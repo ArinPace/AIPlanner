@@ -1,0 +1,51 @@
+export type CalendarView = 'day' | 'week' | 'month' | 'year'
+
+export type RecurrenceFrequency = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'
+
+export interface Recurrence {
+  frequency: RecurrenceFrequency
+  interval: number
+  until: string | null
+}
+
+export interface Tag {
+  id: string
+  name: string
+  color: string
+}
+
+export interface CalendarEvent {
+  id: string
+  title: string
+  description: string
+  start: string
+  end: string
+  allDay: boolean
+  tagIds: string[]
+  recurrence: Recurrence
+}
+
+export interface Occurrence {
+  event: CalendarEvent
+  start: Date
+  end: Date
+}
+
+export interface StoredState {
+  events: CalendarEvent[]
+  tags: Tag[]
+  hiddenTagIds: string[]
+  zoom?: number
+}
+
+export interface EventDraft {
+  title: string
+  description: string
+  date: string
+  endDate: string
+  startTime: string
+  endTime: string
+  allDay: boolean
+  tagIds: string[]
+  recurrence: Recurrence
+}

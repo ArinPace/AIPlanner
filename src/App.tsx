@@ -1,0 +1,363 @@
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { FilesView } from './components/FilesView'
+import { EventModal } from './components/EventModal'
+import { Header } from './components/Header'
+import { LoginScreen } from './components/LoginScreen'
+import { MonthView } from './components/MonthView'
+import { Sidebar } from './components/Sidebar'
+import { TimeGridView } from './components/TimeGridView'
+import { YearView } from './components/YearView'
+import { emptyCalendar, getSession, loadCalendar, logout, saveCalendar, setToken } from './lib/api'
+import { isEventVisible } from './lib/colors'
+import {
+  addDays,
+  addMonths,
+  addYears,
+  combineDateAndTime,
+  endOfDateInput,
+  startOfDateInput,
+  toDateInput,
+  toTimeInput,
+  visibleRange,
+} from './lib/dates'
+import { expandEvents } from './lib/recurrence'
+import { createId } from './lib/storage'
+import { useDatePinch } from './lib/useDatePinch'
+import { clampZoom, DEFAULT_ZOOM, ZOOM_STEP } from './lib/zoom'
+import type { CalendarEvent, CalendarView, EventDraft, StoredState, Tag } from './types'
+
+function emptyRecurrence() {
+  return { frequency: 'none' as const, interval: 1, until: null }
+}
+
+function draftFromPreset(date: Date, options?: { timed?: boolean; allDay?: boolean }): EventDraft {
+  const allDay = Boolean(options?.allDay)
+  const start = options?.timed
+    ? date
+    : new Date(date.getFullYear(), date.getMonth(), date.getDate(), 9, 0, 0, 0)
+  const end = new Date(start.getTime() + 60 * 60 * 1000)
+  return {
+    title: '',
+    description: '',
+    date: toDateInput(start),
+    endDate: toDateInput(allDay ? start : end),
+    startTime: toTimeInput(start),
+    endTime: toTimeInput(end),
+    allDay,
+    tagIds: [],
+    recurrence: emptyRecurrence(),
+  }
+}
+
+function draftFromEvent(event: CalendarEvent): EventDraft {
+  const start = new Date(event.start)
+  const end = new Date(event.end)
+  return {
+    title: event.title,
+    description: event.description,
+    date: toDateInput(start),
+    endDate: toDateInput(end),
+    startTime: toTimeInput(start),
+    endTime: toTimeInput(end),
+    allDay: event.allDay,
+    tagIds: [...event.tagIds],
+    recurrence: { ...event.recurrence },
+  }
+}
+
+function eventFromDraft(draft: EventDraft, id: string): CalendarEvent {
+  const start = draft.allDay ? startOfDateInput(draft.date) : combineDateAndTime(draft.date, draft.startTime)
+  const end = draft.allDay ? endOfDateInput(draft.endDate) : combineDateAndTime(draft.endDate, draft.endTime)
+  return {
+    id,
+    title: draft.title.trim(),
+    description: draft.description.trim(),
+    start: start.toISOString(),
+    end: end.toISOString(),
+    allDay: draft.allDay,
+    tagIds: draft.tagIds,
+    recurrence: {
+      frequency: draft.recurrence.frequency,
+      interval: Math.max(1, draft.recurrence.interval || 1),
+      until: draft.recurrence.frequency === 'none' ? null : draft.recurrence.until,
+    },
+  }
+}
+
+export default function App() {
+  const [username, setUsername] = useState<string | null>(null)
+  const [checking, setChecking] = useState(true)
+
+  useEffect(() => {
+    getSession()
+      .then((session) => setUsername(session.username))
+      .catch(() => setUsername(null))
+      .finally(() => setChecking(false))
+  }, [])
+
+  if (checking) {
+    return (
+      <div className="login-screen">
+        <p className="quiet">Loading calendar…</p>
+      </div>
+    )
+  }
+
+  if (!username) {
+    return <LoginScreen onSignedIn={setUsername} />
+  }
+
+  return (
+    <CalendarApp
+      username={username}
+      onLogout={() => {
+        void logout().finally(() => {
+          setToken(null)
+          setUsername(null)
+        })
+      }}
+    />
+  )
+}
+
+function CalendarApp({ username, onLogout }: { username: string; onLogout: () => void }) {
+  const [tab, setTab] = useState<'calendar' | 'files'>('calendar')
+  const [filesUnsaved, setFilesUnsaved] = useState(false)
+  const [cursor, setCursor] = useState(() => new Date())
+  const [view, setView] = useState<CalendarView>('month')
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [events, setEvents] = useState<CalendarEvent[]>([])
+  const [tags, setTags] = useState<Tag[]>([])
+  const [hiddenTagIds, setHiddenTagIds] = useState<string[]>([])
+  const [zoom, setZoom] = useState(DEFAULT_ZOOM)
+  const [draft, setDraft] = useState<EventDraft | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [loaded, setLoaded] = useState(false)
+  const [loadError, setLoadError] = useState('')
+  const [saveError, setSaveError] = useState('')
+  const mainRef = useRef<HTMLElement>(null)
+
+  function applyState(state: StoredState) {
+    setEvents(state.events)
+    setTags(state.tags)
+    setHiddenTagIds(state.hiddenTagIds)
+    setZoom(clampZoom(state.zoom ?? DEFAULT_ZOOM))
+  }
+
+  useEffect(() => {
+    loadCalendar()
+      .then((state) => {
+        applyState(state)
+        setLoadError('')
+      })
+      .catch((error) => {
+        applyState(emptyCalendar())
+        setLoadError(error instanceof Error ? error.message : 'Could not load your calendar.')
+      })
+      .finally(() => setLoaded(true))
+  }, [])
+
+  useEffect(() => {
+    if (!loaded) return
+    const timer = window.setTimeout(() => {
+      saveCalendar({ events, tags, hiddenTagIds, zoom })
+        .then(() => setSaveError(''))
+        .catch((error) => setSaveError(error instanceof Error ? error.message : 'Could not save.'))
+    }, 250)
+    return () => window.clearTimeout(timer)
+  }, [events, tags, hiddenTagIds, zoom, loaded])
+
+  useDatePinch(mainRef, setView, loaded && tab === 'calendar')
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (tab !== 'calendar') return
+      if (!(event.ctrlKey || event.metaKey)) return
+      const target = event.target
+      if (target instanceof HTMLElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
+      if (event.key === '=' || event.key === '+') {
+        event.preventDefault()
+        setZoom((current) => clampZoom(current + ZOOM_STEP))
+      }
+      if (event.key === '-' || event.key === '_') {
+        event.preventDefault()
+        setZoom((current) => clampZoom(current - ZOOM_STEP))
+      }
+      if (event.key === '0') {
+        event.preventDefault()
+        setZoom(DEFAULT_ZOOM)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [tab])
+
+  const hiddenSet = useMemo(() => new Set(hiddenTagIds), [hiddenTagIds])
+  const range = useMemo(() => visibleRange(cursor, view), [cursor, view])
+  const occurrences = useMemo(() => {
+    const visible = events.filter((event) => isEventVisible(event, hiddenSet))
+    return expandEvents(visible, range.start, range.end)
+  }, [events, hiddenSet, range.end, range.start])
+
+  function navigate(direction: -1 | 1) {
+    if (view === 'year') setCursor(addYears(cursor, direction))
+    else if (view === 'month') setCursor(addMonths(cursor, direction))
+    else if (view === 'week') setCursor(addDays(cursor, direction * 7))
+    else setCursor(addDays(cursor, direction))
+  }
+
+  function openCreate(date: Date, options?: { timed?: boolean; allDay?: boolean }) {
+    setEditingId(null)
+    setDraft(draftFromPreset(date, options))
+  }
+
+  function openEdit(event: CalendarEvent) {
+    setEditingId(event.id)
+    setDraft(draftFromEvent(event))
+  }
+
+  function closeModal() {
+    setDraft(null)
+    setEditingId(null)
+  }
+
+  function saveDraft() {
+    if (!draft) return
+    const saved = eventFromDraft(draft, editingId ?? createId())
+    setEvents((current) => {
+      const without = current.filter((event) => event.id !== saved.id)
+      return [...without, saved]
+    })
+    closeModal()
+  }
+
+  function deleteEvent() {
+    if (!editingId) return
+    if (!window.confirm('Delete this event? If it repeats, the whole series will be removed.')) return
+    setEvents((current) => current.filter((event) => event.id !== editingId))
+    closeModal()
+  }
+
+  function addTag(tag: Tag) {
+    setTags((current) => [...current, tag])
+  }
+
+  function deleteTag(id: string) {
+    const tag = tags.find((item) => item.id === id)
+    if (!tag) return
+    if (!window.confirm(`Delete the "${tag.name}" tag? Events stay, but they will no longer use this tag.`)) return
+    setTags((current) => current.filter((item) => item.id !== id))
+    setHiddenTagIds((current) => current.filter((tagId) => tagId !== id))
+    setEvents((current) =>
+      current.map((event) => ({ ...event, tagIds: event.tagIds.filter((tagId) => tagId !== id) })),
+    )
+  }
+
+  function toggleTag(id: string) {
+    setHiddenTagIds((current) => (current.includes(id) ? current.filter((tagId) => tagId !== id) : [...current, id]))
+  }
+
+  if (!loaded) {
+    return (
+      <div className="login-screen">
+        <p className="quiet">Opening your calendar…</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="app-shell">
+      <Header
+        tab={tab}
+        onTabChange={setTab}
+        cursor={cursor}
+        view={view}
+        zoom={zoom}
+        username={username}
+        onViewChange={setView}
+        onNavigate={navigate}
+        onToday={() => setCursor(new Date())}
+        onToggleSidebar={() => setSidebarOpen((value) => !value)}
+        onCreate={() => openCreate(cursor)}
+        onVisualZoomChange={(value) => setZoom(clampZoom(value))}
+        onLogout={() => {
+          if (!filesUnsaved || window.confirm('Files has unsaved changes. Discard them and log out?')) onLogout()
+        }}
+      />
+
+      <div className="files-tab-panel" hidden={tab !== 'files'}><FilesView onUnsavedChange={setFilesUnsaved} /></div>
+      <div className="app-body" hidden={tab !== 'calendar'}>
+        <Sidebar
+          open={sidebarOpen}
+          cursor={cursor}
+          onCursorChange={setCursor}
+          onCreate={() => openCreate(cursor)}
+          tags={tags}
+          hiddenTagIds={hiddenSet}
+          onToggleTag={toggleTag}
+          onAddTag={addTag}
+          onDeleteTag={deleteTag}
+        />
+
+        {sidebarOpen && <button type="button" className="sidebar-scrim" aria-label="Close sidebar" onClick={() => setSidebarOpen(false)} />}
+
+        <main
+          className="calendar-main"
+          ref={mainRef}
+          style={{ '--zoom': String(zoom) } as CSSProperties}
+        >
+          {(loadError || saveError) && <p className="save-banner">{loadError || saveError}</p>}
+          {view === 'year' ? (
+            <YearView
+              cursor={cursor}
+              occurrences={occurrences}
+              onMonthOpen={(date) => {
+                setCursor(date)
+                setView('month')
+              }}
+              onDayOpen={(date) => {
+                setCursor(date)
+                setView('day')
+              }}
+            />
+          ) : view === 'month' ? (
+            <MonthView
+              cursor={cursor}
+              zoom={zoom}
+              occurrences={occurrences}
+              tags={tags}
+              onDayClick={(date) => openCreate(date)}
+              onDayOpen={(date) => {
+                setCursor(date)
+                setView('day')
+              }}
+              onEventClick={(event) => openEdit(event)}
+            />
+          ) : (
+            <TimeGridView
+              cursor={cursor}
+              view={view}
+              zoom={zoom}
+              occurrences={occurrences}
+              tags={tags}
+              onSlotClick={(date, allDay) => openCreate(date, { timed: !allDay, allDay })}
+              onEventClick={(event) => openEdit(event)}
+            />
+          )}
+        </main>
+      </div>
+
+      {draft && (
+        <EventModal
+          mode={editingId ? 'edit' : 'create'}
+          draft={draft}
+          tags={tags}
+          onChange={setDraft}
+          onClose={closeModal}
+          onSave={saveDraft}
+          onDelete={editingId ? deleteEvent : undefined}
+        />
+      )}
+    </div>
+  )
+}

@@ -1,0 +1,202 @@
+import { useEffect, useRef } from 'react'
+import type { CalendarEvent, CalendarView, Occurrence, Tag } from '../types'
+import { contrastText, eventColor } from '../lib/colors'
+import {
+  endOfDay,
+  formatHour,
+  formatTimeCompact,
+  getWeekDays,
+  isToday,
+  overlaps,
+  startOfDay,
+} from '../lib/dates'
+import { RepeatIcon } from './Icons'
+
+type TimeGridViewProps = {
+  cursor: Date
+  view: Extract<CalendarView, 'week' | 'day'>
+  zoom: number
+  occurrences: Occurrence[]
+  tags: Tag[]
+  onSlotClick: (date: Date, allDay?: boolean) => void
+  onEventClick: (event: CalendarEvent, occurrenceStart: Date) => void
+}
+
+const BASE_HOUR_HEIGHT = 48
+const HOURS = Array.from({ length: 24 }, (_, index) => index)
+
+type LaidOut = Occurrence & { col: number; cols: number }
+
+function layoutDay(items: Occurrence[]): LaidOut[] {
+  const sorted = [...items].sort((a, b) => a.start.getTime() - b.start.getTime())
+  const columns: Occurrence[][] = []
+
+  for (const item of sorted) {
+    let placed = false
+    for (const column of columns) {
+      const last = column[column.length - 1]
+      if (last.end.getTime() <= item.start.getTime()) {
+        column.push(item)
+        placed = true
+        break
+      }
+    }
+    if (!placed) columns.push([item])
+  }
+
+  return sorted.map((item) => {
+    const col = columns.findIndex((column) => column.includes(item))
+    return { ...item, col: Math.max(col, 0), cols: Math.max(columns.length, 1) }
+  })
+}
+
+function clipToDay(item: Occurrence, day: Date): { start: Date; end: Date } | null {
+  const dayStart = startOfDay(day)
+  const dayEnd = endOfDay(day)
+  if (!overlaps(item.start, item.end, dayStart, dayEnd)) return null
+  return {
+    start: item.start < dayStart ? dayStart : item.start,
+    end: item.end > dayEnd ? dayEnd : item.end,
+  }
+}
+
+export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClick, onEventClick }: TimeGridViewProps) {
+  const days = view === 'day' ? [startOfDay(cursor)] : getWeekDays(cursor)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const prevZoom = useRef(zoom)
+  const hourHeight = Math.round(BASE_HOUR_HEIGHT * zoom)
+
+  useEffect(() => {
+    const node = scrollRef.current
+    if (!node) return
+    node.scrollTop = 8 * hourHeight - 16
+  }, [view, cursor])
+
+  useEffect(() => {
+    const node = scrollRef.current
+    if (!node || prevZoom.current === zoom) return
+    const oldHeight = BASE_HOUR_HEIGHT * prevZoom.current
+    const nextHeight = BASE_HOUR_HEIGHT * zoom
+    const midpoint = node.scrollTop + node.clientHeight / 2
+    node.scrollTop = (midpoint / oldHeight) * nextHeight - node.clientHeight / 2
+    prevZoom.current = zoom
+  }, [zoom])
+
+  const now = new Date()
+  const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 60) * hourHeight
+
+  return (
+    <div className="time-view">
+      <div className={`time-header days-${days.length}`}>
+        <div className="gutter" />
+        {days.map((day) => (
+          <div key={day.toISOString()} className={`time-day-head ${isToday(day) ? 'is-today' : ''}`}>
+            <span className="dow">{day.toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase()}</span>
+            <span className="num">{day.getDate()}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className={`all-day-row days-${days.length}`}>
+        <div className="gutter">All day</div>
+        {days.map((day) => {
+          const items = occurrences.filter((item) => item.event.allDay && clipToDay(item, day))
+          return (
+            <div key={day.toISOString()} className="all-day-cell" onClick={() => onSlotClick(startOfDay(day), true)}>
+              {items.map((item) => {
+                const color = eventColor(item.event, tags)
+                return (
+                  <button
+                    key={`${item.event.id}-${item.start.toISOString()}`}
+                    type="button"
+                    className="event-chip"
+                    style={{ background: color, color: contrastText(color) }}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onEventClick(item.event, item.start)
+                    }}
+                  >
+                    {item.event.recurrence.frequency !== 'none' && <RepeatIcon />}
+                    <span className="event-title">{item.event.title || '(No title)'}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="time-scroll" ref={scrollRef}>
+        <div className={`time-body days-${days.length}`} style={{ height: 24 * hourHeight }}>
+          <div className="hours">
+            {HOURS.map((hour) => (
+              <div key={hour} className="hour-label" style={{ height: hourHeight }}>
+                {hour === 0 ? '' : formatHour(hour)}
+              </div>
+            ))}
+          </div>
+
+          {days.map((day) => {
+            const timed = occurrences.filter((item) => !item.event.allDay && clipToDay(item, day))
+            const laidOut = layoutDay(timed)
+            const showNow = isToday(day)
+
+            return (
+              <div key={day.toISOString()} className="day-col">
+                {HOURS.map((hour) => (
+                  <button
+                    key={hour}
+                    type="button"
+                    className="hour-slot"
+                    style={{ height: hourHeight }}
+                    aria-label={`${formatHour(hour)} on ${day.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}`}
+                    onClick={() =>
+                      onSlotClick(new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour, 0, 0, 0))
+                    }
+                  />
+                ))}
+
+                {showNow && <div className="now-line" style={{ top: nowTop }} />}
+
+                {laidOut.map((item) => {
+                  const clipped = clipToDay(item, day)
+                  if (!clipped) return null
+                  const startMinutes = clipped.start.getHours() * 60 + clipped.start.getMinutes()
+                  const endMinutes = clipped.end.getHours() * 60 + clipped.end.getMinutes() + clipped.end.getSeconds() / 60
+                  const top = (startMinutes / 60) * hourHeight
+                  const height = Math.max(((endMinutes - startMinutes) / 60) * hourHeight, 18)
+                  const width = `calc((100% - 8px) / ${item.cols})`
+                  const left = `calc(4px + ${item.col} * (100% - 8px) / ${item.cols})`
+                  const color = eventColor(item.event, tags)
+
+                  return (
+                    <button
+                      key={`${item.event.id}-${item.start.toISOString()}`}
+                      type="button"
+                      className="timed-event"
+                      style={{
+                        top,
+                        height,
+                        width,
+                        left,
+                        background: color,
+                        color: contrastText(color),
+                      }}
+                      onClick={() => onEventClick(item.event, item.start)}
+                    >
+                      <span className="event-title">
+                        {item.event.recurrence.frequency !== 'none' && <RepeatIcon />}
+                        {item.event.title || '(No title)'}
+                      </span>
+                      <span className="event-time">{formatTimeCompact(item.start)}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
