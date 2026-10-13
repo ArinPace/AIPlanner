@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import { createPlannerMcp } from './mcp.js'
+import { createPlannerMcp, handleMcpRequest } from './mcp.js'
 import { validRedirect } from './mcp-auth.js'
 import { browserUrl } from './mcp-browser.js'
 import { chatUrl } from './chat-links.js'
@@ -50,4 +50,14 @@ test('stateless HTTP discovery survives transport closure and a fresh request',a
     assert.ok(data.result)
     if(message.method==='tools/list')assert.equal(data.result.tools.length,12)
   }
+})
+
+test('anonymous discovery exposes tool schemas but account data and actions require OAuth',async()=>{
+  const response=await handleMcpRequest(new Request('https://aiplanner-ten.vercel.app/api/mcp',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list',params:{}})}),'/api/mcp')
+  assert.equal(response.status,200)
+  const data=await response.json() as {result:{tools:{name:string}[]}}
+  assert.ok(data.result.tools.some(t=>t.name==='planner_read'))
+  const action=await handleMcpRequest(new Request('https://aiplanner-ten.vercel.app/api/mcp',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'planner_read',arguments:{}}})}),'/api/mcp')
+  assert.equal(action.status,401)
+  assert.match(action.headers.get('WWW-Authenticate') || '',/oauth-protected-resource/)
 })
