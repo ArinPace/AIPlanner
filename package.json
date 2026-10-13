@@ -10,12 +10,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
     "@supabase/supabase-js": "2.117.3",
     "@vercel/oidc": "3.2.0",
     "ai": "7.0.138",
     "jose": "6.2.12",
+    "playwright-core": "1.64.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "zod": "4.3.6"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",

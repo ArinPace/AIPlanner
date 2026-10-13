@@ -41,22 +41,26 @@ Use **Edit folder** to change a folder's name, color, labels, or parent. Folder 
 
 Files endpoints require the existing signed-in session. Uploading, downloading, moving, or deleting items affects only that account. Keep the `data/` directory when moving or backing up the app. Calendar and Files are saved independently.
 
-## Agent
+## Agent and ChatGPT MCP
 
-The hosted **Agent** tab provides planner chat, cloud-browser launch controls, saved login profiles, source preferences, and account-scoped run/message history in Supabase. Browser Use V4 performs read-only academic checks with recordings disabled and a $0.50 per-run cost limit. Validated results create notes under **Agent updates**, organized into course subfolders, and timezone-aware calendar deadlines. Repeated results reuse generated IDs. Modified personal notes and reminders are preserved. Calendar and Files updates commit together with revision checks so concurrent edits cannot be silently overwritten.
+The hosted **Agent** tab is a list of private ChatGPT conversation links. Add a name and the conversation URL; links persist per planner account in Supabase and open the real ChatGPT conversation in a new tab. Removing a link does not delete the conversation. ChatGPT transcripts are not copied or embedded. The previous gateway chat data remains in storage.
 
-Sign in as your planner account, open Agent, select sources, and click **Connect** under Cloud browser. Sign into the enabled sites in that cloud window, including SSO/MFA. Click **Save login and close window** before the one-hour timeout; a normal close persists the profile. Then launch a check or enable the twice-daily schedule. A saved profile does not prevent sites from expiring authentication.
+The authenticated MCP endpoint is `https://aiplanner-ten.vercel.app/api/mcp`. In ChatGPT Plugins, choose **Add custom MCP server**, name it AI Planner, enter that endpoint, select OAuth, and authorize with your planner account. The Agent page includes the URL, a starter check-and-schedule prompt, connection status, and a disconnect button. Authorization is separate from ChatGPT plan billing. The connector uses the official MCP SDK with stateless Streamable HTTP and JSON responses; OAuth discovery is published under `/.well-known/`.
 
-The Supabase scheduler calls the authenticated tick endpoint every minute. It launches opted-in accounts at **7 AM and 5 PM America/New_York**, once per local schedule slot, and reconciles running tasks independently of the browser UI or laptop. The long-lived scheduler secret is stored in Vault; requests carry short-lived HMAC signatures. Scheduled runs remain disabled until a cloud login profile is saved and the account opts in. Agent access is currently limited to `arin` through `AGENT_ALLOWED_USERS`.
+OAuth uses dynamic public-client registration, exact registered OpenAI/loopback callbacks, S256 PKCE, one-use browser-bound consent requests and authorization codes, resource binding, scoped opaque access tokens, atomic refresh-token rotation and revocation. Only token hashes are stored. MCP tables have RLS enabled and deny direct browser-role access. Every tool is scoped to the authenticated planner account; write and browser tools require their corresponding grant.
 
-Google API OAuth and OpenAI identity OAuth endpoints are implemented with PKCE, state, nonce, browser-bound callbacks, verified ID tokens, and encrypted server-side token storage. Google needs a registered OAuth client with Gmail/Calendar/Drive read-only scopes; this assistant's Google connections cannot be transferred to the app. Hosted Sign in with ChatGPT requires an approved OpenAI client. OpenAI identity authorization does not itself fund chat or grant ChatGPT plan usage. Planner chat currently uses AI Gateway with Vercel OIDC and the configured model. Set the optional OAuth environment variables in `.env.example` when those clients are available.
+Tools read calendar and Files, organize nested folders and notes, save links and events, register chat URLs, inspect run history, and atomically save verified source updates. Calendar and Files changes use revision checks. Source imports deduplicate generated records and preserve manual edits. PDF bytes continue to use the existing private upload/download flow, not MCP text payloads.
 
-Agent operations use the hosted Supabase API. Local development continues to use its disk API; local Agent requests report that the feature is available on the hosted app.
+`browser_open`, `browser_read` and `browser_close` resume the saved Browser Use profile. The server connects directly to its owned cloud browser via CDP, without launching a separate AI inference run. Browser sessions have recordings disabled, a 12-minute window, a 15-minute provider timeout, and a scheduler cleanup. Only explicitly enabled source domains can be navigated; browser cookies, local storage and arbitrary JavaScript are never exposed through tools. Page text and links are untrusted data. Users must complete login/MFA in the returned live view when sessions expire. Browser Use still bills browser sessions. ChatGPT can instead use its own separately authenticated cloud browser.
+
+The existing Browser Use AI collector and Supabase 7 AM / 5 PM America/New_York scheduler remain available through the hosted API. Once a ChatGPT scheduled workflow is verified, disable the separate Browser Use schedule to avoid duplicate runs. A scheduled ChatGPT task must retain the connected plugin and applicable browser permissions; do not treat a prompt asking for a schedule as proof the schedule exists. Local computer access is not needed for cloud checks.
+
+Optional Google API and hosted OpenAI identity OAuth endpoints remain available when registered application clients are provisioned. They are separate from connecting this MCP to ChatGPT. Agent operations use the hosted Supabase API; local development continues to use its disk API.
 
 ## Validation
 
 ```sh
 npm run build
 npm run lint
-npx tsx@4.21.0 --test server/agent.test.ts
+npx tsx@4.21.0 --test server/agent.test.ts server/mcp.test.ts
 ```
