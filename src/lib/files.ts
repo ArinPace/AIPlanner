@@ -16,6 +16,7 @@ export interface PlannerTextFile {
 }
 
 export interface FilesState {
+  revision?: number
   folders: PlannerFolder[]
   files: PlannerTextFile[]
   documents?: PlannerDocument[]
@@ -62,6 +63,7 @@ export function descendantIds(folders: PlannerFolder[], id: string): Set<string>
 export function validateFilesState(value: unknown): asserts value is FilesState {
   if (!value || typeof value !== 'object') throw new Error('Invalid files data.')
   const state = value as FilesState
+  if (new TextEncoder().encode(JSON.stringify(state)).length > 3 * 1024 * 1024) throw new Error('The Files workspace supports up to 3 MB of text and metadata. PDFs are stored separately.');
   if (!Array.isArray(state.folders) || !Array.isArray(state.files)) throw new Error('Invalid files data.')
   if (state.folders.length > 2000 || state.files.length > 5000) throw new Error('Too many folders or files.')
   const ids = new Set<string>()

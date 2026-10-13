@@ -166,6 +166,12 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       return true
     }
 
+    if (url === '/api/files/upload/start' && method === 'POST') {
+      if (!usernameFromRequest(req)) { send(res, 401, { error: 'Please sign in.' }); return true }
+      send(res, 200, { mode: 'local' })
+      return true
+    }
+
     if (url === '/api/files/upload' && method === 'POST') {
       const username = usernameFromRequest(req)
       if (!username) { send(res, 401, { error: 'Please sign in.' }); return true }

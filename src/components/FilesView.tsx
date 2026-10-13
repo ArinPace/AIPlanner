@@ -112,8 +112,8 @@ export function FilesView({ onUnsavedChange }: { onUnsavedChange: (unsaved: bool
     saving.current = true
     setBusy(true)
     try {
-      await saveFiles(next)
-      setState(next)
+      const saved = await saveFiles(next)
+      setState({ ...next, revision: saved.revision ?? next.revision })
       setNotice('All changes saved')
       return true
     } catch (err) {
@@ -153,7 +153,7 @@ export function FilesView({ onUnsavedChange }: { onUnsavedChange: (unsaved: bool
     const ids = descendantIds(state.folders, folder.id)
     const fileCount = state.files.filter((file) => ids.has(file.folderId)).length + (state.documents ?? []).filter((document) => ids.has(document.folderId)).length
     if (!window.confirm(`Delete “${folder.name}”, its ${ids.size - 1} subfolder(s), and ${fileCount} file(s) and link(s)? This cannot be undone.`)) return
-    if (await persist({ folders: state.folders.filter((item) => !ids.has(item.id)), files: state.files.filter((file) => !ids.has(file.folderId)), documents: (state.documents ?? []).filter((document) => !ids.has(document.folderId)) })) {
+    if (await persist({ ...state, folders: state.folders.filter((item) => !ids.has(item.id)), files: state.files.filter((file) => !ids.has(file.folderId)), documents: (state.documents ?? []).filter((document) => !ids.has(document.folderId)) })) {
       if (folderId && ids.has(folderId)) setFolderId(folder.parentId)
       if (fileDraft && ids.has(fileDraft.folderId)) setFileDraft(null)
     }

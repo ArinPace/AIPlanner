@@ -69,8 +69,8 @@ export function LoginScreen({ onSignedIn }: LoginScreenProps) {
             autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            placeholder="At least 4 characters"
-            minLength={4}
+            placeholder={mode === 'login' ? 'Your password' : 'At least 8 characters'}
+            minLength={mode === 'login' ? 4 : 8}
             required
           />
         </label>
@@ -82,7 +82,7 @@ export function LoginScreen({ onSignedIn }: LoginScreenProps) {
         </button>
 
         <p className="login-hint">
-          Each account is stored as a file in the project <code>data</code> folder.
+          Your calendar and files are saved privately to your account.
         </p>
       </form>
     </div>

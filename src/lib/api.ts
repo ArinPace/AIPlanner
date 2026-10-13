@@ -26,7 +26,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       },
     })
   } catch {
-    throw new Error('Could not reach the calendar server. Keep the app running with npm run dev.')
+    throw new Error('Could not reach the server. Check your connection and try again.')
   }
 
   const data = (await response.json().catch(() => ({}))) as T & { error?: string }
@@ -78,21 +78,35 @@ export function loadFiles() {
 }
 
 export function saveFiles(state: FilesState) {
-  return request<{ ok: boolean }>('/api/files', { method: 'PUT', body: JSON.stringify(state) })
+  return request<{ ok: boolean; revision?: number }>('/api/files', { method: 'PUT', body: JSON.stringify(state) })
 }
 
-export function uploadPdf(folderId: string, file: File) {
-  return request<FilesState>(`/api/files/upload?folderId=${encodeURIComponent(folderId)}`, {
-    method: 'POST', body: file,
-    headers: { 'Content-Type': 'application/pdf', 'X-File-Name': encodeURIComponent(file.name) },
+export async function uploadPdf(folderId: string, file: File) {
+  if (!(await file.slice(0, 1024).text()).includes('%PDF-')) throw new Error('Choose a valid PDF file.')
+  const ticket = await request<{ mode: 'local' | 'signed'; id?: string; uploadUrl?: string }>('/api/files/upload/start', {
+    method: 'POST', body: JSON.stringify({ folderId, name: file.name, size: file.size }),
   })
+  if (ticket.mode === 'local') return request<FilesState>(`/api/files/upload?folderId=${encodeURIComponent(folderId)}`, {
+    method: 'POST', body: file, headers: { 'Content-Type': 'application/pdf', 'X-File-Name': encodeURIComponent(file.name) },
+  })
+  try {
+    const upload = await fetch(ticket.uploadUrl!, { method: 'PUT', headers: { 'Content-Type': 'application/pdf', 'x-upsert': 'false' }, body: file })
+    if (!upload.ok) throw new Error('Could not upload the PDF. Please try again.')
+    return await request<FilesState>('/api/files/upload/finish', { method: 'POST', body: JSON.stringify({ id: ticket.id }) })
+  } catch (error) {
+    await request('/api/files/upload/cancel', { method: 'POST', body: JSON.stringify({ id: ticket.id }) }).catch(() => undefined)
+    throw error
+  }
 }
 
 export async function downloadPdf(id: string, name: string) {
   const token = getToken()
   const response = await fetch(`/api/files/documents/${encodeURIComponent(id)}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
   if (!response.ok) throw new Error('Could not download this PDF. Please try again.')
-  const url = URL.createObjectURL(await response.blob())
+  const blob = response.headers.get('Content-Type')?.includes('application/json')
+    ? await fetch((await response.json() as { downloadUrl: string }).downloadUrl).then((download) => { if (!download.ok) throw new Error('Could not download PDF.'); return download.blob() })
+    : await response.blob()
+  const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
   link.download = /\.pdf$/i.test(name) ? name : `${name}.pdf`
