@@ -1,5 +1,5 @@
-import { handleCloudRequest } from '../server/cloud.ts'
-export const GET = handleCloudRequest
-export const POST = handleCloudRequest
-export const PUT = handleCloudRequest
-export const DELETE = handleCloudRequest
+import { handleCloudRequest } from '../server/cloud.js'
+export function GET(request: Request) { return handleCloudRequest(request) }
+export function POST(request: Request) { return handleCloudRequest(request) }
+export function PUT(request: Request) { return handleCloudRequest(request) }
+export function DELETE(request: Request) { return handleCloudRequest(request) }

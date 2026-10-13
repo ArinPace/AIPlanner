@@ -1,8 +1,8 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { randomUUID } from 'node:crypto'
-import { validateFilesState, type FilesState, type PlannerDocument } from '../src/lib/files.ts'
-import { createToken, hashPassword, normalizeUsername, tokenHash, verifyPassword } from './auth.ts'
-import { DEFAULT_CALENDAR, EMPTY_FILES } from './defaults.ts'
+import { validateFilesState, type FilesState, type PlannerDocument } from '../src/lib/files.js'
+import { createToken, hashPassword, normalizeUsername, tokenHash, verifyPassword } from './auth.js'
+import { DEFAULT_CALENDAR, EMPTY_FILES } from './defaults.js'
 
 const BUCKET = 'planner-pdfs'
 let client: SupabaseClient | undefined

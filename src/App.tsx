@@ -136,6 +136,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   const [loadError, setLoadError] = useState('')
   const [saveError, setSaveError] = useState('')
   const mainRef = useRef<HTMLElement>(null)
+  const saveQueue = useRef<Promise<void>>(Promise.resolve())
 
   function applyState(state: StoredState) {
     setEvents(state.events)
@@ -158,14 +159,14 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   }, [])
 
   useEffect(() => {
-    if (!loaded) return
+    if (!loaded || loadError) return
     const timer = window.setTimeout(() => {
-      saveCalendar({ events, tags, hiddenTagIds, zoom })
+      saveQueue.current = saveQueue.current.catch(() => undefined).then(() => saveCalendar({ events, tags, hiddenTagIds, zoom }))
         .then(() => setSaveError(''))
         .catch((error) => setSaveError(error instanceof Error ? error.message : 'Could not save.'))
     }, 250)
     return () => window.clearTimeout(timer)
-  }, [events, tags, hiddenTagIds, zoom, loaded])
+  }, [events, tags, hiddenTagIds, zoom, loaded, loadError])
 
   useDatePinch(mainRef, setView, loaded && tab === 'calendar')
 
@@ -265,6 +266,10 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
     )
   }
 
+  if (loadError) {
+    return <div className="login-screen"><div className="login-card"><p role="alert" className="form-error">{loadError}</p><p className="quiet">Your saved calendar has been left intact. Reload before making changes.</p><button type="button" className="primary-btn" onClick={() => window.location.reload()}>Retry loading calendar</button></div></div>
+  }
+
   return (
     <div className="app-shell">
       <Header
@@ -281,7 +286,8 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
         onCreate={() => openCreate(cursor)}
         onVisualZoomChange={(value) => setZoom(clampZoom(value))}
         onLogout={() => {
-          if (!filesUnsaved || window.confirm('Files has unsaved changes. Discard them and log out?')) onLogout()
+          if (filesUnsaved && !window.confirm('Files has unsaved changes. Discard them and log out?')) return
+          void saveQueue.current.then(() => saveCalendar({ events, tags, hiddenTagIds, zoom })).then(onLogout).catch(() => setSaveError('Could not save your calendar before logging out. Please try again.'))
         }}
       />
 
