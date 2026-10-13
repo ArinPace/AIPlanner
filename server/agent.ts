@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { generateText, jsonSchema, stepCountIs, tool } from 'ai'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
+import { getVercelOidcTokenSync } from '@vercel/oidc'
 import { ApiError, body, db, json } from './cloud.js'
 import { validateFilesState, type FilesState } from '../src/lib/files.js'
 import type { StoredState } from '../src/types.js'
@@ -15,6 +16,7 @@ function check<T>({ data, error }: { data: T; error: { code?: string } | null })
 }
 function allowed(username: string) { return (process.env.AGENT_ALLOWED_USERS || 'arin').split(',').includes(username) }
 function requireOperator(username: string) { if (!allowed(username)) throw new ApiError(403, 'Agent access is not enabled for this account.') }
+function chatReady() { if (process.env.AI_GATEWAY_API_KEY) return true; try { return Boolean(getVercelOidcTokenSync()) } catch { return false } }
 async function bu(path: string, method = 'GET', data?: unknown): Promise<Record<string, any>> {
   if (!process.env.BROWSER_USE_API_KEY) throw new ApiError(503, 'Connect Browser Use before launching the agent.')
   const response = await fetch(`${BASE}${path}`, { method, headers: { 'X-Browser-Use-API-Key': process.env.BROWSER_USE_API_KEY, 'Content-Type': 'application/json' }, ...(data ? { body: JSON.stringify(data) } : {}), signal: AbortSignal.timeout(18000) })
@@ -273,7 +275,7 @@ export async function handleAgentRequest(request: Request,path: string,username:
   if (path==='/api/agent/status' && request.method==='GET') {
     await refreshRuns(username)
     const [s,runs,messages,connections]=await Promise.all([settings(username),db().from('planner_agent_runs').select('id,kind,status,trigger,task,created_at,finished_at,summary,error,live_url,applied_at').eq('username',username).order('created_at',{ascending:false}).limit(30),db().from('planner_agent_messages').select('id,role,content,created_at').eq('username',username).order('created_at',{ascending:false}).limit(40),db().from('planner_connections').select('provider,identity,updated_at').eq('username',username)])
-    return json({allowed:allowed(username),browserConfigured:Boolean(process.env.BROWSER_USE_API_KEY),chatConfigured:Boolean(process.env.VERCEL_OIDC_TOKEN || process.env.AI_GATEWAY_API_KEY),oauth:{google:Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),openai:Boolean(process.env.OPENAI_CLIENT_ID)},settings:s,runs:check(runs),messages:check(messages).reverse(),connections:check(connections)})
+    return json({allowed:allowed(username),browserConfigured:Boolean(process.env.BROWSER_USE_API_KEY),chatConfigured:chatReady(),oauth:{google:Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),openai:Boolean(process.env.OPENAI_CLIENT_ID)},settings:s,runs:check(runs),messages:check(messages).reverse(),connections:check(connections)})
   }
   requireOperator(username)
   if (request.method!=='POST') throw new ApiError(405,'Use POST for this action.')
