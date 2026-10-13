@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { createPlannerMcp } from './mcp.js'
 import { validRedirect } from './mcp-auth.js'
@@ -35,4 +36,18 @@ test('MCP exposes discovery and checks write/browser scopes before any storage o
     assert.equal(browser.isError,true)
     assert.match(JSON.stringify(browser.content),/browser:read/)
   } finally {await client.close();await server.close()}
+})
+
+test('stateless HTTP discovery survives transport closure and a fresh request',async()=>{
+  for (const message of [{jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'test',version:'1'}}},{jsonrpc:'2.0',id:2,method:'tools/list',params:{}}]) {
+    const server=createPlannerMcp('arin',['planner:read'])
+    const transport=new WebStandardStreamableHTTPServerTransport({sessionIdGenerator:undefined,enableJsonResponse:true})
+    await server.connect(transport)
+    const response=await transport.handleRequest(new Request('https://planner.test/api/mcp',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json, text/event-stream'},body:JSON.stringify(message)}))
+    await server.close()
+    assert.equal(response.status,200)
+    const data=await response.json() as {result?:{tools:{name:string}[]}}
+    assert.ok(data.result)
+    if(message.method==='tools/list')assert.equal(data.result.tools.length,12)
+  }
 })
