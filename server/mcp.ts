@@ -108,12 +108,20 @@ export async function handleMcpRequest(request: Request,path: string): Promise<R
   const origin = request.headers.get('origin')
   if (origin && ![MCP_ORIGIN,'https://chatgpt.com','https://platform.openai.com'].includes(origin)) throw new ApiError(403,'Untrusted browser origin.')
   const identity = await mcpIdentity(request)
-  if (!identity) {
+  let discovery = false
+  if (!identity && request.method === 'POST') {
+    // Clients may discover the tool catalog before linking an account. No tool execution or user data is public.
+    try {
+      const input = await request.clone().json() as {method?:string}
+      discovery = ['initialize','notifications/initialized','ping','tools/list','prompts/list'].includes(input.method || '')
+    } catch { /* Invalid requests still require authentication. */ }
+  }
+  if (!identity && !discovery) {
     const response = json({error:'Connect AI Planner through OAuth before using these tools.'},401)
     response.headers.set('WWW-Authenticate',`Bearer resource_metadata="${MCP_ORIGIN}/.well-known/oauth-protected-resource", scope="${MCP_SCOPES.join(' ')}"`)
     return response
   }
-  const server = createPlannerMcp(identity.username,identity.scope.split(' '))
+  const server = createPlannerMcp(identity?.username || '',identity?.scope.split(' ') || [])
   const transport = new WebStandardStreamableHTTPServerTransport({sessionIdGenerator:undefined,enableJsonResponse:true,maxRequestBodySize:3*1024*1024})
   await server.connect(transport)
   const response = await transport.handleRequest(request)
