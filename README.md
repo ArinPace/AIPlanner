@@ -41,8 +41,6 @@ Use **Edit folder** to change a folder's name, color, labels, or parent. Folder 
 
 Files endpoints require the existing signed-in session. Uploading, downloading, moving, or deleting items affects only that account. Keep the `data/` directory when moving or backing up the app. Calendar and Files are saved independently.
 
-## Checks
-
 ## Agent
 
 The hosted **Agent** tab provides planner chat, cloud-browser launch controls, saved login profiles, source preferences, and account-scoped run/message history in Supabase. Browser Use V4 performs read-only academic checks with recordings disabled and a $0.50 per-run cost limit. Validated results create notes under **Agent updates**, organized into course subfolders, and timezone-aware calendar deadlines. Repeated results reuse generated IDs. Modified personal notes and reminders are preserved. Calendar and Files updates commit together with revision checks so concurrent edits cannot be silently overwritten.

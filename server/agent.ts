@@ -176,6 +176,16 @@ async function launch(username: string, task: string, trigger='manual', slot: st
     throw error
   }
 }
+async function closeLogin(username: string, automatic=false) {
+  const s=await settings(username)
+  const browser=s.login_browser_id ? await bu('/browsers/'+s.login_browser_id) : null
+  const saved=browser?.status==='active'
+  if (saved) await bu('/browsers/'+s.login_browser_id,'PATCH',{action:'stop'})
+  const message=saved ? (automatic ? 'Login profile saved automatically before the window timeout.' : 'Cloud login profile saved and window closed.') : 'The login window expired. Its existing profile is retained, but new sign-ins may need to be repeated.'
+  check(await db().from('planner_agent_runs').update({status:saved?'succeeded':'needs_login',summary:message,finished_at:new Date().toISOString()}).eq('username',username).eq('kind','login').eq('status','running'))
+  check(await db().from('planner_agent_settings').update({login_browser_id:null,login_url:null}).eq('username',username))
+  return {saved,message}
+}
 async function refreshRuns(username: string) {
   const runs = check(await db().from('planner_agent_runs').select('*').eq('username',username).eq('kind','sync').in('status',['starting','running','applying']))
   for (const run of runs) {
@@ -201,8 +211,8 @@ async function refreshRuns(username: string) {
         if (run.browser_id) await bu('/browsers/'+run.browser_id,'PATCH',{action:'stop'}).catch(()=>undefined)
       }
     } catch (error) {
-      if (error instanceof ApiError && error.message.startsWith('The agent returned')) {
-        check(await db().from('planner_agent_runs').update({status:'failed',error:error.message,finished_at:new Date().toISOString()}).eq('id',run.id))
+      if (error instanceof SyntaxError || (error instanceof ApiError && error.message.startsWith('The agent returned'))) {
+        check(await db().from('planner_agent_runs').update({status:'failed',error:'The agent returned an invalid result. No planner data was changed.',finished_at:new Date().toISOString()}).eq('id',run.id))
         if (run.browser_id) await bu('/browsers/'+run.browser_id,'PATCH',{action:'stop'}).catch(()=>undefined)
       }
       else console.error('Agent status check failed', { type:error instanceof Error ? error.name : 'unknown' })
@@ -246,6 +256,11 @@ export async function handleAgentRequest(request: Request,path: string,username:
     const hour=part('hour'), slot=`${part('year')}-${part('month')}-${part('day')} ${hour}`
     for (const user of users) {
       if (!allowed(user.username)) continue
+      const s=await settings(user.username)
+      if (s.login_browser_id) {
+        const browser=await bu('/browsers/'+s.login_browser_id)
+        if (browser.status==='stopped' || Date.parse(browser.timeoutAt)<Date.now()+180000) await closeLogin(user.username,true)
+      }
       await refreshRuns(user.username)
       if (user.schedule_enabled && ['07','17'].includes(hour)) {
         const exists=check(await db().from('planner_agent_runs').select('id').eq('username',user.username).eq('schedule_slot',slot).maybeSingle())
@@ -281,10 +296,14 @@ export async function handleAgentRequest(request: Request,path: string,username:
     return json({url:browser.liveUrl})
   }
   if (path==='/api/agent/browser/save') {
-    const s=await settings(username)
-    if (s.login_browser_id) await bu('/browsers/'+s.login_browser_id,'PATCH',{action:'stop'})
-    check(await db().from('planner_agent_runs').update({status:'succeeded',summary:'Cloud browser closed normally; its profile can be reused.',finished_at:new Date().toISOString()}).eq('username',username).eq('kind','login').eq('status','running'))
-    check(await db().from('planner_agent_settings').update({login_browser_id:null,login_url:null}).eq('username',username))
+    return json(await closeLogin(username))
+  }
+  if (path==='/api/agent/cancel') {
+    const run=check(await db().from('planner_agent_runs').select('*').eq('username',username).eq('id',String(input.id)).eq('kind','sync').maybeSingle())
+    if (!run) throw new ApiError(404,'Run not found.')
+    if (run.provider_id && ['starting','running','applying'].includes(run.status)) await bu('/runs/'+run.provider_id+'/cancel','POST')
+    if (run.browser_id) await bu('/browsers/'+run.browser_id,'PATCH',{action:'stop'})
+    check(await db().from('planner_agent_runs').update({status:'cancelled',finished_at:new Date().toISOString()}).eq('username',username).eq('id',run.id).in('status',['starting','running','applying']))
     return json({ok:true})
   }
   if (path==='/api/agent/launch') return json(await launch(username,typeof input.task==='string' ? input.task.slice(0,3000) : 'Check enabled sources for academic updates and due-date changes.'))
