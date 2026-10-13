@@ -23,6 +23,7 @@ export interface CalendarEvent {
   allDay: boolean
   tagIds: string[]
   recurrence: Recurrence
+  agentSnapshot?: string
 }
 
 export interface Occurrence {
@@ -32,6 +33,7 @@ export interface Occurrence {
 }
 
 export interface StoredState {
+  revision?: number
   events: CalendarEvent[]
   tags: Tag[]
   hiddenTagIds: string[]

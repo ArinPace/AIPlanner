@@ -13,6 +13,7 @@ export interface PlannerTextFile {
   name: string
   content: string
   updatedAt: string
+  agentSnapshot?: string
 }
 
 export interface FilesState {

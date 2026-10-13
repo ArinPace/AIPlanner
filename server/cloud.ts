@@ -3,20 +3,21 @@ import { randomUUID } from 'node:crypto'
 import { validateFilesState, type FilesState, type PlannerDocument } from '../src/lib/files.js'
 import { createToken, hashPassword, normalizeUsername, tokenHash, verifyPassword } from './auth.js'
 import { DEFAULT_CALENDAR, EMPTY_FILES } from './defaults.js'
+import { handleAgentRequest } from './agent.js'
 
 const BUCKET = 'planner-pdfs'
 let client: SupabaseClient | undefined
 export function cloudConfigured() {
   return Boolean(process.env.SUPABASE_URL && (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY))
 }
-function db() {
+export function db() {
   if (!cloudConfigured()) throw new ApiError(503, 'Cloud storage is not configured yet.')
   client ??= createClient(process.env.SUPABASE_URL!, (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)!, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   })
   return client
 }
-class ApiError extends Error {
+export class ApiError extends Error {
   status: number
   constructor(status: number, message: string) { super(message); this.status = status }
 }
@@ -33,10 +34,10 @@ function dataResult<T>(response: { data: T; error: { code?: string; message?: st
   return data as NonNullable<T>
 }
 
-function json(value: unknown, status = 200) {
+export function json(value: unknown, status = 200) {
   return Response.json(value, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } })
 }
-async function body(request: Request): Promise<Record<string, unknown>> {
+export async function body(request: Request): Promise<Record<string, unknown>> {
   const text = await request.text()
   if (Buffer.byteLength(text) > 3 * 1024 * 1024) throw new ApiError(413, 'This workspace is too large to save in one request.')
   try {
@@ -91,6 +92,9 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
   const path = url.searchParams.get('route') ? `/api/${url.searchParams.get('route')}` : url.pathname.replace(/\/$/, '')
   const method = request.method
   try {
+    if (path === '/api/agent/cron' || path.startsWith('/api/agent/oauth/callback/')) {
+      return await handleAgentRequest(request, path, null)
+    }
     if (path === '/api/health' && method === 'GET') {
       result(await db().from('planner_accounts').select('username', { head: true, count: 'exact' }).limit(1))
       const bucket = dataResult(await db().storage.getBucket(BUCKET))
@@ -128,16 +132,19 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
     }
     const username = await sessionUser(request)
     if (!username) throw new ApiError(401, 'Please sign in.')
+    if (path.startsWith('/api/agent/')) return await handleAgentRequest(request, path, username)
     if (path === '/api/calendar' && method === 'GET') {
-      const row = dataResult(await db().from('planner_calendars').select('state').eq('username', username).single())
-      return json(row.state)
+      const row = dataResult(await db().from('planner_calendars').select('state,revision').eq('username', username).single())
+      return json({ ...row.state, revision: row.revision })
     }
     if (path === '/api/calendar' && method === 'PUT') {
       const input = await body(request)
       if (!Array.isArray(input.events) || !Array.isArray(input.tags) || !Array.isArray(input.hiddenTagIds)) throw new ApiError(400, 'Invalid calendar data.')
       const state = { events: input.events, tags: input.tags, hiddenTagIds: input.hiddenTagIds, zoom: typeof input.zoom === 'number' ? input.zoom : 1 }
-      result(await db().from('planner_calendars').update({ state, updated_at: new Date().toISOString() }).eq('username', username))
-      return json({ ok: true })
+      if (!Number.isSafeInteger(input.revision) || Number(input.revision) < 0) throw new ApiError(409, 'Reload your calendar before saving.')
+      const rows = dataResult(await db().from('planner_calendars').update({ state, revision: Number(input.revision) + 1, updated_at: new Date().toISOString() }).eq('username', username).eq('revision', input.revision).select('revision'))
+      if (!rows.length) throw new ApiError(409, 'Your calendar changed during a sync or in another tab. Reload before saving.')
+      return json({ ok: true, revision: rows[0].revision })
     }
     if (path === '/api/files' && method === 'GET') {
       await cleanupUploads(username)

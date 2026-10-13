@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "2.117.3",
+    "ai": "7.0.138",
+    "jose": "6.2.12",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

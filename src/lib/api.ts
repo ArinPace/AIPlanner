@@ -58,15 +58,20 @@ export function getSession() {
   return request<{ username: string | null }>('/api/session')
 }
 
-export function loadCalendar() {
-  return request<StoredState>('/api/calendar')
+let calendarRevision: number | undefined
+export async function loadCalendar() {
+  const state = await request<StoredState>('/api/calendar')
+  calendarRevision = state.revision
+  return state
 }
 
-export function saveCalendar(state: StoredState) {
-  return request<{ ok: boolean }>('/api/calendar', {
+export async function saveCalendar(state: StoredState) {
+  const saved = await request<{ ok: boolean; revision?: number }>('/api/calendar', {
     method: 'PUT',
-    body: JSON.stringify(state),
+    body: JSON.stringify({ ...state, revision: calendarRevision }),
   })
+  calendarRevision = saved.revision
+  return saved
 }
 
 export function emptyCalendar(): StoredState {

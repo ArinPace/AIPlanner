@@ -43,7 +43,22 @@ Files endpoints require the existing signed-in session. Uploading, downloading, 
 
 ## Checks
 
+## Agent
+
+The hosted **Agent** tab provides planner chat, cloud-browser launch controls, saved login profiles, source preferences, and account-scoped run/message history in Supabase. Browser Use V4 performs read-only academic checks with recordings disabled and a $0.50 per-run cost limit. Validated results create notes under **Agent updates**, organized into course subfolders, and timezone-aware calendar deadlines. Repeated results reuse generated IDs. Modified personal notes and reminders are preserved. Calendar and Files updates commit together with revision checks so concurrent edits cannot be silently overwritten.
+
+Sign in as your planner account, open Agent, select sources, and click **Connect** under Cloud browser. Sign into the enabled sites in that cloud window, including SSO/MFA. Click **Save login and close window** before the one-hour timeout; a normal close persists the profile. Then launch a check or enable the twice-daily schedule. A saved profile does not prevent sites from expiring authentication.
+
+The Supabase scheduler calls the authenticated tick endpoint every minute. It launches opted-in accounts at **7 AM and 5 PM America/New_York**, once per local schedule slot, and reconciles running tasks independently of the browser UI or laptop. The long-lived scheduler secret is stored in Vault; requests carry short-lived HMAC signatures. Scheduled runs remain disabled until a cloud login profile is saved and the account opts in. Agent access is currently limited to `arin` through `AGENT_ALLOWED_USERS`.
+
+Google API OAuth and OpenAI identity OAuth endpoints are implemented with PKCE, state, nonce, browser-bound callbacks, verified ID tokens, and encrypted server-side token storage. Google needs a registered OAuth client with Gmail/Calendar/Drive read-only scopes; this assistant's Google connections cannot be transferred to the app. Hosted Sign in with ChatGPT requires an approved OpenAI client. OpenAI identity authorization does not itself fund chat or grant ChatGPT plan usage. Planner chat currently uses AI Gateway with Vercel OIDC and the configured model. Set the optional OAuth environment variables in `.env.example` when those clients are available.
+
+Agent operations use the hosted Supabase API. Local development continues to use its disk API; local Agent requests report that the feature is available on the hosted app.
+
+## Validation
+
 ```sh
 npm run build
 npm run lint
+npx tsx@4.21.0 --test server/agent.test.ts
 ```

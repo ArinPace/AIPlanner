@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { FilesView } from './components/FilesView'
+import { AgentView } from './components/AgentView'
 import { EventModal } from './components/EventModal'
 import { Header } from './components/Header'
 import { LoginScreen } from './components/LoginScreen'
@@ -121,7 +122,7 @@ export default function App() {
 }
 
 function CalendarApp({ username, onLogout }: { username: string; onLogout: () => void }) {
-  const [tab, setTab] = useState<'calendar' | 'files'>('calendar')
+  const [tab, setTab] = useState<'calendar' | 'files' | 'agent'>('calendar')
   const [filesUnsaved, setFilesUnsaved] = useState(false)
   const [cursor, setCursor] = useState(() => new Date())
   const [view, setView] = useState<CalendarView>('month')
@@ -292,6 +293,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
       />
 
       <div className="files-tab-panel" hidden={tab !== 'files'}><FilesView onUnsavedChange={setFilesUnsaved} /></div>
+      <div hidden={tab !== 'agent'}><AgentView active={tab === 'agent'} /></div>
       <div className="app-body" hidden={tab !== 'calendar'}>
         <Sidebar
           open={sidebarOpen}

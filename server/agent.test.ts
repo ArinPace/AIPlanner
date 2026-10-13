@@ -1,0 +1,40 @@
+import assert from 'node:assert/strict'
+import { test } from 'node:test'
+import { mergeUpdates, parseUpdates } from './agent.js'
+import type { StoredState } from '../src/types.js'
+import type { FilesState } from '../src/lib/files.js'
+
+const calendar: StoredState = {events:[],tags:[],hiddenTagIds:[],zoom:1}
+const files: FilesState = {folders:[],files:[],documents:[]}
+const update = {source:'brightspace',course:'Intro to CS',title:'Assignment 2',url:'https://brightspace.nyu.edu/d2l/assignment/2',summary:'Birthdays.java',dueAt:'2026-09-27T23:59:00-04:00'}
+test('sync creates nested notes and an exact timezone-aware deadline, without duplicates',()=>{
+  const first=mergeUpdates(calendar,files,[update])
+  const second=mergeUpdates(first.calendar,first.files,[update])
+  assert.equal(second.calendar.events.length,1)
+  assert.equal(second.calendar.events[0].start,'2026-09-28T03:59:00.000Z')
+  assert.equal(second.files.files.length,1)
+  assert.equal(second.files.folders.length,2)
+  assert.equal(second.files.folders[1].parentId,second.files.folders[0].id)
+  assert.equal(calendar.events.length,0)
+  assert.equal(files.folders.length,0)
+})
+test('changed deadlines update generated records while preserving manual edits',()=>{
+  const first=mergeUpdates(calendar,files,[update])
+  const changed={...update,dueAt:'2026-09-30T23:59:00-04:00',summary:'New deadline announced'}
+  const fresh=mergeUpdates(first.calendar,first.files,[changed])
+  assert.equal(fresh.calendar.events[0].start,'2026-10-01T03:59:00.000Z')
+  first.calendar.events[0].title='My custom reminder'
+  first.files.files[0].content='My personal notes'
+  const edited=mergeUpdates(first.calendar,first.files,[changed])
+  assert.equal(edited.calendar.events[0].title,'My custom reminder')
+  assert.equal(edited.files.files[0].content,'My personal notes')
+  assert.equal(edited.files.files.length,2)
+  assert.match(edited.files.files[1].content,/New deadline/)
+})
+test('untrusted output rejects unknown destinations, invalid deadlines, and excess updates',()=>{
+  const output={summary:'Checked',needsLogin:false,updates:[update]}
+  assert.equal(parseUpdates(output).updates.length,1)
+  assert.throws(()=>parseUpdates({...output,updates:[{...update,url:'https://evil.example/collect'}]}))
+  assert.throws(()=>parseUpdates({...output,updates:[{...update,dueAt:'2026-09-27'}]}))
+  assert.throws(()=>parseUpdates({...output,updates:Array(101).fill(update)}))
+})

@@ -5,8 +5,8 @@ import { SettingsPanel } from './SettingsPanel'
 import { CalendarMark, ChevronIcon, MenuIcon, PlusIcon, SettingsIcon } from './Icons'
 
 type HeaderProps = {
-  tab: 'calendar' | 'files'
-  onTabChange: (tab: 'calendar' | 'files') => void
+  tab: 'calendar' | 'files' | 'agent'
+  onTabChange: (tab: 'calendar' | 'files' | 'agent') => void
   cursor: Date
   view: CalendarView
   zoom: number
@@ -68,7 +68,7 @@ export function Header({
       </div>
 
       <div className="header-center">
-        <nav className="workspace-tabs" aria-label="Workspace"><button type="button" aria-current={tab === 'calendar' ? 'page' : undefined} className={tab === 'calendar' ? 'is-active' : ''} onClick={() => onTabChange('calendar')}>Calendar</button><button type="button" aria-current={tab === 'files' ? 'page' : undefined} className={tab === 'files' ? 'is-active' : ''} onClick={() => onTabChange('files')}>Files</button></nav>
+        <nav className="workspace-tabs" aria-label="Workspace"><button type="button" aria-current={tab === 'calendar' ? 'page' : undefined} className={tab === 'calendar' ? 'is-active' : ''} onClick={() => onTabChange('calendar')}>Calendar</button><button type="button" aria-current={tab === 'files' ? 'page' : undefined} className={tab === 'files' ? 'is-active' : ''} onClick={() => onTabChange('files')}>Files</button><button type="button" aria-current={tab === 'agent' ? 'page' : undefined} className={tab === 'agent' ? 'is-active' : ''} onClick={() => onTabChange('agent')}>Agent</button></nav>
         {tab === 'calendar' && <>
 
         <button type="button" className="today-btn" onClick={onToday}>
