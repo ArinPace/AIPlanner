@@ -1,6 +1,16 @@
 # AI Planner
 
-A local React + TypeScript planner with Calendar and Files workspaces.
+A React + TypeScript planner with Calendar and Files workspaces, deployed on Vercel with private Supabase storage.
+
+Live app: https://aiplanner-ten.vercel.app/
+
+## Hosted storage
+
+The hosted API saves accounts, sessions, calendars, folder trees, text files, links, and PDF metadata in Supabase PostgreSQL. PDF bytes go directly to the private `planner-pdfs` Storage bucket using temporary signed URLs. Downloads require an account session and use short-lived signed URLs. PDFs can be up to 25 MB; uploads bypass the Vercel function body limit.
+
+The schema is in `supabase/migrations/`. Database tables have row level security enabled and deny browser roles direct access. The server uses `SUPABASE_URL` and `SUPABASE_SECRET_KEY` (or `SUPABASE_SERVICE_ROLE_KEY`); keep these in Vercel environment variables, never in frontend variables or source control. Account passwords and session tokens are stored as hashes. Each API request is scoped to its account. Concurrent Files saves reject stale revisions instead of overwriting newer changes.
+
+Pushes to GitHub's `main` branch automatically deploy to Vercel. `/api/health` verifies database access and the private PDF bucket. The existing local account was migrated without changing its password hash.
 
 ## Run locally
 
@@ -20,9 +30,9 @@ Choose **Files** in the header, then create a folder. Folders support names, cus
 - Save web links with a title and open them in a new tab.
 - Rename and move items using their editor's folder selector.
 
-Use **Edit folder** to change a folder's name, color, labels, or parent. Folder moves cannot create cycles. Search scans names, labels, text contents, and saved URLs across folders; PDF contents are not indexed. Filter by folder label and sort by name or recent updates. Deleting a folder removes its subfolders and all their items after confirmation. Text edits stay open when switching workspace tabs; leaving the editor, closing the page, or logging out prompts when there are unsaved edits.
+Use **Edit folder** to change a folder's name, color, labels, or parent. Folder moves cannot create cycles. Search scans names, labels, folder paths, text contents, and saved URLs across the entire folder tree; PDF contents are not indexed. Filter by folder label and sort by name or recent updates. Deleting a folder removes its subfolders and all their items after confirmation. Text edits stay open when switching workspace tabs; leaving the editor, closing the page, or logging out prompts when there are unsaved edits.
 
-## Storage
+## Local development storage
 
 - `data/users.json` and `data/sessions.json`: existing account/session storage.
 - `data/calendars/<username>.json`: calendar events and settings.

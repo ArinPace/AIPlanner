@@ -35,7 +35,7 @@ export function LoginScreen({ onSignedIn }: LoginScreenProps) {
           <CalendarMark size={40} />
           <div>
             <h1>AI Planner</h1>
-            <p>Sign in to save your calendar and files on this computer.</p>
+            <p>Sign in to save your calendar and files to your account.</p>
           </div>
         </div>
 
