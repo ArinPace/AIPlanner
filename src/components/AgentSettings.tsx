@@ -34,14 +34,24 @@ export function AgentSettings({ state, mode, aiReady, now, onClose, refresh }: {
     try { await action(); await refresh() } catch (e) { popup.current?.close(); popup.current = null; setError(e instanceof Error ? e.message : 'Please try again.') } finally { setBusy(false) }
   }
   async function save(next = sources) { await agentAction('vm/settings', { sources: next, schedule_enabled: scheduled && next.length > 0, schedule }) }
-  function connect(source: VmSource) {
-    // Open synchronously in the click handler; delayed window.open is blocked.
+  function prepareSignInTab() {
     popup.current = window.open('about:blank', '_blank')
     if (popup.current) { popup.current.opener = null; popup.current.document.title = 'Preparing your secure sign-in'; popup.current.document.body.textContent = 'Starting your private browser. Your sign-in page will open here shortly. You can return to the planner while it starts.' }
+  }
+  function connect(source: VmSource) {
+    // Open synchronously in the click handler; delayed window.open is blocked.
+    prepareSignInTab()
     void perform(async () => {
       const next = [...new Set([...sources, source])]; setSources(next); await save(next)
       const job = await agentAction<VmJob>('vm/browser/open', { source }); setRequestId(job.id)
       setNotice('Starting your private browser. Sign in in the new tab, then select Verify connections.')
+    })
+  }
+  function connectClaude() {
+    if (!host?.capabilities.claudeConnected) prepareSignInTab()
+    void perform(async () => {
+      if (host?.capabilities.claudeConnected) { await agentAction('vm/provider', { provider: 'claude_code' }); setNotice('Using your connected Claude account.') }
+      else { const job = await agentAction<VmJob>('vm/claude/connect'); setRequestId(job.id); setNotice('Preparing Claude authorization in the new tab. Your current AI stays connected.') }
     })
   }
   const aiConnections = <section className="assistant-settings-section"><h3>AI account</h3>
@@ -52,10 +62,7 @@ export function AgentSettings({ state, mode, aiReady, now, onClose, refresh }: {
         else { const job = await agentAction<VmJob>('vm/chatgpt/connect', { method: 'device' }); setRequestId(job.id); setNotice('Requesting your OpenAI sign-in code…') }
       })}>{host?.capabilities.chatgptConnected ? 'Use ChatGPT' : 'Connect ChatGPT'}</button></div>}
     <div className="assistant-provider"><strong>Claude</strong>{host?.capabilities.claudeConnected && <span className="connection-badge">Connected</span>}
-      <button type="button" disabled={busy || !host} onClick={() => void perform(async () => {
-        if (host?.capabilities.claudeConnected) { await agentAction('vm/provider', { provider: 'claude_code' }); setNotice('Using your connected Claude account.') }
-        else { const job = await agentAction<VmJob>('vm/claude/connect'); setRequestId(job.id); setNotice('Preparing Claude authorization. Open the private browser link below when ready.') }
-      })}>{host?.capabilities.claudeConnected ? 'Use Claude' : 'Connect Claude'}</button></div>
+      <button type="button" disabled={busy || !host} onClick={connectClaude}>{host?.capabilities.claudeConnected ? 'Use Claude' : 'Connect Claude'}</button></div>
     <details><summary>Use an OpenAI API key</summary><form onSubmit={e => { e.preventDefault(); void perform(async () => { await agentAction('vm/ai', { apiKey }); setApiKey(''); setNotice('API key connected.') }) }}><label>API key<input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} autoComplete="off" required /></label><button disabled={busy}>Save API key</button></form></details>
     {device && !aiReady && <div className="assistant-connection-result"><p>Enter this code on OpenAI’s authorization page:</p><code>{device.userCode}</code><a href={device.verificationUrl} target="_blank" rel="noreferrer">Open OpenAI authorization ↗</a></div>}
   </section>

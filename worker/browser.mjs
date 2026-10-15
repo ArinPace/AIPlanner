@@ -36,7 +36,7 @@ export async function openLogin(dataDir, source) {
   if (!(source in sources)) throw new Error('Choose a supported website.')
   return openView(dataDir, sources[source])
 }
-export async function openView(dataDir, destination) {
+export async function openView(dataDir, destination, attempt = 0) {
   await closeLiveBrowser()
   const ctx = await browser(dataDir), page = ctx.pages()[0] || await ctx.newPage()
   await page.goto(destination, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {})
@@ -63,7 +63,7 @@ export async function openView(dataDir, destination) {
     upstream.on('error', () => socket.destroy()); upstream.end()
   })
   await new Promise(resolve => proxy.listen(6081, '127.0.0.1', resolve))
-  const tunnel = spawn('cloudflared', ['tunnel', '--no-autoupdate', '--url', 'http://127.0.0.1:6081'], { stdio: ['ignore', 'ignore', 'pipe'] })
+  const tunnel = spawn('cloudflared', ['tunnel', '--no-autoupdate', '--protocol', 'http2', '--edge-ip-version', '4', '--url', 'http://127.0.0.1:6081'], { stdio: ['ignore', 'ignore', 'pipe'] })
   const current = { proxy, tunnel, sockets, timer: setTimeout(() => void closeLiveBrowser(), 20 * 60000) }; live = current
   const origin = await new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('Could not open the private browser view. Try again.')), 45000)
@@ -71,6 +71,31 @@ export async function openView(dataDir, destination) {
     tunnel.stderr.on('data', chunk => { buffer = (buffer + chunk).slice(-4000); const match = buffer.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/); if (match) { clearTimeout(timer); resolve(match[0]) } })
     tunnel.on('error', () => { clearTimeout(timer); reject(new Error('The browser connection service is unavailable.')) })
   }).catch(async error => { await closeLiveBrowser(); throw error })
+  // Avoid a premature lookup: some local resolvers cache NXDOMAIN for a newly
+  // allocated hostname even after Cloudflare publishes its DNS record.
+  await new Promise(resolve => setTimeout(resolve, 5000))
+  // cloudflared announces its hostname before DNS and the public route are
+  // ready. Publish the view only after an end-to-end request succeeds.
+  let available = false
+  let readinessReason = 'not checked'
+  const deadline = Date.now() + 20000
+  while (Date.now() < deadline && live === current) {
+    try {
+      const response = await fetch(`${origin}/${token}/vnc.html`, { signal: AbortSignal.timeout(5000) })
+      const html = await response.text()
+      readinessReason = `HTTP ${response.status}; viewer ${/novnc/i.test(html) ? 'present' : 'missing'}`
+      if (response.ok && /novnc/i.test(html)) { available = true; break }
+    } catch (error) { readinessReason = error.cause?.code || error.name }
+    await new Promise(resolve => setTimeout(resolve, 1000))
+  }
+  if (!available) {
+    console.error('Private browser readiness failed:', readinessReason)
+    await closeLiveBrowser()
+    // A newly allocated quick-tunnel hostname can be unresolvable on a local
+    // resolver even though the tunnel is connected. Try a fresh route once.
+    if (attempt === 0) return openView(dataDir, destination, 1)
+    throw new Error('The private browser could not connect. Please try Connect again.')
+  }
   // Xvfb has a fixed display size. Scaling keeps the full guest browser usable
   // on phones and narrow windows without cropping the sign-in form.
   return { liveUrl: `${origin}/${token}/vnc.html?autoconnect=1&resize=scale&path=${token}/websockify`, expiresAt: new Date(Date.now() + 20 * 60000).toISOString() }
