@@ -7,6 +7,7 @@ import { browser, openLogin, checkSites, liveBrowserOpen, shutdownBrowser, close
 import { tomlValue } from './config-args.mjs'
 import { connectPersonalChatGpt, disconnectPersonalChatGpt } from './oauth.mjs'
 import { connectPersonalDevice, disconnectPersonalDevice, personalCodexStatus } from './device-auth.mjs'
+import { claudeStatus, connectClaude, disconnectClaude, claudeChat } from './claude.mjs'
 
 const dataDir = process.env.PLANNER_DATA_DIR || '/var/lib/planner'
 const config = JSON.parse(await readFile(path.join(dataDir, 'worker.json'), 'utf8'))
@@ -23,6 +24,7 @@ async function api(action, value = {}) {
 let hostId
 try { hostId = (await readFile(path.join(dataDir, 'host-id'), 'utf8')).trim() } catch { hostId = 'urn:uuid:' + randomUUID(); await writeFile(path.join(dataDir, 'host-id'), hostId, { mode: 0o600, flag: 'wx' }) }
 async function credential(remote) {
+  if (remote.aiProvider === 'claude_code') return claudeStatus(dataDir)
   if (remote.credential?.apiKey) return { access_token: remote.credential.apiKey, identity: 'OpenAI API', type: 'api' }
   if (remote.personalChatGptAllowed) {
     const personal = await personalCodexStatus(dataDir)
@@ -46,6 +48,7 @@ async function chat(job, auth, remote) {
   if (!auth) throw new Error('Connect an AI account in Setup first.')
   if (liveBrowserOpen()) throw new Error('Finish signing into your websites and select Verify connections before starting an agent run.')
   await browser(dataDir)
+  if (auth.type === 'claude') return claudeChat({ dataDir, job, remote, origin, token: config.token, instructions, progress: reply => api('progress', { id: job.id, lease: job.lease, reply }) })
   const root = path.dirname(fileURLToPath(import.meta.url)), node = process.execPath
   const executable = path.join(root, 'node_modules', '.bin', 'codex')
   const args = ['app-server', '--listen', 'stdio://']
@@ -61,6 +64,7 @@ async function chat(job, auth, remote) {
     'mcp_servers.planner.disabled_tools': ['browser_open', 'browser_read', 'browser_close'],
     'mcp_servers.browser.command': node,
     'mcp_servers.browser.args': [path.join(root, 'browser-tools.mjs')],
+    'mcp_servers.browser.env': { PLANNER_ENABLED_SOURCES: JSON.stringify(remote.sources) },
   }
   for (const [key, value] of Object.entries(overrides)) args.push('-c', `${key}=${tomlValue(value)}`)
   const env = { ...process.env, CODEX_HOME: path.join(dataDir, 'codex'), ...(auth.access_token ? { ACCESS_TOKEN: auth.access_token } : {}), PLANNER_WORKER_TOKEN: config.token, PLANNER_ENABLED_SOURCES: JSON.stringify(remote.sources) }
@@ -94,12 +98,19 @@ for (;;) {
     const remote = await api('config')
     const auth = await credential(remote).catch(() => null)
     signedIn = Boolean(auth); identity = auth?.identity || null
-    ;({ job } = await api('claim', { signedIn, identity, version: '0.1.0' }))
+    ;({ job } = await api('claim', { signedIn, identity, runtime: remote.aiProvider === 'claude_code' ? 'claude' : 'codex', version: '0.2.0' }))
     if (job) {
       const timer = setInterval(() => void api('progress', { id: job.id, lease: job.lease, reply: '' }).catch(() => {}), 20000)
       try {
         let result
-        if (job.kind === 'browser_login' && job.message === 'chatgpt_disconnect') {
+        if (job.kind === 'browser_login' && job.message === 'claude_connect') {
+          await closeLiveBrowser()
+          result = { reply: 'Sign in through Claude Code’s own authorization page in your private VM browser.', result: await connectClaude(dataDir) }
+        }
+        else if (job.kind === 'browser_login' && job.message === 'claude_disconnect') {
+          await disconnectClaude(dataDir); await closeLiveBrowser(); result = { reply: 'Claude Code was disconnected from this VM.' }
+        }
+        else if (job.kind === 'browser_login' && job.message === 'chatgpt_disconnect') {
           await disconnectPersonalChatGpt(dataDir); await disconnectPersonalDevice(dataDir); await closeLiveBrowser(); result = { reply: 'Your ChatGPT connection was removed from this VM.' }
         }
         else if (job.kind === 'browser_login' && job.message === 'chatgpt_device') {

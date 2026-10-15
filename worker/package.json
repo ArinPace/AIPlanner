@@ -4,8 +4,9 @@
   "type": "module",
   "version": "0.1.0",
   "dependencies": {
-    "@openai/codex": "0.162.1",
+    "@anthropic-ai/claude-code": "2.1.300",
     "@modelcontextprotocol/sdk": "1.32.1",
+    "@openai/codex": "0.162.1",
     "jose": "6.2.12",
     "playwright": "1.64.0",
     "zod": "4.3.6"

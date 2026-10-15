@@ -10,7 +10,6 @@ const config = JSON.parse(await readFile(configPath, 'utf8'))
 const origin = new URL(config.origin)
 if (origin.protocol !== 'https:' || origin.username || origin.password) throw new Error('Use an HTTPS planner origin.')
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const multipass = 'C:/Program Files/Multipass/bin/multipass.exe'
 const powershell = 'powershell.exe'
 async function listGuests() {
   const output = await command(powershell, ['-NoProfile', '-Command', "ConvertTo-Json -Compress -InputObject @(Get-VM | Select-Object Name,@{Name='State';Expression={$_.State.ToString()}})"])

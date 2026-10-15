@@ -18,7 +18,7 @@ export function hostOnline(heartbeat: string | null, now = Date.now()): boolean 
 export function safeWorkerStatus(value: unknown) {
   const input = value && typeof value === 'object' ? value as Record<string, unknown> : {}
   return {
-    runtime: 'codex', recordings: false,
+    runtime: input.runtime === 'claude' ? 'claude' : 'codex', recordings: false,
     signedIn: input.signedIn === true,
     identity: typeof input.identity === 'string' ? input.identity.slice(0, 160) : null,
     version: typeof input.version === 'string' ? input.version.slice(0, 40) : null,

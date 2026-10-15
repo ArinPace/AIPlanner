@@ -20,7 +20,8 @@ export function AgentView({ active }: { active: boolean }) {
   const [now, setNow] = useState(0)
   const loadedSources = useRef(false)
   const host = state?.hosts[0]
-  const aiReady = Boolean(state?.settings.ai_provider || host?.capabilities.signedIn)
+  const claudeSelected = state?.settings.ai_provider === 'claude_code'
+  const aiReady = Boolean(state?.settings.ai_provider === 'openai_api' || (host?.capabilities.signedIn && (claudeSelected ? host.capabilities.runtime === 'claude' : host.capabilities.runtime !== 'claude')))
   const sitesReady = Boolean(state?.settings.sources.length && state.settings.sources.every(s => state.settings.sites[s]?.ready))
   const ready = Boolean(aiReady && sitesReady && host?.online)
   const live = state?.runs.find(r => r.id === liveJobId) || state?.runs.find(r => r.kind === 'browser_login' && r.status === 'completed' && r.result.liveUrl && Date.parse(r.result.expiresAt || '') > now)
@@ -76,6 +77,12 @@ export function AgentView({ active }: { active: boolean }) {
             {authJob?.status === 'failed' && <p role="alert" className="agent-error">{authJob.error}</p>}
             {host?.capabilities.signedIn && host.capabilities.identity !== 'OpenAI API' && <button type="button" className="agent-secondary" disabled={busy} onClick={() => void perform(async () => { await agentAction('vm/chatgpt/disconnect'); setNotice('Disconnecting ChatGPT from your personal VM.') })}>Disconnect ChatGPT</button>}
           </> : <p>Hosted ChatGPT subscription sign-in requires provider approval and is not enabled for this account. You can use an API key now.</p>}</details>
+          <details><summary>Use a Claude subscription</summary>
+            <p>Sign into Claude Code on your private computer using Anthropic’s own authorization page. Claude Code keeps and refreshes your login. Usage follows your Claude plan.</p>
+            <button type="button" className="agent-launch" disabled={busy || !host || state.runs.some(r => r.message === 'claude_connect' && pending(r))} onClick={() => void perform(async () => { const job = await agentAction<VmJob>('vm/claude/connect'); setLiveJobId(job.id); setNotice('Opening Claude Code authorization. The private browser link will appear below. This switches your active AI to Claude.') })}>Continue with Claude</button>
+            {claudeSelected && <button type="button" className="agent-secondary" disabled={busy} onClick={() => void perform(async () => { await agentAction('vm/claude/disconnect'); setNotice('Disconnecting Claude Code. Your separate ChatGPT login remains on its VM.') })}>Disconnect Claude</button>}
+            {state.runs.find(r => r.message === 'claude_connect')?.status === 'failed' && <p role="alert" className="agent-error">{state.runs.find(r => r.message === 'claude_connect')?.error}</p>}
+          </details>
         </div>
         <div className="vm-setup-section"><h3>2. Choose your websites</h3><p>Select what your assistant may check, then sign in through your private browser.</p><div className="vm-site-grid">{(Object.entries(VM_SOURCES) as [VmSource, { name: string; url: string }][]).map(([id, source]) => <div className="vm-site" key={id}><label><input type="checkbox" checked={sources.includes(id)} onChange={e => setSources(current => e.target.checked ? [...current, id] : current.filter(x => x !== id))}/><span>{source.name}<small>{state.settings.sites[id]?.ready ? 'Connection verified' : sources.includes(id) ? 'Sign-in needed' : 'Not selected'}</small></span></label><button className="agent-secondary" type="button" disabled={busy || !sources.includes(id) || !host} onClick={() => void perform(async () => { await saveSources(); const job = await agentAction<VmJob>('vm/browser/open', { source: id }); setLiveJobId(job.id); setNotice('Opening your private browser. The sign-in link will appear shortly.') })}>Sign in</button></div>)}</div><button type="button" className="agent-secondary" disabled={busy} onClick={() => void perform(async () => { await saveSources(); setNotice('Website choices saved.') })}>Save websites</button>
           {liveUrl && <div className="vm-live"><h4>Your browser is ready</h4><p>Sign in on the website, then return here. This private view closes after 20 minutes. Recordings are off.</p><a className="agent-launch agent-open-chat" href={liveUrl} target="_blank" rel="noreferrer">Open private browser ↗</a></div>}{live?.status === 'failed' && <p role="alert" className="agent-error">{live.error}</p>}

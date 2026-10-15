@@ -36,7 +36,7 @@ export async function handleVmWorker(request: Request, path: string) {
   const host = await workerIdentity(request)
   if (path === '/api/agent/vm/worker/config') {
     const settings = checked(await db().from('planner_vm_settings').select('*').eq('username', host.username).single())
-    return json({ sources: settings.sources, credential: settings.credential ? openVmCredential(settings.credential) : null, personalChatGptAllowed: personalChatGptAllowed(host.username) })
+    return json({ sources: settings.sources, aiProvider: settings.ai_provider, credential: settings.credential ? openVmCredential(settings.credential) : null, personalChatGptAllowed: personalChatGptAllowed(host.username) })
   }
   if (path === '/api/agent/vm/worker/mcp') {
     const jobId = request.headers.get('x-planner-job'), lease = request.headers.get('x-planner-lease')
@@ -108,6 +108,12 @@ export async function handleVmRequest(request: Request, path: string, username: 
   }
   if (request.method !== 'POST') throw new ApiError(405, 'Use POST.')
   const input = await body(request)
+  if (path === '/api/agent/vm/claude/connect' || path === '/api/agent/vm/claude/disconnect') {
+    const host = checked(await db().from('planner_vm_hosts').select('id').eq('username', username).is('revoked_at', null).maybeSingle())
+    if (!host) throw new ApiError(409, 'Your private computer is still being prepared.')
+    checked(await db().from('planner_vm_settings').update({ credential: null, ai_provider: path.endsWith('/connect') ? 'claude_code' : null }).eq('username', username))
+    return json(checked(await db().from('planner_vm_jobs').insert({ username, host_id: host.id, kind: 'browser_login', message: path.endsWith('/connect') ? 'claude_connect' : 'claude_disconnect' }).select(publicJob).single()), 202)
+  }
   if (path === '/api/agent/vm/chatgpt/connect' || path === '/api/agent/vm/chatgpt/disconnect') {
     if (!personalChatGptAllowed(username)) throw new ApiError(403, 'Hosted ChatGPT subscription sign-in is awaiting provider approval. Use an API key instead.')
     const host = checked(await db().from('planner_vm_hosts').select('id,heartbeat_at').eq('username', username).is('revoked_at', null).maybeSingle())

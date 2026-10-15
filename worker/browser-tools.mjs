@@ -17,7 +17,13 @@ server.registerTool('browser_read', {
     connection = await chromium.connectOverCDP('http://127.0.0.1:9222')
     const context = connection.contexts()[0], page = await context.newPage()
     try {
-      await page.goto(destination, { waitUntil: 'domcontentloaded', timeout: 45000 }); await page.waitForTimeout(1000)
+      await page.goto(destination, { waitUntil: 'domcontentloaded', timeout: 45000 })
+      // SSO may render an intermediary origin before automatically returning.
+      // Wait for the enabled destination without reading the credential page.
+      await page.waitForURL(value => {
+        try { readableUrl(value.href, enabled, sources); return true } catch { return false }
+      }, { timeout: 15000, waitUntil: 'domcontentloaded' }).catch(() => {})
+      await page.waitForTimeout(2000)
       // Redirected login pages may contain credential fields. Report the wall without reading them.
       try { readableUrl(page.url(), enabled, sources) } catch { return { isError: true, content: [{ type: 'text', text: 'This website redirected to sign-in. Ask the user to reconnect it in Setup.' }] } }
       const text = (await page.locator('body').innerText()).slice(0, 50000)
