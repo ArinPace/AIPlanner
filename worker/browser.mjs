@@ -148,7 +148,7 @@ export async function openView(dataDir, destination, attempt = 0) {
   }
   // Xvfb has a fixed display size. Scaling keeps the full guest browser usable
   // on phones and narrow windows without cropping the sign-in form.
-  return { liveUrl: `${origin}/${token}/vnc.html?autoconnect=1&resize=scale&path=${token}/websockify`, expiresAt: new Date(Date.now() + 20 * 60000).toISOString() }
+  return { liveUrl: `${origin}/${token}/vnc.html?autoconnect=1&reconnect=1&reconnect_delay=2000&resize=scale&path=${token}/websockify`, expiresAt: new Date(Date.now() + 20 * 60000).toISOString() }
 }
 export async function checkSites(dataDir, enabled) {
   await closeLiveBrowser()
