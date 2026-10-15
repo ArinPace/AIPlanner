@@ -14,8 +14,9 @@ const multipass = 'C:/Program Files/Multipass/bin/multipass.exe'
 function command(executable, args, input) {
   return new Promise((resolve, reject) => {
     const child = spawn(executable, args, { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] }); let output = ''
+    const timer = setTimeout(() => { child.kill(); reject(new Error('VM command timed out.')) }, executable === multipass ? 180000 : 45 * 60000)
     child.stdout.on('data', chunk => { output = (output + chunk).slice(-100000) }); child.stderr.resume()
-    child.on('error', reject); child.on('exit', code => code === 0 ? resolve(output) : reject(new Error('VM provisioning failed.'))); child.stdin.end(input)
+    child.on('error', error => { clearTimeout(timer); reject(error) }); child.on('exit', code => { clearTimeout(timer); if (code === 0) resolve(output); else reject(new Error('VM provisioning failed.')) }); child.stdin.end(input)
   })
 }
 async function api(action, value) {
@@ -25,11 +26,11 @@ async function api(action, value) {
 }
 for (;;) {
   try {
-    let list = JSON.parse(await command(multipass, ['list', '--format', 'json']))
     const power = await api('power', {})
     // Enabling Hyper-V requires a reboot. Leave accounts queued until its
     // service exists, rather than marking their first provisioning as failed.
     await command('powershell.exe', ['-NoProfile', '-Command', "if (!(Get-Service vmms -ErrorAction SilentlyContinue)) { exit 1 }"])
+    let list = JSON.parse(await command(multipass, ['list', '--format', 'json']))
     // Stop idle guests before allocating memory to a different user's task.
     for (const computer of power.computers.filter(c => !c.shouldRun)) {
       if (!/^[a-z0-9_]{3,24}$/.test(computer.username)) continue
