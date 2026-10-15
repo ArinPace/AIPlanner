@@ -7,6 +7,15 @@ import path from 'node:path'
 import { allowedLivePath } from './browser-access.mjs'
 import { signedInPage, brightspaceCourse } from './site-status.mjs'
 
+async function signedInBrowserPage(source, page) {
+  for (const frame of page.frames()) {
+    if (new URL(frame.url()).hostname.replace(/^www\./,'') !== new URL(sources[source]).hostname.replace(/^www\./,'')) continue
+    const text = await frame.locator('body').innerText({ timeout: 1500 }).catch(() => '')
+    if (signedInPage(source, frame.url(), text, await frame.locator('input[type=password]:visible').count().catch(() => 0) > 0)) return true
+  }
+  return false
+}
+
 export const sources = {
   brightspace: 'https://brightspace.nyu.edu/', gradescope: 'https://www.gradescope.com/',
   gmail: 'https://mail.google.com/mail/u/0/', calendar: 'https://calendar.google.com/calendar/u/0/r',
@@ -58,9 +67,7 @@ export async function observeSignIn(dataDir) {
   if (!live?.source || live.reported || !context) return {}
   const source = live.source
   for (const page of context.pages()) {
-    if (new URL(page.url()).hostname.replace(/^www\./,'') !== new URL(sources[source]).hostname.replace(/^www\./,'')) continue
-    const text = await page.locator('body').innerText({ timeout: 1500 }).catch(() => '')
-    if (!signedInPage(source, page.url(), text, await page.locator('input[type=password]:visible').count().catch(() => 0) > 0)) continue
+    if (!await signedInBrowserPage(source, page)) continue
     if (source === 'gradescope') {
       for (const candidate of [...context.pages()].reverse()) {
         const course = brightspaceCourse(candidate.url())
@@ -146,8 +153,7 @@ export async function checkSites(dataDir, enabled) {
     if (!(source in sources)) continue
     let existing = false
     for (const current of ctx.pages()) {
-      const text = await current.locator('body').innerText({ timeout: 1500 }).catch(() => '')
-      if (signedInPage(source, current.url(), text, await current.locator('input[type=password]:visible').count().catch(() => 0) > 0)) { existing = true; break }
+      if (await signedInBrowserPage(source, current)) { existing = true; break }
     }
     if (existing) { sites[source] = { ready: true }; continue }
     if (source === 'gradescope') { sites[source] = { ready: false }; continue }
