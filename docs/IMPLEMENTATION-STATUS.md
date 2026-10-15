@@ -38,18 +38,20 @@
 ## Outstanding verification / implementation
 
 - Actual Brightspace course/assignment collection passed: saved a sourced note
-  with CS Assignment 2 list evidence. Detail page instructions remain unverified.
+  with CS Assignment 2 list evidence and actual assignment detail URL. Detail
+  view opened successfully; its Instructions heading had no extracted body or
+  attachments, so assignment-specific instructions remain unverified.
   Fixed explicit enabled-source environment forwarding to the Codex browser MCP
   subprocess and waited for NYU SSO intermediary redirects without reading them.
-- Saved Brightspace login survived VM restart. Enable the new 7AM/5PM
-  America/New_York schedule. Enabling it disables the legacy schedule. Do not
-  disable the legacy schedule prematurely.
+- Saved Brightspace login survived VM restart. The new 7AM/5PM America/New_York
+  schedule is enabled for Brightspace; enabling it disabled the legacy schedule.
 - Native Hyper-V idle shutdown and automatic job-triggered wake both occurred.
 - Multipass recovered after terminating its hung management daemon and restarting
   its service. Existing VM scheduling no longer depends on that daemon.
 - Claude selectable provider implemented with unmodified Claude Code 2.1.300.
   Native sign-in launch and private view smoke test passed; actual user sign-in,
-  inference, and restart persistence still require verification.
+  inference, and restart persistence still require verification. The production
+  Claude connection has been launched from Setup for the owner to sign in.
   Use unmodified Claude Code and its own authentication flow; do not collect or
   proxy subscription tokens. Current Anthropic legal docs explicitly distinguish
   hosting the unmodified binary from offering a custom Claude.ai OAuth client:
