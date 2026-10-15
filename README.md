@@ -133,12 +133,19 @@ account is independent and must be removed from its VM separately.
 ## Personal ChatGPT authorization
 
 For the explicitly configured personal account (`PLANNER_PERSONAL_CHATGPT_USERS`,
-default `arin`), Setup → Use a ChatGPT subscription → Continue with ChatGPT opens
-OpenAI in the VM browser. Its loopback callback runs inside that same VM. The
-phone or device displaying the browser does not need a local helper. This path
-is restricted to the personal self-hosted installation, not general hosted users.
-Choosing ChatGPT removes a previous API key; Disconnect ChatGPT removes the
-saved VM credentials.
+default `arin`), Setup → Use a ChatGPT subscription → Continue with ChatGPT shows
+a one-use device code and OpenAI authorization link. Complete authorization in
+the user's ordinary browser on their phone or computer. Their private Codex
+runtime on the VM owns login and refresh; no login inside automated Chromium or
+local helper on the phone is needed. This is remote control of the owner's
+personal local agent, not a subscription-login integration for hosted customers.
+Do not expand the allowlist as a substitute for an approved hosted integration.
+Choosing ChatGPT removes a previous API key; Disconnect ChatGPT logs the VM's
+own Codex account out. It never imports an existing desktop Codex credential.
+
+The separate SIWC loopback implementation remains an operator recovery option;
+it is not the default website flow. OpenAI's remote-VM SIWC guidance describes
+completing OAuth locally and transferring that registration over SSH.
 
 An optional operator-side command is also available from this repository on
 the Windows computer running the browser:

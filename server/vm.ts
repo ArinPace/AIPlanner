@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import { ApiError, body, db, json } from './cloud.js'
 import { createPlannerMcp } from './mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
-import { hostOnline, safeWorkerStatus, uuid, vmHash, vmMessage } from './vm-validation.js'
+import { hostOnline, safeWorkerStatus, safeDeviceAuthorization, uuid, vmHash, vmMessage } from './vm-validation.js'
 import { openVmCredential, sealVmCredential } from './vm-vault.js'
 import { VM_SOURCES } from '../src/lib/vm.js'
 
@@ -74,6 +74,8 @@ export async function handleVmWorker(request: Request, path: string) {
         output.liveUrl = value.liveUrl; output.expiresAt = new Date(Date.now() + 20 * 60000).toISOString()
       }
       if (value.sites && typeof value.sites === 'object') output.sites = Object.fromEntries(Object.keys(VM_SOURCES).filter(k => k in (value.sites as object)).map(k => [k, { ready: (value.sites as Record<string, { ready?: boolean }>)[k]?.ready === true }]))
+      const device = safeDeviceAuthorization(value.deviceCode, personalChatGptAllowed(host.username))
+      if (device) { output.deviceCode = device; output.expiresAt = new Date(Date.now() + 10 * 60000).toISOString() }
     }
     const result = checked(await db().rpc('planner_vm_report', { p_host: host.id, p_job: input.id, p_lease: input.lease, p_reply: reply, p_error: error, p_finished: finished, p_thread: threadId, p_result: output }))
     if (!result) throw new ApiError(409, 'This job was cancelled or its lease expired.')
@@ -108,7 +110,8 @@ export async function handleVmRequest(request: Request, path: string, username: 
     const host = checked(await db().from('planner_vm_hosts').select('id,heartbeat_at').eq('username', username).is('revoked_at', null).maybeSingle())
     if (!host) throw new ApiError(409, 'Your personal VM is still being prepared.')
     if (path.endsWith('/connect')) checked(await db().from('planner_vm_settings').update({ credential: null, ai_provider: null }).eq('username', username))
-    return json(checked(await db().from('planner_vm_jobs').insert({ username, host_id: host.id, kind: 'browser_login', message: path.endsWith('/disconnect') ? 'chatgpt_disconnect' : 'chatgpt_oauth' }).select(publicJob).single()), 202)
+    checked(await db().from('planner_vm_jobs').update({ result: {} }).eq('username', username).eq('kind', 'browser_login').eq('status', 'completed'))
+    return json(checked(await db().from('planner_vm_jobs').insert({ username, host_id: host.id, kind: 'browser_login', message: path.endsWith('/disconnect') ? 'chatgpt_disconnect' : input.method === 'oauth' ? 'chatgpt_oauth' : 'chatgpt_device' }).select(publicJob).single()), 202)
   }
   if (path === '/api/agent/vm/ai') {
     const apiKey = typeof input.apiKey === 'string' ? input.apiKey.trim() : ''

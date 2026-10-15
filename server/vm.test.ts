@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { randomBytes } from 'node:crypto'
-import { hostOnline, safeWorkerStatus, uuid, vmMessage } from './vm-validation.js'
+import { hostOnline, safeWorkerStatus, safeDeviceAuthorization, uuid, vmMessage } from './vm-validation.js'
 import { sealVmCredential, openVmCredential } from './vm-vault.js'
 import { handleCloudRequest } from './cloud.js'
 import { scheduleSlot, shouldRunVm } from './vm-power.js'
@@ -17,6 +17,13 @@ test('offline-user schedules wake only around New York slots, then stop after th
   assert.equal(shouldRunVm({ jobs: [], scheduled: false }, now), false)
   assert.equal(shouldRunVm({ jobs: [{ kind: 'chat', status: 'queued' }], scheduled: false }, now), true)
   assert.equal(shouldRunVm({ jobs: [{ kind: 'browser_login', status: 'completed', result: { expiresAt: '2026-10-15T11:05:00Z' } }], scheduled: false }, now), true)
+})
+test('personal device authorization cannot turn into public auth, phishing links or token disclosure', () => {
+  const device = { verificationUrl: 'https://auth.openai.com/codex/device', userCode: 'ABCD-1234', access_token: 'must-not-leak' }
+  assert.deepEqual(safeDeviceAuthorization(device, true), { verificationUrl: device.verificationUrl, userCode: device.userCode })
+  assert.equal(safeDeviceAuthorization(device, false), null)
+  for (const url of ['https://auth.openai.com.evil.test/codex/device', 'https://auth.openai.com/codex/device?token=secret', 'javascript:alert(1)']) assert.equal(safeDeviceAuthorization({ ...device, verificationUrl: url }, true), null)
+  assert.equal(safeDeviceAuthorization({ ...device, userCode: '<script>secret</script>' }, true), null)
 })
 
 test('worker routes reject missing and malformed credentials before any database access', async () => {

@@ -1,6 +1,12 @@
 import { createHash } from 'node:crypto'
 
 export const vmHash = (value: string) => createHash('sha256').update(value).digest('hex')
+export function safeDeviceAuthorization(value: unknown, personal: boolean) {
+  if (!personal || !value || typeof value !== 'object') return null
+  const input = value as Record<string, unknown>
+  if (input.verificationUrl !== 'https://auth.openai.com/codex/device' || typeof input.userCode !== 'string' || !/^[A-Z0-9-]{4,32}$/.test(input.userCode)) return null
+  return { verificationUrl: input.verificationUrl, userCode: input.userCode }
+}
 export const uuid = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 export function vmMessage(value: unknown): string {
   if (typeof value !== 'string' || !value.trim() || value.length > 12000) throw new Error('Write a message of 1–12,000 characters.')

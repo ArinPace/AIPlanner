@@ -3,9 +3,10 @@ import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { CodexRpc } from './rpc.mjs'
-import { browser, openLogin, checkSites, liveBrowserOpen, shutdownBrowser } from './browser.mjs'
+import { browser, openLogin, checkSites, liveBrowserOpen, shutdownBrowser, closeLiveBrowser } from './browser.mjs'
 import { tomlValue } from './config-args.mjs'
 import { connectPersonalChatGpt, disconnectPersonalChatGpt } from './oauth.mjs'
+import { connectPersonalDevice, disconnectPersonalDevice, personalCodexStatus } from './device-auth.mjs'
 
 const dataDir = process.env.PLANNER_DATA_DIR || '/var/lib/planner'
 const config = JSON.parse(await readFile(path.join(dataDir, 'worker.json'), 'utf8'))
@@ -23,6 +24,10 @@ let hostId
 try { hostId = (await readFile(path.join(dataDir, 'host-id'), 'utf8')).trim() } catch { hostId = 'urn:uuid:' + randomUUID(); await writeFile(path.join(dataDir, 'host-id'), hostId, { mode: 0o600, flag: 'wx' }) }
 async function credential(remote) {
   if (remote.credential?.apiKey) return { access_token: remote.credential.apiKey, identity: 'OpenAI API', type: 'api' }
+  if (remote.personalChatGptAllowed) {
+    const personal = await personalCodexStatus(dataDir)
+    if (personal) return personal
+  }
   const filename = path.join(dataDir, 'chatgpt.json')
   let saved; try { saved = JSON.parse(await readFile(filename, 'utf8')) } catch { return null }
   if (!saved.scopes?.includes('chatgpt.tokens.use.direct')) throw new Error('Authorize ChatGPT plan usage before starting the agent.')
@@ -45,9 +50,11 @@ async function chat(job, auth, remote) {
   const executable = path.join(root, 'node_modules', '.bin', 'codex')
   const args = ['app-server', '--listen', 'stdio://']
   const overrides = {
-    model_provider: 'planner', 'model_providers.planner.name': 'Planner AI', 'model_providers.planner.base_url': 'https://api.openai.com/v1',
-    'model_providers.planner.env_key': 'ACCESS_TOKEN', 'model_providers.planner.wire_api': 'responses',
-    'model_providers.planner.requires_openai_auth': false, 'model_providers.planner.supports_websockets': false,
+    ...(auth.type === 'codex' ? {} : {
+      model_provider: 'planner', 'model_providers.planner.name': 'Planner AI', 'model_providers.planner.base_url': 'https://api.openai.com/v1',
+      'model_providers.planner.env_key': 'ACCESS_TOKEN', 'model_providers.planner.wire_api': 'responses',
+      'model_providers.planner.requires_openai_auth': false, 'model_providers.planner.supports_websockets': false,
+    }),
     'mcp_servers.planner.url': new URL('/api/agent/vm/worker/mcp', origin).href,
     'mcp_servers.planner.bearer_token_env_var': 'PLANNER_WORKER_TOKEN',
     'mcp_servers.planner.http_headers': { 'X-Planner-Job': job.id, 'X-Planner-Lease': job.lease },
@@ -56,7 +63,7 @@ async function chat(job, auth, remote) {
     'mcp_servers.browser.args': [path.join(root, 'browser-tools.mjs')],
   }
   for (const [key, value] of Object.entries(overrides)) args.push('-c', `${key}=${tomlValue(value)}`)
-  const env = { ...process.env, CODEX_HOME: path.join(dataDir, 'codex'), ACCESS_TOKEN: auth.access_token, PLANNER_WORKER_TOKEN: config.token, PLANNER_ENABLED_SOURCES: JSON.stringify(remote.sources) }
+  const env = { ...process.env, CODEX_HOME: path.join(dataDir, 'codex'), ...(auth.access_token ? { ACCESS_TOKEN: auth.access_token } : {}), PLANNER_WORKER_TOKEN: config.token, PLANNER_ENABLED_SOURCES: JSON.stringify(remote.sources) }
   delete env.OPENAI_API_KEY; delete env.CODEX_API_KEY
   let rpc, reply = '', threadId = job.thread_id, resolveDone, rejectDone, completed = false
   const done = new Promise((resolve, reject) => { resolveDone = resolve; rejectDone = reject }); done.catch(() => {})
@@ -71,7 +78,7 @@ async function chat(job, auth, remote) {
   const timeout = setTimeout(() => { rejectDone(new Error('The run exceeded its 15-minute limit.')); rpc.close() }, 15 * 60000)
   try {
     await rpc.initialize()
-    const params = { cwd: path.join(dataDir, 'workspace'), model: process.env.PLANNER_MODEL || 'gpt-6-luna', approvalPolicy: 'never', sandbox: 'workspace-write', developerInstructions: instructions }
+    const params = { cwd: path.join(dataDir, 'workspace'), ...(process.env.PLANNER_MODEL ? { model: process.env.PLANNER_MODEL } : auth.type === 'codex' ? {} : { model: 'gpt-6-luna' }), approvalPolicy: 'never', sandbox: 'workspace-write', developerInstructions: instructions }
     const thread = await rpc.request(threadId ? 'thread/resume' : 'thread/start', { ...params, ...(threadId ? { threadId, excludeTurns: true } : {}) }, 60000)
     threadId = thread.thread.id
     await report()
@@ -93,7 +100,12 @@ for (;;) {
       try {
         let result
         if (job.kind === 'browser_login' && job.message === 'chatgpt_disconnect') {
-          await disconnectPersonalChatGpt(dataDir); result = { reply: 'Your ChatGPT connection was removed from this VM.' }
+          await disconnectPersonalChatGpt(dataDir); await disconnectPersonalDevice(dataDir); await closeLiveBrowser(); result = { reply: 'Your ChatGPT connection was removed from this VM.' }
+        }
+        else if (job.kind === 'browser_login' && job.message === 'chatgpt_device') {
+          if (!remote.personalChatGptAllowed) throw new Error('This login is only available for the owner of this personal self-hosted agent.')
+          await disconnectPersonalChatGpt(dataDir); await closeLiveBrowser()
+          result = { reply: 'Open OpenAI in your own browser and enter the device code shown in Setup.', result: await connectPersonalDevice(dataDir) }
         }
         else if (job.kind === 'browser_login' && job.message === 'chatgpt_oauth') {
           if (!remote.personalChatGptAllowed) throw new Error('Hosted ChatGPT subscription sign-in is not enabled for this account.')
