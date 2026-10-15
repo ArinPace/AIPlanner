@@ -6,6 +6,7 @@ import { DEFAULT_CALENDAR, EMPTY_FILES } from './defaults.js'
 import { handleAgentRequest } from './agent.js'
 import { handleMcpRequest } from './mcp.js'
 import { handleChatLinks } from './chat-links.js'
+import { handleVmRequest, handleVmWorker } from './vm.js'
 
 const BUCKET = 'planner-pdfs'
 let client: SupabaseClient | undefined
@@ -94,6 +95,7 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
   const path = url.searchParams.get('route') ? `/api/${url.searchParams.get('route')}` : url.pathname.replace(/\/$/, '')
   const method = request.method
   try {
+    if (path.startsWith('/api/agent/vm/worker/')) return await handleVmWorker(request, path)
     if (path.startsWith('/api/mcp') || path.startsWith('/api/.well-known/')) return await handleMcpRequest(request, path)
     if (path === '/api/agent/cron' || path.startsWith('/api/agent/oauth/callback/')) {
       return await handleAgentRequest(request, path, null)
@@ -135,6 +137,7 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
     }
     const username = await sessionUser(request)
     if (!username) throw new ApiError(401, 'Please sign in.')
+    if (path === '/api/agent/vm' || path.startsWith('/api/agent/vm/')) return await handleVmRequest(request, path, username)
     if (path === '/api/agent/chats' || path === '/api/agent/chats/remove' || path === '/api/agent/mcp/disconnect') return await handleChatLinks(request, path, username)
     if (path.startsWith('/api/agent/')) return await handleAgentRequest(request, path, username)
     if (path === '/api/calendar' && method === 'GET') {

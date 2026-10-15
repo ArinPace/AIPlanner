@@ -64,3 +64,102 @@ npm run build
 npm run lint
 npx tsx@4.21.0 --test server/agent.test.ts server/mcp.test.ts
 ```
+# Private Windows VM agent
+
+The Agent page now supports in-planner chats and a three-step setup: connect AI,
+choose websites, and verify private-browser sign-ins. Existing ChatGPT links and
+the planner MCP connection remain under a separate expandable section.
+
+Each account pairs one outbound-only Ubuntu VM. The worker polls HTTPS; the
+Windows host, CDP, VNC, and Codex app-server do not require public inbound ports.
+Supabase stores chat jobs and account-owned connection state with RLS enabled
+and access limited to the backend service role. Pairing codes expire after 15
+minutes and are single-use. Only hashes of worker bearer tokens are stored.
+Jobs use atomic claims and renewable leases; expired jobs fail instead of
+silently replaying planner writes. Revocation cancels queued/running work.
+
+## Host setup (operator, once per account)
+
+Use Windows 11 Pro with firmware virtualization. Enable Hyper-V without an
+automatic reboot, install Canonical Multipass 1.16.4, and restart Windows if
+requested. No Windows or browser profile is mounted into the guest.
+
+Create a pairing code under Agent → Private computer settings, then run from
+this repository in PowerShell:
+
+```powershell
+.\scripts\provision-vm.ps1 -Username arin -PairingCode <one-time-code>
+```
+
+The script creates `planner-arin` with 2 vCPUs, 4 GB RAM and a 25 GB disk. Repeat
+with a different planner username and its own pairing code for another account.
+It installs a non-root worker, persistent Chromium profile, virtual display,
+loopback-only browser view, and restartable systemd services. VM dependencies
+are pinned by `worker/package-lock.json`. The Hyper-V VM is configured to start
+with Windows. Keep the host awake and online for scheduled checks.
+
+The user can verify and save an OpenAI API key in Setup. The backend encrypts it
+using `CONNECTION_ENCRYPTION_KEY`; only the bound VM receives it. Never log it.
+Remove it from Setup to stop future API-key use. A separately connected ChatGPT
+account is independent and must be removed from its VM separately.
+
+## Personal ChatGPT authorization
+
+For the explicitly configured personal account (`PLANNER_PERSONAL_CHATGPT_USERS`,
+default `arin`), Setup → Use a ChatGPT subscription → Continue with ChatGPT opens
+OpenAI in the VM browser. Its loopback callback runs inside that same VM. The
+phone or device displaying the browser does not need a local helper. This path
+is restricted to the personal self-hosted installation, not general hosted users.
+Choosing ChatGPT removes a previous API key; Disconnect ChatGPT removes the
+saved VM credentials.
+
+An optional operator-side command is also available from this repository on
+the Windows computer running the browser:
+
+```powershell
+node scripts/connect-chatgpt.mjs --vm planner-arin
+```
+
+This implements OpenAI's documented SIWC open-source registration with its own
+client registration, stable VM host ID, PKCE, state, nonce and ID-token
+verification. The user approves on OpenAI's page. Credentials are transferred
+directly into the selected VM over Multipass's protected channel and saved
+owner-only; the VM owns refresh-token rotation. No existing Codex auth file is
+copied. Identity-only sign-in is not mistaken for plan-use permission.
+
+Public/hosted subscription access needs an approved OpenAI integration. The
+website does **not** expose native Codex OAuth as a workaround. The UI explains
+that general hosted ChatGPT sign-in is not enabled; API-key setup is available instead.
+See https://developers.openai.com/siwc/token-sharing-open-source and
+https://developers.openai.com/siwc/token-sharing-open-source/self-hosted-vms.
+
+## Website sign-in and daily checks
+
+Select websites, then open their private sign-in view. A temporary Cloudflare
+Tunnel transports the view over HTTPS; a random 192-bit path is required for
+every static asset and WebSocket request. The view expires after 20 minutes and
+closes when Verify connections runs. Do not share its URL. Browser cookies stay
+on that account's VM disk. No video, trace, or session recording is enabled.
+Verify connections checks for authenticated-page evidence, not merely a 200
+response. SSO/MFA can still expire or block automated Chromium; reconnect when
+needed. Agent jobs pause while the interactive sign-in view is open.
+
+The agent's browser MCP exposes read-only navigation and page reading only;
+it does not expose clicking, form submission, JavaScript execution or cookies.
+Planner tools are bound to the worker's username and current job lease. The
+agent reads calendar/files and saves sourced updates through the existing MCP.
+When enabled, daily checks enqueue once per 7 AM / 5 PM New York slot while the
+worker is online. Enabling this schedule disables the older Browser Use
+schedule to avoid duplicate collectors. Offline slots are not backfilled.
+
+## Validation
+
+```powershell
+npm run build
+npx tsx --test server/agent.test.ts server/mcp.test.ts server/vm.test.ts
+node --test worker/browser-access.test.mjs
+```
+
+After provisioning, verify the entire path: Setup AI → private browser login →
+Verify connections → chat → completed run → planner change. A successful web
+build or queue test alone does not establish a working VM or model turn.
