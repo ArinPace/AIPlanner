@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
+install -d -m 0755 /etc/needrestart/conf.d
+install -m 0644 /home/ubuntu/planner-worker/needrestart-planner.conf /etc/needrestart/conf.d/planner.conf
 apt-get update
 apt-get install -y ca-certificates curl gnupg xvfb x11vnc novnc websockify openbox
 install -d -m 0755 /etc/apt/keyrings

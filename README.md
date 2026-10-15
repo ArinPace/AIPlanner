@@ -188,6 +188,10 @@ button that keeps the saved browser session open. Gradescope starts from
 Brightspace so the user can launch their course's Gradescope link; the VM
 remembers only the Brightspace course page, not expiring SSO launch tokens.
 Agent jobs pause while the interactive sign-in view is open.
+Automatic package updates install normally but defer restarting the five
+interactive desktop services until the next normal VM restart. Worker restarts
+invalidate old viewer links; the planner explains the interruption and offers
+Reopen browser without clearing the saved profile.
 
 The agent's browser MCP exposes read-only navigation and page reading only;
 it does not expose clicking, form submission, JavaScript execution or cookies.

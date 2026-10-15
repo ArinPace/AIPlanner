@@ -26,7 +26,9 @@ export function AgentSettings({ state, mode, aiReady, now, onClose, refresh }: {
   const device = Date.parse(requested?.result.expiresAt || '') > now ? requested?.result.deviceCode : null
   const liveUrl = requested?.result.liveUrl && Date.parse(requested.result.expiresAt || '') > now ? requested.result.liveUrl : null
   const verified = Boolean(connection?.source && connection.intent !== 'open' && Date.parse(state.settings.sites[connection.source]?.verifiedAt || '') >= connection.started)
-  const waiting = Boolean(connection && !verified && !liveUrl && !error && requested?.status !== 'failed' && requested?.status !== 'cancelled')
+  const interrupted = requested?.result.interrupted === true
+  const expired = Boolean(requested?.result.expiresAt && Date.parse(requested.result.expiresAt) <= now && !verified)
+  const waiting = Boolean(connection && !verified && !interrupted && !expired && !liveUrl && !error && requested?.status !== 'failed' && requested?.status !== 'cancelled')
   const { stage, estimate, elapsed, detail, percent } = connectionProgress(requested?.status, state.power, connection?.cold || false, Math.max(0, Math.floor(((clock || connection?.started || 0) - (connection?.started || 0)) / 1000)))
   useEffect(() => {
     if (!waiting) return
@@ -47,6 +49,14 @@ export function AgentSettings({ state, mode, aiReady, now, onClose, refresh }: {
   }, [waiting, stage, estimate, elapsed, detail, percent])
   useEffect(() => { dialog.current?.showModal() }, [])
   useEffect(() => {
+    if ((interrupted || expired) && popup.current && !popup.current.closed) {
+      const doc = popup.current.document
+      const message = doc.createElement('p')
+      message.textContent = 'This browser connection ended. Return to the planner and select Reopen browser to continue. Saved sign-ins are retained.'
+      message.style.cssText = 'font:16px/1.7 system-ui;padding:32px;max-width:600px;margin:auto'
+      doc.body.replaceChildren(message)
+      return
+    }
     if (verified) { popup.current?.close(); popup.current = null; return }
     if (liveUrl && popup.current && !popup.current.closed && popupUrl.current !== liveUrl) {
       popupUrl.current = liveUrl
@@ -58,7 +68,7 @@ export function AgentSettings({ state, mode, aiReady, now, onClose, refresh }: {
       doc.body.replaceChildren(frame)
     }
     if (requested?.status === 'failed') { popup.current?.close(); popup.current = null }
-  }, [liveUrl, verified, requested?.status, requested?.error])
+  }, [liveUrl, verified, interrupted, expired, requested?.status, requested?.error])
   useEffect(() => {
     if (mode === 'setup' && aiReady && state.settings.sources.length && state.settings.sources.every(s => state.settings.sites[s]?.ready)) onClose()
   }, [aiReady, state.settings.sites, state.settings.sources, mode, onClose])
@@ -73,6 +83,7 @@ export function AgentSettings({ state, mode, aiReady, now, onClose, refresh }: {
     // oxlint-disable-next-line react/purity
     const started = Date.now()
     setRequestId(null); setConnection({ label, started, cold: state.power !== 'online' }); setClock(started); popupUrl.current = ''
+    popup.current?.close()
     popup.current = window.open('about:blank', '_blank')
     setPopupBlocked(!popup.current)
     if (popup.current) { popup.current.opener = null; popup.current.document.open(); popup.current.document.write(connectionLoadingPage); popup.current.document.close(); popup.current.document.getElementById('connection-title')!.textContent = `Connecting ${label}` }
@@ -110,6 +121,7 @@ export function AgentSettings({ state, mode, aiReady, now, onClose, refresh }: {
     <div className="assistant-settings-inner"><header><div><h2 id="agent-settings-title">{mode === 'settings' ? 'Settings' : mode === 'setup' ? 'Connect your assistant' : 'Connected sites'}</h2><p>{mode === 'connections' ? 'Add websites for your assistant to check.' : 'Your accounts, your schedule.'}</p></div><button type="button" className="icon-btn" aria-label="Close settings" onClick={onClose}><CloseIcon /></button></header>
       {(error || requested?.status === 'failed') && <p role="alert" className="agent-banner agent-error">{error || requested?.error || 'Connection could not be opened. Try again.'}</p>}{notice && !verified && <p role="status" className="agent-banner">{notice}</p>}
       {verified && <div className="assistant-connection-success" role="status"><strong>✓ {connection?.label} connected</strong><progress max="100" value="100" aria-label="Connection complete"/><p>Sign-in confirmed. Your session is saved on your private computer.</p></div>}
+      {(interrupted || expired) && <div className="assistant-connection-result" role="alert"><p>{interrupted ? 'The private browser was interrupted.' : 'The private browser view expired.'} Your saved sign-ins are retained.</p>{connection?.source && <button type="button" disabled={busy} onClick={() => connect(connection.source!, connection.intent)}>Reopen browser</button>}</div>}
       {waiting && <div className="assistant-connection-progress" aria-label="Connection progress"><strong>{connection?.intent === 'open' ? 'Opening' : 'Connecting'} {connection?.label}</strong><p role="status">{stage}</p><progress max="100" value={percent} aria-label="Estimated connection progress"/><span className="assistant-progress-percent">{percent}% · estimated</span><p>{estimate}</p><small>{elapsed}</small><p>{detail}</p>{popupBlocked && <p>The sign-in tab was blocked. An Open private sign-in browser link will appear here when it is ready.</p>}</div>}
       {mode === 'setup' && !aiReady && aiConnections}
       {mode !== 'settings' && <section className="assistant-settings-section"><h3>{mode === 'setup' ? 'Connect your websites' : 'Websites'}</h3><div className="assistant-sites">{(Object.entries(VM_SOURCES) as [VmSource, { name: string }][]).map(([id, source]) => <div className="assistant-site" key={id}><label><input type="checkbox" checked={sources.includes(id)} onChange={e => setSources(current => e.target.checked ? [...current, id] : current.filter(x => x !== id))}/><span><strong>{source.name}</strong><small>{state.settings.sites[id]?.ready ? 'Connected' : sources.includes(id) ? 'Sign-in needed' : 'Not connected'}{id === 'gradescope' ? ' - via Brightspace' : ''}</small></span></label><button type="button" disabled={busy || !host || Boolean(requested && ['queued','running'].includes(requested.status))} onClick={() => connect(id, state.settings.sites[id]?.ready ? 'open' : 'connect')}>{state.settings.sites[id]?.ready ? 'Open site' : id === 'gradescope' ? 'Connect via Brightspace' : 'Connect'}</button></div>)}</div><div className="assistant-settings-actions"><button disabled={busy} onClick={() => void perform(async () => { await save(); setNotice('Website choices saved.') })}>Save websites</button><button disabled={busy || !host || !sources.length} onClick={() => void perform(async () => { await save(); const job = await agentAction<VmJob>('vm/browser/check'); setRequestId(job.id); setNotice('Verifying connections…') })}>Verify connections</button></div>{requested?.kind === 'browser_check' && requested.status === 'completed' && <p role="status">Connections checked. Sites needing sign-in are marked above.</p>}</section>}

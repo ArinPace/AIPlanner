@@ -24,5 +24,6 @@ export function safeWorkerStatus(value: unknown) {
     version: typeof input.version === 'string' ? input.version.slice(0, 40) : null,
     ...(typeof input.chatgptConnected === 'boolean' ? { chatgptConnected: input.chatgptConnected } : {}),
     ...(typeof input.claudeConnected === 'boolean' ? { claudeConnected: input.claudeConnected } : {}),
+    ...(typeof input.workerStartedAt === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(input.workerStartedAt) && Number.isFinite(Date.parse(input.workerStartedAt)) ? { workerStartedAt: input.workerStartedAt } : {}),
   }
 }

@@ -52,8 +52,12 @@ export async function handleVmWorker(request: Request, path: string) {
   }
   const input = await body(request)
   if (path === '/api/agent/vm/worker/claim') {
+    const capabilities = safeWorkerStatus(input)
+    if (capabilities.workerStartedAt && capabilities.workerStartedAt !== host.capabilities?.workerStartedAt) {
+      checked(await db().from('planner_vm_jobs').update({ result: { interrupted: true } }).eq('username', host.username).eq('host_id', host.id).eq('kind','browser_login').eq('status','completed').lt('finished_at',capabilities.workerStartedAt).not('result->liveUrl','is',null))
+    }
     if (input.activateClaude === true && input.claudeConnected === true) checked(await db().from('planner_vm_settings').update({ ai_provider: 'claude_code', credential: null }).eq('username', host.username))
-    checked(await db().from('planner_vm_hosts').update({ heartbeat_at: new Date().toISOString(), capabilities: safeWorkerStatus(input) }).eq('id', host.id).is('revoked_at', null))
+    checked(await db().from('planner_vm_hosts').update({ heartbeat_at: new Date().toISOString(), capabilities }).eq('id', host.id).is('revoked_at', null))
     // Once authorized, remove the spent device code and its keep-awake window.
     // The user must retain no live sign-in secret just to keep chatting.
     if (input.signedIn === true) checked(await db().from('planner_vm_jobs').update({ result: {} }).eq('username', host.username).eq('kind', 'browser_login').eq('message', 'chatgpt_device').eq('status', 'completed').not('result->deviceCode', 'is', null))

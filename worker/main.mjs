@@ -10,6 +10,7 @@ import { connectPersonalDevice, disconnectPersonalDevice, personalCodexStatus } 
 import { claudeStatus, connectClaude, disconnectClaude, claudeChat } from './claude.mjs'
 
 const dataDir = process.env.PLANNER_DATA_DIR || '/var/lib/planner'
+const workerStartedAt = new Date().toISOString()
 const config = JSON.parse(await readFile(path.join(dataDir, 'worker.json'), 'utf8'))
 process.on('SIGTERM', () => { void shutdownBrowser().finally(() => process.exit(0)) })
 const origin = new URL(config.origin)
@@ -106,7 +107,7 @@ for (;;) {
     const auth = await credential(remote).catch(() => null)
     signedIn = Boolean(auth); identity = auth?.identity || null
     pendingSites = { ...pendingSites, ...await observeSignIn(dataDir).catch(() => ({})) }
-    ;({ job } = await api('claim', { signedIn, identity, observedSites: pendingSites, runtime: remote.aiProvider === 'claude_code' ? 'claude' : 'codex', chatgptConnected: Boolean(nativeChatGpt), claudeConnected: Boolean(nativeClaude), activateClaude, version: '0.2.2' }))
+    ;({ job } = await api('claim', { signedIn, identity, workerStartedAt, observedSites: pendingSites, runtime: remote.aiProvider === 'claude_code' ? 'claude' : 'codex', chatgptConnected: Boolean(nativeChatGpt), claudeConnected: Boolean(nativeClaude), activateClaude, version: '0.2.3' }))
     pendingSites = {}
     if (activateClaude) await unlink(claudePending).catch(() => {})
     if (job) {
