@@ -195,6 +195,10 @@ Reopen browser without clearing the saved profile.
 
 The agent's browser MCP exposes read-only navigation and page reading only;
 it does not expose clicking, form submission, JavaScript execution or cookies.
+Slack channel reads wait for rendered messages, reuse matching open tabs, and
+scroll to the latest end of the virtualized list. Results include message
+timestamps and permalinks; image attachments are identified without claiming
+their contents were read. A loading shell is reported as incomplete access.
 Planner tools are bound to the worker's username and current job lease. The
 agent reads calendar/files and saves sourced updates through the existing MCP.
 When enabled, daily checks enqueue once per configured time and timezone while
