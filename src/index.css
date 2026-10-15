@@ -1555,4 +1555,7 @@ textarea {
   .header-left { grid-column: 1 / -1; }
   .header-right { grid-column: 1 / -1; grid-row: 2; max-width: none; justify-content: space-between; flex-wrap: nowrap; }
   .header-center { grid-row: 3; }
+  .view-switch button { padding: 0 5px; }
+  .user-chip { flex-shrink: 0; }
+  .user-chip .text-btn { white-space: nowrap; }
 }
