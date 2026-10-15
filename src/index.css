@@ -1660,6 +1660,11 @@ textarea {
 .assistant-connection-progress { padding: 18px; margin: 16px 0; border: 1px solid #e1e5eb; border-radius: 12px; background: #f8f9fb; }
 .assistant-connection-heading { display: flex; align-items: center; gap: 10px; font-size: 14px; }
 .assistant-connection-progress small { color: #626873; font-variant-numeric: tabular-nums; }
+.assistant-settings progress { display: block; width: 100%; height: 12px; accent-color: #333; margin: 12px 0 6px; }
+.assistant-progress-percent { display: block; text-align: right; font-size: 12px; color: #666; font-variant-numeric: tabular-nums; }
+.assistant-connection-success { padding: 18px; margin: 16px 0; border: 1px solid #bddcc9; border-radius: 12px; background: #f2fbf5; }
+.assistant-connection-success progress { accent-color: #25875a; }
+.assistant-site > button { flex-shrink: 0; max-width: 155px; }
 .assistant-connection-spinner { width: 16px; height: 16px; flex-shrink: 0; border: 2px solid #ddd; border-top-color: #333; border-radius: 50%; animation: connection-spin 1s linear infinite; }
 @keyframes connection-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .assistant-connection-spinner { animation: none; } }

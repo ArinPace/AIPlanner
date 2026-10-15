@@ -57,7 +57,16 @@ export async function handleVmWorker(request: Request, path: string) {
     // Once authorized, remove the spent device code and its keep-awake window.
     // The user must retain no live sign-in secret just to keep chatting.
     if (input.signedIn === true) checked(await db().from('planner_vm_jobs').update({ result: {} }).eq('username', host.username).eq('kind', 'browser_login').eq('message', 'chatgpt_device').eq('status', 'completed').not('result->deviceCode', 'is', null))
-    const settings = checked(await db().from('planner_vm_settings').select('sources,schedule_enabled,schedule').eq('username', host.username).single())
+    const settings = checked(await db().from('planner_vm_settings').select('sources,sites,schedule_enabled,schedule').eq('username', host.username).single())
+    if (input.observedSites && typeof input.observedSites === 'object') {
+      const observed = input.observedSites as Record<string, { ready?: boolean }>
+      const verified = Object.fromEntries(Object.keys(VM_SOURCES).filter(k => settings.sources.includes(k) && observed[k]?.ready === true).map(k => [k, { ready: true, verifiedAt: new Date().toISOString() }]))
+      if (Object.keys(verified).length) {
+        checked(await db().from('planner_vm_settings').update({ sites: { ...settings.sites, ...verified } }).eq('username', host.username))
+        // Expired connection views must not continue holding the VM awake.
+        for (const source of Object.keys(verified)) checked(await db().from('planner_vm_jobs').update({ result: {} }).eq('username', host.username).eq('kind','browser_login').eq('message',source).eq('status','completed'))
+      }
+    }
     const slot = scheduleSlot(new Date(), settings.schedule || DEFAULT_VM_SCHEDULE, false)
     if (settings.schedule_enabled && settings.sources.length && slot) {
       checked(await db().from('planner_vm_jobs').upsert({ username: host.username, host_id: host.id, kind: 'sync', schedule_slot: slot, message: 'Read my enabled websites for new announcements, assignments and deadline changes. Read the planner first, save verified updates with planner_apply_updates, and report which sources were checked or unavailable. Do not invent deadlines or overwrite manual edits.' }, { onConflict: 'username,schedule_slot', ignoreDuplicates: true }))
@@ -169,7 +178,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
       const settings = checked(await db().from('planner_vm_settings').select('sources').eq('username', username).single())
       if (!settings.sources.includes(source)) throw new ApiError(400, 'Select this website in setup first.')
     }
-    const job = checked(await db().from('planner_vm_jobs').insert({ username, host_id: host.id, kind: path.endsWith('/open') ? 'browser_login' : 'browser_check', message: source }).select(publicJob).single())
+    const job = checked(await db().from('planner_vm_jobs').insert({ username, host_id: host.id, kind: path.endsWith('/open') ? 'browser_login' : 'browser_check', message: input.intent === 'open' ? 'open:' + source : source }).select(publicJob).single())
     return json(job, 202)
   }
   if (path === '/api/agent/vm/pair') {

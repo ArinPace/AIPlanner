@@ -2,9 +2,10 @@ import { chromium } from 'playwright'
 import { spawn } from 'node:child_process'
 import http from 'node:http'
 import { randomBytes } from 'node:crypto'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { allowedLivePath } from './browser-access.mjs'
+import { signedInPage, brightspaceCourse } from './site-status.mjs'
 
 export const sources = {
   brightspace: 'https://brightspace.nyu.edu/', gradescope: 'https://www.gradescope.com/',
@@ -32,9 +33,47 @@ export async function closeLiveBrowser() {
   for (const socket of live.sockets) socket.destroy()
   live = null
 }
-export async function openLogin(dataDir, source) {
+export async function openLogin(dataDir, source, keepOpen = false) {
   if (!(source in sources)) throw new Error('Choose a supported website.')
-  return openView(dataDir, sources[source])
+  let destination = sources[source]
+  if (source === 'gradescope') {
+    const saved = JSON.parse(await readFile(path.join(dataDir, 'site-launches.json'), 'utf8').catch(() => '{}'))
+    destination = brightspaceCourse(saved.gradescope) || sources.brightspace
+  }
+  const result = await openView(dataDir, destination)
+  if (live) { live.source = source; live.keepOpen = keepOpen; live.reported = false }
+  if (source === 'gradescope') {
+    const page = context.pages()[0]
+    // Use only an unambiguous Gradescope link in the course, preserving its
+    // Brightspace launch action rather than copying an expiring LTI URL.
+    for (const frame of page.frames()) {
+      const link = frame.getByRole('link', { name: /gradescope/i })
+      if (await link.count() === 1) { await link.click({ timeout: 5000 }).catch(() => {}); break }
+    }
+  }
+  return result
+}
+
+export async function observeSignIn(dataDir) {
+  if (!live?.source || live.reported || !context) return {}
+  const source = live.source
+  for (const page of context.pages()) {
+    if (new URL(page.url()).hostname.replace(/^www\./,'') !== new URL(sources[source]).hostname.replace(/^www\./,'')) continue
+    const text = await page.locator('body').innerText({ timeout: 1500 }).catch(() => '')
+    if (!signedInPage(source, page.url(), text, await page.locator('input[type=password]:visible').count().catch(() => 0) > 0)) continue
+    if (source === 'gradescope') {
+      for (const candidate of [...context.pages()].reverse()) {
+        const course = brightspaceCourse(candidate.url())
+        if (course) { await writeFile(path.join(dataDir, 'site-launches.json'), JSON.stringify({ gradescope: course }), { mode: 0o600 }); break }
+      }
+    }
+    live.reported = true
+    const result = { [source]: { ready: true } }
+    // Open-site views remain interactive; connection views finish automatically.
+    if (!live.keepOpen) await closeLiveBrowser()
+    return result
+  }
+  return {}
 }
 export async function openView(dataDir, destination, attempt = 0) {
   await closeLiveBrowser()
@@ -105,25 +144,19 @@ export async function checkSites(dataDir, enabled) {
   const ctx = await browser(dataDir), sites = {}
   for (const source of enabled) {
     if (!(source in sources)) continue
+    let existing = false
+    for (const current of ctx.pages()) {
+      const text = await current.locator('body').innerText({ timeout: 1500 }).catch(() => '')
+      if (signedInPage(source, current.url(), text, await current.locator('input[type=password]:visible').count().catch(() => 0) > 0)) { existing = true; break }
+    }
+    if (existing) { sites[source] = { ready: true }; continue }
+    if (source === 'gradescope') { sites[source] = { ready: false }; continue }
     const page = await ctx.newPage()
     try {
       await page.goto(sources[source], { waitUntil: 'domcontentloaded', timeout: 40000 })
       await page.waitForTimeout(2000)
-      const url = new URL(page.url()), text = (await page.locator('body').innerText()).slice(0, 6000)
-      const expected = new URL(sources[source]).hostname.replace(/^www\./, '')
-      const sameSite = url.hostname.replace(/^www\./, '') === expected
-      const loginWall = /(?:^|\/)(?:login|signin|auth|saml)(?:\/|$)/i.test(url.pathname) || await page.locator('input[type=password]').count() > 0 || /sign in to continue|log in to gradescope|sign in to x|log in to instagram|sign in to your workspace|welcome to brightspace/i.test(text)
-      const evidence = {
-        brightspace: /\/d2l\/home/.test(url.pathname) && /my courses|course selector|select a course/i.test(text),
-        gradescope: /\/account|\/courses\//.test(url.pathname) && /your courses|dashboard|assignments/i.test(text),
-        gmail: /inbox|compose|drafts/i.test(text) && /\/mail\/u\/\d/.test(url.pathname),
-        calendar: /create|my calendars|today/i.test(text) && /\/calendar\/u\/\d/.test(url.pathname),
-        drive: /my drive|shared with me|my files/i.test(text) && /\/drive\/u\/\d/.test(url.pathname),
-        slack: /\/client\//.test(url.pathname) && /channels|threads|direct messages/i.test(text),
-        instagram: /messages|notifications/i.test(text) && !/sign up to see|log in to see/i.test(text),
-        x: /\/home/.test(url.pathname) && /for you|following/i.test(text),
-      }[source]
-      sites[source] = { ready: sameSite && !loginWall && Boolean(evidence) }
+      const text = (await page.locator('body').innerText()).slice(0, 12000)
+      sites[source] = { ready: signedInPage(source, page.url(), text, await page.locator('input[type=password]:visible').count() > 0) }
     } catch { sites[source] = { ready: false } } finally { await page.close() }
   }
   return { sites }

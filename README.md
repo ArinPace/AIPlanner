@@ -177,11 +177,17 @@ https://developers.openai.com/siwc/token-sharing-open-source/self-hosted-vms.
 Select websites, then open their private sign-in view. A temporary Cloudflare
 Tunnel transports the view over HTTPS; a random 192-bit path is required for
 every static asset and WebSocket request. The view expires after 20 minutes and
-closes when Verify connections runs. Do not share its URL. Browser cookies stay
+closes automatically after a connection is confirmed, or when Verify connections runs. Do not share its URL. Browser cookies stay
 on that account's VM disk. No video, trace, or session recording is enabled.
 Verify connections checks for authenticated-page evidence, not merely a 200
 response. SSO/MFA can still expire or block automated Chromium; reconnect when
-needed. Agent jobs pause while the interactive sign-in view is open.
+needed. Startup shows an estimated percentage below 100 until the viewer is
+ready. The worker detects signed-in pages, saves a confirmation timestamp, and
+the planner closes the connection tab. Connected websites have an Open site
+button that keeps the saved browser session open. Gradescope starts from
+Brightspace so the user can launch their course's Gradescope link; the VM
+remembers only the Brightspace course page, not expiring SSO launch tokens.
+Agent jobs pause while the interactive sign-in view is open.
 
 The agent's browser MCP exposes read-only navigation and page reading only;
 it does not expose clicking, form submission, JavaScript execution or cookies.

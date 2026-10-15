@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { CodexRpc } from './rpc.mjs'
-import { browser, openLogin, checkSites, liveBrowserOpen, shutdownBrowser, closeLiveBrowser } from './browser.mjs'
+import { browser, openLogin, checkSites, liveBrowserOpen, shutdownBrowser, closeLiveBrowser, observeSignIn } from './browser.mjs'
 import { tomlValue } from './config-args.mjs'
 import { connectPersonalChatGpt, disconnectPersonalChatGpt } from './oauth.mjs'
 import { connectPersonalDevice, disconnectPersonalDevice, personalCodexStatus } from './device-auth.mjs'
@@ -91,7 +91,7 @@ async function chat(job, auth, remote) {
     return { reply, threadId }
   } finally { clearInterval(heartbeat); clearTimeout(timeout); rpc.close() }
 }
-let signedIn = false, identity = null
+let signedIn = false, identity = null, pendingSites = {}
 const claudePending = path.join(dataDir, 'claude-login-pending')
 for (;;) {
   let job
@@ -105,7 +105,9 @@ for (;;) {
     if (activateClaude) { remote.aiProvider = 'claude_code'; await closeLiveBrowser() }
     const auth = await credential(remote).catch(() => null)
     signedIn = Boolean(auth); identity = auth?.identity || null
-    ;({ job } = await api('claim', { signedIn, identity, runtime: remote.aiProvider === 'claude_code' ? 'claude' : 'codex', chatgptConnected: Boolean(nativeChatGpt), claudeConnected: Boolean(nativeClaude), activateClaude, version: '0.2.1' }))
+    pendingSites = { ...pendingSites, ...await observeSignIn(dataDir).catch(() => ({})) }
+    ;({ job } = await api('claim', { signedIn, identity, observedSites: pendingSites, runtime: remote.aiProvider === 'claude_code' ? 'claude' : 'codex', chatgptConnected: Boolean(nativeChatGpt), claudeConnected: Boolean(nativeClaude), activateClaude, version: '0.2.2' }))
+    pendingSites = {}
     if (activateClaude) await unlink(claudePending).catch(() => {})
     if (job) {
       const timer = setInterval(() => void api('progress', { id: job.id, lease: job.lease, reply: '' }).catch(() => {}), 20000)
@@ -132,7 +134,7 @@ for (;;) {
           if (!remote.personalChatGptAllowed) throw new Error('Hosted ChatGPT subscription sign-in is not enabled for this account.')
           result = { reply: 'Authorize ChatGPT on OpenAI’s page in your private browser, then return to Setup.', result: await connectPersonalChatGpt(dataDir, hostId) }
         }
-        else if (job.kind === 'browser_login') result = { reply: 'Your private browser is ready. Sign in, then return here to verify.', result: await openLogin(dataDir, job.message) }
+        else if (job.kind === 'browser_login') result = { reply: 'Your private browser is ready. Sign-in is detected automatically.', result: await openLogin(dataDir, job.message.replace(/^open:/,''), job.message.startsWith('open:')) }
         else if (job.kind === 'browser_check') result = { reply: 'Website checks finished. Sites that still need login are shown in Setup.', result: await checkSites(dataDir, remote.sources) }
         else { clearInterval(timer); result = await chat(job, auth, remote) }
         await api('finish', { id: job.id, lease: job.lease, ...result })

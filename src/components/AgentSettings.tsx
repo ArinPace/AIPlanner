@@ -8,6 +8,7 @@ import { connectionLoadingPage, connectionProgress } from '../lib/connectionProg
 export function AgentSettings({ state, mode, aiReady, now, onClose, refresh }: { state: VmState; now: number; mode: 'setup' | 'connections' | 'settings'; aiReady: boolean; onClose: () => void; refresh: () => Promise<void> }) {
   const dialog = useRef<HTMLDialogElement>(null)
   const popup = useRef<Window | null>(null)
+  const popupUrl = useRef('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -17,33 +18,47 @@ export function AgentSettings({ state, mode, aiReady, now, onClose, refresh }: {
   const [apiKey, setApiKey] = useState('')
   const [requestId, setRequestId] = useState<string | null>(null)
   const [pair, setPair] = useState<{ code: string } | null>(null)
-  const [connection, setConnection] = useState<{ label: string; started: number; cold: boolean } | null>(null)
+  const [connection, setConnection] = useState<{ label: string; started: number; cold: boolean; source?: VmSource; intent?: 'connect' | 'open' } | null>(null)
   const [clock, setClock] = useState(0)
   const [popupBlocked, setPopupBlocked] = useState(false)
   const host = state.hosts[0]
   const requested = state.runs.find(r => r.id === requestId)
   const device = Date.parse(requested?.result.expiresAt || '') > now ? requested?.result.deviceCode : null
   const liveUrl = requested?.result.liveUrl && Date.parse(requested.result.expiresAt || '') > now ? requested.result.liveUrl : null
-  const waiting = Boolean(connection && !liveUrl && !error && requested?.status !== 'failed' && requested?.status !== 'cancelled')
-  const { stage, estimate, elapsed, detail } = connectionProgress(requested?.status, state.power, connection?.cold || false, Math.max(0, Math.floor(((clock || connection?.started || 0) - (connection?.started || 0)) / 1000)))
+  const verified = Boolean(connection?.source && connection.intent !== 'open' && Date.parse(state.settings.sites[connection.source]?.verifiedAt || '') >= connection.started)
+  const waiting = Boolean(connection && !verified && !liveUrl && !error && requested?.status !== 'failed' && requested?.status !== 'cancelled')
+  const { stage, estimate, elapsed, detail, percent } = connectionProgress(requested?.status, state.power, connection?.cold || false, Math.max(0, Math.floor(((clock || connection?.started || 0) - (connection?.started || 0)) / 1000)))
   useEffect(() => {
     if (!waiting) return
     const timer = window.setInterval(() => setClock(Date.now()), 1000)
     return () => window.clearInterval(timer)
   }, [waiting])
   useEffect(() => {
-    if (!waiting || !popup.current || popup.current.closed) return
+    if (!waiting || !popup.current || popup.current.closed || popupUrl.current) return
     const doc = popup.current.document
     for (const [key, value] of Object.entries({ stage, estimate, elapsed, detail })) {
       const node = doc.getElementById('connection-' + key)
       if (node) node.textContent = value
     }
-  }, [waiting, stage, estimate, elapsed, detail])
+    const bar = doc.getElementById('connection-bar') as HTMLProgressElement | null
+    if (bar) bar.value = percent
+    const label = doc.getElementById('connection-percent')
+    if (label) label.textContent = `${percent}% · estimated`
+  }, [waiting, stage, estimate, elapsed, detail, percent])
   useEffect(() => { dialog.current?.showModal() }, [])
   useEffect(() => {
-    if (liveUrl && popup.current && !popup.current.closed) { popup.current.location.replace(liveUrl); popup.current = null }
+    if (verified) { popup.current?.close(); popup.current = null; return }
+    if (liveUrl && popup.current && !popup.current.closed && popupUrl.current !== liveUrl) {
+      popupUrl.current = liveUrl
+      const doc = popup.current.document
+      const frame = doc.createElement('iframe')
+      frame.src = liveUrl; frame.title = 'Private browser'; frame.referrerPolicy = 'no-referrer'
+      frame.style.cssText = 'border:0;width:100%;height:100dvh;display:block'
+      doc.body.style.cssText = 'margin:0;display:block;background:#fff'
+      doc.body.replaceChildren(frame)
+    }
     if (requested?.status === 'failed') { popup.current?.close(); popup.current = null }
-  }, [liveUrl, requested?.status, requested?.error])
+  }, [liveUrl, verified, requested?.status, requested?.error])
   useEffect(() => {
     if (mode === 'setup' && aiReady && state.settings.sources.length && state.settings.sources.every(s => state.settings.sites[s]?.ready)) onClose()
   }, [aiReady, state.settings.sites, state.settings.sources, mode, onClose])
@@ -57,18 +72,19 @@ export function AgentSettings({ state, mode, aiReady, now, onClose, refresh }: {
     // Called only by Connect click handlers, never during render.
     // oxlint-disable-next-line react/purity
     const started = Date.now()
-    setRequestId(null); setConnection({ label, started, cold: state.power !== 'online' }); setClock(started)
+    setRequestId(null); setConnection({ label, started, cold: state.power !== 'online' }); setClock(started); popupUrl.current = ''
     popup.current = window.open('about:blank', '_blank')
     setPopupBlocked(!popup.current)
     if (popup.current) { popup.current.opener = null; popup.current.document.open(); popup.current.document.write(connectionLoadingPage); popup.current.document.close(); popup.current.document.getElementById('connection-title')!.textContent = `Connecting ${label}` }
   }
-  function connect(source: VmSource) {
+  function connect(source: VmSource, intent: 'connect' | 'open' = 'connect') {
     // Open synchronously in the click handler; delayed window.open is blocked.
     prepareSignInTab(VM_SOURCES[source].name)
+    setConnection(current => current && { ...current, source, intent })
     void perform(async () => {
-      const next = [...new Set([...sources, source])]; setSources(next); await save(next)
-      const job = await agentAction<VmJob>('vm/browser/open', { source }); setRequestId(job.id)
-      setNotice('Starting your private browser. Sign in in the new tab, then select Verify connections.')
+      const next = [...new Set([...sources, ...(source === 'gradescope' ? ['brightspace' as const] : []), source])]; setSources(next); await save(next)
+      const job = await agentAction<VmJob>('vm/browser/open', { source, intent }); setRequestId(job.id)
+      setNotice(intent === 'open' ? 'Opening the site in your saved browser session.' : source === 'gradescope' ? 'In Brightspace, open your course and use its Gradescope link. Sign-in is detected automatically.' : 'Sign in in the new tab. We will confirm automatically and close the sign-in tab.')
     })
   }
   function connectClaude() {
@@ -92,11 +108,12 @@ export function AgentSettings({ state, mode, aiReady, now, onClose, refresh }: {
   </section>
   return <dialog ref={dialog} className="assistant-settings" onCancel={onClose} onClick={e => { if (e.target === e.currentTarget) onClose() }} aria-labelledby="agent-settings-title">
     <div className="assistant-settings-inner"><header><div><h2 id="agent-settings-title">{mode === 'settings' ? 'Settings' : mode === 'setup' ? 'Connect your assistant' : 'Connected sites'}</h2><p>{mode === 'connections' ? 'Add websites for your assistant to check.' : 'Your accounts, your schedule.'}</p></div><button type="button" className="icon-btn" aria-label="Close settings" onClick={onClose}><CloseIcon /></button></header>
-      {(error || requested?.status === 'failed') && <p role="alert" className="agent-banner agent-error">{error || requested?.error || 'Connection could not be opened. Try again.'}</p>}{notice && <p role="status" className="agent-banner">{notice}</p>}
-      {waiting && <div className="assistant-connection-progress" aria-label="Connection progress"><div className="assistant-connection-heading"><span className="assistant-connection-spinner" aria-hidden="true"/><strong>Connecting {connection?.label}</strong></div><p role="status">{stage}</p><p>{estimate}</p><small>{elapsed}</small><p>{detail}</p>{popupBlocked && <p>The sign-in tab was blocked. An Open private sign-in browser link will appear here when it is ready.</p>}</div>}
+      {(error || requested?.status === 'failed') && <p role="alert" className="agent-banner agent-error">{error || requested?.error || 'Connection could not be opened. Try again.'}</p>}{notice && !verified && <p role="status" className="agent-banner">{notice}</p>}
+      {verified && <div className="assistant-connection-success" role="status"><strong>✓ {connection?.label} connected</strong><progress max="100" value="100" aria-label="Connection complete"/><p>Sign-in confirmed. Your session is saved on your private computer.</p></div>}
+      {waiting && <div className="assistant-connection-progress" aria-label="Connection progress"><strong>{connection?.intent === 'open' ? 'Opening' : 'Connecting'} {connection?.label}</strong><p role="status">{stage}</p><progress max="100" value={percent} aria-label="Estimated connection progress"/><span className="assistant-progress-percent">{percent}% · estimated</span><p>{estimate}</p><small>{elapsed}</small><p>{detail}</p>{popupBlocked && <p>The sign-in tab was blocked. An Open private sign-in browser link will appear here when it is ready.</p>}</div>}
       {mode === 'setup' && !aiReady && aiConnections}
-      {mode !== 'settings' && <section className="assistant-settings-section"><h3>{mode === 'setup' ? 'Connect your websites' : 'Websites'}</h3><div className="assistant-sites">{(Object.entries(VM_SOURCES) as [VmSource, { name: string }][]).map(([id, source]) => <div className="assistant-site" key={id}><label><input type="checkbox" checked={sources.includes(id)} onChange={e => setSources(current => e.target.checked ? [...current, id] : current.filter(x => x !== id))}/><span><strong>{source.name}</strong><small>{state.settings.sites[id]?.ready ? 'Connected' : sources.includes(id) ? 'Sign-in needed' : 'Not connected'}</small></span></label><button type="button" disabled={busy || !host || Boolean(requested && ['queued','running'].includes(requested.status))} onClick={() => connect(id)}>{state.settings.sites[id]?.ready ? 'Reconnect' : 'Connect'}</button></div>)}</div><div className="assistant-settings-actions"><button disabled={busy} onClick={() => void perform(async () => { await save(); setNotice('Website choices saved.') })}>Save websites</button><button disabled={busy || !host || !sources.length} onClick={() => void perform(async () => { await save(); const job = await agentAction<VmJob>('vm/browser/check'); setRequestId(job.id); setNotice('Verifying connections…') })}>Verify connections</button></div>{requested?.kind === 'browser_check' && requested.status === 'completed' && <p role="status">Connections checked. Sites needing sign-in are marked above.</p>}</section>}
-      {liveUrl && <div className="assistant-connection-result"><p>Your sign-in browser is ready. Recordings are off.</p><a href={liveUrl} target="_blank" rel="noreferrer">Open private sign-in browser ↗</a></div>}
+      {mode !== 'settings' && <section className="assistant-settings-section"><h3>{mode === 'setup' ? 'Connect your websites' : 'Websites'}</h3><div className="assistant-sites">{(Object.entries(VM_SOURCES) as [VmSource, { name: string }][]).map(([id, source]) => <div className="assistant-site" key={id}><label><input type="checkbox" checked={sources.includes(id)} onChange={e => setSources(current => e.target.checked ? [...current, id] : current.filter(x => x !== id))}/><span><strong>{source.name}</strong><small>{state.settings.sites[id]?.ready ? 'Connected' : sources.includes(id) ? 'Sign-in needed' : 'Not connected'}{id === 'gradescope' ? ' - via Brightspace' : ''}</small></span></label><button type="button" disabled={busy || !host || Boolean(requested && ['queued','running'].includes(requested.status))} onClick={() => connect(id, state.settings.sites[id]?.ready ? 'open' : 'connect')}>{state.settings.sites[id]?.ready ? 'Open site' : id === 'gradescope' ? 'Connect via Brightspace' : 'Connect'}</button></div>)}</div><div className="assistant-settings-actions"><button disabled={busy} onClick={() => void perform(async () => { await save(); setNotice('Website choices saved.') })}>Save websites</button><button disabled={busy || !host || !sources.length} onClick={() => void perform(async () => { await save(); const job = await agentAction<VmJob>('vm/browser/check'); setRequestId(job.id); setNotice('Verifying connections…') })}>Verify connections</button></div>{requested?.kind === 'browser_check' && requested.status === 'completed' && <p role="status">Connections checked. Sites needing sign-in are marked above.</p>}</section>}
+      {liveUrl && !verified && <div className="assistant-connection-result"><progress max="100" value="100" aria-label="Browser startup complete"/><strong>100% · Browser ready</strong><p>{connection?.intent === 'open' ? 'Your saved browser session is open.' : 'Complete sign-in in the new tab. We are checking for success automatically.'} Recordings are off.</p><a href={liveUrl} target="_blank" rel="noreferrer">Open private sign-in browser ↗</a></div>}
       {!waiting && requested && ['queued','running'].includes(requested.status) && <p role="status">Preparing your connection…</p>}
       {mode === 'settings' && <><section className="assistant-settings-section"><h3>Schedule</h3><p>Check connected websites daily at the times you choose, even when you are away.</p><form onSubmit={e => { e.preventDefault(); void perform(async () => { await save(); setNotice('Schedule saved.') }) }}><label className="assistant-check"><input type="checkbox" checked={scheduled} onChange={e => setScheduled(e.target.checked)} />Enable scheduled checks</label><label>Timezone<input list="assistant-timezones" value={schedule.timezone} onChange={e => setSchedule({ ...schedule, timezone: e.target.value })} required /></label><datalist id="assistant-timezones">{['America/New_York','America/Los_Angeles','Europe/London','Asia/Singapore','Asia/Kolkata','UTC'].map(t => <option key={t} value={t}/>)}</datalist><div className="assistant-times">{schedule.times.map((time,index) => <div key={index}><label>Daily time {index+1}<input type="time" value={time} onChange={e => setSchedule({ ...schedule, times: schedule.times.map((t,i) => i===index ? e.target.value : t) })} required /></label><button type="button" disabled={schedule.times.length===1} onClick={() => setSchedule({ ...schedule, times: schedule.times.filter((_,i) => i!==index) })}>Remove time</button></div>)}</div><div className="assistant-settings-actions"><button type="button" disabled={schedule.times.length>=6} onClick={() => setSchedule({ ...schedule, times: [...schedule.times,'12:00'] })}>Add time</button><button disabled={busy}>Save schedule</button></div></form></section>
         <details className="assistant-advanced"><summary>Advanced</summary>{aiConnections}<section className="assistant-settings-section"><h3>Recent activity</h3>{state.runs.map(run => <p key={run.id}>{run.kind} · {run.status} · {new Date(run.created_at).toLocaleString()}{run.error ? ` · ${run.error}` : ''}</p>)}</section><section className="assistant-settings-section"><h3>Private computer</h3><p>{state.power === 'online' ? 'Online' : state.power === 'starting' ? 'Starting' : 'Offline'}. Starts at sign-in and sleeps after 30 idle minutes. Recordings are off.</p>{host && <button disabled={busy} onClick={() => void perform(async () => { await agentAction('vm/revoke', { id: host.id }); setNotice('Computer disconnected.') })}>Disconnect computer</button>}<button disabled={busy} onClick={() => void perform(async () => { setPair(await agentAction('vm/pair')) })}>Create pairing code</button>{pair && <code className="vm-command">{pair.code}</code>}</section><details><summary>Saved ChatGPT links & plugin</summary><ChatLinks active /></details></details></>}
