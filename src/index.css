@@ -1665,6 +1665,11 @@ textarea {
 .assistant-connection-success { padding: 18px; margin: 16px 0; border: 1px solid #bddcc9; border-radius: 12px; background: #f2fbf5; }
 .assistant-connection-success progress { accent-color: #25875a; }
 .assistant-site > button { flex-shrink: 0; max-width: 155px; }
+@media (max-width: 400px) {
+  .assistant-site { flex-wrap: wrap; }
+  .assistant-site label { flex: 1 0 100%; }
+  .assistant-site > button { margin-left: 28px; max-width: none; }
+}
 .assistant-connection-spinner { width: 16px; height: 16px; flex-shrink: 0; border: 2px solid #ddd; border-top-color: #333; border-radius: 50%; animation: connection-spin 1s linear infinite; }
 @keyframes connection-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .assistant-connection-spinner { animation: none; } }
