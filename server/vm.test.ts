@@ -18,6 +18,13 @@ test('offline-user schedules wake only around New York slots, then stop after th
   assert.equal(shouldRunVm({ jobs: [{ kind: 'chat', status: 'queued' }], scheduled: false }, now), true)
   assert.equal(shouldRunVm({ jobs: [{ kind: 'browser_login', status: 'completed', result: { expiresAt: '2026-10-15T11:05:00Z' } }], scheduled: false }, now), true)
 })
+test('chat messages wake sleeping guests and keep them warm only during conversation', () => {
+  const now = new Date('2026-10-16T14:00:00Z')
+  assert.equal(shouldRunVm({ jobs: [{kind:'chat',status:'queued'}], scheduled:false }, now), true)
+  assert.equal(shouldRunVm({ jobs: [{kind:'chat',status:'completed',finished_at:'2026-10-16T13:58:00Z'}], scheduled:false }, now), true)
+  assert.equal(shouldRunVm({ jobs: [{kind:'chat',status:'completed',finished_at:'2026-10-16T13:54:00Z'}], scheduled:false }, now), false)
+  assert.equal(shouldRunVm({ jobs: [{kind:'sync',status:'completed',finished_at:'2026-10-16T13:59:00Z'}], scheduled:false }, now), false)
+})
 test('personal device authorization cannot turn into public auth, phishing links or token disclosure', () => {
   const device = { verificationUrl: 'https://auth.openai.com/codex/device', userCode: 'ABCD-1234', access_token: 'must-not-leak' }
   assert.deepEqual(safeDeviceAuthorization(device, true), { verificationUrl: device.verificationUrl, userCode: device.userCode })
