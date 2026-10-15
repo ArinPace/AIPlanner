@@ -43,7 +43,7 @@ Files endpoints require the existing signed-in session. Uploading, downloading, 
 
 ## Agent and ChatGPT MCP
 
-The hosted **Agent** tab is a list of private ChatGPT conversation links. Add a name and the conversation URL; links persist per planner account in Supabase and open the real ChatGPT conversation in a new tab. Removing a link does not delete the conversation. ChatGPT transcripts are not copied or embedded. The previous gateway chat data remains in storage.
+The hosted **Agent** tab provides in-planner conversations with a collapsible vertical chat sidebar. Saved external ChatGPT conversation links remain available under Settings → Advanced; these links open the real ChatGPT conversation, and removing a link does not delete it.
 
 The authenticated MCP endpoint is `https://aiplanner-ten.vercel.app/api/mcp`. In ChatGPT Plugins, choose **Add custom MCP server**, name it AI Planner, enter that endpoint, select OAuth, and authorize with your planner account. The Agent page includes the URL, a starter check-and-schedule prompt, connection status, and a disconnect button. Authorization is separate from ChatGPT plan billing. The connector uses the official MCP SDK with stateless Streamable HTTP and JSON responses; OAuth discovery is published under `/.well-known/`.
 
@@ -66,9 +66,12 @@ npx tsx@4.21.0 --test server/agent.test.ts server/mcp.test.ts
 ```
 # Private Windows VM agent
 
-The Agent page now supports in-planner chats and a three-step setup: connect AI,
-choose websites, and verify private-browser sign-ins. Existing ChatGPT links and
-the planner MCP connection remain under a separate expandable section.
+The Agent page opens directly to chat for connected accounts. Use Add sites to
+connect more websites; Connect selects the source and opens a sign-in tab while
+the VM starts. One-time AI setup disappears after completion. Settings contains
+the daily schedule editor; AI account management, activity, private-computer
+controls, and saved ChatGPT links live under Advanced. The conversation sidebar
+stays vertical at every screen size and can be hidden.
 
 Each account pairs one outbound-only Ubuntu VM. The worker polls HTTPS; the
 Windows host, CDP, VNC, and Codex app-server do not require public inbound ports.
@@ -105,7 +108,7 @@ Use Windows 11 Pro with firmware virtualization. Enable Hyper-V without an
 automatic reboot, install Canonical Multipass 1.16.4, and restart Windows if
 requested. No Windows or browser profile is mounted into the guest.
 
-Create a pairing code under Agent → Private computer settings, then run from
+Create a pairing code under Agent → Settings → Advanced → Private computer, then run from
 this repository in PowerShell:
 
 ```powershell
@@ -182,8 +185,10 @@ The agent's browser MCP exposes read-only navigation and page reading only;
 it does not expose clicking, form submission, JavaScript execution or cookies.
 Planner tools are bound to the worker's username and current job lease. The
 agent reads calendar/files and saves sourced updates through the existing MCP.
-When enabled, daily checks enqueue once per 7 AM / 5 PM New York slot while the
-worker is online. Enabling this schedule disables the older Browser Use
+When enabled, daily checks enqueue once per configured time and timezone while
+the worker is online. The default is 7 AM / 5 PM America/New_York; Settings allows
+one to six daily times and an IANA timezone. The host wakes the VM two minutes
+before a slot. Enabling this schedule disables the older Browser Use
 schedule to avoid duplicate collectors. Offline slots are not backfilled.
 
 ## Validation
