@@ -71,7 +71,9 @@ export async function openView(dataDir, destination) {
     tunnel.stderr.on('data', chunk => { buffer = (buffer + chunk).slice(-4000); const match = buffer.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/); if (match) { clearTimeout(timer); resolve(match[0]) } })
     tunnel.on('error', () => { clearTimeout(timer); reject(new Error('The browser connection service is unavailable.')) })
   }).catch(async error => { await closeLiveBrowser(); throw error })
-  return { liveUrl: `${origin}/${token}/vnc.html?autoconnect=1&resize=remote&path=${token}/websockify`, expiresAt: new Date(Date.now() + 20 * 60000).toISOString() }
+  // Xvfb has a fixed display size. Scaling keeps the full guest browser usable
+  // on phones and narrow windows without cropping the sign-in form.
+  return { liveUrl: `${origin}/${token}/vnc.html?autoconnect=1&resize=scale&path=${token}/websockify`, expiresAt: new Date(Date.now() + 20 * 60000).toISOString() }
 }
 export async function checkSites(dataDir, enabled) {
   await closeLiveBrowser()
