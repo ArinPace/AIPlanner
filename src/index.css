@@ -1653,3 +1653,7 @@ textarea {
 }
 @media (max-width: 400px) { .assistant-chat-title strong { max-width: 84px; } .assistant-chat-title span { max-width: 110px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } }
 @media (prefers-reduced-motion: reduce) { .assistant-pulse { animation: none; } }
+.assistant-chat-title .assistant-power { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; color: #777; white-space: nowrap; }
+.assistant-power i { width: 6px; height: 6px; flex-shrink: 0; border-radius: 50%; background: #a1a1a1; }
+.assistant-power.online i { background: #25875a; }
+.assistant-power.starting i, .assistant-power.preparing i { background: #ce9627; }

@@ -19,7 +19,7 @@ export function shouldRunVm(input: { wakeUntil?: string | null; jobs: { status: 
   if (input.jobs.some(j => ['queued', 'running'].includes(j.status))) return true
   // Keep the computer warm between conversational turns instead of rebooting
   // after every reply. Background-only checks still shut down when finished.
-  if (input.jobs.some(j => j.kind === 'chat' && ['completed', 'failed', 'cancelled'].includes(j.status) && Date.parse(j.finished_at || '') > now.getTime() - 5 * 60000)) return true
+  if (input.jobs.some(j => j.kind === 'chat' && ['completed', 'failed', 'cancelled'].includes(j.status) && Date.parse(j.finished_at || '') > now.getTime() - 30 * 60000)) return true
   if (input.jobs.some(j => j.kind === 'browser_login' && j.status === 'completed' && Date.parse(j.result?.expiresAt || '') > now.getTime())) return true
   const slot = scheduleSlot(now, input.schedule)
   return Boolean(input.scheduled && slot && !input.jobs.some(j => j.schedule_slot === slot))

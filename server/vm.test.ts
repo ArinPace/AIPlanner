@@ -22,7 +22,10 @@ test('chat messages wake sleeping guests and keep them warm only during conversa
   const now = new Date('2026-10-16T14:00:00Z')
   assert.equal(shouldRunVm({ jobs: [{kind:'chat',status:'queued'}], scheduled:false }, now), true)
   assert.equal(shouldRunVm({ jobs: [{kind:'chat',status:'completed',finished_at:'2026-10-16T13:58:00Z'}], scheduled:false }, now), true)
-  assert.equal(shouldRunVm({ jobs: [{kind:'chat',status:'completed',finished_at:'2026-10-16T13:54:00Z'}], scheduled:false }, now), false)
+  assert.equal(shouldRunVm({ jobs: [{kind:'chat',status:'completed',finished_at:'2026-10-16T13:31:00Z'}], scheduled:false }, now), true)
+  assert.equal(shouldRunVm({ jobs: [], scheduled:false, wakeUntil:'2026-10-16T14:01:00Z' }, now), true)
+  assert.equal(shouldRunVm({ jobs: [], scheduled:false, wakeUntil:'2026-10-16T13:59:00Z' }, now), false)
+  assert.equal(shouldRunVm({ jobs: [{kind:'chat',status:'completed',finished_at:'2026-10-16T13:29:00Z'}], scheduled:false }, now), false)
   assert.equal(shouldRunVm({ jobs: [{kind:'sync',status:'completed',finished_at:'2026-10-16T13:59:00Z'}], scheduled:false }, now), false)
 })
 test('custom schedules validate and share the same due slot between wake and worker paths', () => {

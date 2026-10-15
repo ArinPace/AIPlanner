@@ -90,8 +90,10 @@ key or users' passwords are installed on Windows. Its default capacity is four
 VMs (4 GB each); later registrations wait rather than overcommitting this PC.
 VMs retain their own browser profile, ChatGPT registration, thread history and
 daily tasks while the user's phone/laptop is offline. The Windows coordinator
-wakes each VM shortly before its scheduled slot and stops idle guests. The host
-must stay on.
+wakes each VM at sign-in and shortly before its scheduled slot. Real interaction
+renews a 30-minute idle timeout; background page polling does not. Running jobs
+finish before shutdown. The Agent header shows the reported VM power state.
+The Windows host must stay on.
 
 After registering the host through the operator-only
 `POST /api/agent/vm/host/register` endpoint, store its returned token and planner

@@ -23,6 +23,8 @@ export function AgentView({ active }: { active: boolean }) {
   const claude = state?.settings.ai_provider === 'claude_code'
   const aiReady = Boolean(state?.settings.ai_provider === 'openai_api' || (host?.capabilities.signedIn && (claude ? host.capabilities.runtime === 'claude' : host.capabilities.runtime !== 'claude')))
   const provider = claude ? 'Claude' : state?.settings.ai_provider === 'openai_api' ? 'OpenAI API' : 'ChatGPT'
+  const power = state?.power || (host?.online ? 'online' : 'offline')
+  const powerLabel = { online: 'Online', offline: 'Offline', starting: 'Starting', preparing: 'Preparing' }[power]
   const title = state?.chats.find(c => c.id === chat)?.title || 'New chat'
   const closePanel = useCallback(() => setPanel(null), [])
   const refresh = useCallback(async () => {
@@ -77,7 +79,7 @@ export function AgentView({ active }: { active: boolean }) {
     </aside>}
     {sidebar && <button type="button" className="assistant-sidebar-scrim" aria-label="Close chat sidebar" onClick={() => setSidebar(false)}/>}
     <section className="assistant-chat" aria-label="Assistant chat">
-      <header className="assistant-chat-header"><div>{!sidebar && <button type="button" className="icon-btn" aria-label="Show chat sidebar" onClick={() => setSidebar(true)}><MenuIcon/></button>}<button type="button" className="icon-btn" aria-label="New chat" onClick={newChat}><PlusIcon/></button><div className="assistant-chat-title"><strong>{title}</strong><span>{state ? aiReady ? `${provider} connected${host?.online ? '' : ' · Wakes automatically'}` : 'Connect your AI to get started' : 'Loading…'}</span></div></div><div><button type="button" className="assistant-sites-button" onClick={() => setPanel('connections')}>Add sites</button><button type="button" className="icon-btn" aria-label="Agent settings" onClick={() => setPanel('settings')}><SettingsIcon/></button></div></header>
+      <header className="assistant-chat-header"><div>{!sidebar && <button type="button" className="icon-btn" aria-label="Show chat sidebar" onClick={() => setSidebar(true)}><MenuIcon/></button>}<button type="button" className="icon-btn" aria-label="New chat" onClick={newChat}><PlusIcon/></button><div className="assistant-chat-title"><strong>{title}</strong><span>{state ? aiReady ? `${provider} connected` : 'Connect your AI to get started' : 'Loading…'}</span>{state && <span className={'assistant-power ' + power} role="status" aria-label="Virtual machine status"><i aria-hidden="true"/>VM {powerLabel}</span>}</div></div><div><button type="button" className="assistant-sites-button" onClick={() => setPanel('connections')}>Add sites</button><button type="button" className="icon-btn" aria-label="Agent settings" onClick={() => setPanel('settings')}><SettingsIcon/></button></div></header>
       {error && <p role="alert" className="assistant-error">{error}</p>}
       {state?.provisioning?.error && <p role="alert" className="assistant-error">{state.provisioning.error}</p>}
       <div className="assistant-thread" aria-live="polite">

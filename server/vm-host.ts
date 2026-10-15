@@ -10,6 +10,11 @@ function checked<T>({ data, error }: { data: T; error: unknown }): NonNullable<T
 export async function queuePersonalVm(username: string) {
   checked(await db().from('planner_vm_provisioning').upsert({ username }, { onConflict: 'username', ignoreDuplicates: true }))
 }
+export async function touchVmActivity(username: string) {
+  const wakeUntil = new Date(Date.now() + 30 * 60000).toISOString()
+  checked(await db().from('planner_vm_provisioning').upsert({ username, wake_until: wakeUntil }, { onConflict: 'username' }))
+  return wakeUntil
+}
 export async function registerVmHost(username: string) {
   if (!(process.env.VM_HOST_OPERATORS || 'arin').split(',').map(x => x.trim()).includes(username)) throw new ApiError(403, 'Only the Windows host operator can register a VM server.')
   const token = 'ppool_' + randomBytes(32).toString('base64url')
@@ -25,6 +30,17 @@ export async function handleVmPool(request: Request, path: string) {
   if (!pool) throw new ApiError(401, 'Host registration was revoked.')
   const input = await body(request)
   checked(await db().from('planner_vm_pools').update({ heartbeat_at: new Date().toISOString() }).eq('id', pool.id))
+  if (path.endsWith('/status')) {
+    if (!Array.isArray(input.guests) || input.guests.length > 100) throw new ApiError(400, 'Report VM states.')
+    const computers = checked(await db().from('planner_vm_provisioning').select('username').eq('pool_id', pool.id))
+    for (const computer of computers) {
+      const name = 'planner-' + computer.username.replaceAll('_', '-')
+      const guest = input.guests.find((g: { name?: string; state?: string }) => g?.name === name)
+      if (!guest || !['Running','Off','Starting','Stopping','Saved','Paused'].includes(guest.state)) continue
+      checked(await db().from('planner_vm_provisioning').update({ power_state: guest.state, power_updated_at: new Date().toISOString() }).eq('username', computer.username).eq('pool_id', pool.id))
+    }
+    return json({ ok: true })
+  }
   if (path.endsWith('/power')) {
     const computers = checked(await db().from('planner_vm_provisioning').select('username,status,wake_until,lease_until').eq('pool_id', pool.id))
     const decisions = []

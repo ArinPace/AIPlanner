@@ -49,6 +49,7 @@ for (;;) {
     // service exists, rather than marking their first provisioning as failed.
     await command('powershell.exe', ['-NoProfile', '-Command', "if (!(Get-Service vmms -ErrorAction SilentlyContinue)) { exit 1 }"])
     let list = await listGuests()
+    await api('status', { guests: list.list.map(vm => ({ name: vm.name, state: vm.state })) })
     // Stop idle guests before allocating memory to a different user's task.
     for (const computer of power.computers.filter(c => !c.shouldRun)) {
       if (!/^[a-z0-9_]{3,24}$/.test(computer.username)) continue
@@ -60,8 +61,10 @@ for (;;) {
     for (const computer of power.computers.filter(c => c.shouldRun)) {
       if (!/^[a-z0-9_]{3,24}$/.test(computer.username) || vmCount >= power.capacity || os.freemem() < 5 * 1024 ** 3) continue
       const name = 'planner-' + computer.username.replaceAll('_', '-')
-      if (list.list.some(vm => vm.name === name && vm.state === 'Off')) { await log('starting', { name }); await powerGuest(name, true); vmCount++ }
+      if (list.list.some(vm => vm.name === name && ['Off','Saved'].includes(vm.state))) { await log('starting', { name }); await powerGuest(name, true); vmCount++ }
     }
+    list = await listGuests()
+    await api('status', { guests: list.list.map(vm => ({ name: vm.name, state: vm.state })) })
     const { job } = await api('claim', { vmCount: os.freemem() < 5 * 1024 ** 3 ? power.capacity : vmCount })
     if (job) {
       if (!/^[a-z0-9_]{3,24}$/.test(job.username)) throw new Error('Invalid VM account.')

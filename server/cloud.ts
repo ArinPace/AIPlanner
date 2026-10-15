@@ -7,7 +7,7 @@ import { handleAgentRequest } from './agent.js'
 import { handleMcpRequest } from './mcp.js'
 import { handleChatLinks } from './chat-links.js'
 import { handleVmRequest, handleVmWorker } from './vm.js'
-import { handleVmPool, queuePersonalVm, registerVmHost } from './vm-host.js'
+import { handleVmPool, queuePersonalVm, registerVmHost, touchVmActivity } from './vm-host.js'
 
 const BUCKET = 'planner-pdfs'
 let client: SupabaseClient | undefined
@@ -96,7 +96,7 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
   const path = url.searchParams.get('route') ? `/api/${url.searchParams.get('route')}` : url.pathname.replace(/\/$/, '')
   const method = request.method
   try {
-    if (['/api/agent/vm/host/claim', '/api/agent/vm/host/finish', '/api/agent/vm/host/power'].includes(path)) return await handleVmPool(request, path)
+    if (['/api/agent/vm/host/claim', '/api/agent/vm/host/finish', '/api/agent/vm/host/power', '/api/agent/vm/host/status'].includes(path)) return await handleVmPool(request, path)
     if (path.startsWith('/api/agent/vm/worker/')) return await handleVmWorker(request, path)
     if (path.startsWith('/api/mcp') || path.startsWith('/api/.well-known/')) return await handleMcpRequest(request, path)
     if (path === '/api/agent/cron' || path.startsWith('/api/agent/oauth/callback/')) {
@@ -122,6 +122,7 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
           result(await db().from('planner_calendars').insert({ username, state: DEFAULT_CALENDAR }))
           result(await db().from('planner_files').insert({ username, state: EMPTY_FILES }))
           await queuePersonalVm(username)
+          await touchVmActivity(username)
           return json({ username, token: await sessionToken(username) }, 201)
         } catch (error) {
           await db().from('planner_accounts').delete().eq('username', username)
@@ -130,6 +131,7 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
       }
       const account = result(await db().from('planner_accounts').select('password_hash').eq('username', username).maybeSingle())
       if (!account || !verifyPassword(password, account.password_hash)) throw new ApiError(401, 'Wrong username or password.')
+      await touchVmActivity(username).catch(() => console.error('VM wake request will retry from the signed-in app.'))
       return json({ username, token: await sessionToken(username) })
     }
     if (path === '/api/session' && method === 'GET') return json({ username: await sessionUser(request) })

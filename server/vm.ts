@@ -5,6 +5,7 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { hostOnline, safeWorkerStatus, safeDeviceAuthorization, uuid, vmHash, vmMessage } from './vm-validation.js'
 import { openVmCredential, sealVmCredential } from './vm-vault.js'
 import { DEFAULT_VM_SCHEDULE, scheduleSlot, validateSchedule } from './vm-power.js'
+import { touchVmActivity } from './vm-host.js'
 import { VM_SOURCES } from '../src/lib/vm.js'
 
 function checked<T>({ data, error }: { data: T; error: { code?: string } | null }): NonNullable<T> {
@@ -97,9 +98,14 @@ export async function handleVmRequest(request: Request, path: string, username: 
       db().from('planner_vm_chats').select('id,title,created_at,updated_at').eq('username', username).order('updated_at', { ascending: false }).limit(100),
       db().from('planner_vm_settings').select('sources,schedule_enabled,sites,ai_provider,schedule').eq('username', username).single(),
       db().from('planner_vm_jobs').select(publicJob).eq('username', username).order('created_at', { ascending: false }).limit(20),
-      db().from('planner_vm_provisioning').select('status,error').eq('username', username).maybeSingle(),
+      db().from('planner_vm_provisioning').select('status,error,wake_until,power_state,power_updated_at').eq('username', username).maybeSingle(),
     ])
-    return json({ hosts: checked(hosts).map(h => ({ ...h, online: hostOnline(h.heartbeat_at) })), chats: checked(chats), settings: checked(settings), runs: checked(runs), provisioning: checked(provisioning) || null, personalChatGptAvailable: personalChatGptAllowed(username), hostedChatGptAvailable: false, recordings: false })
+    const machine = checked(provisioning) || null
+    const connectedHosts = checked(hosts).map(h => ({ ...h, online: hostOnline(h.heartbeat_at) }))
+    const wantsWake = Date.parse(machine?.wake_until || '') > Date.now() || checked(runs).some(r => ['queued','running'].includes(r.status))
+    const freshPower = Date.now() - Date.parse(machine?.power_updated_at || '') < 60000
+    const power = !connectedHosts.length ? 'preparing' : freshPower ? machine?.power_state === 'Running' ? 'online' : wantsWake ? 'starting' : 'offline' : connectedHosts.some(h => h.online) ? 'online' : wantsWake ? 'starting' : 'offline'
+    return json({ hosts: connectedHosts, power, chats: checked(chats), settings: checked(settings), runs: checked(runs), provisioning: machine, personalChatGptAvailable: personalChatGptAllowed(username), hostedChatGptAvailable: false, recordings: false })
   }
   if (request.method === 'GET' && path === '/api/agent/vm/messages') {
     const chatId = url.searchParams.get('chat')
@@ -108,6 +114,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
   }
   if (request.method !== 'POST') throw new ApiError(405, 'Use POST.')
   const input = await body(request)
+  if (path === '/api/agent/vm/activity') return json({ wakeUntil: await touchVmActivity(username) })
   if (path === '/api/agent/vm/provider') {
     if (!['chatgpt', 'claude_code'].includes(String(input.provider))) throw new ApiError(400, 'Choose a connected AI.')
     if (input.provider === 'chatgpt' && !personalChatGptAllowed(username)) throw new ApiError(403, 'Personal ChatGPT is not available for this account.')

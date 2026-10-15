@@ -24,6 +24,7 @@ import {
 import { expandEvents } from './lib/recurrence'
 import { createId } from './lib/storage'
 import { useDatePinch } from './lib/useDatePinch'
+import { useVmActivity } from './lib/useVmActivity'
 import { clampZoom, DEFAULT_ZOOM, ZOOM_STEP } from './lib/zoom'
 import type { CalendarEvent, CalendarView, EventDraft, StoredState, Tag } from './types'
 
@@ -125,6 +126,7 @@ export default function App() {
 }
 
 function CalendarApp({ username, onLogout }: { username: string; onLogout: () => void }) {
+  useVmActivity(username)
   const [tab, setTab] = useState<'calendar' | 'files' | 'agent'>('calendar')
   const [filesUnsaved, setFilesUnsaved] = useState(false)
   const [cursor, setCursor] = useState(() => new Date())
