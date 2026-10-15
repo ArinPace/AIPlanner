@@ -4,6 +4,9 @@ export function allowedLivePath(url, token) {
 export function readableUrl(value, enabled, sources) {
   const url = new URL(value)
   const hosts = enabled.filter(s => sources[s]).map(s => new URL(sources[s]).hostname.replace(/^www\./, ''))
-  if (url.protocol !== 'https:' || url.username || url.password || !hosts.includes(url.hostname.replace(/^www\./, '')) || /(?:logout|signout|delete|remove|unsubscribe|submit|checkout)/i.test(url.pathname)) throw new Error('Choose a read-only HTTPS page from an enabled website.')
+  // Brightspace uses this GET view for assignment instructions as well as the
+  // upload form. Navigation exposes text only; this tool cannot fill or submit it.
+  const assignmentView = enabled.includes('brightspace') && url.hostname === new URL(sources.brightspace).hostname && url.pathname === '/d2l/lms/dropbox/user/folder_submit_files.d2l' && [...url.searchParams].every(([key, value]) => ['db', 'grpid', 'isprv', 'bp', 'ou'].includes(key) && /^\d+$/.test(value))
+  if (url.protocol !== 'https:' || url.username || url.password || !hosts.includes(url.hostname.replace(/^www\./, '')) || (!assignmentView && /(?:logout|signout|delete|remove|unsubscribe|submit|checkout)/i.test(url.pathname))) throw new Error('Choose a read-only HTTPS page from an enabled website.')
   return url.href
 }

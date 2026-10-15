@@ -14,5 +14,9 @@ test('private browser gateway rejects missing, wrong and traversal tokens', () =
 test('agent browser allows only enabled read-only public HTTPS destinations', () => {
   const sources = { brightspace: 'https://brightspace.nyu.edu/', gmail: 'https://mail.google.com/' }
   assert.equal(readableUrl('https://brightspace.nyu.edu/d2l/home/123', ['brightspace'], sources), 'https://brightspace.nyu.edu/d2l/home/123')
+  const assignment = 'https://brightspace.nyu.edu/d2l/lms/dropbox/user/folder_submit_files.d2l?db=123&ou=456'
+  assert.equal(readableUrl(assignment, ['brightspace'], sources), assignment)
+  assert.throws(() => readableUrl(assignment + '&action=submit', ['brightspace'], sources))
+  assert.throws(() => readableUrl(assignment, ['gmail'], sources))
   for (const url of ['http://127.0.0.1', 'file:///etc/passwd', 'https://mail.google.com/', 'https://brightspace.nyu.edu.evil.test/', 'https://secret:password@brightspace.nyu.edu/', 'https://brightspace.nyu.edu/logout']) assert.throws(() => readableUrl(url, ['brightspace'], sources))
 })
