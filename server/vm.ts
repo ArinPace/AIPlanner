@@ -77,6 +77,7 @@ export async function handleVmWorker(request: Request, path: string) {
     }
     const result = checked(await db().rpc('planner_vm_report', { p_host: host.id, p_job: input.id, p_lease: input.lease, p_reply: reply, p_error: error, p_finished: finished, p_thread: threadId, p_result: output }))
     if (!result) throw new ApiError(409, 'This job was cancelled or its lease expired.')
+    if (finished && !error && output.sites) checked(await db().from('planner_vm_jobs').update({ result: {} }).eq('username', host.username).eq('kind', 'browser_login').eq('status', 'completed'))
     return json({ ok: true })
   }
   throw new ApiError(404, 'Unknown worker action.')
@@ -86,13 +87,14 @@ export async function handleVmRequest(request: Request, path: string, username: 
   const url = new URL(request.url)
   if (request.method === 'GET' && path === '/api/agent/vm') {
     checked(await db().from('planner_vm_settings').upsert({ username }, { onConflict: 'username', ignoreDuplicates: true }))
-    const [hosts, chats, settings, runs] = await Promise.all([
+    const [hosts, chats, settings, runs, provisioning] = await Promise.all([
       db().from('planner_vm_hosts').select(publicHost).eq('username', username).is('revoked_at', null).order('created_at', { ascending: false }),
       db().from('planner_vm_chats').select('id,title,created_at,updated_at').eq('username', username).order('updated_at', { ascending: false }).limit(100),
       db().from('planner_vm_settings').select('sources,schedule_enabled,sites,ai_provider').eq('username', username).single(),
       db().from('planner_vm_jobs').select(publicJob).eq('username', username).order('created_at', { ascending: false }).limit(20),
+      db().from('planner_vm_provisioning').select('status,error').eq('username', username).maybeSingle(),
     ])
-    return json({ hosts: checked(hosts).map(h => ({ ...h, online: hostOnline(h.heartbeat_at) })), chats: checked(chats), settings: checked(settings), runs: checked(runs), personalChatGptAvailable: personalChatGptAllowed(username), hostedChatGptAvailable: false, recordings: false })
+    return json({ hosts: checked(hosts).map(h => ({ ...h, online: hostOnline(h.heartbeat_at) })), chats: checked(chats), settings: checked(settings), runs: checked(runs), provisioning: checked(provisioning) || null, personalChatGptAvailable: personalChatGptAllowed(username), hostedChatGptAvailable: false, recordings: false })
   }
   if (request.method === 'GET' && path === '/api/agent/vm/messages') {
     const chatId = url.searchParams.get('chat')
@@ -104,7 +106,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
   if (path === '/api/agent/vm/chatgpt/connect' || path === '/api/agent/vm/chatgpt/disconnect') {
     if (!personalChatGptAllowed(username)) throw new ApiError(403, 'Hosted ChatGPT subscription sign-in is awaiting provider approval. Use an API key instead.')
     const host = checked(await db().from('planner_vm_hosts').select('id,heartbeat_at').eq('username', username).is('revoked_at', null).maybeSingle())
-    if (!host || !hostOnline(host.heartbeat_at)) throw new ApiError(409, 'Start your personal VM before connecting ChatGPT.')
+    if (!host) throw new ApiError(409, 'Your personal VM is still being prepared.')
     if (path.endsWith('/connect')) checked(await db().from('planner_vm_settings').update({ credential: null, ai_provider: null }).eq('username', username))
     return json(checked(await db().from('planner_vm_jobs').insert({ username, host_id: host.id, kind: 'browser_login', message: path.endsWith('/disconnect') ? 'chatgpt_disconnect' : 'chatgpt_oauth' }).select(publicJob).single()), 202)
   }
@@ -131,7 +133,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
     const source = String(input.source || '')
     if (path.endsWith('/open') && !(source in VM_SOURCES)) throw new ApiError(400, 'Choose a website.')
     const host = checked(await db().from('planner_vm_hosts').select('id,heartbeat_at').eq('username', username).is('revoked_at', null).maybeSingle())
-    if (!host || !hostOnline(host.heartbeat_at)) throw new ApiError(409, 'Your private computer is offline. Start the VM, then try again.')
+    if (!host) throw new ApiError(409, 'Your private computer is still being prepared.')
     if (source) {
       const settings = checked(await db().from('planner_vm_settings').select('sources').eq('username', username).single())
       if (!settings.sources.includes(source)) throw new ApiError(400, 'Select this website in setup first.')

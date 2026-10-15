@@ -4,11 +4,27 @@ import { randomBytes } from 'node:crypto'
 import { hostOnline, safeWorkerStatus, uuid, vmMessage } from './vm-validation.js'
 import { sealVmCredential, openVmCredential } from './vm-vault.js'
 import { handleCloudRequest } from './cloud.js'
+import { scheduleSlot, shouldRunVm } from './vm-power.js'
+
+test('offline-user schedules wake only around New York slots, then stop after the slot completes', () => {
+  const now = new Date('2026-10-15T10:59:00Z')
+  assert.equal(scheduleSlot(now), '2026-10-15 07')
+  assert.equal(scheduleSlot(new Date('2026-10-15T21:00:00Z')), '2026-10-15 17')
+  assert.equal(scheduleSlot(new Date('2026-12-15T12:00:00Z')), '2026-12-15 07')
+  assert.equal(scheduleSlot(new Date('2026-10-15T15:00:00Z')), null)
+  assert.equal(shouldRunVm({ jobs: [], scheduled: true }, now), true)
+  assert.equal(shouldRunVm({ jobs: [{ kind: 'sync', status: 'completed', schedule_slot: '2026-10-15 07' }], scheduled: true }, now), false)
+  assert.equal(shouldRunVm({ jobs: [], scheduled: false }, now), false)
+  assert.equal(shouldRunVm({ jobs: [{ kind: 'chat', status: 'queued' }], scheduled: false }, now), true)
+  assert.equal(shouldRunVm({ jobs: [{ kind: 'browser_login', status: 'completed', result: { expiresAt: '2026-10-15T11:05:00Z' } }], scheduled: false }, now), true)
+})
 
 test('worker routes reject missing and malformed credentials before any database access', async () => {
-  for (const token of ['', 'sk-not-a-worker-token', 'pvm_short']) {
-    const response = await handleCloudRequest(new Request('https://planner.test/api/agent/vm/worker/claim', { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: '{}' }))
-    assert.equal(response.status, 401)
+  for (const route of ['worker/claim', 'host/claim', 'host/finish']) {
+    for (const token of ['', 'sk-not-a-worker-token', 'pvm_short']) {
+      const response = await handleCloudRequest(new Request('https://planner.test/api/agent/vm/' + route, { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: '{}' }))
+      assert.equal(response.status, 401)
+    }
   }
 })
 test('VM credentials are authenticated ciphertext and cannot be decrypted after tampering', () => {

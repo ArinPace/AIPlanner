@@ -7,6 +7,7 @@ import { handleAgentRequest } from './agent.js'
 import { handleMcpRequest } from './mcp.js'
 import { handleChatLinks } from './chat-links.js'
 import { handleVmRequest, handleVmWorker } from './vm.js'
+import { handleVmPool, queuePersonalVm, registerVmHost } from './vm-host.js'
 
 const BUCKET = 'planner-pdfs'
 let client: SupabaseClient | undefined
@@ -95,6 +96,7 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
   const path = url.searchParams.get('route') ? `/api/${url.searchParams.get('route')}` : url.pathname.replace(/\/$/, '')
   const method = request.method
   try {
+    if (['/api/agent/vm/host/claim', '/api/agent/vm/host/finish', '/api/agent/vm/host/power'].includes(path)) return await handleVmPool(request, path)
     if (path.startsWith('/api/agent/vm/worker/')) return await handleVmWorker(request, path)
     if (path.startsWith('/api/mcp') || path.startsWith('/api/.well-known/')) return await handleMcpRequest(request, path)
     if (path === '/api/agent/cron' || path.startsWith('/api/agent/oauth/callback/')) {
@@ -119,6 +121,7 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
         try {
           result(await db().from('planner_calendars').insert({ username, state: DEFAULT_CALENDAR }))
           result(await db().from('planner_files').insert({ username, state: EMPTY_FILES }))
+          await queuePersonalVm(username)
           return json({ username, token: await sessionToken(username) }, 201)
         } catch (error) {
           await db().from('planner_accounts').delete().eq('username', username)
@@ -137,6 +140,7 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
     }
     const username = await sessionUser(request)
     if (!username) throw new ApiError(401, 'Please sign in.')
+    if (path === '/api/agent/vm/host/register' && method === 'POST') return await registerVmHost(username)
     if (path === '/api/agent/vm' || path.startsWith('/api/agent/vm/')) return await handleVmRequest(request, path, username)
     if (path === '/api/agent/chats' || path === '/api/agent/chats/remove' || path === '/api/agent/mcp/disconnect') return await handleChatLinks(request, path, username)
     if (path.startsWith('/api/agent/')) return await handleAgentRequest(request, path, username)

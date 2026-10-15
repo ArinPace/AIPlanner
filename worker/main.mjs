@@ -3,12 +3,13 @@ import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { CodexRpc } from './rpc.mjs'
-import { browser, openLogin, checkSites, liveBrowserOpen } from './browser.mjs'
+import { browser, openLogin, checkSites, liveBrowserOpen, shutdownBrowser } from './browser.mjs'
 import { tomlValue } from './config-args.mjs'
 import { connectPersonalChatGpt, disconnectPersonalChatGpt } from './oauth.mjs'
 
 const dataDir = process.env.PLANNER_DATA_DIR || '/var/lib/planner'
 const config = JSON.parse(await readFile(path.join(dataDir, 'worker.json'), 'utf8'))
+process.on('SIGTERM', () => { void shutdownBrowser().finally(() => process.exit(0)) })
 const origin = new URL(config.origin)
 if (origin.protocol !== 'https:' || origin.username || origin.password || origin.pathname !== '/') throw new Error('Use the HTTPS planner origin.')
 await mkdir(path.join(dataDir, 'workspace'), { recursive: true, mode: 0o700 })

@@ -25,6 +25,7 @@ export async function browser(dataDir) {
   return context
 }
 export const liveBrowserOpen = () => Boolean(live)
+export async function shutdownBrowser() { await closeLiveBrowser(); if (context) await context.close() }
 export async function closeLiveBrowser() {
   if (!live) return
   clearTimeout(live.timer); live.tunnel.kill(); live.proxy.closeAllConnections(); live.proxy.close();

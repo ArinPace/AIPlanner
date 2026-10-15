@@ -80,6 +80,27 @@ silently replaying planner writes. Revocation cancels queued/running work.
 
 ## Host setup (operator, once per account)
 
+New planner registrations now enqueue a distinct private VM automatically.
+`host/main.mjs` runs on the Windows host and provisions queued accounts through
+Multipass. The provisioner has a separate revocable token; no Supabase service
+key or users' passwords are installed on Windows. Its default capacity is four
+VMs (4 GB each); later registrations wait rather than overcommitting this PC.
+VMs retain their own browser profile, ChatGPT registration, thread history and
+daily tasks while the user's phone/laptop is offline. The Windows coordinator
+wakes each VM shortly before its scheduled slot and stops idle guests. The host
+must stay on.
+
+After registering the host through the operator-only
+`POST /api/agent/vm/host/register` endpoint, store its returned token and planner
+origin in a private JSON file outside the repository. Install the startup task:
+
+```powershell
+.\scripts\install-vm-host.ps1 -ConfigPath <private-host-config.json>
+```
+
+The following manual provisioning command is an operator recovery path, not
+part of normal end-user setup.
+
 Use Windows 11 Pro with firmware virtualization. Enable Hyper-V without an
 automatic reboot, install Canonical Multipass 1.16.4, and restart Windows if
 requested. No Windows or browser profile is mounted into the guest.
