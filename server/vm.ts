@@ -51,6 +51,9 @@ export async function handleVmWorker(request: Request, path: string) {
   const input = await body(request)
   if (path === '/api/agent/vm/worker/claim') {
     checked(await db().from('planner_vm_hosts').update({ heartbeat_at: new Date().toISOString(), capabilities: safeWorkerStatus(input) }).eq('id', host.id).is('revoked_at', null))
+    // Once authorized, remove the spent device code and its keep-awake window.
+    // The user must retain no live sign-in secret just to keep chatting.
+    if (input.signedIn === true) checked(await db().from('planner_vm_jobs').update({ result: {} }).eq('username', host.username).eq('kind', 'browser_login').eq('message', 'chatgpt_device').eq('status', 'completed').not('result->deviceCode', 'is', null))
     const settings = checked(await db().from('planner_vm_settings').select('sources,schedule_enabled').eq('username', host.username).single())
     const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' }).formatToParts(new Date())
     const part = (type: string) => parts.find(p => p.type === type)?.value || ''
