@@ -50,6 +50,7 @@ export async function handleVmWorker(request: Request, path: string) {
   }
   const input = await body(request)
   if (path === '/api/agent/vm/worker/claim') {
+    if (input.activateClaude === true && input.claudeConnected === true) checked(await db().from('planner_vm_settings').update({ ai_provider: 'claude_code', credential: null }).eq('username', host.username))
     checked(await db().from('planner_vm_hosts').update({ heartbeat_at: new Date().toISOString(), capabilities: safeWorkerStatus(input) }).eq('id', host.id).is('revoked_at', null))
     // Once authorized, remove the spent device code and its keep-awake window.
     // The user must retain no live sign-in secret just to keep chatting.
@@ -108,10 +109,20 @@ export async function handleVmRequest(request: Request, path: string, username: 
   }
   if (request.method !== 'POST') throw new ApiError(405, 'Use POST.')
   const input = await body(request)
+  if (path === '/api/agent/vm/provider') {
+    if (!['chatgpt', 'claude_code'].includes(String(input.provider))) throw new ApiError(400, 'Choose a connected AI.')
+    if (input.provider === 'chatgpt' && !personalChatGptAllowed(username)) throw new ApiError(403, 'Personal ChatGPT is not available for this account.')
+    const host = checked(await db().from('planner_vm_hosts').select('capabilities').eq('username', username).is('revoked_at', null).maybeSingle())
+    const caps = host?.capabilities || {}
+    const connected = input.provider === 'chatgpt' ? caps.chatgptConnected === true || (caps.signedIn === true && caps.runtime !== 'claude' && caps.identity !== 'OpenAI API') : caps.claudeConnected === true || (caps.signedIn === true && caps.runtime === 'claude')
+    if (!connected) throw new ApiError(409, 'Connect this AI before selecting it.')
+    checked(await db().from('planner_vm_settings').update({ ai_provider: input.provider === 'chatgpt' ? null : 'claude_code', credential: null }).eq('username', username))
+    return json({ ok: true })
+  }
   if (path === '/api/agent/vm/claude/connect' || path === '/api/agent/vm/claude/disconnect') {
     const host = checked(await db().from('planner_vm_hosts').select('id').eq('username', username).is('revoked_at', null).maybeSingle())
     if (!host) throw new ApiError(409, 'Your private computer is still being prepared.')
-    checked(await db().from('planner_vm_settings').update({ credential: null, ai_provider: path.endsWith('/connect') ? 'claude_code' : null }).eq('username', username))
+    if (path.endsWith('/disconnect')) checked(await db().from('planner_vm_settings').update({ ai_provider: null }).eq('username', username).eq('ai_provider', 'claude_code'))
     return json(checked(await db().from('planner_vm_jobs').insert({ username, host_id: host.id, kind: 'browser_login', message: path.endsWith('/connect') ? 'claude_connect' : 'claude_disconnect' }).select(publicJob).single()), 202)
   }
   if (path === '/api/agent/vm/chatgpt/connect' || path === '/api/agent/vm/chatgpt/disconnect') {

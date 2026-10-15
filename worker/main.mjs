@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, rename } from 'node:fs/promises'
+import { readFile, writeFile, mkdir, rename, unlink } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
@@ -92,22 +92,32 @@ async function chat(job, auth, remote) {
   } finally { clearInterval(heartbeat); clearTimeout(timeout); rpc.close() }
 }
 let signedIn = false, identity = null
+const claudePending = path.join(dataDir, 'claude-login-pending')
 for (;;) {
   let job
   try {
     const remote = await api('config')
+    const nativeClaude = await claudeStatus(dataDir).catch(() => null)
+    const nativeChatGpt = remote.personalChatGptAllowed ? await personalCodexStatus(dataDir).catch(() => null) : null
+    const pendingUntil = Number(await readFile(claudePending, 'utf8').catch(() => 0))
+    const activateClaude = Boolean(nativeClaude && pendingUntil > Date.now())
+    if (pendingUntil && pendingUntil <= Date.now()) await unlink(claudePending).catch(() => {})
+    if (activateClaude) { remote.aiProvider = 'claude_code'; await closeLiveBrowser() }
     const auth = await credential(remote).catch(() => null)
     signedIn = Boolean(auth); identity = auth?.identity || null
-    ;({ job } = await api('claim', { signedIn, identity, runtime: remote.aiProvider === 'claude_code' ? 'claude' : 'codex', version: '0.2.0' }))
+    ;({ job } = await api('claim', { signedIn, identity, runtime: remote.aiProvider === 'claude_code' ? 'claude' : 'codex', chatgptConnected: Boolean(nativeChatGpt), claudeConnected: Boolean(nativeClaude), activateClaude, version: '0.2.1' }))
+    if (activateClaude) await unlink(claudePending).catch(() => {})
     if (job) {
       const timer = setInterval(() => void api('progress', { id: job.id, lease: job.lease, reply: '' }).catch(() => {}), 20000)
       try {
         let result
         if (job.kind === 'browser_login' && job.message === 'claude_connect') {
           await closeLiveBrowser()
+          await writeFile(claudePending, String(Date.now() + 10 * 60000), { mode: 0o600 })
           result = { reply: 'Sign in through Claude Code’s own authorization page in your private VM browser.', result: await connectClaude(dataDir) }
         }
         else if (job.kind === 'browser_login' && job.message === 'claude_disconnect') {
+          await unlink(claudePending).catch(() => {})
           await disconnectClaude(dataDir); await closeLiveBrowser(); result = { reply: 'Claude Code was disconnected from this VM.' }
         }
         else if (job.kind === 'browser_login' && job.message === 'chatgpt_disconnect') {

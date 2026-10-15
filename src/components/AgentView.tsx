@@ -14,7 +14,8 @@ export function AgentView({ active }: { active: boolean }) {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
-  const [setup, setSetup] = useState(false)
+  const [setup, setSetup] = useState<'auto' | 'open' | 'closed'>('auto')
+  const previouslyReady = useRef<boolean | null>(null)
   const [pair, setPair] = useState<{ code: string; expiresAt: string } | null>(null)
   const [liveJobId, setLiveJobId] = useState<string | null>(null)
   const [now, setNow] = useState(0)
@@ -23,7 +24,16 @@ export function AgentView({ active }: { active: boolean }) {
   const claudeSelected = state?.settings.ai_provider === 'claude_code'
   const aiReady = Boolean(state?.settings.ai_provider === 'openai_api' || (host?.capabilities.signedIn && (claudeSelected ? host.capabilities.runtime === 'claude' : host.capabilities.runtime !== 'claude')))
   const sitesReady = Boolean(state?.settings.sources.length && state.settings.sources.every(s => state.settings.sites[s]?.ready))
-  const ready = Boolean(aiReady && sitesReady && host?.online)
+  const ready = Boolean(aiReady && sitesReady && host)
+  const showSetup = setup === 'open' || (setup === 'auto' && !aiReady)
+  const providerName = claudeSelected ? 'Claude' : state?.settings.ai_provider === 'openai_api' ? 'OpenAI API' : 'ChatGPT'
+  useEffect(() => {
+    if (!state) return
+    if (ready && previouslyReady.current === false) {
+      setSetup('closed'); setNotice('Setup complete. Your assistant is ready—send a message below.')
+    }
+    previouslyReady.current = ready
+  }, [ready, state])
   const live = state?.runs.find(r => r.id === liveJobId) || state?.runs.find(r => r.kind === 'browser_login' && r.status === 'completed' && r.result.liveUrl && Date.parse(r.result.expiresAt || '') > now)
   const liveUrl = live?.result.liveUrl && Date.parse(live.result.expiresAt || '') > now ? live.result.liveUrl : null
   const authJob = state?.runs.find(r => r.message === 'chatgpt_device')
@@ -31,6 +41,7 @@ export function AgentView({ active }: { active: boolean }) {
   const refresh = useCallback(async () => {
     const next = await agentRequest<VmState>('vm'); setState(next); setNow(Date.now())
     if (!loadedSources.current) { setSources(next.settings.sources); loadedSources.current = true }
+    if (!chat && next.chats.length) setChat(next.chats[0].id)
     if (chat) setJobs((await agentRequest<{ jobs: VmJob[] }>('vm/messages?chat=' + encodeURIComponent(chat))).jobs)
   }, [chat])
   useEffect(() => {
@@ -58,28 +69,31 @@ export function AgentView({ active }: { active: boolean }) {
     setJobs((await agentRequest<{ jobs: VmJob[] }>('vm/messages?chat=' + encodeURIComponent(id))).jobs)
   }
   return <main className="agent-workspace planner-assistant">
-    <div className="agent-heading"><div><p className="agent-eyebrow">YOUR PLANNER ASSISTANT</p><h1>A little help, every day.</h1><p>Connect your AI and websites. Keep the conversation here.</p></div><button className="agent-secondary" type="button" onClick={() => setSetup(!setup)}>{setup ? 'Back to chats' : 'Setup & connections'}</button></div>
+    <div className="agent-heading"><div><p className="agent-eyebrow">YOUR PLANNER ASSISTANT</p><h1>A little help, every day.</h1><p>Connect your AI and websites. Keep the conversation here.</p></div><button className="agent-secondary" type="button" onClick={() => setSetup(showSetup ? 'closed' : 'open')}>{showSetup ? 'Back to chats' : 'Setup & connections'}</button></div>
     {error && <p className="agent-banner agent-error" role="alert">{error}</p>}{notice && <p className="agent-banner" role="status">{notice}</p>}
     {!state && !error && <p role="status">Loading your assistant…</p>}
     {state && <>
-      <div className="vm-status-strip"><span className={'vm-dot ' + (host?.online ? 'online' : '')}/><span>{host?.online ? 'Your private computer is online' : host ? 'Your private computer wakes when needed' : 'Preparing your private computer'}</span><span className="vm-status-label">{ready ? 'Ready to help' : 'Finish setup below'}</span></div>
+      <div className="vm-status-strip"><span className={'vm-dot ' + (host?.online ? 'online' : '')}/><span>{host?.online ? 'Your private computer is online' : host ? 'Your private computer wakes when needed' : 'Preparing your private computer'}</span><span className="vm-status-label">{ready ? 'Setup complete · Ready to help' : aiReady ? 'Chat ready · Add websites in Setup' : 'Connect an AI to start chatting'}</span></div>
       {state.provisioning?.error && <p role="alert" className="agent-banner agent-error">{state.provisioning.error}</p>}
-      {(setup || !aiReady || !sitesReady) && <section className="agent-card vm-setup" aria-labelledby="assistant-setup-title">
+      {aiReady && <p className="agent-banner vm-ready" role="status">{providerName} connected{host?.capabilities.identity ? ` · ${host.capabilities.identity}` : ''}. {ready ? 'Setup complete. Your assistant is ready.' : 'Chat is ready. Add websites in Setup & connections when you want course updates.'}</p>}
+      {showSetup && <section className="agent-card vm-setup" aria-labelledby="assistant-setup-title">
         <h2 id="assistant-setup-title">Make it yours.</h2><p>Three simple steps. Your connections stay private to your account.</p>
         <ol className="vm-steps"><li className="done">Sign in</li><li className={aiReady ? 'done' : ''}>Connect AI</li><li className={sitesReady ? 'done' : ''}>Sign into websites</li></ol>
         <div className="vm-setup-section"><h3>1. Choose your AI</h3>{aiReady && <p className="vm-ready">Connected · {host?.capabilities.identity || 'OpenAI API'}</p>}
-          <details><summary>Use an OpenAI API key</summary><form className="vm-key-form" onSubmit={e => { e.preventDefault(); void perform(async () => { await agentAction('vm/ai', { apiKey }); setApiKey(''); setNotice('API key verified and saved securely.') }) }}><label htmlFor="vm-api-key">OpenAI API key</label><input id="vm-api-key" type="password" autoComplete="off" spellCheck={false} value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-…" required/><button className="agent-launch" disabled={busy || !apiKey.trim()}>Connect AI</button><small>API usage is billed by OpenAI. Your key is encrypted in storage and never included in chat messages.</small></form>{state.settings.ai_provider && <button type="button" className="agent-secondary" disabled={busy} onClick={() => void perform(async () => { await agentAction('vm/ai/disconnect'); setNotice('API key removed. A separately authorized personal ChatGPT account remains on its VM.') })}>Remove API key</button>}</details>
+          <details><summary>Use an OpenAI API key</summary><form className="vm-key-form" onSubmit={e => { e.preventDefault(); void perform(async () => { await agentAction('vm/ai', { apiKey }); setApiKey(''); setNotice('API key verified and saved securely.') }) }}><label htmlFor="vm-api-key">OpenAI API key</label><input id="vm-api-key" type="password" autoComplete="off" spellCheck={false} value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-…" required/><button className="agent-launch" disabled={busy || !apiKey.trim()}>Connect AI</button><small>API usage is billed by OpenAI. Your key is encrypted in storage and never included in chat messages.</small></form>{state.settings.ai_provider === 'openai_api' && <button type="button" className="agent-secondary" disabled={busy} onClick={() => void perform(async () => { await agentAction('vm/ai/disconnect'); setNotice('API key removed. A separately authorized personal ChatGPT account remains on its VM.') })}>Remove API key</button>}</details>
           <details><summary>Use a ChatGPT subscription</summary>{state.personalChatGptAvailable ? <>
+            {(host?.capabilities.chatgptConnected || (!claudeSelected && aiReady && state.settings.ai_provider !== 'openai_api')) && <p className="vm-ready">ChatGPT is already connected. <button type="button" className="agent-secondary" disabled={busy || (!claudeSelected && aiReady && state.settings.ai_provider !== 'openai_api')} onClick={() => void perform(async () => { await agentAction('vm/provider', { provider: 'chatgpt' }); setSetup('closed'); setNotice('Using your saved ChatGPT connection. Your agent will wake when you send a message.') })}>Use connected ChatGPT</button></p>}
             <p>For your personal self-hosted agent. Authorize on OpenAI’s page in your own browser, on your phone or computer.{state.settings.ai_provider ? ' Switching to ChatGPT removes your saved API key.' : ''}</p>
             <button type="button" className="agent-launch" disabled={busy || !host || Boolean(authJob && pending(authJob))} onClick={() => void perform(async () => { const job = await agentAction<VmJob>('vm/chatgpt/connect', { method: 'device' }); setLiveJobId(job.id); setNotice('Waking your agent and requesting an OpenAI device code. It will appear here shortly.') })}>Continue with ChatGPT</button>
             {authJob && pending(authJob) && <p role="status">Preparing your sign-in code…</p>}
             {device && <div className="vm-live"><h4>Authorize your agent</h4><p>Open OpenAI, enter this one-use code, then return here. Keep this code private. It expires in 10 minutes.</p><code className="vm-command">{device.userCode}</code><a className="agent-launch agent-open-chat" href={device.verificationUrl} target="_blank" rel="noreferrer">Open OpenAI authorization ↗</a><p role="status">Waiting for authorization…</p></div>}
             {authJob?.status === 'failed' && <p role="alert" className="agent-error">{authJob.error}</p>}
-            {host?.capabilities.signedIn && host.capabilities.identity !== 'OpenAI API' && <button type="button" className="agent-secondary" disabled={busy} onClick={() => void perform(async () => { await agentAction('vm/chatgpt/disconnect'); setNotice('Disconnecting ChatGPT from your personal VM.') })}>Disconnect ChatGPT</button>}
+            {!claudeSelected && host?.capabilities.signedIn && host.capabilities.identity !== 'OpenAI API' && <button type="button" className="agent-secondary" disabled={busy} onClick={() => void perform(async () => { await agentAction('vm/chatgpt/disconnect'); setNotice('Disconnecting ChatGPT from your personal VM.') })}>Disconnect ChatGPT</button>}
           </> : <p>Hosted ChatGPT subscription sign-in requires provider approval and is not enabled for this account. You can use an API key now.</p>}</details>
           <details><summary>Use a Claude subscription</summary>
+            {host?.capabilities.claudeConnected && <p className="vm-ready">Claude is already connected. <button type="button" className="agent-secondary" disabled={busy || claudeSelected} onClick={() => void perform(async () => { await agentAction('vm/provider', { provider: 'claude_code' }); setSetup('closed'); setNotice('Using your saved Claude connection.') })}>Use connected Claude</button></p>}
             <p>Sign into Claude Code on your private computer using Anthropic’s own authorization page. Claude Code keeps and refreshes your login. Usage follows your Claude plan.</p>
-            <button type="button" className="agent-launch" disabled={busy || !host || state.runs.some(r => r.message === 'claude_connect' && pending(r))} onClick={() => void perform(async () => { const job = await agentAction<VmJob>('vm/claude/connect'); setLiveJobId(job.id); setNotice('Opening Claude Code authorization. The private browser link will appear below. This switches your active AI to Claude.') })}>Continue with Claude</button>
+            <button type="button" className="agent-launch" disabled={busy || !host || state.runs.some(r => r.message === 'claude_connect' && pending(r))} onClick={() => void perform(async () => { const job = await agentAction<VmJob>('vm/claude/connect'); setLiveJobId(job.id); setNotice('Opening Claude Code authorization. The private browser link will appear below. Your current AI stays connected until Claude sign-in succeeds.') })}>Continue with Claude</button>
             {claudeSelected && <button type="button" className="agent-secondary" disabled={busy} onClick={() => void perform(async () => { await agentAction('vm/claude/disconnect'); setNotice('Disconnecting Claude Code. Your separate ChatGPT login remains on its VM.') })}>Disconnect Claude</button>}
             {state.runs.find(r => r.message === 'claude_connect')?.status === 'failed' && <p role="alert" className="agent-error">{state.runs.find(r => r.message === 'claude_connect')?.error}</p>}
           </details>

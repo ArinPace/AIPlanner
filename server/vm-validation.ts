@@ -22,5 +22,7 @@ export function safeWorkerStatus(value: unknown) {
     signedIn: input.signedIn === true,
     identity: typeof input.identity === 'string' ? input.identity.slice(0, 160) : null,
     version: typeof input.version === 'string' ? input.version.slice(0, 40) : null,
+    ...(typeof input.chatgptConnected === 'boolean' ? { chatgptConnected: input.chatgptConnected } : {}),
+    ...(typeof input.claudeConnected === 'boolean' ? { claudeConnected: input.claudeConnected } : {}),
   }
 }
