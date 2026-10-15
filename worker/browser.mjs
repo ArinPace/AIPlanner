@@ -67,6 +67,9 @@ export async function observeSignIn(dataDir) {
   if (!live?.source || live.reported || !context) return {}
   const source = live.source
   for (const page of context.pages()) {
+    // Confirm the page the user is actually viewing, not a cached signed-in
+    // screen left behind in another tab before a session expired.
+    if (!await page.evaluate(() => document.visibilityState === 'visible').catch(() => false)) continue
     if (!await signedInBrowserPage(source, page)) continue
     if (source === 'gradescope') {
       for (const candidate of [...context.pages()].reverse()) {
@@ -86,6 +89,7 @@ export async function openView(dataDir, destination, attempt = 0) {
   await closeLiveBrowser()
   const ctx = await browser(dataDir), page = ctx.pages()[0] || await ctx.newPage()
   await page.goto(destination, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {})
+  await page.bringToFront()
   const token = randomBytes(24).toString('base64url'), sockets = new Set()
   const headers = { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' }
   const proxy = http.createServer((req, res) => {
