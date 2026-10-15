@@ -116,8 +116,14 @@ The script creates `planner-arin` with 2 vCPUs, 4 GB RAM and a 25 GB disk. Repea
 with a different planner username and its own pairing code for another account.
 It installs a non-root worker, persistent Chromium profile, virtual display,
 loopback-only browser view, and restartable systemd services. VM dependencies
-are pinned by `worker/package-lock.json`. The Hyper-V VM is configured to start
-with Windows. Keep the host awake and online for scheduled checks.
+are pinned by `worker/package-lock.json`. The coordinator starts with Windows;
+guests start only when needed. Keep the host awake and online for scheduled checks.
+
+Enrollment codes enter the Windows coordinator over stdin and are transferred
+over Multipass SSH into private temporary directories. The guest consumes and
+deletes its one-use code before enrollment. Codes are never passed in command
+arguments or committed. Host lifecycle diagnostics are written beside the private
+host configuration in `host.log`, with no tokens, browser URLs, or command output.
 
 The user can verify and save an OpenAI API key in Setup. The backend encrypts it
 using `CONNECTION_ENCRYPTION_KEY`; only the bound VM receives it. Never log it.

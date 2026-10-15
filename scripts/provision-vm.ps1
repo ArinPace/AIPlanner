@@ -23,8 +23,17 @@ if (!$existing) {
 }
 $staging = Join-Path $env:TEMP ('planner-vm-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $staging | Out-Null
+$stagingAcl = Get-Acl -LiteralPath $staging
+$stagingAcl.SetAccessRuleProtection($true, $false)
+foreach ($sid in @([Security.Principal.WindowsIdentity]::GetCurrent().User.Value, 'S-1-5-18', 'S-1-5-32-544') | Select-Object -Unique) {
+  $rule = [Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($sid), 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+  $stagingAcl.AddAccessRule($rule)
+}
+Set-Acl -LiteralPath $staging -AclObject $stagingAcl
 try {
-  # Secrets travel over stdin to the VM, never via cloud-init, Git or process args.
+  # The coordinator supplies secrets over stdin, never in process args.
+  # Multipass on Windows can leave piped remote stdin unread, so transfer the
+  # one-use enrollment code over SSH into an owner-only guest directory.
   $enrollment = @{origin=$PlannerOrigin;code=$PairingCode} | ConvertTo-Json -Compress
   & $multipass exec $vmName -- mkdir -p /home/ubuntu/planner-worker
   foreach ($sourceFile in (Get-ChildItem -LiteralPath (Join-Path $repoRoot 'worker') -File)) {
@@ -37,12 +46,24 @@ try {
   }
   & $multipass exec $vmName -- sudo bash /home/ubuntu/planner-worker/bootstrap.sh
   if ($LASTEXITCODE -ne 0) { throw 'VM bootstrap failed.' }
-  $enrollment | & $multipass exec $vmName -- sudo -u planner node /opt/planner/enroll.mjs
+  & $multipass exec $vmName -- install -d -m 0700 /home/ubuntu/planner-enrollment
+  if ($LASTEXITCODE -ne 0) { throw 'Could not prepare private enrollment directory.' }
+  $enrollmentFile = Join-Path $staging 'enrollment.json'
+  [IO.File]::WriteAllText($enrollmentFile, $enrollment, [Text.UTF8Encoding]::new($false))
+  $guestEnrollment = '/home/ubuntu/planner-enrollment/enrollment.json'
+  & $multipass transfer $enrollmentFile ($vmName + ':' + $guestEnrollment)
+  if ($LASTEXITCODE -ne 0) { throw 'Enrollment transfer failed.' }
+  & $multipass exec $vmName -- sudo install -o planner -g planner -m 0600 $guestEnrollment /var/lib/planner/enrollment.json
+  if ($LASTEXITCODE -ne 0) { throw 'Could not protect enrollment data.' }
+  & $multipass exec $vmName -- rm -f $guestEnrollment
+  & $multipass exec $vmName -- sudo -u planner node /opt/planner/enroll.mjs /var/lib/planner/enrollment.json
   if ($LASTEXITCODE -ne 0) { throw 'VM pairing failed. Generate a fresh code in the planner.' }
   & $multipass exec $vmName -- sudo systemctl enable --now planner-worker.service
   if ($LASTEXITCODE -ne 0) { throw 'Worker service did not start.' }
   # The lightweight Windows scheduler wakes guests only when needed.
-  if (Get-Command Set-VM -ErrorAction SilentlyContinue) { Set-VM -Name $vmName -AutomaticStartAction Nothing -AutomaticStopAction ShutDown }
+  # Multipass guests may not support Hyper-V's shutdown integration setting.
+  # Keep its safe host-shutdown save behavior; only disable automatic startup.
+  if (Get-Command Set-VM -ErrorAction SilentlyContinue) { Set-VM -Name $vmName -AutomaticStartAction Nothing }
   Write-Output "Private VM $vmName is running. Return to the planner and connect AI, then websites."
 } finally {
   # No recursive cleanup outside the exact temporary directory created above.
