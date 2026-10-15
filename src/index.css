@@ -52,12 +52,14 @@ p {
 
 .app-shell {
   height: 100%;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   background: var(--bg);
 }
 
 .app-header {
+  flex-shrink: 0;
   height: 64px;
   min-height: 64px;
   padding: 0 12px 0 8px;
@@ -575,13 +577,16 @@ p {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .login-screen {
   min-height: 100%;
+  height: 100dvh;
+  overflow-y: auto;
   display: grid;
   place-items: center;
+  align-items: safe center;
   background: #f8f9fa;
   padding: 24px;
 }
@@ -754,15 +759,16 @@ p {
 }
 
 .month-grid {
-  flex: 1;
+  flex: 1 0 auto;
   min-height: 0;
-  height: 100%;
+  height: auto;
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   grid-template-rows: repeat(6, minmax(0, 1fr));
 }
 
 .month-cell {
+  min-width: 0;
   min-height: 0;
   border-top: 1px solid var(--line);
   border-right: 1px solid var(--line);
@@ -1037,7 +1043,8 @@ p {
   display: grid;
   gap: 14px;
   position: relative;
-  overflow: hidden;
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
 }
 
 .modal-accent {
@@ -1251,6 +1258,7 @@ textarea {
 .workspace-tabs button.is-active { background: #fff; color: var(--blue); box-shadow: 0 1px 3px #20212415; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .files-tab-panel { flex: 1; min-height: 0; display: flex; }
+.agent-tab-panel { flex: 1; min-height: 0; min-width: 0; overflow-y: auto; }
 .files-workspace { flex: 1; display: flex; min-height: 0; min-width: 0; }
 .files-loading { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
 .files-sidebar { width: 240px; flex-shrink: 0; padding: 20px 12px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; background: #fafbfd; overflow: auto; }
@@ -1387,7 +1395,7 @@ textarea {
 }
 
 /* Agent workspace */
-.agent-workspace { padding: 36px clamp(18px, 4vw, 64px); max-width: 1500px; margin: 0 auto; color: #263143; }
+.agent-workspace { width: 100%; min-width: 0; padding: 36px clamp(18px, 4vw, 64px); max-width: 1500px; margin: 0 auto; color: #263143; overflow-wrap: anywhere; }
 .agent-heading { display: flex; justify-content: space-between; align-items: start; gap: 20px; margin-bottom: 30px; }
 .agent-heading h1 { font-size: clamp(26px, 3vw, 38px); font-weight: 600; letter-spacing: -1.2px; margin: 8px 0 12px; }
 .agent-heading p { color: #68758a; margin: 0; line-height: 1.6; }
@@ -1512,4 +1520,39 @@ textarea {
 .vm-compose textarea { resize: vertical; min-height: 80px; }
 .vm-activity > div { padding: 12px 0; border-bottom: 1px solid #edf0f4; }
 .vm-activity span { display: block; color: #728095; font-size: 13px; margin-top: 4px; }
+.agent-card + .agent-card { margin-top: 20px; }
+.agent-heading > *, .agent-card, .vm-site, .vm-site label, .vm-site label > span { min-width: 0; }
+.vm-site input, .vm-schedule input { flex-shrink: 0; }
+.vm-site button { flex-shrink: 0; }
+.vm-compose { grid-template-columns: minmax(0, 1fr) auto; }
+.vm-compose textarea { min-width: 0; }
+.vm-chat-list { min-height: 0; max-height: 800px; overflow-y: auto; }
+.settings-panel { max-width: calc(100vw - 24px); max-height: calc(100dvh - 100px); overflow-y: auto; }
+
+/* Give the workspace controls a full row before the desktop header crowds. */
+@media (max-width: 1200px) {
+  .app-header { height: auto; grid-template-columns: minmax(0, 1fr) auto; padding: 8px 12px; gap: 8px; }
+  .header-left { grid-column: 1; grid-row: 1; min-width: 0; }
+  .header-right { grid-column: 2; grid-row: 1; }
+  .header-center { grid-column: 1 / -1; grid-row: 2; min-width: 0; flex-wrap: wrap; justify-content: flex-start; overflow: visible; }
+  .header-center > * { flex-shrink: 0; }
+}
+@media (max-width: 600px) {
+  .header-center .workspace-tabs { width: 100%; }
+  .workspace-tabs button { flex: 1; }
+  .header-right { min-width: 0; }
+  .header-left .mobile-only { padding: 0 8px; }
+  .vm-compose { grid-template-columns: minmax(0, 1fr); }
+  .vm-chat-list { max-height: none; }
+  .vm-site { padding: 12px; }
+  .vm-site label { gap: 8px; }
+  .vm-live { padding: 14px; }
+  .event-modal { padding: 16px; }
+  .settings-panel { position: fixed; top: 88px; right: 12px; max-height: calc(100dvh - 112px); }
+}
 @media(max-width: 700px) { .vm-site-grid { grid-template-columns: 1fr; } .vm-steps { gap: 6px; font-size: 12px; } .vm-steps li { padding: 10px; } .vm-chat-workspace { grid-template-columns: 1fr; } .vm-chat-list { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid #e6eaf0; padding: 12px; } .vm-chat-list > button { flex-shrink: 0; max-width: 180px; margin: 0; } .vm-chat-list > button.agent-launch { margin: 0; } .vm-status-strip { flex-wrap: wrap; } .vm-status-label { margin-left: 0; } }
+@media (max-width: 380px) {
+  .header-left { grid-column: 1 / -1; }
+  .header-right { grid-column: 1 / -1; grid-row: 2; max-width: none; justify-content: space-between; flex-wrap: nowrap; }
+  .header-center { grid-row: 3; }
+}

@@ -57,7 +57,7 @@ export function MonthView({ cursor, zoom, occurrences, tags, onDayClick, onDayOp
       <div className="month-scroll" ref={scrollRef}>
         <div
           className="month-grid"
-          style={{ gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` }}
+          style={{ gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`, minHeight: rows * TARGET_WEEK_HEIGHT * Math.max(1, zoom) }}
         >
         {days.map((day) => {
           const dayEvents = occurrences.filter((item) =>

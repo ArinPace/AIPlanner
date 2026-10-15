@@ -129,7 +129,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   const [filesUnsaved, setFilesUnsaved] = useState(false)
   const [cursor, setCursor] = useState(() => new Date())
   const [view, setView] = useState<CalendarView>('month')
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.matchMedia('(min-width: 861px)').matches)
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [tags, setTags] = useState<Tag[]>([])
   const [hiddenTagIds, setHiddenTagIds] = useState<string[]>([])
@@ -329,7 +329,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
       />
 
       <div className="files-tab-panel" hidden={tab !== 'files'}><FilesView active={tab === 'files'} onUnsavedChange={setFilesUnsaved} /></div>
-      <div hidden={tab !== 'agent'}><AgentView active={tab === 'agent'} /></div>
+      <div className="agent-tab-panel" hidden={tab !== 'agent'}><AgentView active={tab === 'agent'} /></div>
       <div className="app-body" hidden={tab !== 'calendar'}>
         <Sidebar
           open={sidebarOpen}
