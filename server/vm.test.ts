@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto'
 import { hostOnline, safeWorkerStatus, safeDeviceAuthorization, uuid, vmMessage } from './vm-validation.js'
 import { sealVmCredential, openVmCredential } from './vm-vault.js'
 import { handleCloudRequest } from './cloud.js'
-import { scheduleSlot, shouldRunVm } from './vm-power.js'
+import { scheduleSlot, shouldRunVm, validateSchedule } from './vm-power.js'
 
 test('offline-user schedules wake only around New York slots, then stop after the slot completes', () => {
   const now = new Date('2026-10-15T10:59:00Z')
@@ -24,6 +24,18 @@ test('chat messages wake sleeping guests and keep them warm only during conversa
   assert.equal(shouldRunVm({ jobs: [{kind:'chat',status:'completed',finished_at:'2026-10-16T13:58:00Z'}], scheduled:false }, now), true)
   assert.equal(shouldRunVm({ jobs: [{kind:'chat',status:'completed',finished_at:'2026-10-16T13:54:00Z'}], scheduled:false }, now), false)
   assert.equal(shouldRunVm({ jobs: [{kind:'sync',status:'completed',finished_at:'2026-10-16T13:59:00Z'}], scheduled:false }, now), false)
+})
+test('custom schedules validate and share the same due slot between wake and worker paths', () => {
+  const schedule = validateSchedule({timezone:'Asia/Singapore',times:['17:45','07:30','07:30']})
+  assert.deepEqual(schedule.times,['07:30','17:45'])
+  const early = new Date('2026-10-15T23:28:00Z')
+  assert.equal(scheduleSlot(early,schedule),'2026-10-16 07:30 Asia/Singapore')
+  assert.equal(scheduleSlot(early,schedule,false),null)
+  assert.equal(scheduleSlot(new Date('2026-10-15T23:35:00Z'),schedule,false),'2026-10-16 07:30 Asia/Singapore')
+  assert.equal(scheduleSlot(new Date('2026-10-16T01:00:00Z'),schedule,false),null)
+  assert.equal(shouldRunVm({scheduled:true,schedule,jobs:[]},early),true)
+  assert.equal(shouldRunVm({scheduled:true,schedule,jobs:[{kind:'sync',status:'completed',schedule_slot:'2026-10-16 07:30 Asia/Singapore'}]},early),false)
+  for(const invalid of [{timezone:'bad/zone',times:['07:00']},{timezone:'UTC',times:['25:00']},{timezone:'UTC',times:[]}])assert.throws(()=>validateSchedule(invalid))
 })
 test('personal device authorization cannot turn into public auth, phishing links or token disclosure', () => {
   const device = { verificationUrl: 'https://auth.openai.com/codex/device', userCode: 'ABCD-1234', access_token: 'must-not-leak' }

@@ -4,6 +4,7 @@ import { createPlannerMcp } from './mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { hostOnline, safeWorkerStatus, safeDeviceAuthorization, uuid, vmHash, vmMessage } from './vm-validation.js'
 import { openVmCredential, sealVmCredential } from './vm-vault.js'
+import { DEFAULT_VM_SCHEDULE, scheduleSlot, validateSchedule } from './vm-power.js'
 import { VM_SOURCES } from '../src/lib/vm.js'
 
 function checked<T>({ data, error }: { data: T; error: { code?: string } | null }): NonNullable<T> {
@@ -55,11 +56,9 @@ export async function handleVmWorker(request: Request, path: string) {
     // Once authorized, remove the spent device code and its keep-awake window.
     // The user must retain no live sign-in secret just to keep chatting.
     if (input.signedIn === true) checked(await db().from('planner_vm_jobs').update({ result: {} }).eq('username', host.username).eq('kind', 'browser_login').eq('message', 'chatgpt_device').eq('status', 'completed').not('result->deviceCode', 'is', null))
-    const settings = checked(await db().from('planner_vm_settings').select('sources,schedule_enabled').eq('username', host.username).single())
-    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' }).formatToParts(new Date())
-    const part = (type: string) => parts.find(p => p.type === type)?.value || ''
-    if (settings.schedule_enabled && settings.sources.length && ['07', '17'].includes(part('hour'))) {
-      const slot = `${part('year')}-${part('month')}-${part('day')} ${part('hour')}`
+    const settings = checked(await db().from('planner_vm_settings').select('sources,schedule_enabled,schedule').eq('username', host.username).single())
+    const slot = scheduleSlot(new Date(), settings.schedule || DEFAULT_VM_SCHEDULE, false)
+    if (settings.schedule_enabled && settings.sources.length && slot) {
       checked(await db().from('planner_vm_jobs').upsert({ username: host.username, host_id: host.id, kind: 'sync', schedule_slot: slot, message: 'Read my enabled websites for new announcements, assignments and deadline changes. Read the planner first, save verified updates with planner_apply_updates, and report which sources were checked or unavailable. Do not invent deadlines or overwrite manual edits.' }, { onConflict: 'username,schedule_slot', ignoreDuplicates: true }))
     }
     const job = checked(await db().rpc('planner_vm_claim', { p_host: host.id }))
@@ -96,7 +95,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
     const [hosts, chats, settings, runs, provisioning] = await Promise.all([
       db().from('planner_vm_hosts').select(publicHost).eq('username', username).is('revoked_at', null).order('created_at', { ascending: false }),
       db().from('planner_vm_chats').select('id,title,created_at,updated_at').eq('username', username).order('updated_at', { ascending: false }).limit(100),
-      db().from('planner_vm_settings').select('sources,schedule_enabled,sites,ai_provider').eq('username', username).single(),
+      db().from('planner_vm_settings').select('sources,schedule_enabled,sites,ai_provider,schedule').eq('username', username).single(),
       db().from('planner_vm_jobs').select(publicJob).eq('username', username).order('created_at', { ascending: false }).limit(20),
       db().from('planner_vm_provisioning').select('status,error').eq('username', username).maybeSingle(),
     ])
@@ -148,7 +147,9 @@ export async function handleVmRequest(request: Request, path: string, username: 
   if (path === '/api/agent/vm/settings') {
     if (!Array.isArray(input.sources) || input.sources.some(s => typeof s !== 'string' || !(s in VM_SOURCES)) || typeof input.schedule_enabled !== 'boolean') throw new ApiError(400, 'Choose supported websites.')
     if (input.schedule_enabled && !input.sources.length) throw new ApiError(400, 'Choose websites before enabling daily checks.')
-    checked(await db().from('planner_vm_settings').upsert({ username, sources: [...new Set(input.sources)], schedule_enabled: input.schedule_enabled, updated_at: new Date().toISOString() }, { onConflict: 'username' }))
+    let schedule
+    try { schedule = input.schedule === undefined ? undefined : validateSchedule(input.schedule) } catch (e) { throw new ApiError(400, (e as Error).message) }
+    checked(await db().from('planner_vm_settings').upsert({ username, ...(schedule ? { schedule } : {}), sources: [...new Set(input.sources)], schedule_enabled: input.schedule_enabled, updated_at: new Date().toISOString() }, { onConflict: 'username' }))
     if (input.schedule_enabled) checked(await db().from('planner_agent_settings').update({ schedule_enabled: false }).eq('username', username))
     return json({ ok: true })
   }
