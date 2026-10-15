@@ -72,7 +72,7 @@ function DocumentDialog({ document, folders, busy, error, onClose, onSave }: {
   </dialog>
 }
 
-export function FilesView({ onUnsavedChange }: { onUnsavedChange: (unsaved: boolean) => void }) {
+export function FilesView({ active, onUnsavedChange }: { active: boolean; onUnsavedChange: (unsaved: boolean) => void }) {
   const [state, setState] = useState<FilesState | null>(null)
   const [loadError, setLoadError] = useState('')
   const [error, setError] = useState('')
@@ -99,10 +99,26 @@ export function FilesView({ onUnsavedChange }: { onUnsavedChange: (unsaved: bool
     return () => window.removeEventListener('beforeunload', onUnload)
   }, [unsaved])
   useEffect(() => {
-    let active = true
-    loadFiles().then((data) => { validateFilesState(data); if (active) setState(data) }).catch((err: unknown) => { if (active) setLoadError(err instanceof Error ? err.message : 'Could not load your files.') })
-    return () => { active = false }
-  }, [])
+    if (!active || unsaved) return
+    let cancelled = false, refreshing = false
+    async function refresh() {
+      if (refreshing || document.visibilityState === 'hidden') return
+      refreshing = true
+      try {
+        const data = await loadFiles(); validateFilesState(data)
+        if (cancelled) return
+        setState(current => current && current.revision !== undefined && current.revision === data.revision ? current : data)
+        setFileDraft(current => current ? data.files.find(file => file.id === current.id) ?? null : null)
+        setFolderId(current => current && data.folders.some(folder => folder.id === current) ? current : null)
+        setLoadError('')
+      } catch (err) { if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Could not load your files.') }
+      finally { refreshing = false }
+    }
+    void refresh()
+    const timer = window.setInterval(() => void refresh(), 15000)
+    window.addEventListener('focus', refresh)
+    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener('focus', refresh) }
+  }, [active, unsaved])
 
   async function persist(next: FilesState): Promise<boolean> {
     if (saving.current) return false

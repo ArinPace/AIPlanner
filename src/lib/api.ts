@@ -59,9 +59,10 @@ export function getSession() {
 }
 
 let calendarRevision: number | undefined
-export async function loadCalendar() {
+export function adoptCalendarRevision(revision: number | undefined) { calendarRevision = revision }
+export async function loadCalendar({ adopt = true }: { adopt?: boolean } = {}) {
   const state = await request<StoredState>('/api/calendar')
-  calendarRevision = state.revision
+  if (adopt) adoptCalendarRevision(state.revision)
   return state
 }
 

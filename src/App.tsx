@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { FilesView } from './components/FilesView'
 import { AgentView } from './components/AgentView'
 import { EventModal } from './components/EventModal'
@@ -8,7 +8,7 @@ import { MonthView } from './components/MonthView'
 import { Sidebar } from './components/Sidebar'
 import { TimeGridView } from './components/TimeGridView'
 import { YearView } from './components/YearView'
-import { emptyCalendar, getSession, loadCalendar, logout, saveCalendar, setToken } from './lib/api'
+import { adoptCalendarRevision, emptyCalendar, getSession, loadCalendar, logout, saveCalendar, setToken } from './lib/api'
 import { isEventVisible } from './lib/colors'
 import {
   addDays,
@@ -29,6 +29,9 @@ import type { CalendarEvent, CalendarView, EventDraft, StoredState, Tag } from '
 
 function emptyRecurrence() {
   return { frequency: 'none' as const, interval: 1, until: null }
+}
+function calendarFingerprint(state: StoredState) {
+  return JSON.stringify({ events: state.events, tags: state.tags, hiddenTagIds: state.hiddenTagIds, zoom: clampZoom(state.zoom ?? DEFAULT_ZOOM) })
 }
 
 function draftFromPreset(date: Date, options?: { timed?: boolean; allDay?: boolean }): EventDraft {
@@ -138,13 +141,15 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   const [saveError, setSaveError] = useState('')
   const mainRef = useRef<HTMLElement>(null)
   const saveQueue = useRef<Promise<void>>(Promise.resolve())
+  const persistedCalendar = useRef('')
 
-  function applyState(state: StoredState) {
+  const applyState = useCallback((state: StoredState) => {
+    persistedCalendar.current = calendarFingerprint(state)
     setEvents(state.events)
     setTags(state.tags)
     setHiddenTagIds(state.hiddenTagIds)
     setZoom(clampZoom(state.zoom ?? DEFAULT_ZOOM))
-  }
+  }, [])
 
   useEffect(() => {
     loadCalendar()
@@ -157,17 +162,45 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
         setLoadError(error instanceof Error ? error.message : 'Could not load your calendar.')
       })
       .finally(() => setLoaded(true))
-  }, [])
+  }, [applyState])
 
   useEffect(() => {
     if (!loaded || loadError) return
+    const state = { events, tags, hiddenTagIds, zoom }
+    const fingerprint = calendarFingerprint(state)
+    if (fingerprint === persistedCalendar.current) return
     const timer = window.setTimeout(() => {
-      saveQueue.current = saveQueue.current.catch(() => undefined).then(() => saveCalendar({ events, tags, hiddenTagIds, zoom }))
-        .then(() => setSaveError(''))
+      saveQueue.current = saveQueue.current.catch(() => undefined).then(() => saveCalendar(state))
+        .then(() => { persistedCalendar.current = fingerprint; setSaveError('') })
         .catch((error) => setSaveError(error instanceof Error ? error.message : 'Could not save.'))
     }, 250)
     return () => window.clearTimeout(timer)
   }, [events, tags, hiddenTagIds, zoom, loaded, loadError])
+
+  useEffect(() => {
+    if (tab !== 'calendar' || !loaded || loadError || draft) return
+    let cancelled = false, refreshing = false
+    const fingerprint = calendarFingerprint({ events, tags, hiddenTagIds, zoom })
+    async function refresh() {
+      if (refreshing || document.visibilityState === 'hidden') return
+      refreshing = true
+      try {
+        await saveQueue.current
+        if (cancelled || persistedCalendar.current !== fingerprint) return
+        const remote = await loadCalendar({ adopt: false })
+        if (cancelled) return
+        // Never advance the write revision for a discarded refresh. A local
+        // edit cancels this effect and keeps optimistic concurrency intact.
+        adoptCalendarRevision(remote.revision)
+        if (calendarFingerprint(remote) !== fingerprint) applyState(remote)
+      } catch { /* Keep the loaded calendar; writes still check its revision. */ }
+      finally { refreshing = false }
+    }
+    void refresh()
+    const timer = window.setInterval(() => void refresh(), 15000)
+    window.addEventListener('focus', refresh)
+    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener('focus', refresh) }
+  }, [tab, loaded, loadError, draft, events, tags, hiddenTagIds, zoom, applyState])
 
   useDatePinch(mainRef, setView, loaded && tab === 'calendar')
 
@@ -288,11 +321,14 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
         onVisualZoomChange={(value) => setZoom(clampZoom(value))}
         onLogout={() => {
           if (filesUnsaved && !window.confirm('Files has unsaved changes. Discard them and log out?')) return
-          void saveQueue.current.then(() => saveCalendar({ events, tags, hiddenTagIds, zoom })).then(onLogout).catch(() => setSaveError('Could not save your calendar before logging out. Please try again.'))
+          const state = { events, tags, hiddenTagIds, zoom }
+          const fingerprint = calendarFingerprint(state)
+          const unsaved = fingerprint !== persistedCalendar.current
+          void saveQueue.current.then(async () => { if (unsaved && fingerprint !== persistedCalendar.current) await saveCalendar(state) }).then(onLogout).catch(() => setSaveError('Could not save your calendar before logging out. Please try again.'))
         }}
       />
 
-      <div className="files-tab-panel" hidden={tab !== 'files'}><FilesView onUnsavedChange={setFilesUnsaved} /></div>
+      <div className="files-tab-panel" hidden={tab !== 'files'}><FilesView active={tab === 'files'} onUnsavedChange={setFilesUnsaved} /></div>
       <div hidden={tab !== 'agent'}><AgentView active={tab === 'agent'} /></div>
       <div className="app-body" hidden={tab !== 'calendar'}>
         <Sidebar
