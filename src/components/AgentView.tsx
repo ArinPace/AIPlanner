@@ -18,6 +18,9 @@ export function AgentView({ active }: { active: boolean }) {
   const [now, setNow] = useState(0)
   const [sidebar, setSidebar] = useState(() => window.innerWidth > 700)
   const [panel, setPanel] = useState<'setup' | 'connections' | 'settings' | null>(null)
+  const [showArchived, setShowArchived] = useState(false)
+  const [copied, setCopied] = useState('')
+  const [chatAction, setChatAction] = useState<string | null>(null)
   const end = useRef<HTMLDivElement>(null)
   const host = state?.hosts[0]
   const claude = state?.settings.ai_provider === 'claude_code'
@@ -26,12 +29,15 @@ export function AgentView({ active }: { active: boolean }) {
   const power = state?.power || (host?.online ? 'online' : 'offline')
   const powerLabel = { online: 'Online', offline: 'Offline', starting: 'Starting', preparing: 'Preparing' }[power]
   const title = state?.chats.find(c => c.id === chat)?.title || 'New chat'
+  const archived = state?.chats.find(c=>c.id===chat)?.archived || false
+  const visibleChats = state?.chats.filter(c=>Boolean(c.archived)===showArchived) || []
   const closePanel = useCallback(() => setPanel(null), [])
   const refresh = useCallback(async () => {
     const next = await agentRequest<VmState>('vm'); setState(next); setNow(Date.now())
     if (!initialized.current) {
       initialized.current = true
-      if (next.chats.length) { selectedChat.current = next.chats[0].id; setChat(next.chats[0].id) }
+      const first = next.chats.find(c=>!c.archived)
+      if (first) { selectedChat.current = first.id; setChat(first.id) }
     }
     const id = selectedChat.current
     if (id) {
@@ -55,11 +61,27 @@ export function AgentView({ active }: { active: boolean }) {
     finally { if (selectedChat.current === id) setLoadingChat(false) }
   }
   function newChat() {
+    setShowArchived(false)
     selectedChat.current = null; setChat(null); setJobs([]); setMessage(''); setError(''); setLoadingChat(false)
     if (window.innerWidth <= 700) setSidebar(false)
   }
+  async function manageChat(item: VmChat, action: 'archive' | 'delete') {
+    if (chatAction) return
+    if (action === 'delete' && !window.confirm(`Delete “${item.title}” and its messages from the planner?`)) return
+    setChatAction(item.id); setError('')
+    try {
+      await agentAction('vm/chats/'+action,{ id:item.id, ...(action==='archive'?{archived:!item.archived}:{}) })
+      if (selectedChat.current === item.id) { selectedChat.current=null;setChat(null);setJobs([]);setMessage('');setLoadingChat(false) }
+      await refresh()
+    } catch(e) { setError(e instanceof Error?e.message:'Could not update this chat.') }
+    finally { setChatAction(null) }
+  }
+  async function copyMessage(text: string, key: string) {
+    try { await navigator.clipboard.writeText(text); setCopied(key) }
+    catch { setError('Could not copy. Check clipboard permission in your browser.') }
+  }
   async function send() {
-    if (busy || loadingChat || !message.trim() || !aiReady || !host || jobs.some(pending)) return
+    if (busy || loadingChat || archived || !message.trim() || !aiReady || !host || jobs.some(pending)) return
     setBusy(true); setError('')
     try {
       let id = selectedChat.current
@@ -74,21 +96,23 @@ export function AgentView({ active }: { active: boolean }) {
     {sidebar && <aside className="assistant-sidebar" aria-label="Chat sidebar">
       <div className="assistant-sidebar-top"><strong>Your chats</strong><button type="button" className="icon-btn" aria-label="Hide chat sidebar" onClick={() => setSidebar(false)}><CloseIcon size={18}/></button></div>
       <button type="button" className="assistant-new-chat" onClick={newChat}><PlusIcon size={18}/>New chat</button>
-      <nav aria-label="Conversations" className="assistant-conversations">{state?.chats.map(item => <button type="button" key={item.id} title={item.title} aria-current={item.id === chat ? 'page' : undefined} onClick={() => void chooseChat(item.id)}>{item.title}</button>)}{state && !state.chats.length && <p>No conversations yet.</p>}</nav>
+      <button type="button" className="assistant-archive-toggle" aria-pressed={showArchived} onClick={()=>setShowArchived(v=>!v)}>{showArchived?'Back to chats':'Archived chats'}</button>
+      <nav aria-label="Conversations" className="assistant-conversations">{visibleChats.map(item => <div className="assistant-chat-row" key={item.id}><button type="button" title={item.title} aria-current={item.id === chat ? 'page' : undefined} onClick={() => void chooseChat(item.id)}>{item.title}</button><details className="assistant-chat-options"><summary aria-label={'Options for '+item.title}>⋯</summary><div><button disabled={Boolean(chatAction)} onClick={()=>void manageChat(item,'archive')}>{item.archived?'Restore chat':'Archive chat'}</button><button disabled={Boolean(chatAction)} onClick={()=>void manageChat(item,'delete')}>Delete chat</button></div></details></div>)}{state && !visibleChats.length && <p>{showArchived?'No archived chats.':'No conversations yet.'}</p>}</nav>
       <button type="button" className="assistant-sidebar-settings" onClick={() => setPanel('settings')}><SettingsIcon size={18}/>Settings</button>
     </aside>}
     {sidebar && <button type="button" className="assistant-sidebar-scrim" aria-label="Close chat sidebar" onClick={() => setSidebar(false)}/>}
     <section className="assistant-chat" aria-label="Assistant chat">
       <header className="assistant-chat-header"><div>{!sidebar && <button type="button" className="icon-btn" aria-label="Show chat sidebar" onClick={() => setSidebar(true)}><MenuIcon/></button>}<button type="button" className="icon-btn" aria-label="New chat" onClick={newChat}><PlusIcon/></button><div className="assistant-chat-title"><strong>{title}</strong><span>{state ? aiReady ? `${provider} connected` : 'Connect your AI to get started' : 'Loading…'}</span>{state && <span className={'assistant-power ' + power} role="status" aria-label="Virtual machine status"><i aria-hidden="true"/>VM {powerLabel}</span>}</div></div><div><button type="button" className="assistant-sites-button" onClick={() => setPanel('connections')}>Add sites</button><button type="button" className="icon-btn" aria-label="Agent settings" onClick={() => setPanel('settings')}><SettingsIcon/></button></div></header>
       {error && <p role="alert" className="assistant-error">{error}</p>}
+      {archived && <p className="agent-banner">This chat is archived. <button disabled={Boolean(chatAction)} onClick={()=>{const item=state?.chats.find(c=>c.id===chat);if(item)void manageChat(item,'archive')}}>Restore chat</button></p>}
       {state?.provisioning?.error && <p role="alert" className="assistant-error">{state.provisioning.error}</p>}
       <div className="assistant-thread" aria-live="polite">
         <div className="assistant-thread-content">
           {!jobs.length && <div className="assistant-welcome"><span className="assistant-spark">✦</span><h1>{loadingChat ? 'Opening your chat…' : 'What can I help with?'}</h1><p>{aiReady ? 'Plan your day, organize your files, or check your connected sites.' : 'Connect your AI account once. Then keep the conversation here.'}</p>{state && !aiReady && <button type="button" className="assistant-primary" onClick={() => setPanel('setup')}>Connect AI</button>}</div>}
-          {jobs.map(job => <article key={job.id} className="assistant-turn"><div className="assistant-user-message">{job.message}</div>{job.reply && <div className="assistant-reply">{job.reply}</div>}{pending(job) && <div className="assistant-working"><span className="assistant-pulse"/>{job.status === 'queued' ? host?.online ? 'Waiting for your agent…' : 'Waking your private computer…' : 'Working…'}<button type="button" onClick={() => { void agentAction('vm/cancel', { id: job.id }).then(refresh).catch(e => setError(e.message)) }}>Stop</button></div>}{job.error && <p role="alert" className="assistant-error">{job.error}</p>}</article>)}<div ref={end}/>
+          {jobs.map(job => <article key={job.id} className="assistant-turn"><div className="assistant-user-message">{job.message}<button type="button" className="assistant-copy" aria-label="Copy your message" onClick={()=>void copyMessage(job.message,job.id+'-user')}>{copied===job.id+'-user'?'Copied':'Copy'}</button></div>{job.reply && <div className="assistant-reply">{job.reply}<button type="button" className="assistant-copy" aria-label="Copy assistant message" onClick={()=>void copyMessage(job.reply,job.id+'-reply')}>{copied===job.id+'-reply'?'Copied':'Copy'}</button></div>}{pending(job) && <div className="assistant-working"><span className="assistant-pulse"/>{job.status === 'queued' ? host?.online ? 'Waiting for your agent…' : 'Waking your private computer…' : 'Working…'}<button type="button" onClick={() => { void agentAction('vm/cancel', { id: job.id }).then(refresh).catch(e => setError(e.message)) }}>Stop</button></div>}{job.error && <p role="alert" className="assistant-error">{job.error}</p>}</article>)}<div ref={end}/>
         </div>
       </div>
-      <div className="assistant-compose-wrap"><form className="assistant-compose" onSubmit={e => { e.preventDefault(); void send() }}><label className="sr-only" htmlFor="assistant-message">Message your assistant</label><textarea id="assistant-message" placeholder="Message your assistant…" value={message} rows={2} maxLength={12000} onChange={e => setMessage(e.target.value)} onKeyDown={e => { if (e.key==='Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send() } }}/><div><button type="button" className="assistant-compose-connect" onClick={() => setPanel(aiReady ? 'connections' : 'setup')}>{aiReady ? '+ Add sites' : 'Connect AI'}</button><button type="submit" className="assistant-send" aria-label="Send message" disabled={busy || loadingChat || !message.trim() || !aiReady || !host || jobs.some(pending)}>↑</button></div></form><p className="assistant-compose-note">Your assistant can make mistakes. Check important details.</p></div>
+      <div className="assistant-compose-wrap"><form className="assistant-compose" onSubmit={e => { e.preventDefault(); void send() }}><label className="sr-only" htmlFor="assistant-message">Message your assistant</label><textarea id="assistant-message" placeholder="Message your assistant…" value={message} rows={2} maxLength={12000} onChange={e => setMessage(e.target.value)} onKeyDown={e => { if (e.key==='Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send() } }}/><div><button type="button" className="assistant-compose-connect" onClick={() => setPanel(aiReady ? 'connections' : 'setup')}>{aiReady ? '+ Add sites' : 'Connect AI'}</button><button type="submit" className="assistant-send" aria-label="Send message" disabled={busy || loadingChat || archived || !message.trim() || !aiReady || !host || jobs.some(pending)}>↑</button></div></form><p className="assistant-compose-note">Your assistant can make mistakes. Check important details.</p></div>
     </section>
     {state && panel && <AgentSettings state={state} now={now} mode={panel} aiReady={aiReady} onClose={closePanel} refresh={refresh}/>}
   </main>

@@ -5,7 +5,7 @@ export function signedInPage(source, href, text, hasPassword = false) {
   if (url.protocol !== 'https:' || url.hostname.replace(/^www\./,'') !== hosts[source] || hasPassword || /(?:^|\/)(?:login|signin|auth|saml)(?:\/|$)/i.test(url.pathname) || /sign in to continue|log in to gradescope|sign in to x|log in to instagram|sign in to your workspace/i.test(text)) return false
   return Boolean({
     brightspace: /\/d2l\/home/.test(url.pathname) && /my courses|course selector|select a course|course home|content|announcements/i.test(text),
-    gradescope: /\/account|\/courses\//.test(url.pathname) && /your courses|dashboard|assignments|course dashboard/i.test(text),
+    gradescope: (/\/account|\/courses\//.test(url.pathname) || url.pathname === '/' && /your courses/i.test(text) && /account|course dashboard/i.test(text)) && /your courses|dashboard|assignments|course dashboard/i.test(text),
     gmail: /inbox|compose|drafts/i.test(text) && /\/mail\/u\/\d/.test(url.pathname),
     calendar: /create|my calendars|today/i.test(text) && /\/calendar\/u\/\d/.test(url.pathname),
     drive: /my drive|shared with me|my files/i.test(text) && /\/drive\/u\/\d/.test(url.pathname),

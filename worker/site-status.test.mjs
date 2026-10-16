@@ -5,6 +5,8 @@ import { signedInPage, brightspaceCourse } from './site-status.mjs'
 test('sign-in confirmation requires the correct site and authenticated page evidence', () => {
   assert.equal(signedInPage('brightspace','https://brightspace.nyu.edu/d2l/home/123','Welcome to Brightspace. Course Home Content'),true)
   assert.equal(signedInPage('gradescope','https://www.gradescope.com/courses/123','Assignments Course Dashboard'),true)
+  assert.equal(signedInPage('gradescope','https://www.gradescope.com/','Your Courses Account Course Dashboard'),true)
+  assert.equal(signedInPage('gradescope','https://www.gradescope.com/','Welcome to Gradescope. Sign up to manage your courses.'),false)
   assert.equal(signedInPage('gmail','https://mail.google.com/mail/u/0/#inbox','Inbox Compose'),true)
   for (const href of ['https://accounts.google.com/login','https://mail.google.com.evil.test/mail/u/0/','https://mail.google.com/mail/u/0/auth']) assert.equal(signedInPage('gmail',href,'Inbox Compose'),false)
   assert.equal(signedInPage('gradescope','https://www.gradescope.com/','Log in to Gradescope'),false)

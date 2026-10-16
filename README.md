@@ -195,10 +195,18 @@ Reopen browser without clearing the saved profile.
 
 The agent's browser MCP exposes read-only navigation and page reading only;
 it does not expose clicking, form submission, JavaScript execution or cookies.
+Chats have per-chat Archive/Restore and Delete actions, an Archived chats view,
+and copy buttons for user and assistant messages. Archived chats stay readable
+and must be restored before sending. Delete removes the chat and its planner
+job history; account ownership is checked server-side.
+
 Slack channel reads wait for rendered messages, reuse matching open tabs, and
 scroll to the latest end of the virtualized list. Results include message
 timestamps, permalinks and image indices. `browser_view_image` returns real
-image pixels to the agent for visual reading. Slack uses the original signed-in
+image pixels to the agent for visual reading. Normal `browser_read` calls attach
+the latest four content images automatically, within an 8 MB budget, so users
+do not need image-specific prompts. Additional image indices are reported for
+follow-up reading. Slack uses the original signed-in
 attachment where available, with a rendered-image fallback. Only Slack file
 hosts/paths are permitted for attachment requests; redirects and image formats
 are checked. Image text is untrusted data, and unreadable or absent details

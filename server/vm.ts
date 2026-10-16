@@ -108,7 +108,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
     checked(await db().from('planner_vm_settings').upsert({ username }, { onConflict: 'username', ignoreDuplicates: true }))
     const [hosts, chats, settings, runs, provisioning] = await Promise.all([
       db().from('planner_vm_hosts').select(publicHost).eq('username', username).is('revoked_at', null).order('created_at', { ascending: false }),
-      db().from('planner_vm_chats').select('id,title,created_at,updated_at').eq('username', username).order('updated_at', { ascending: false }).limit(100),
+      db().from('planner_vm_chats').select('id,title,archived,created_at,updated_at').eq('username', username).order('updated_at', { ascending: false }).limit(100),
       db().from('planner_vm_settings').select('sources,schedule_enabled,sites,ai_provider,schedule').eq('username', username).single(),
       db().from('planner_vm_jobs').select(publicJob).eq('username', username).order('created_at', { ascending: false }).limit(20),
       db().from('planner_vm_provisioning').select('status,error,wake_until,power_state,power_updated_at').eq('username', username).maybeSingle(),
@@ -202,6 +202,19 @@ export async function handleVmRequest(request: Request, path: string, username: 
     const title = typeof input.title === 'string' && input.title.trim() ? input.title.trim().slice(0, 100) : 'New conversation'
     return json(checked(await db().from('planner_vm_chats').insert({ username, title }).select('id,title,created_at,updated_at').single()), 201)
   }
+  if (path === '/api/agent/vm/chats/archive' || path === '/api/agent/vm/chats/delete') {
+    if (!uuid(input.id)) throw new ApiError(400,'Choose a chat.')
+    const owned = checked(await db().from('planner_vm_chats').select('id').eq('id',input.id).eq('username',username).maybeSingle())
+    if (!owned) throw new ApiError(404,'Chat not found.')
+    if (path.endsWith('/archive')) {
+      if (typeof input.archived !== 'boolean') throw new ApiError(400,'Choose archive or restore.')
+      checked(await db().from('planner_vm_chats').update({ archived:input.archived }).eq('id',input.id).eq('username',username))
+    } else {
+      // The owned chat's jobs cascade; their leases become invalid immediately.
+      checked(await db().from('planner_vm_chats').delete().eq('id',input.id).eq('username',username))
+    }
+    return json({ok:true})
+  }
   if (path === '/api/agent/vm/cancel') {
     if (!uuid(input.id)) throw new ApiError(400, 'Choose a run.')
     checked(await db().from('planner_vm_jobs').update({ status: 'cancelled', finished_at: new Date().toISOString() }).eq('id', input.id).eq('username', username).in('status', ['queued', 'running']))
@@ -211,8 +224,9 @@ export async function handleVmRequest(request: Request, path: string, username: 
     if (!uuid(input.chatId)) throw new ApiError(400, 'Choose a chat.')
     let message: string
     try { message = vmMessage(input.message) } catch (e) { throw new ApiError(400, (e as Error).message) }
-    const chat = checked(await db().from('planner_vm_chats').select('id,thread_id').eq('id', input.chatId).eq('username', username).maybeSingle())
+    const chat = checked(await db().from('planner_vm_chats').select('id,thread_id,archived').eq('id', input.chatId).eq('username', username).maybeSingle())
     if (!chat) throw new ApiError(404, 'Chat not found.')
+    if (chat.archived) throw new ApiError(409,'Restore this archived chat before sending a message.')
     const host = checked(await db().from('planner_vm_hosts').select('id').eq('username', username).is('revoked_at', null).maybeSingle())
     if (!host) throw new ApiError(409, 'Pair your personal VM before sending a message.')
     const id = randomUUID()

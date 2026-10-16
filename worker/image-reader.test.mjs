@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readableSlackImageUrl } from './browser-access.mjs'
 import { imageMime, readPageImage } from './image-reader.mjs'
 import { chromium } from 'playwright-core'
+import { readWithImages } from './automatic-images.mjs'
 
 test('image requests are limited to Slack attachment paths, including after redirects', () => {
   assert.equal(readableSlackImageUrl('https://files.slack.com/files-pri/T1-F1/poster.jpg'),'https://files.slack.com/files-pri/T1-F1/poster.jpg')
@@ -28,5 +29,17 @@ test('rendered images are returned as real PNG pixels, with an explicit missing-
     assert.equal(imageMime(Buffer.from(image.data,'base64')),'image/png')
     assert.match(output.content[0].text,/rendered image/)
     await assert.rejects(readPageImage(context,page,result,false,1),/Image not found/)
+  } finally { await browser.close() }
+})
+test('ordinary page reads attach image pixels automatically, without an image-specific prompt', async () => {
+  const browser = await chromium.launch({ channel:'msedge', headless:true })
+  try {
+    const context = await browser.newContext()
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120"><text x="10" y="60">Automatic event image</text></svg>'
+    await context.route('https://example.test/**', r=>r.fulfill({contentType:'text/html',body:`<img alt="Event" src="data:image/svg+xml,${encodeURIComponent(svg)}">`}))
+    const result = await readWithImages(context,'https://example.test/events')
+    assert.equal(result.content.filter(c=>c.type==='image').length,1)
+    assert.deepEqual(JSON.parse(result.content[0].text).automaticImages.attached,[0])
+    assert.equal(context.pages().length,0)
   } finally { await browser.close() }
 })

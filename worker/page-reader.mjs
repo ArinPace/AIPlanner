@@ -44,12 +44,27 @@ export async function readBrowserPage(context, destination, { slackTimeout = 450
       }
     }).sort((a,b) => Number(a.timestamp)-Number(b.timestamp)).slice(-30)) : undefined
     const images = await page.locator(slack ? '[data-qa="message_container"] img:not(.c-avatar__image)' : 'img').evaluateAll(nodes => nodes.filter(n => n.naturalWidth >= 80 && n.naturalHeight >= 80 && n.getBoundingClientRect().width > 0).map((n,index) => ({ index, alt: n.alt || 'Image', width: n.naturalWidth, height: n.naturalHeight, messageTimestamp: n.closest('[data-msg-ts]')?.getAttribute('data-msg-ts') || null })))
+    const shadowText = slack ? '' : await page.locator('body').evaluate(body => {
+      const parts = []
+      function visit(root) {
+        for (const el of root.querySelectorAll('*')) if (el.shadowRoot) {
+          const walker = document.createTreeWalker(el.shadowRoot,NodeFilter.SHOW_TEXT)
+          while (walker.nextNode()) {
+            const n = walker.currentNode, p = n.parentElement
+            if (p && !p.closest('style,script,noscript') && p.getClientRects().length && getComputedStyle(p).visibility !== 'hidden' && n.textContent.trim()) parts.push(n.textContent.trim())
+          }
+          visit(el.shadowRoot)
+        }
+      }
+      visit(body)
+      return parts.join('\n').slice(0,40000)
+    })
     const result = {
       title: await page.title(), url: page.url(),
-      text: messages ? messages.map(m => m.text).join('\n\n').slice(-40000) : (await page.locator('body').innerText()).slice(0, 50000),
+      text: messages ? messages.map(m => m.text).join('\n\n').slice(-40000) : ((await page.locator('body').innerText())+'\n'+shadowText).slice(0, 50000),
       links: await page.locator('a[href]').evaluateAll(nodes => nodes.slice(0, 200).map(n => ({ text: n.textContent?.trim().slice(0,160), url: n.href }))),
       images,
-      ...(messages ? { messages, coverage: 'Latest rendered channel messages after scrolling to the end. Use browser_view_image for image contents.' } : {}),
+      ...(messages ? { messages, coverage: 'Latest rendered channel messages after scrolling to the end. browser_read automatically includes image pixels; browser_view_image can inspect additional images.' } : {}),
     }
     return inspect ? await inspect(page, result, slack) : result
   } finally { if (!existing) await page.close() }

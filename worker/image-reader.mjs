@@ -7,7 +7,7 @@ export function imageMime(bytes) {
   return null
 }
 
-export async function readPageImage(context, page, result, slack, index) {
+export async function readPageImage(context, page, result, slack, index, { original = true } = {}) {
   const metadata = result.images[index]
   if (!metadata) throw new Error('Image not found. Read the page again to list its current images.')
   const images = page.locator(slack ? '[data-qa="message_container"] img:not(.c-avatar__image)' : 'img')
@@ -19,7 +19,7 @@ export async function readPageImage(context, page, result, slack, index) {
   }
   if (!selected) throw new Error('Image moved while loading. Read the page again.')
   let bytes, mimeType, quality = 'rendered image'
-  if (slack) {
+  if (slack && original) {
     // Read only the attachment linked from the selected message. Browser-owned
     // requests carry its existing session; cookies/tokens are never exposed.
     const candidate = await selected.evaluate(n => {

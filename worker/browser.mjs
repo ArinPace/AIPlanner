@@ -160,7 +160,6 @@ export async function checkSites(dataDir, enabled) {
       if (await signedInBrowserPage(source, current)) { existing = true; break }
     }
     if (existing) { sites[source] = { ready: true }; continue }
-    if (source === 'gradescope') { sites[source] = { ready: false }; continue }
     const page = await ctx.newPage()
     try {
       await page.goto(sources[source], { waitUntil: 'domcontentloaded', timeout: 40000 })
