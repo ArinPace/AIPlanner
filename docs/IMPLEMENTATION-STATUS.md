@@ -95,3 +95,17 @@ TimeGridView warnings. Re-run checks appropriate to subsequent changes.
 - Google browser account selection now remembers the /u/N/ slot only (not message
   URLs or credentials) for Gmail, Calendar and Drive, and applies it to subsequent
   read tools and site opening. Tested slot isolation across hosts.
+
+## 2026-10-16 Google OAuth client activation
+
+- Owner completed Google's API User Data Policy consent setup. Created a Web
+  OAuth client in atlantean-force-511800-c9 with the production callback
+  /api/agent/oauth/callback/google. Client ID/secret are production-only sensitive
+  Vercel environment variables; no client secret was saved in the repository.
+- Google Calendar API enabled. Configured read-only Calendar plus identity scopes.
+  Environment redeployment completed; production reports Google OAuth configured.
+- Calendar's main connection button now uses native browser OAuth instead of VM
+  sign-in. Existing saved browser accounts remain under their own account controls.
+- Google publishing status remains Testing. The Cloud project owner is an initial
+  test user; requested confirmation of the intended additional Calendar email.
+  Public Google verification and real user consent/callback/API-read are pending.
