@@ -8,6 +8,8 @@ import { allowedLivePath } from './browser-access.mjs'
 import { signedInPage, brightspaceCourse } from './site-status.mjs'
 import { siteLaunches, rememberLanding, googleAccountLanding } from './site-launches.mjs'
 import { browserAccountIdentity } from './account-identity.mjs'
+import { googleBrowser, googleSources, closeGoogleBrowser } from './google-browser.mjs'
+export { googleBrowser, googleSources } from './google-browser.mjs'
 
 async function signedInBrowserPage(source, page) {
   for (const frame of page.frames()) {
@@ -37,7 +39,7 @@ export async function browser(dataDir) {
   return context
 }
 export const liveBrowserOpen = () => Boolean(live)
-export async function shutdownBrowser() { await closeLiveBrowser(); if (context) await context.close() }
+export async function shutdownBrowser() { await closeLiveBrowser(); await closeGoogleBrowser(); if (context) await context.close() }
 export async function closeLiveBrowser() {
   if (!live) return
   clearTimeout(live.timer); live.tunnel.kill(); live.proxy.closeAllConnections(); live.proxy.close();
@@ -54,10 +56,10 @@ export async function openLogin(dataDir, source, keepOpen = false) {
     const saved = await siteLaunches(dataDir)
     destination = brightspaceCourse(saved.gradescope) || sources.brightspace
   }
-  const result = await openView(dataDir, destination)
+  const result = await openView(dataDir, destination, 0, googleSources.has(source))
   if (live) { live.source = source; live.keepOpen = keepOpen; live.reported = false }
   if (source === 'gradescope') {
-    const page = context.pages()[0]
+    const page = live.context.pages()[0]
     // Use only an unambiguous Gradescope link in the course, preserving its
     // Brightspace launch action rather than copying an expiring LTI URL.
     for (const frame of page.frames()) {
@@ -69,15 +71,15 @@ export async function openLogin(dataDir, source, keepOpen = false) {
 }
 
 export async function observeSignIn(dataDir) {
-  if (!live?.source || live.reported && !live.keepOpen || !context) return {}
+  if (!live?.source || live.reported && !live.keepOpen || !live.context) return {}
   const source = live.source
-  for (const page of context.pages()) {
+  for (const page of live.context.pages()) {
     // Confirm the page the user is actually viewing, not a cached signed-in
     // screen left behind in another tab before a session expired.
     if (!await page.evaluate(() => document.visibilityState === 'visible').catch(() => false)) continue
     if (!await signedInBrowserPage(source, page)) continue
     if (source === 'gradescope') {
-      for (const candidate of [...context.pages()].reverse()) {
+      for (const candidate of [...live.context.pages()].reverse()) {
         const course = brightspaceCourse(candidate.url())
         if (course) { await rememberLanding(dataDir,'gradescope',course); break }
       }
@@ -94,9 +96,9 @@ export async function observeSignIn(dataDir) {
   }
   return {}
 }
-export async function openView(dataDir, destination, attempt = 0) {
+export async function openView(dataDir, destination, attempt = 0, google = false) {
   await closeLiveBrowser()
-  const ctx = await browser(dataDir), page = ctx.pages()[0] || await ctx.newPage()
+  const ctx = google ? await googleBrowser(dataDir) : await browser(dataDir), page = ctx.pages()[0] || await ctx.newPage()
   await page.goto(destination, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {})
   await page.bringToFront()
   const token = randomBytes(24).toString('base64url'), sockets = new Set()
@@ -123,7 +125,7 @@ export async function openView(dataDir, destination, attempt = 0) {
   })
   await new Promise(resolve => proxy.listen(6081, '127.0.0.1', resolve))
   const tunnel = spawn('cloudflared', ['tunnel', '--no-autoupdate', '--protocol', 'http2', '--edge-ip-version', '4', '--url', 'http://127.0.0.1:6081'], { stdio: ['ignore', 'ignore', 'pipe'] })
-  const current = { proxy, tunnel, sockets, timer: setTimeout(() => void closeLiveBrowser(), 20 * 60000) }; live = current
+  const current = { proxy, tunnel, sockets, context:ctx, timer: setTimeout(() => void closeLiveBrowser(), 20 * 60000) }; live = current
   const origin = await new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('Could not open the private browser view. Try again.')), 45000)
     let buffer = ''
@@ -152,7 +154,7 @@ export async function openView(dataDir, destination, attempt = 0) {
     await closeLiveBrowser()
     // A newly allocated quick-tunnel hostname can be unresolvable on a local
     // resolver even though the tunnel is connected. Try a fresh route once.
-    if (attempt === 0) return openView(dataDir, destination, 1)
+    if (attempt === 0) return openView(dataDir, destination, 1, google)
     throw new Error('The private browser could not connect. Please try Connect again.')
   }
   // Xvfb has a fixed display size. Scaling keeps the full guest browser usable
@@ -161,10 +163,11 @@ export async function openView(dataDir, destination, attempt = 0) {
 }
 export async function checkSites(dataDir, enabled) {
   await closeLiveBrowser()
-  const ctx = await browser(dataDir), sites = {}
+  const sites = {}
   const preferred=await siteLaunches(dataDir)
   for (const source of enabled) {
     if (!(source in sources)) continue
+    const ctx = googleSources.has(source) ? await googleBrowser(dataDir) : await browser(dataDir)
     let existing = null
     for (const current of ctx.pages()) {
       if (googleAccountLanding(source,preferred[source]) && googleAccountLanding(source,current.url())!==googleAccountLanding(source,preferred[source])) continue

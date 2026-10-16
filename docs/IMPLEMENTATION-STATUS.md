@@ -127,3 +127,24 @@ TimeGridView warnings. Re-run checks appropriate to subsequent changes.
 - This establishes a real background VM read, not a new clock-triggered execution.
   Host Windows PC/network must remain available; the user's client laptop/phone
   need not be online. Do not claim the host itself can run while powered off.
+
+## 2026-10-16 Google website sign-in inside VM
+
+- Investigated the actual browser path separately from Calendar API OAuth.
+  Existing private browser was Chrome for Testing 156.0.8078.4, launched through
+  Playwright. VM clock was NTP-synchronized, accounts.google.com TLS validated,
+  CA certificates current. No Google account security controls were disabled.
+- Installed signed Google Chrome Stable 155.0.8059.84 from Google's apt repository.
+  Google websites now use a separate /var/lib/planner/google-browser profile;
+  original browser profile and its Brightspace/Gradescope/Slack sessions remain.
+  Stable Chrome runs with its default sandbox/TLS and normal browser launch,
+  no stealth flags, user-agent spoofing or ignored certificate errors.
+- Google browser CDP is bound only to 127.0.0.1:9223; original CDP stays on 9222.
+  Worker observation, site verification and agent browser/image reads route Google
+  services to the stable profile. New VM provisioning installs stable Chrome too.
+- Live test: Google accepted the confirmed arnavjain824@gmail.com identifier and
+  advanced to /v3/signin/challenge/pwd with a visible password field and no insecure
+  browser rejection. Opened the private VM view for the owner to finish password/MFA.
+  Actual successful Google website authentication remains pending user completion.
+- Added explicit Open VM browser action beside Calendar OAuth, preserving both
+  independent connections. Scope/isolation routing tests and build pass.
