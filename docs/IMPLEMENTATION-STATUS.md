@@ -88,3 +88,10 @@ TimeGridView warnings. Re-run checks appropriate to subsequent changes.
 - Account management desktop/mobile mocked UI tests passed at 1440 and 320 pixels.
   Database transaction checks passed for history, rename/removal and owner isolation;
   RLS enabled, public table/function privileges denied. No test account changes kept.
+
+- Production account API smoke test passed: list, rename/remove an isolated
+  temporary record, reject unauthenticated modification, and preserve all five
+  enabled sources. Live Verify connections passed all five browser sites.
+- Google browser account selection now remembers the /u/N/ slot only (not message
+  URLs or credentials) for Gmail, Calendar and Drive, and applies it to subsequent
+  read tools and site opening. Tested slot isolation across hosts.

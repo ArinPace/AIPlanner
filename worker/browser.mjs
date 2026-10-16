@@ -6,7 +6,7 @@ import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { allowedLivePath } from './browser-access.mjs'
 import { signedInPage, brightspaceCourse } from './site-status.mjs'
-import { siteLaunches, rememberLanding } from './site-launches.mjs'
+import { siteLaunches, rememberLanding, googleAccountLanding } from './site-launches.mjs'
 import { browserAccountIdentity } from './account-identity.mjs'
 
 async function signedInBrowserPage(source, page) {
@@ -47,6 +47,8 @@ export async function closeLiveBrowser() {
 export async function openLogin(dataDir, source, keepOpen = false) {
   if (!(source in sources)) throw new Error('Choose a supported website.')
   let destination = sources[source]
+  const preferred=await siteLaunches(dataDir)
+  destination=googleAccountLanding(source,preferred[source]) || destination
   if (source === 'slack') { const saved=await siteLaunches(dataDir); if (saved.slack?.startsWith('https://app.slack.com/client/')) destination=saved.slack }
   if (source === 'gradescope') {
     const saved = await siteLaunches(dataDir)
@@ -81,6 +83,7 @@ export async function observeSignIn(dataDir) {
       }
     }
     if (source === 'slack') await rememberLanding(dataDir,'slack',page.url())
+    if (['gmail','calendar','drive'].includes(source)) await rememberLanding(dataDir,source,page.url())
     const identity = await browserAccountIdentity(source,page)
     if (live.reported && live.identity === identity) return {}
     live.reported = true; live.identity = identity
@@ -159,17 +162,19 @@ export async function openView(dataDir, destination, attempt = 0) {
 export async function checkSites(dataDir, enabled) {
   await closeLiveBrowser()
   const ctx = await browser(dataDir), sites = {}
+  const preferred=await siteLaunches(dataDir)
   for (const source of enabled) {
     if (!(source in sources)) continue
     let existing = null
     for (const current of ctx.pages()) {
+      if (googleAccountLanding(source,preferred[source]) && googleAccountLanding(source,current.url())!==googleAccountLanding(source,preferred[source])) continue
       if (await signedInBrowserPage(source, current)) { existing = current; break }
     }
     if (existing) { sites[source] = { ready: true, identity: await browserAccountIdentity(source,existing) }; continue }
     const page = await ctx.newPage()
     try {
       const saved = source === 'slack' ? await siteLaunches(dataDir) : {}
-      await page.goto(source === 'slack' && saved.slack?.startsWith('https://app.slack.com/client/') ? saved.slack : sources[source], { waitUntil: 'domcontentloaded', timeout: 40000 })
+      await page.goto(googleAccountLanding(source,preferred[source]) || (source === 'slack' && saved.slack?.startsWith('https://app.slack.com/client/') ? saved.slack : sources[source]), { waitUntil: 'domcontentloaded', timeout: 40000 })
       if (source === 'slack') await page.locator('[data-qa="message_container"]').first().waitFor({timeout:30000}).catch(()=>{})
       await page.waitForTimeout(2000)
       const text = (await page.locator('body').innerText()).slice(0, 12000)
