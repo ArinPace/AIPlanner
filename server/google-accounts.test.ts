@@ -11,7 +11,7 @@ test('Google accounts are owner scoped, tokens stay private, and Calendar uses t
   process.env.GOOGLE_CLIENT_ID='test-client';process.env.GOOGLE_CLIENT_SECRET='test-secret';process.env.CONNECTION_ENCRYPTION_KEY='ab'.repeat(32)
   const tokens={access_token:'test-access',refresh_token:'test-refresh',scope:GOOGLE_CALENDAR_SCOPE,expires_at:Date.now()+3600000}
   const account={id:'ee34ba25-54bc-44df-8515-f7e6784dfed1',identity:'owner@example.com',credentials:sealVmCredential(tokens),updated_at:new Date().toISOString()}
-  let attempt:Record<string,unknown>|null=null,selected=false,revoked=false,deleted=false
+  let attempt:Record<string,unknown>|null=null,selected=false,revoked=false,deleted=false,refreshed=false,persisted=false
   globalThis.fetch=async(input,init)=>{
     const request=new Request(input,init),url=new URL(request.url)
     if(url.hostname==='database.test'){
@@ -25,10 +25,20 @@ test('Google accounts are owner scoped, tokens stay private, and Calendar uses t
         if(request.method==='DELETE'){deleted=true;assert.equal(url.searchParams.get('id'),'eq.'+account.id);return new Response(null,{status:204})}
         const id=url.searchParams.get('id')
         if(id && id!=='eq.'+account.id)return Response.json(null)
+        if(request.method==='PATCH'){
+          assert.equal(id,'eq.'+account.id)
+          const data=await request.json() as {credentials:string}
+          assert.ok(!data.credentials.includes('fresh-access'));account.credentials=data.credentials;persisted=true
+          return new Response(null,{status:204})
+        }
         return Response.json(id ? account : [account])
       }
     }
-    if(url.hostname==='www.googleapis.com' && url.pathname.includes('/calendar/')){assert.equal(request.headers.get('authorization'),'Bearer test-access');return Response.json({timeZone:'UTC',items:[{id:'event',summary:'Verified event'}]})}
+    if(url.href==='https://oauth2.googleapis.com/token'){
+      const form=new URLSearchParams(await request.text());assert.equal(form.get('grant_type'),'refresh_token');assert.equal(form.get('refresh_token'),'test-refresh');refreshed=true
+      return Response.json({access_token:'fresh-access',expires_in:3600})
+    }
+    if(url.hostname==='www.googleapis.com' && url.pathname.includes('/calendar/')){assert.equal(request.headers.get('authorization'),refreshed?'Bearer fresh-access':'Bearer test-access');return Response.json({timeZone:'UTC',items:[{id:'event',summary:'Verified event'}]})}
     if(url.href==='https://oauth2.googleapis.com/revoke'){assert.equal(new URLSearchParams(await request.text()).get('token'),'test-refresh');revoked=true;return Response.json({})}
     throw new Error('Unexpected test request '+url.origin+url.pathname)
   }
@@ -41,6 +51,9 @@ test('Google accounts are owner scoped, tokens stay private, and Calendar uses t
     await selectGoogleAccount('arin',account.id);assert.ok(selected)
     await assert.rejects(()=>selectGoogleAccount('arin','bb34ba25-54bc-44df-8515-f7e6784dfed1'),/not found/)
     const calendar=await readGoogleCalendar('arin',undefined,undefined,account.id);assert.equal(calendar.events[0].title,'Verified event')
+    account.credentials=sealVmCredential({...tokens,expires_at:Date.now()-60000})
+    const renewed=await readGoogleCalendar('arin',undefined,undefined,account.id)
+    assert.equal(renewed.events[0].title,'Verified event');assert.ok(refreshed && persisted,'Offline access must renew and persist an expired access token without a browser')
     await assert.rejects(()=>readGoogleCalendar('arin',undefined,undefined,'bb34ba25-54bc-44df-8515-f7e6784dfed1'),/Connect Google/)
     await removeGoogleAccount('arin',account.id);assert.ok(revoked && deleted)
   }finally{globalThis.fetch=previousFetch;for(const k of keys){if(saved[k]===undefined)delete process.env[k];else process.env[k]=saved[k]}}

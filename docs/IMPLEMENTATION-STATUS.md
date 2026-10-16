@@ -109,3 +109,21 @@ TimeGridView warnings. Re-run checks appropriate to subsequent changes.
 - Google publishing status remains Testing. The Cloud project owner is an initial
   test user; requested confirmation of the intended additional Calendar email.
   Public Google verification and real user consent/callback/API-read are pending.
+
+## 2026-10-16 VM Calendar offline verification
+
+- The confirmed arnavjain824@gmail.com Google account was added to Google's test
+  users. The planner now has a completed Calendar OAuth grant, not just an OAuth
+  client configuration. Calendar is enabled in the VM's 07:00/17:00 New York schedule.
+- Live VM agent test called the account-scoped planner MCP to read the selected
+  OAuth Calendar account. Its 96 upcoming events matched the authenticated API
+  check. No Google browser session was used. Temporary verification chat deleted.
+- Worker instructions explicitly prefer Calendar OAuth and prohibit silently
+  substituting a different browser account after an OAuth failure. Both provisioned
+  VMs updated. Future provisions use the updated worker source.
+- Expired-access-token test verifies server-side refresh and encrypted persistence
+  without user/browser interaction. Public Google verification remains pending;
+  Google Testing refresh-token expiration still limits unattended longevity.
+- This establishes a real background VM read, not a new clock-triggered execution.
+  Host Windows PC/network must remain available; the user's client laptop/phone
+  need not be online. Do not claim the host itself can run while powered off.
