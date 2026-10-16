@@ -31,7 +31,7 @@ export async function saveEvent(username:string,args:EventPatch) {
   if(old)Object.assign(old,event);else row.state.events.push(event)
   const rows=storage(await db().from('planner_calendars').update({state:row.state,revision:row.revision+1,updated_at:new Date().toISOString()}).eq('username',username).eq('revision',row.revision).select('revision'))
   if(!rows.length)throw new ApiError(409,'Calendar changed. Read it before retrying.')
-  return {saved:true,event,revision:rows[0].revision}
+  return {saved:true,eventId:event.id,event,revision:rows[0].revision}
 }
 
 export function searchFiles(state:FilesState,args:{query?:string;folderId?:string;offset?:number;limit?:number}) {

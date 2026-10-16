@@ -49,7 +49,26 @@ The authenticated MCP endpoint is `https://aiplanner-ten.vercel.app/api/mcp`. In
 
 OAuth uses dynamic public-client registration, exact registered OpenAI/loopback callbacks, S256 PKCE, one-use browser-bound consent requests and authorization codes, resource binding, scoped opaque access tokens, atomic refresh-token rotation and revocation. Only token hashes are stored. MCP tables have RLS enabled and deny direct browser-role access. Every tool is scoped to the authenticated planner account; write and browser tools require their corresponding grant.
 
-Tools read calendar and Files, organize nested folders and notes, save links and events, register chat URLs, inspect run history, and atomically save verified source updates. Calendar and Files changes use revision checks. Source imports deduplicate generated records and preserve manual edits. PDF bytes continue to use the existing private upload/download flow, not MCP text payloads.
+Tools read calendar and Files, organize nested folders and notes, save links and events, register chat URLs, inspect run history, and atomically save verified source updates. Calendar and Files changes use revision checks. Source imports deduplicate generated records and preserve manual edits. PDF uploads continue to use the existing private upload flow.
+
+`planner_calendar_read` searches the internal planner calendar (including hidden
+events and recurrence rules), independently of Google Calendar. Results are
+paginated base events, not expanded recurring occurrences. `planner_save_event`
+creates events or patches only supplied fields on an existing ID; omitted tags,
+recurrence, descriptions and source metadata remain intact. Series edits affect
+the entire series. Unknown IDs, invalid tags and stale revisions are rejected.
+
+`planner_files_search` searches all nested folders, paths, labels, note contents,
+link URLs and PDF filenames, with optional subtree filtering and pagination.
+`planner_read_file` returns paginated note text, link metadata, or extracted text
+from uploaded PDF pages. PDFs require both owned Files metadata and a completed
+owned upload, use private storage directly, and never expose storage credentials
+or signed URLs to the model. PDF text extraction does not provide OCR or diagrams;
+empty/scanned pages and unread pages must be reported accurately. A search does
+not search inside PDFs; read the relevant PDF pages separately.
+`planner_update_item` renames/moves notes, links and PDFs, edits notes/link URLs,
+and changes folder parents, colors and labels. It preserves PDF bytes, validates
+folder hierarchy, and rejects unsupported field edits and concurrent saves.
 
 `browser_open`, `browser_read` and `browser_close` resume the saved Browser Use profile. The server connects directly to its owned cloud browser via CDP, without launching a separate AI inference run. Browser sessions have recordings disabled, a 12-minute window, a 15-minute provider timeout, and a scheduler cleanup. Only explicitly enabled source domains can be navigated; browser cookies, local storage and arbitrary JavaScript are never exposed through tools. Page text and links are untrusted data. Users must complete login/MFA in the returned live view when sessions expire. Browser Use still bills browser sessions. ChatGPT can instead use its own separately authenticated cloud browser.
 
