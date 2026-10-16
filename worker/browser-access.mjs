@@ -1,6 +1,11 @@
 export function allowedLivePath(url, token) {
   try { return new URL(url, 'http://127.0.0.1').pathname.startsWith('/' + token + '/') } catch { return false }
 }
+export function readableSlackImageUrl(value) {
+  const u = new URL(value)
+  if (u.protocol !== 'https:' || u.hostname !== 'files.slack.com' || u.port || u.username || u.password || !/^\/files-(pri|tmb)\//.test(u.pathname)) throw new Error('Choose an image attachment displayed in the Slack message.')
+  return u.href
+}
 export function readableUrl(value, enabled, sources) {
   const url = new URL(value)
   const hosts = enabled.filter(s => sources[s]).map(s => new URL(sources[s]).hostname.replace(/^www\./, ''))

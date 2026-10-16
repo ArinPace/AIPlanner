@@ -1,6 +1,6 @@
 const slackChannel = url => url.hostname === 'app.slack.com' && /^\/client\/[^/]+\/[CDG][A-Z0-9]+\/?$/.test(url.pathname)
 
-export async function readBrowserPage(context, destination, { slackTimeout = 45000, validate = () => {} } = {}) {
+export async function readBrowserPage(context, destination, { slackTimeout = 45000, validate = () => {}, inspect } = {}) {
   const target = new URL(destination)
   const slack = slackChannel(target)
   const existing = slack && context.pages().find(p => {
@@ -31,6 +31,7 @@ export async function readBrowserPage(context, destination, { slackTimeout = 450
     }
     // Redirected credential pages must never be returned as page text.
     validate(page.url())
+    if (/(?:^|\/)(?:login|signin|auth|saml)(?:\/|$)/i.test(new URL(page.url()).pathname) || await page.locator('input[type=password]:visible').count() > 0) throw new Error('This website needs sign-in. Reconnect it before reading content.')
     const messages = slack ? await page.locator('[data-qa="message_container"][data-msg-ts]').evaluateAll(nodes => nodes.map(n => {
       const stamp = n.querySelector('a[data-ts]')
       return {
@@ -42,11 +43,14 @@ export async function readBrowserPage(context, destination, { slackTimeout = 450
         links: [...n.querySelectorAll('a[href]')].map(a => ({ text: a.textContent?.trim().slice(0,160), url: a.href })).slice(0,30),
       }
     }).sort((a,b) => Number(a.timestamp)-Number(b.timestamp)).slice(-30)) : undefined
-    return {
+    const images = await page.locator(slack ? '[data-qa="message_container"] img:not(.c-avatar__image)' : 'img').evaluateAll(nodes => nodes.filter(n => n.naturalWidth >= 80 && n.naturalHeight >= 80 && n.getBoundingClientRect().width > 0).map((n,index) => ({ index, alt: n.alt || 'Image', width: n.naturalWidth, height: n.naturalHeight, messageTimestamp: n.closest('[data-msg-ts]')?.getAttribute('data-msg-ts') || null })))
+    const result = {
       title: await page.title(), url: page.url(),
       text: messages ? messages.map(m => m.text).join('\n\n').slice(-40000) : (await page.locator('body').innerText()).slice(0, 50000),
       links: await page.locator('a[href]').evaluateAll(nodes => nodes.slice(0, 200).map(n => ({ text: n.textContent?.trim().slice(0,160), url: n.href }))),
-      ...(messages ? { messages, coverage: 'Latest rendered channel messages after scrolling to the end; attachments are listed as text, not image contents.' } : {}),
+      images,
+      ...(messages ? { messages, coverage: 'Latest rendered channel messages after scrolling to the end. Use browser_view_image for image contents.' } : {}),
     }
+    return inspect ? await inspect(page, result, slack) : result
   } finally { if (!existing) await page.close() }
 }
