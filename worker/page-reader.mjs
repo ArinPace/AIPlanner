@@ -43,7 +43,7 @@ export async function readBrowserPage(context, destination, { slackTimeout = 450
         links: [...n.querySelectorAll('a[href]')].map(a => ({ text: a.textContent?.trim().slice(0,160), url: a.href })).slice(0,30),
       }
     }).sort((a,b) => Number(a.timestamp)-Number(b.timestamp)).slice(-30)) : undefined
-    const images = await page.locator(slack ? '[data-qa="message_container"] img:not(.c-avatar__image)' : 'img').evaluateAll(nodes => nodes.filter(n => n.naturalWidth >= 80 && n.naturalHeight >= 80 && n.getBoundingClientRect().width > 0).map((n,index) => ({ index, alt: n.alt || 'Image', width: n.naturalWidth, height: n.naturalHeight, messageTimestamp: n.closest('[data-msg-ts]')?.getAttribute('data-msg-ts') || null })))
+    const images = await page.locator(slack ? '[data-qa="message_container"] img:not(.c-avatar__image)' : 'img').evaluateAll(nodes => nodes.filter(n => n.naturalWidth >= 80 && n.naturalHeight >= 80 && n.getBoundingClientRect().width >= 80 && n.getBoundingClientRect().height >= 80).map((n,index) => ({ index, alt: n.alt || 'Image', width: n.naturalWidth, height: n.naturalHeight, messageTimestamp: n.closest('[data-msg-ts]')?.getAttribute('data-msg-ts') || null })))
     const shadowText = slack ? '' : await page.locator('body').evaluate(body => {
       const parts = []
       function visit(root) {

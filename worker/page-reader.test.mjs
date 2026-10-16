@@ -19,5 +19,9 @@ test('Slack reader waits beyond the app shell, returns messages and keeps existi
     assert.equal(existing.isClosed(), false)
     await context.route('https://app.slack.com/client/E123/CEMPTY', route => route.fulfill({ body: 'Loading Slack' }))
     await assert.rejects(readBrowserPage(context, 'https://app.slack.com/client/E123/CEMPTY', { slackTimeout: 100 }), { code: 'SLACK_NOT_READY' })
+    await context.route('https://example.test/**', route=>route.fulfill({contentType:'text/html',body:'<div id="course"></div><script>document.querySelector("#course").attachShadow({mode:"open"}).innerHTML="<div>Introduction to Computer Science</div><span style=display:none>Hidden text must stay hidden</span>"</script>'}))
+    const course = await readBrowserPage(context,'https://example.test/courses')
+    assert.match(course.text,/Introduction to Computer Science/)
+    assert.doesNotMatch(course.text,/Hidden text must stay hidden/)
   } finally { await browser.close() }
 })

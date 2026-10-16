@@ -2,10 +2,11 @@ import { chromium } from 'playwright'
 import { spawn } from 'node:child_process'
 import http from 'node:http'
 import { randomBytes } from 'node:crypto'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { allowedLivePath } from './browser-access.mjs'
 import { signedInPage, brightspaceCourse } from './site-status.mjs'
+import { siteLaunches, rememberLanding } from './site-launches.mjs'
 
 async function signedInBrowserPage(source, page) {
   for (const frame of page.frames()) {
@@ -45,8 +46,9 @@ export async function closeLiveBrowser() {
 export async function openLogin(dataDir, source, keepOpen = false) {
   if (!(source in sources)) throw new Error('Choose a supported website.')
   let destination = sources[source]
+  if (source === 'slack') { const saved=await siteLaunches(dataDir); if (saved.slack?.startsWith('https://app.slack.com/client/')) destination=saved.slack }
   if (source === 'gradescope') {
-    const saved = JSON.parse(await readFile(path.join(dataDir, 'site-launches.json'), 'utf8').catch(() => '{}'))
+    const saved = await siteLaunches(dataDir)
     destination = brightspaceCourse(saved.gradescope) || sources.brightspace
   }
   const result = await openView(dataDir, destination)
@@ -74,9 +76,10 @@ export async function observeSignIn(dataDir) {
     if (source === 'gradescope') {
       for (const candidate of [...context.pages()].reverse()) {
         const course = brightspaceCourse(candidate.url())
-        if (course) { await writeFile(path.join(dataDir, 'site-launches.json'), JSON.stringify({ gradescope: course }), { mode: 0o600 }); break }
+        if (course) { await rememberLanding(dataDir,'gradescope',course); break }
       }
     }
+    if (source === 'slack') await rememberLanding(dataDir,'slack',page.url())
     live.reported = true
     const result = { [source]: { ready: true } }
     // Open-site views remain interactive; connection views finish automatically.
@@ -162,7 +165,9 @@ export async function checkSites(dataDir, enabled) {
     if (existing) { sites[source] = { ready: true }; continue }
     const page = await ctx.newPage()
     try {
-      await page.goto(sources[source], { waitUntil: 'domcontentloaded', timeout: 40000 })
+      const saved = source === 'slack' ? await siteLaunches(dataDir) : {}
+      await page.goto(source === 'slack' && saved.slack?.startsWith('https://app.slack.com/client/') ? saved.slack : sources[source], { waitUntil: 'domcontentloaded', timeout: 40000 })
+      if (source === 'slack') await page.locator('[data-qa="message_container"]').first().waitFor({timeout:30000}).catch(()=>{})
       await page.waitForTimeout(2000)
       const text = (await page.locator('body').innerText()).slice(0, 12000)
       sites[source] = { ready: signedInPage(source, page.url(), text, await page.locator('input[type=password]:visible').count() > 0) }

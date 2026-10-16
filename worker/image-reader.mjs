@@ -14,7 +14,7 @@ export async function readPageImage(context, page, result, slack, index, { origi
   const handles = await images.elementHandles()
   let selected, current = 0
   for (const image of handles) {
-    if (!await image.evaluate(n => n.naturalWidth >= 80 && n.naturalHeight >= 80 && n.getBoundingClientRect().width > 0)) continue
+    if (!await image.evaluate(n => n.naturalWidth >= 80 && n.naturalHeight >= 80 && n.getBoundingClientRect().width >= 80 && n.getBoundingClientRect().height >= 80)) continue
     if (current++ === index) { selected = image; break }
   }
   if (!selected) throw new Error('Image moved while loading. Read the page again.')
