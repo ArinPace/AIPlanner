@@ -183,3 +183,23 @@ TimeGridView warnings. Re-run checks appropriate to subsequent changes.
 - Live Verify connections now passes all five enabled sites: Gmail, Calendar,
   Brightspace, Gradescope and Slack. Production UI verification passed for the
   Calendar success banner, correct signed-in VM identity and absent OAuth section.
+
+## 2026-10-16 editable agent schedule and message timestamps
+
+- Added planner_schedule_read and planner_schedule_update MCP tools, scoped to the
+  authenticated planner user and planner:write. Tools read/write actual VM settings,
+  support enabled state, timezone, up to six daily times, enabled sources and saved
+  review instructions, with updatedAt comparison to reject stale concurrent writes.
+- Corrected planner_read and source-write permission checks to use VM sources when
+  present instead of the obsolete Browser Use source list. The VM already had all
+  seven requested sources enabled; stale legacy reads explained the agent's report.
+- Scheduled VM job creation now includes the saved review instructions. Schedule UI
+  exposes those instructions and preserves them when changing times/timezone.
+- Each user message and agent reply now displays its stored timestamp in viewer-local
+  time, with full date/time/timezone in the hover label. Streaming replies use start
+  time until completion. Copy buttons still copy only message text.
+- Owner-scoped settings, stale-write conflicts, partial updates, source validation,
+  schedule-message instructions and MCP write-scope tests pass. Desktop/320px tests
+  pass for timestamps, local timezone, review instruction edits and retained times.
+- All seven source connection flags are currently ready, including Slack/Instagram.
+  Live agent schedule-write verification and fresh source checks pending deployment.

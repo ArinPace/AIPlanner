@@ -32,6 +32,9 @@ test('MCP exposes discovery and checks write/browser scopes before any storage o
     const result = await client.callTool({name:'planner_register_chat',arguments:{title:'Daily updates',url:'https://chatgpt.com/c/6ab5101f-2f6c-83ea-9164-7380356691a5'}})
     assert.equal(result.isError,true)
     assert.match(JSON.stringify(result.content),/planner:write/)
+    const schedule=await client.callTool({name:'planner_schedule_update',arguments:{expectedUpdatedAt:'2026-10-16T00:00:00Z',enabled:false}})
+    assert.equal(schedule.isError,true)
+    assert.match(JSON.stringify(schedule.content),/planner:write/)
     const browser = await client.callTool({name:'browser_open',arguments:{}})
     assert.equal(browser.isError,true)
     assert.match(JSON.stringify(browser.content),/browser:read/)
@@ -48,7 +51,7 @@ test('stateless HTTP discovery survives transport closure and a fresh request',a
     assert.equal(response.status,200)
     const data=await response.json() as {result?:{tools:{name:string}[]}}
     assert.ok(data.result)
-    if(message.method==='tools/list')for(const name of ['planner_read','google_calendar_accounts','google_calendar_read'])assert.ok(data.result.tools.some(t=>t.name===name))
+    if(message.method==='tools/list')for(const name of ['planner_read','planner_schedule_read','planner_schedule_update','google_calendar_accounts','google_calendar_read'])assert.ok(data.result.tools.some(t=>t.name===name))
   }
 })
 

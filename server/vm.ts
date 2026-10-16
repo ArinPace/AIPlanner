@@ -4,7 +4,7 @@ import { createPlannerMcp } from './mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { hostOnline, safeWorkerStatus, safeDeviceAuthorization, uuid, vmHash, vmMessage } from './vm-validation.js'
 import { openVmCredential, sealVmCredential } from './vm-vault.js'
-import { DEFAULT_VM_SCHEDULE, scheduleSlot, validateSchedule } from './vm-power.js'
+import { DEFAULT_VM_SCHEDULE, scheduleSlot, validateSchedule, scheduledReviewMessage } from './vm-power.js'
 import { touchVmActivity } from './vm-host.js'
 import { VM_SOURCES } from '../src/lib/vm.js'
 import { googleCalendarStatus, readGoogleCalendar, startGoogleCalendar, selectGoogleAccount, removeGoogleAccount } from './agent.js'
@@ -79,7 +79,7 @@ export async function handleVmWorker(request: Request, path: string) {
     }
     const slot = scheduleSlot(new Date(), settings.schedule || DEFAULT_VM_SCHEDULE, false)
     if (settings.schedule_enabled && settings.sources.length && slot) {
-      checked(await db().from('planner_vm_jobs').upsert({ username: host.username, host_id: host.id, kind: 'sync', schedule_slot: slot, message: 'Read my enabled websites for new announcements, assignments and deadline changes. Read the planner first, save verified updates with planner_apply_updates, and report which sources were checked or unavailable. Do not invent deadlines or overwrite manual edits.' }, { onConflict: 'username,schedule_slot', ignoreDuplicates: true }))
+      checked(await db().from('planner_vm_jobs').upsert({ username: host.username, host_id: host.id, kind: 'sync', schedule_slot: slot, message: scheduledReviewMessage(settings.schedule || DEFAULT_VM_SCHEDULE) }, { onConflict: 'username,schedule_slot', ignoreDuplicates: true }))
     }
     const job = checked(await db().rpc('planner_vm_claim', { p_host: host.id }))
     return json({ job: job || null })
