@@ -201,5 +201,12 @@ TimeGridView warnings. Re-run checks appropriate to subsequent changes.
 - Owner-scoped settings, stale-write conflicts, partial updates, source validation,
   schedule-message instructions and MCP write-scope tests pass. Desktop/320px tests
   pass for timestamps, local timezone, review instruction edits and retained times.
-- All seven source connection flags are currently ready, including Slack/Instagram.
-  Live agent schedule-write verification and fresh source checks pending deployment.
+- Real VM agent schedule read/update verification passed: actual task instructions
+  persisted (1,099 characters), all seven sources enabled, 07:00/17:00 New York.
+  Production desktop/mobile UI checks passed for the actual configuration chat
+  timestamps and saved review instructions.
+- Fresh source verification passed Brightspace, Gmail, Calendar, Drive, Slack and
+  Instagram. Gradescope is currently signed out; no saved Brightspace course launch
+  was available for automatic renewal. It remains enabled but must be reported as
+  unavailable until reconnected through Brightspace. Initial cached flags had all
+  seven ready; do not substitute those flags for the fresh result.
