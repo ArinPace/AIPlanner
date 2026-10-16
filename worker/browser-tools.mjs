@@ -18,8 +18,9 @@ server.registerTool('browser_read', {
 }, async ({ url }) => {
   let connection
   try {
-    const destination = readableUrl(selectedBrowserDestination(url,await siteLaunches(process.env.PLANNER_DATA_DIR || '/var/lib/planner')), enabled, sources)
-    connection = await chromium.connectOverCDP(browserEndpoint(destination))
+    const saved=await siteLaunches(process.env.PLANNER_DATA_DIR || '/var/lib/planner')
+    const destination = readableUrl(selectedBrowserDestination(url,saved), enabled, sources)
+    connection = await chromium.connectOverCDP(browserEndpoint(destination,saved.browserProfiles))
     const output = await readWithImages(connection.contexts()[0], destination, { validate: value => readableUrl(value, enabled, sources) })
     const page = JSON.parse(output.content[0].text)
     await rememberLanding(process.env.PLANNER_DATA_DIR || '/var/lib/planner','slack',page.url).catch(()=>{})
@@ -34,8 +35,9 @@ server.registerTool('browser_view_image', {
 }, async ({ url, imageIndex }) => {
   let connection
   try {
-    const destination = readableUrl(selectedBrowserDestination(url,await siteLaunches(process.env.PLANNER_DATA_DIR || '/var/lib/planner')), enabled, sources)
-    connection = await chromium.connectOverCDP(browserEndpoint(destination))
+    const saved=await siteLaunches(process.env.PLANNER_DATA_DIR || '/var/lib/planner')
+    const destination = readableUrl(selectedBrowserDestination(url,saved), enabled, sources)
+    connection = await chromium.connectOverCDP(browserEndpoint(destination,saved.browserProfiles))
     const context = connection.contexts()[0]
     return await readBrowserPage(context, destination, { validate: value => readableUrl(value, enabled, sources), inspect: (page,result,slack) => readPageImage(context,page,result,slack,imageIndex) })
   } catch { return { isError: true, content: [{ type:'text', text:'This image could not be read. Read the page again to check available image indices and sign-in. Do not invent image contents.' }] } }

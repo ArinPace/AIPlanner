@@ -174,3 +174,12 @@ TimeGridView warnings. Re-run checks appropriate to subsequent changes.
 - Explicit server connection confirmation also closes the sign-in popup when a
   separate Verify connections run replaced the site timestamp. UI tests cover this
   path at desktop and phone widths.
+
+- Follow-up regression check caught Gmail being routed into the fresh Chrome profile.
+  Corrected per-site routing: Calendar uses stable Chrome; existing Gmail/Drive retain
+  their original saved profile until the user explicitly connects/manages an account
+  there. Agent reads, site opening and verification use the same per-site choice.
+  Added regression assertions for preserved Gmail/Drive and explicit stable opt-in.
+- Live Verify connections now passes all five enabled sites: Gmail, Calendar,
+  Brightspace, Gradescope and Slack. Production UI verification passed for the
+  Calendar success banner, correct signed-in VM identity and absent OAuth section.

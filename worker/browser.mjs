@@ -6,10 +6,11 @@ import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { allowedLivePath } from './browser-access.mjs'
 import { signedInPage, brightspaceCourse } from './site-status.mjs'
-import { siteLaunches, rememberLanding, googleAccountLanding } from './site-launches.mjs'
+import { siteLaunches, rememberLanding, googleAccountLanding, rememberBrowserProfile } from './site-launches.mjs'
 import { browserAccountIdentity } from './account-identity.mjs'
 import { googleBrowser, googleSources, closeGoogleBrowser } from './google-browser.mjs'
 import { connectionMode, shouldConfirm } from './connection-mode.mjs'
+import { stableProfile } from './browser-routing.mjs'
 export { googleBrowser, googleSources } from './google-browser.mjs'
 
 async function signedInBrowserPage(source, page) {
@@ -57,7 +58,9 @@ export async function openLogin(dataDir, source, intent = 'connect') {
     const saved = await siteLaunches(dataDir)
     destination = brightspaceCourse(saved.gradescope) || sources.brightspace
   }
-  const result = await openView(dataDir, destination, 0, googleSources.has(source))
+  const useStable=googleSources.has(source) && (intent!=='open' || stableProfile(source,preferred.browserProfiles))
+  if(useStable)await rememberBrowserProfile(dataDir,source)
+  const result = await openView(dataDir, destination, 0, useStable)
   const page=live.context.pages()[0]
   const mode=connectionMode(intent,await signedInBrowserPage(source,page))
   if (live) { live.source = source; live.mode = mode; live.initialIdentity=await browserAccountIdentity(source,page); live.reported = false }
@@ -172,7 +175,7 @@ export async function checkSites(dataDir, enabled) {
   const preferred=await siteLaunches(dataDir)
   for (const source of enabled) {
     if (!(source in sources)) continue
-    const ctx = googleSources.has(source) ? await googleBrowser(dataDir) : await browser(dataDir)
+    const ctx = stableProfile(source,preferred.browserProfiles) ? await googleBrowser(dataDir) : await browser(dataDir)
     let existing = null
     for (const current of ctx.pages()) {
       if (googleAccountLanding(source,preferred[source]) && googleAccountLanding(source,current.url())!==googleAccountLanding(source,preferred[source])) continue

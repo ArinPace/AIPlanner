@@ -25,6 +25,13 @@ export function selectedBrowserDestination(href,saved) {
 export async function siteLaunches(dataDir) {
   return JSON.parse(await readFile(path.join(dataDir,'site-launches.json'),'utf8').catch(()=>'{}'))
 }
+export async function rememberBrowserProfile(dataDir,source) {
+  if(!['gmail','calendar','drive'].includes(source))return
+  const saved=await siteLaunches(dataDir)
+  saved.browserProfiles={...saved.browserProfiles,[source]:'stable'}
+  const file=path.join(dataDir,'site-launches.json')
+  await writeFile(file+'.tmp',JSON.stringify(saved),{mode:0o600});await rename(file+'.tmp',file)
+}
 export async function rememberLanding(dataDir, source, href) {
   const u = new URL(href)
   const url = source === 'slack' && u.origin === 'https://app.slack.com' && /^\/client\/[A-Z0-9]+\/[CDG][A-Z0-9]+\/?$/.test(u.pathname) ? u.origin+u.pathname : source === 'gradescope' ? brightspaceCourse(href) : googleAccountLanding(source,href)
