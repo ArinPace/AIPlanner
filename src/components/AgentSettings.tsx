@@ -26,7 +26,7 @@ export function AgentSettings({ state, mode, aiReady, now, onClose, refresh }: {
   const requested = state.runs.find(r => r.id === requestId)
   const device = Date.parse(requested?.result.expiresAt || '') > now ? requested?.result.deviceCode : null
   const liveUrl = requested?.result.liveUrl && Date.parse(requested.result.expiresAt || '') > now ? requested.result.liveUrl : null
-  const verified = Boolean(connection?.source && (connection.intent !== 'open' || requested?.result.signInRequired || requested?.result.connected) && Date.parse(state.settings.sites[connection.source]?.verifiedAt || '') >= connection.started)
+  const verified = Boolean(connection?.source && (requested?.result.connected === true || ((connection.intent !== 'open' || requested?.result.signInRequired) && Date.parse(state.settings.sites[connection.source]?.verifiedAt || '') >= connection.started)))
   const interrupted = requested?.result.interrupted === true
   const expired = Boolean(requested?.result.expiresAt && Date.parse(requested.result.expiresAt) <= now && !verified)
   const waiting = Boolean(connection && !verified && !interrupted && !expired && !liveUrl && !error && requested?.status !== 'failed' && requested?.status !== 'cancelled')

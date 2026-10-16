@@ -167,5 +167,10 @@ TimeGridView warnings. Re-run checks appropriate to subsequent changes.
   encountered login. Desktop/320px mocked flow tests cover popup close and both banners.
 - Closed the one viewer tab created for the owner's completed manual sign-in. Original
   VM browser profile and Google signed-in session retained. Actual verified browser
-  session survived the worker restart. Full production confirmation verification pending
-  this deployment's completion; previous notes about Google API scheduling are superseded.
+  session survived the worker restart. Production confirmation passed: a real VM Calendar connection produced a server
+  confirmation, cleared its viewer URL, and retained the requested browser account.
+  Previous notes about Google API scheduling are superseded.
+
+- Explicit server connection confirmation also closes the sign-in popup when a
+  separate Verify connections run replaced the site timestamp. UI tests cover this
+  path at desktop and phone widths.
