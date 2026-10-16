@@ -7,6 +7,7 @@ import path from 'node:path'
 import { allowedLivePath } from './browser-access.mjs'
 import { signedInPage, brightspaceCourse } from './site-status.mjs'
 import { siteLaunches, rememberLanding } from './site-launches.mjs'
+import { browserAccountIdentity } from './account-identity.mjs'
 
 async function signedInBrowserPage(source, page) {
   for (const frame of page.frames()) {
@@ -66,7 +67,7 @@ export async function openLogin(dataDir, source, keepOpen = false) {
 }
 
 export async function observeSignIn(dataDir) {
-  if (!live?.source || live.reported || !context) return {}
+  if (!live?.source || live.reported && !live.keepOpen || !context) return {}
   const source = live.source
   for (const page of context.pages()) {
     // Confirm the page the user is actually viewing, not a cached signed-in
@@ -80,8 +81,10 @@ export async function observeSignIn(dataDir) {
       }
     }
     if (source === 'slack') await rememberLanding(dataDir,'slack',page.url())
-    live.reported = true
-    const result = { [source]: { ready: true } }
+    const identity = await browserAccountIdentity(source,page)
+    if (live.reported && live.identity === identity) return {}
+    live.reported = true; live.identity = identity
+    const result = { [source]: { ready: true, identity } }
     // Open-site views remain interactive; connection views finish automatically.
     if (!live.keepOpen) await closeLiveBrowser()
     return result
@@ -158,11 +161,11 @@ export async function checkSites(dataDir, enabled) {
   const ctx = await browser(dataDir), sites = {}
   for (const source of enabled) {
     if (!(source in sources)) continue
-    let existing = false
+    let existing = null
     for (const current of ctx.pages()) {
-      if (await signedInBrowserPage(source, current)) { existing = true; break }
+      if (await signedInBrowserPage(source, current)) { existing = current; break }
     }
-    if (existing) { sites[source] = { ready: true }; continue }
+    if (existing) { sites[source] = { ready: true, identity: await browserAccountIdentity(source,existing) }; continue }
     const page = await ctx.newPage()
     try {
       const saved = source === 'slack' ? await siteLaunches(dataDir) : {}
@@ -171,6 +174,7 @@ export async function checkSites(dataDir, enabled) {
       await page.waitForTimeout(2000)
       const text = (await page.locator('body').innerText()).slice(0, 12000)
       sites[source] = { ready: signedInPage(source, page.url(), text, await page.locator('input[type=password]:visible').count() > 0) }
+      if (sites[source].ready) sites[source].identity = await browserAccountIdentity(source,page)
     } catch { sites[source] = { ready: false } } finally { await page.close() }
   }
   return { sites }

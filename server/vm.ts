@@ -7,6 +7,8 @@ import { openVmCredential, sealVmCredential } from './vm-vault.js'
 import { DEFAULT_VM_SCHEDULE, scheduleSlot, validateSchedule } from './vm-power.js'
 import { touchVmActivity } from './vm-host.js'
 import { VM_SOURCES } from '../src/lib/vm.js'
+import { googleCalendarStatus, readGoogleCalendar, startGoogleCalendar, selectGoogleAccount, removeGoogleAccount } from './agent.js'
+import { observeAccounts, editBrowserAccount } from './browser-accounts.js'
 
 function checked<T>({ data, error }: { data: T; error: { code?: string } | null }): NonNullable<T> {
   if (error) throw new ApiError(error.code === '23505' ? 409 : 503, error.code === '23505' ? 'Another message is already waiting in this chat.' : 'Could not access your agent workspace.')
@@ -63,7 +65,8 @@ export async function handleVmWorker(request: Request, path: string) {
     if (input.signedIn === true) checked(await db().from('planner_vm_jobs').update({ result: {} }).eq('username', host.username).eq('kind', 'browser_login').eq('message', 'chatgpt_device').eq('status', 'completed').not('result->deviceCode', 'is', null))
     const settings = checked(await db().from('planner_vm_settings').select('sources,sites,schedule_enabled,schedule').eq('username', host.username).single())
     if (input.observedSites && typeof input.observedSites === 'object') {
-      const observed = input.observedSites as Record<string, { ready?: boolean }>
+      const observed = input.observedSites as Record<string, { ready?: boolean; identity?: unknown }>
+      await observeAccounts(host.username, observed, settings.sources)
       const verified = Object.fromEntries(Object.keys(VM_SOURCES).filter(k => settings.sources.includes(k) && observed[k]?.ready === true).map(k => [k, { ready: true, verifiedAt: new Date().toISOString() }]))
       if (Object.keys(verified).length) {
         checked(await db().from('planner_vm_settings').update({ sites: { ...settings.sites, ...verified } }).eq('username', host.username))
@@ -96,6 +99,10 @@ export async function handleVmWorker(request: Request, path: string) {
     }
     const result = checked(await db().rpc('planner_vm_report', { p_host: host.id, p_job: input.id, p_lease: input.lease, p_reply: reply, p_error: error, p_finished: finished, p_thread: threadId, p_result: output }))
     if (!result) throw new ApiError(409, 'This job was cancelled or its lease expired.')
+    if (finished && !error && input.result && typeof input.result === 'object' && 'sites' in input.result) {
+      const settings = checked(await db().from('planner_vm_settings').select('sources').eq('username',host.username).single())
+      await observeAccounts(host.username, (input.result as { sites: Record<string,{ready?:boolean;identity?:unknown}> }).sites, settings.sources)
+    }
     if (finished && !error && output.sites) checked(await db().from('planner_vm_jobs').update({ result: {} }).eq('username', host.username).eq('kind', 'browser_login').eq('status', 'completed'))
     return json({ ok: true })
   }
@@ -106,19 +113,20 @@ export async function handleVmRequest(request: Request, path: string, username: 
   const url = new URL(request.url)
   if (request.method === 'GET' && path === '/api/agent/vm') {
     checked(await db().from('planner_vm_settings').upsert({ username }, { onConflict: 'username', ignoreDuplicates: true }))
-    const [hosts, chats, settings, runs, provisioning] = await Promise.all([
+    const [hosts, chats, settings, runs, provisioning, accounts] = await Promise.all([
       db().from('planner_vm_hosts').select(publicHost).eq('username', username).is('revoked_at', null).order('created_at', { ascending: false }),
       db().from('planner_vm_chats').select('id,title,archived,created_at,updated_at').eq('username', username).order('updated_at', { ascending: false }).limit(100),
       db().from('planner_vm_settings').select('sources,schedule_enabled,sites,ai_provider,schedule').eq('username', username).single(),
       db().from('planner_vm_jobs').select(publicJob).eq('username', username).order('created_at', { ascending: false }).limit(20),
       db().from('planner_vm_provisioning').select('status,error,wake_until,power_state,power_updated_at').eq('username', username).maybeSingle(),
+      db().from('planner_browser_accounts').select('id,source,identity,label,active,verified_at').eq('username',username).order('verified_at',{ascending:false}),
     ])
     const machine = checked(provisioning) || null
     const connectedHosts = checked(hosts).map(h => ({ ...h, online: hostOnline(h.heartbeat_at) }))
     const wantsWake = Date.parse(machine?.wake_until || '') > Date.now() || checked(runs).some(r => ['queued','running'].includes(r.status))
     const freshPower = Date.now() - Date.parse(machine?.power_updated_at || '') < 60000
     const power = !connectedHosts.length ? 'preparing' : freshPower ? machine?.power_state === 'Running' ? 'online' : wantsWake ? 'starting' : 'offline' : connectedHosts.some(h => h.online) ? 'online' : wantsWake ? 'starting' : 'offline'
-    return json({ hosts: connectedHosts, power, chats: checked(chats), settings: checked(settings), runs: checked(runs), provisioning: machine, personalChatGptAvailable: personalChatGptAllowed(username), hostedChatGptAvailable: false, recordings: false })
+    return json({ hosts: connectedHosts, power, accounts:checked(accounts), google:await googleCalendarStatus(username), chats: checked(chats), settings: checked(settings), runs: checked(runs), provisioning: machine, personalChatGptAvailable: personalChatGptAllowed(username), hostedChatGptAvailable: false, recordings: false })
   }
   if (request.method === 'GET' && path === '/api/agent/vm/messages') {
     const chatId = url.searchParams.get('chat')
@@ -127,6 +135,22 @@ export async function handleVmRequest(request: Request, path: string, username: 
   }
   if (request.method !== 'POST') throw new ApiError(405, 'Use POST.')
   const input = await body(request)
+  if (path === '/api/agent/vm/google/connect') return startGoogleCalendar(username)
+  if (path === '/api/agent/vm/browser/accounts') {
+    if (!uuid(input.id)) throw new ApiError(400,'Choose an account.')
+    await editBrowserAccount(username,input)
+    return json({ok:true})
+  }
+  if (path === '/api/agent/vm/google/check') {
+    if (input.id !== undefined && !uuid(input.id)) throw new ApiError(400,'Choose a Google account.')
+    return json(await readGoogleCalendar(username,undefined,undefined,input.id as string | undefined))
+  }
+  if (path === '/api/agent/vm/google/disconnect') {
+    if(!uuid(input.id))throw new ApiError(400,'Choose a Google account.')
+    await removeGoogleAccount(username,input.id)
+    return json({ok:true})
+  }
+  if(path==='/api/agent/vm/google/select') {if(!uuid(input.id))throw new ApiError(400,'Choose a Google account.');await selectGoogleAccount(username,input.id);return json({ok:true})}
   if (path === '/api/agent/vm/activity') return json({ wakeUntil: await touchVmActivity(username) })
   if (path === '/api/agent/vm/provider') {
     if (!['chatgpt', 'claude_code'].includes(String(input.provider))) throw new ApiError(400, 'Choose a connected AI.')

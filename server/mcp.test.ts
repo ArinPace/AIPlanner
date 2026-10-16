@@ -48,7 +48,7 @@ test('stateless HTTP discovery survives transport closure and a fresh request',a
     assert.equal(response.status,200)
     const data=await response.json() as {result?:{tools:{name:string}[]}}
     assert.ok(data.result)
-    if(message.method==='tools/list')assert.equal(data.result.tools.length,12)
+    if(message.method==='tools/list')for(const name of ['planner_read','google_calendar_accounts','google_calendar_read'])assert.ok(data.result.tools.some(t=>t.name===name))
   }
 })
 

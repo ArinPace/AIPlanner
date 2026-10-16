@@ -1633,6 +1633,16 @@ textarea {
 .assistant-site label { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .assistant-site strong { font-size: 13px; font-weight: 500; }
 .assistant-site small { display: block; color: #888; font-size: 11px; margin-top: 5px; }
+.assistant-site-group { min-width: 0; border-bottom: 1px solid #eee; padding-bottom: 12px; }
+.assistant-site-group .assistant-site { border-bottom: 0; }
+.connection-accounts { margin-left: 28px; font-size: 12px; }
+.connection-accounts summary { cursor: pointer; padding: 6px 0; }
+.connection-account { padding: 12px; margin: 8px 0; background: #f6f6f6; border-radius: 10px; overflow-wrap: anywhere; min-width: 0; }
+.connection-account strong, .connection-account small { display: block; margin-bottom: 5px; }
+.connection-account .assistant-settings-actions { margin-top: 10px; gap: 6px; }
+.connection-account form { display: flex; flex-wrap: wrap; gap: 8px; }
+.connection-account form label { flex: 1 1 100%; min-width: 0; }
+.connection-account input { box-sizing: border-box; max-width: 100%; }
 .assistant-settings-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
 .assistant-settings footer { display: flex; justify-content: flex-end; border-top: 1px solid #eee; padding-top: 20px; }
 .assistant-times { display: grid; gap: 12px; }

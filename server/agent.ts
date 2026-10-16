@@ -51,13 +51,16 @@ const oauthConfig = (provider: string) => provider === 'google' ? {
   authorize: 'https://auth.openai.com/api/accounts/authorize', token: 'https://auth.openai.com/api/accounts/oauth/token',
   jwks: 'https://auth.openai.com/.well-known/jwks.json', issuer: ['https://auth.openai.com'], scopes: 'openid profile email',
 }
-async function oauthStart(username: string, provider: string) {
+export const GOOGLE_CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly'
+export function startGoogleCalendar(username: string) { return oauthStart(username,'google',`openid email ${GOOGLE_CALENDAR_SCOPE}`) }
+async function oauthStart(username: string, provider: string, requestedScopes?: string) {
   const config = oauthConfig(provider)
   if (!config.clientId || (provider === 'google' && !config.secret)) throw new ApiError(503, provider === 'google' ? 'Google OAuth needs a registered Google Cloud client. Your Google connections in this chat do not authorize the hosted planner.' : 'Hosted Continue with ChatGPT requires an approved OpenAI client ID. Chat remains available through the planner’s AI connection.')
   const state = randomBytes(32).toString('hex'), verifier = randomBytes(32).toString('base64url'), nonce = randomBytes(24).toString('hex'), browserToken = randomBytes(32).toString('hex')
-  check(await db().from('planner_oauth_attempts').insert({ username, provider, state_hash: sha(state), verifier, nonce, browser_hash: sha(browserToken), expires_at: new Date(Date.now() + 600000).toISOString() }))
+  const scopes = requestedScopes || config.scopes
+  check(await db().from('planner_oauth_attempts').insert({ username, provider, requested_scopes:scopes, state_hash: sha(state), verifier, nonce, browser_hash: sha(browserToken), expires_at: new Date(Date.now() + 600000).toISOString() }))
   const url = new URL(config.authorize)
-  url.search = new URLSearchParams({ client_id: config.clientId, redirect_uri: `${ORIGIN}/api/agent/oauth/callback/${provider}`, response_type: 'code', scope: config.scopes, state, nonce, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256', ...(provider === 'google' ? { access_type: 'offline', prompt: 'consent' } : {}) }).toString()
+  url.search = new URLSearchParams({ client_id: config.clientId, redirect_uri: `${ORIGIN}/api/agent/oauth/callback/${provider}`, response_type: 'code', scope: scopes, state, nonce, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256', ...(provider === 'google' ? { access_type: 'offline', prompt: 'select_account consent' } : {}) }).toString()
   const response = json({ url: url.toString() })
   response.headers.set('Set-Cookie', `planner-oauth=${browserToken}; HttpOnly; Secure; SameSite=Lax; Path=/api/agent/oauth; Max-Age=600`)
   return response
@@ -81,12 +84,22 @@ async function oauthCallback(request: Request, provider: string) {
   const tokens = await response.json() as Record<string, any>
   const { payload } = await jwtVerify(tokens.id_token, createRemoteJWKSet(new URL(config.jwks)), { issuer: config.issuer, audience: config.clientId })
   if (payload.nonce !== attempt.nonce || !payload.sub) throw new ApiError(400, 'The provider identity could not be verified.')
-  check(await db().from('planner_connections').upsert({ username: attempt.username, provider, identity: typeof payload.email === 'string' ? payload.email : payload.sub, credentials: encrypt({ ...tokens, expires_at: Date.now() + tokens.expires_in * 1000 }), updated_at: new Date().toISOString() }))
+  if (provider === 'google') {
+    const granted = String(tokens.scope || attempt.requested_scopes || '').split(' ')
+    if (attempt.requested_scopes?.includes(GOOGLE_CALENDAR_SCOPE) && !granted.includes(GOOGLE_CALENDAR_SCOPE)) throw new ApiError(400,'Calendar permission was not granted. Start again and allow read-only Calendar access.')
+    if (!tokens.refresh_token) throw new ApiError(400,'Google did not grant offline access. Reconnect and approve the requested access.')
+  }
+  const identity=typeof payload.email === 'string' ? payload.email : payload.sub
+  const credentials=encrypt({ ...tokens, scope:tokens.scope || attempt.requested_scopes || config.scopes, expires_at: Date.now() + tokens.expires_in * 1000 })
+  if (provider==='google' && attempt.requested_scopes===`openid email ${GOOGLE_CALENDAR_SCOPE}`) {
+    const account=check(await db().from('planner_google_accounts').upsert({username:attempt.username,google_sub:payload.sub,identity,credentials,updated_at:new Date().toISOString()},{onConflict:'username,google_sub'}).select('id').single())
+    check(await db().from('planner_vm_settings').upsert({username:attempt.username,google_account_id:account.id},{onConflict:'username'}))
+  } else check(await db().from('planner_connections').upsert({ username: attempt.username, provider, identity, credentials, updated_at: new Date().toISOString() }))
   return new Response(null, { status: 303, headers: { Location: `${ORIGIN}/?connection=connected`, 'Set-Cookie': 'planner-oauth=; HttpOnly; Secure; SameSite=Lax; Path=/api/agent/oauth; Max-Age=0', 'Cache-Control': 'no-store' } })
 }
-async function googleSnapshot(username: string, sources: string[]) {
+async function googleTokens(username: string) {
   const connection = check(await db().from('planner_connections').select('*').eq('username', username).eq('provider', 'google').maybeSingle())
-  if (!connection) return ''
+  if (!connection) throw new ApiError(409,'Connect your Google account in Add sites first.')
   let tokens = decrypt(connection.credentials)
   if (tokens.expires_at < Date.now() + 60000) {
     const config = oauthConfig('google')
@@ -95,9 +108,59 @@ async function googleSnapshot(username: string, sources: string[]) {
     const fresh = await response.json() as Record<string, any>; tokens = { ...tokens, ...fresh, expires_at: Date.now() + fresh.expires_in * 1000 }
     check(await db().from('planner_connections').update({ credentials: encrypt(tokens), updated_at: new Date().toISOString() }).eq('username', username).eq('provider', 'google'))
   }
+  return { tokens, identity:connection.identity }
+}
+export async function googleCalendarStatus(username: string) {
+  const [rows,selected]=await Promise.all([db().from('planner_google_accounts').select('id,identity,credentials,updated_at').eq('username',username).order('updated_at',{ascending:false}),db().from('planner_vm_settings').select('google_account_id').eq('username',username).maybeSingle()])
+  const accounts=check(rows).map(row=>({id:row.id,identity:row.identity,updatedAt:row.updated_at,connected:String(decrypt(row.credentials).scope || '').split(' ').includes(GOOGLE_CALENDAR_SCOPE)}))
+  const active=accounts.find(a=>a.id===check(selected)?.google_account_id) || accounts[0]
+  return { configured:Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET), connected:active?.connected || false, identity:active?.identity || null, updatedAt:active?.updatedAt || null, activeAccountId:active?.id || null, accounts }
+}
+export async function selectGoogleAccount(username:string,id:string) {
+  const account=check(await db().from('planner_google_accounts').select('id').eq('id',id).eq('username',username).maybeSingle())
+  if(!account) throw new ApiError(404,'Google account not found.')
+  check(await db().from('planner_vm_settings').upsert({username,google_account_id:id},{onConflict:'username'}))
+}
+export async function removeGoogleAccount(username:string,id:string) {
+  const account=check(await db().from('planner_google_accounts').select('id,credentials').eq('id',id).eq('username',username).maybeSingle())
+  if(!account) throw new ApiError(404,'Google account not found.')
+  const tokens=decrypt(account.credentials)
+  const response=await fetch('https://oauth2.googleapis.com/revoke',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({token:tokens.refresh_token || tokens.access_token}),signal:AbortSignal.timeout(15000)})
+  if(!response.ok && response.status!==400) throw new ApiError(502,'Google could not revoke this account. Try removing it again.')
+  check(await db().from('planner_google_accounts').delete().eq('id',id).eq('username',username))
+}
+export async function readGoogleCalendar(username: string, timeMin?: string, timeMax?: string, accountId?:string) {
+  const status = await googleCalendarStatus(username)
+  const selected=status.accounts.find(a=>a.id===(accountId || status.activeAccountId))
+  if (!selected?.connected) throw new ApiError(409,'Connect Google Calendar through Add sites first.')
+  const start = timeMin || new Date().toISOString()
+  if (!Number.isFinite(Date.parse(start))) throw new ApiError(400,'Choose a valid Calendar start date.')
+  const end = timeMax || new Date(Date.parse(start)+30*86400000).toISOString()
+  if (!Number.isFinite(Date.parse(start)) || !Number.isFinite(Date.parse(end)) || Date.parse(end)<=Date.parse(start) || Date.parse(end)-Date.parse(start)>366*86400000) throw new ApiError(400,'Choose a valid Calendar range of up to one year.')
+  const account=check(await db().from('planner_google_accounts').select('identity,credentials').eq('username',username).eq('id',selected.id).single())
+  let tokens=decrypt(account.credentials)
+  if(tokens.expires_at<Date.now()+60000){
+    const config=oauthConfig('google')
+    const refreshed=await fetch(config.token,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'refresh_token',client_id:config.clientId!,client_secret:config.secret!,refresh_token:tokens.refresh_token}),signal:AbortSignal.timeout(15000)})
+    if(!refreshed.ok)throw new ApiError(401,'Reconnect this Google account to renew Calendar access.')
+    const fresh=await refreshed.json() as Record<string,any>;tokens={...tokens,...fresh,expires_at:Date.now()+fresh.expires_in*1000}
+    check(await db().from('planner_google_accounts').update({credentials:encrypt(tokens)}).eq('username',username).eq('id',selected.id))
+  }
+  const url = new URL('https://www.googleapis.com/calendar/v3/calendars/primary/events')
+  url.search = new URLSearchParams({singleEvents:'true',orderBy:'startTime',maxResults:'250',timeMin:new Date(start).toISOString(),timeMax:new Date(end).toISOString()}).toString()
+  const response = await fetch(url,{headers:{Authorization:`Bearer ${tokens.access_token}`},signal:AbortSignal.timeout(15000)})
+  if (!response.ok) throw new ApiError(response.status===401?401:502,'Google Calendar could not be read. Reconnect the Google account and try again.')
+  const data = await response.json() as Record<string,any>
+  return {identity:account.identity,accountId:selected.id,timeMin:start,timeMax:end,timeZone:data.timeZone,events:(data.items || []).map((e:any)=>({id:e.id,title:e.summary,description:e.description,start:e.start,end:e.end,location:e.location,url:e.htmlLink,status:e.status})),hasMore:Boolean(data.nextPageToken)}
+}
+async function googleSnapshot(username: string, sources: string[]) {
+  const connection = check(await db().from('planner_connections').select('identity').eq('username',username).eq('provider','google').maybeSingle())
+  if (!connection) return ''
+  const {tokens} = await googleTokens(username)
   async function read(url: string) { const r = await fetch(url, { headers: { Authorization: `Bearer ${tokens.access_token}` }, signal: AbortSignal.timeout(10000) }); if (!r.ok) throw new ApiError(502, 'Could not read the connected Google account. Reconnect it and try again.'); return r.json() as Promise<Record<string, any>> }
   const context: unknown[] = []
-  if (sources.includes('gmail')) {
+  const granted = String(tokens.scope || '').split(' ')
+  if (sources.includes('gmail') && granted.includes('https://www.googleapis.com/auth/gmail.readonly')) {
     const list = await read('https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=15&q=' + encodeURIComponent('newer_than:14d (brightspace OR gradescope OR assignment OR syllabus OR exam OR deadline)'))
     for (const item of list.messages || []) {
       const message = await read(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${item.id}?format=full`)
@@ -105,8 +168,8 @@ async function googleSnapshot(username: string, sources: string[]) {
       context.push({ source: 'gmail', url: `https://mail.google.com/mail/u/0/#all/${item.id}`, headers: message.payload?.headers?.filter((h: any)=>['subject','from','date'].includes(h.name.toLowerCase())), text: text(message.payload || {}).slice(0,10000), snippet: message.snippet })
     }
   }
-  if (sources.includes('calendar')) context.push({ source: 'calendar', data: await read('https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&maxResults=50&timeMin=' + encodeURIComponent(new Date().toISOString()) + '&timeMax=' + encodeURIComponent(new Date(Date.now()+30*86400000).toISOString())) })
-  if (sources.includes('drive')) context.push({ source: 'drive', data: await read('https://www.googleapis.com/drive/v3/files?pageSize=30&fields=files(id,name,webViewLink,modifiedTime)&q=' + encodeURIComponent("trashed = false and modifiedTime > '" + new Date(Date.now()-14*86400000).toISOString() + "'")) })
+  if (sources.includes('calendar') && granted.includes(GOOGLE_CALENDAR_SCOPE)) context.push({ source: 'calendar', data: await read('https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&maxResults=50&timeMin=' + encodeURIComponent(new Date().toISOString()) + '&timeMax=' + encodeURIComponent(new Date(Date.now()+30*86400000).toISOString())) })
+  if (sources.includes('drive') && granted.includes('https://www.googleapis.com/auth/drive.readonly')) context.push({ source: 'drive', data: await read('https://www.googleapis.com/drive/v3/files?pageSize=30&fields=files(id,name,webViewLink,modifiedTime)&q=' + encodeURIComponent("trashed = false and modifiedTime > '" + new Date(Date.now()-14*86400000).toISOString() + "'")) })
   return JSON.stringify(context)
 }
 export const updateSchema = { type: 'object', properties: { summary: { type: 'string' }, needsLogin: { type: 'boolean' }, updates: { type: 'array', maxItems: 100, items: { type: 'object', properties: { source: { type: 'string', enum: [...SOURCES] }, course: { type: 'string' }, title: { type: 'string' }, url: { type: 'string' }, summary: { type: 'string' }, dueAt: { type: ['string','null'] } }, required: ['source','course','title','url','summary','dueAt'], additionalProperties: false } } }, required: ['summary','needsLogin','updates'], additionalProperties: false }

@@ -68,3 +68,23 @@ note, and Agent E2E calendar verification event. Preserve unrelated user data.
 
 Build passed; server/browser-access tests passed; lint had two pre-existing
 TimeGridView warnings. Re-run checks appropriate to subsequent changes.
+
+## 2026-10-16 account management
+
+- Every supported VM website now has an Accounts list with editable labels,
+  reconnect/switch, and removal. Browser sessions are distinguished from previous
+  accounts; unknown identities are explicitly labeled rather than inferred from
+  messages. Account detection reads only account controls.
+- Browser account inventory is private server-side Supabase data with owner-scoped
+  API queries/RPCs. Removing an active entry disables that source. Website cookies
+  are not revoked by deleting metadata; use the website's account menu to sign out.
+- Native Google Calendar OAuth supports multiple encrypted, per-user account grants,
+  selection of a default, testing access, removal/revocation, and read-only MCP tools.
+  Authorization opens in the user's normal browser, not the automated VM.
+- Google Cloud project atlantean-force-511800-c9 has been created. Consent branding
+  is External, pending owner acceptance of Google API User Data Policy. Client
+  credentials, production publishing/verification and live OAuth remain unfinished.
+  Do not represent Calendar OAuth as working until those steps pass.
+- Account management desktop/mobile mocked UI tests passed at 1440 and 320 pixels.
+  Database transaction checks passed for history, rename/removal and owner isolation;
+  RLS enabled, public table/function privileges denied. No test account changes kept.

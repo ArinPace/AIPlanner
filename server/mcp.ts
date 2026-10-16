@@ -3,7 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { z } from 'zod'
 import { ApiError, db, json } from './cloud.js'
-import { applyUpdates, parseUpdates, refreshRuns, settings } from './agent.js'
+import { applyUpdates, parseUpdates, refreshRuns, settings, readGoogleCalendar, googleCalendarStatus } from './agent.js'
 import { saveChatLink } from './chat-links.js'
 import { validateFilesState, type FilesState } from '../src/lib/files.js'
 import { closeMcpBrowser, openMcpBrowser, readMcpBrowser } from './mcp-browser.js'
@@ -41,6 +41,13 @@ export function createPlannerMcp(username: string, scopes: string[]) {
     const row = await filesRow(username), file = row.state.files.find((f:any)=>f.id===args.id)
     if (!file) throw new ApiError(404,'Text file not found.')
     return file
+  })
+  add('google_calendar_accounts','List this planner user’s authorized Google Calendar accounts and active account, without tokens.',{},'planner:read',true,()=>googleCalendarStatus(username))
+  add('google_calendar_read','Read events from a Google account linked through OAuth in Add sites. Prefer this over the VM browser, which may use a different account. Defaults to the selected account; use accountId from google_calendar_accounts for another authorized account. Returns up to 250 events and hasMore if truncated.',{timeMin:iso.optional(),timeMax:iso.optional(),accountId:z.string().uuid().optional()},'planner:read',true,async args=>{
+    const vm = storage(await db().from('planner_vm_settings').select('sources').eq('username',username).maybeSingle())
+    const enabled = vm ? vm.sources : (await settings(username)).sources
+    if (!enabled.includes('calendar')) throw new ApiError(403,'Enable Google Calendar in Add sites before reading it.')
+    return readGoogleCalendar(username,args.timeMin,args.timeMax,args.accountId)
   })
   add('planner_save_folder','Create or organize a folder. Reuse an existing ID to rename, move, label or recolor it. Nested folders are supported. Read the latest revision first.',{id:id.optional(),name:title,parentId:id.nullable(),color,labels,revision:z.number().int().nonnegative()},'planner:write',false,async args=>{
     const row = await filesRow(username)
