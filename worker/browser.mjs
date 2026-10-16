@@ -9,6 +9,7 @@ import { signedInPage, brightspaceCourse } from './site-status.mjs'
 import { siteLaunches, rememberLanding, googleAccountLanding } from './site-launches.mjs'
 import { browserAccountIdentity } from './account-identity.mjs'
 import { googleBrowser, googleSources, closeGoogleBrowser } from './google-browser.mjs'
+import { connectionMode, shouldConfirm } from './connection-mode.mjs'
 export { googleBrowser, googleSources } from './google-browser.mjs'
 
 async function signedInBrowserPage(source, page) {
@@ -46,7 +47,7 @@ export async function closeLiveBrowser() {
   for (const socket of live.sockets) socket.destroy()
   live = null
 }
-export async function openLogin(dataDir, source, keepOpen = false) {
+export async function openLogin(dataDir, source, intent = 'connect') {
   if (!(source in sources)) throw new Error('Choose a supported website.')
   let destination = sources[source]
   const preferred=await siteLaunches(dataDir)
@@ -57,7 +58,9 @@ export async function openLogin(dataDir, source, keepOpen = false) {
     destination = brightspaceCourse(saved.gradescope) || sources.brightspace
   }
   const result = await openView(dataDir, destination, 0, googleSources.has(source))
-  if (live) { live.source = source; live.keepOpen = keepOpen; live.reported = false }
+  const page=live.context.pages()[0]
+  const mode=connectionMode(intent,await signedInBrowserPage(source,page))
+  if (live) { live.source = source; live.mode = mode; live.initialIdentity=await browserAccountIdentity(source,page); live.reported = false }
   if (source === 'gradescope') {
     const page = live.context.pages()[0]
     // Use only an unambiguous Gradescope link in the course, preserving its
@@ -67,11 +70,11 @@ export async function openLogin(dataDir, source, keepOpen = false) {
       if (await link.count() === 1) { await link.click({ timeout: 5000 }).catch(() => {}); break }
     }
   }
-  return result
+  return {...result,signInRequired:mode==='connect'}
 }
 
 export async function observeSignIn(dataDir) {
-  if (!live?.source || live.reported && !live.keepOpen || !live.context) return {}
+  if (!live?.source || live.reported && live.mode==='connect' || !live.context) return {}
   const source = live.source
   for (const page of live.context.pages()) {
     // Confirm the page the user is actually viewing, not a cached signed-in
@@ -87,11 +90,13 @@ export async function observeSignIn(dataDir) {
     if (source === 'slack') await rememberLanding(dataDir,'slack',page.url())
     if (['gmail','calendar','drive'].includes(source)) await rememberLanding(dataDir,source,page.url())
     const identity = await browserAccountIdentity(source,page)
+    if(!shouldConfirm(live.mode,live.initialIdentity,identity))continue
     if (live.reported && live.identity === identity) return {}
     live.reported = true; live.identity = identity
-    const result = { [source]: { ready: true, identity } }
+    const completedConnection=live.mode!=='open'
+    const result = { [source]: { ready: true, identity, completedConnection } }
     // Open-site views remain interactive; connection views finish automatically.
-    if (!live.keepOpen) await closeLiveBrowser()
+    if (completedConnection) await closeLiveBrowser()
     return result
   }
   return {}

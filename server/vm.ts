@@ -16,6 +16,9 @@ function checked<T>({ data, error }: { data: T; error: { code?: string } | null 
 }
 const publicJob = 'id,chat_id,kind,status,message,reply,error,created_at,started_at,finished_at,result'
 const publicHost = 'id,label,heartbeat_at,capabilities,created_at'
+async function confirmBrowserConnection(username:string,source:string){
+  checked(await db().from('planner_vm_jobs').update({result:{connected:true,source,connectedAt:new Date().toISOString()}}).eq('username',username).eq('kind','browser_login').eq('status','completed').in('message',[source,'open:'+source,'manage:'+source]).not('result->liveUrl','is',null))
+}
 // Explicit personal self-hosted account only. Do not turn this into a public
 // hosted subscription flow without an approved OpenAI client integration.
 const personalChatGptAllowed = (username: string) => (process.env.PLANNER_PERSONAL_CHATGPT_USERS || 'arin').split(',').map(x => x.trim()).includes(username)
@@ -65,13 +68,13 @@ export async function handleVmWorker(request: Request, path: string) {
     if (input.signedIn === true) checked(await db().from('planner_vm_jobs').update({ result: {} }).eq('username', host.username).eq('kind', 'browser_login').eq('message', 'chatgpt_device').eq('status', 'completed').not('result->deviceCode', 'is', null))
     const settings = checked(await db().from('planner_vm_settings').select('sources,sites,schedule_enabled,schedule').eq('username', host.username).single())
     if (input.observedSites && typeof input.observedSites === 'object') {
-      const observed = input.observedSites as Record<string, { ready?: boolean; identity?: unknown }>
+      const observed = input.observedSites as Record<string, { ready?: boolean; identity?: unknown; completedConnection?: boolean }>
       await observeAccounts(host.username, observed, settings.sources)
       const verified = Object.fromEntries(Object.keys(VM_SOURCES).filter(k => settings.sources.includes(k) && observed[k]?.ready === true).map(k => [k, { ready: true, verifiedAt: new Date().toISOString() }]))
       if (Object.keys(verified).length) {
         checked(await db().from('planner_vm_settings').update({ sites: { ...settings.sites, ...verified } }).eq('username', host.username))
         // Expired connection views must not continue holding the VM awake.
-        for (const source of Object.keys(verified)) checked(await db().from('planner_vm_jobs').update({ result: {} }).eq('username', host.username).eq('kind','browser_login').eq('message',source).eq('status','completed'))
+        for (const source of Object.keys(verified)) if(observed[source].completedConnection===true)await confirmBrowserConnection(host.username,source)
       }
     }
     const slot = scheduleSlot(new Date(), settings.schedule || DEFAULT_VM_SCHEDULE, false)
@@ -92,6 +95,7 @@ export async function handleVmWorker(request: Request, path: string) {
       const value = input.result as Record<string, unknown>
       if (typeof value.liveUrl === 'string' && /^https:\/\/[a-z0-9-]+\.trycloudflare\.com\/[A-Za-z0-9_-]{32}\//.test(value.liveUrl) && value.liveUrl.length < 1000) {
         output.liveUrl = value.liveUrl; output.expiresAt = new Date(Date.now() + 20 * 60000).toISOString()
+        output.signInRequired=value.signInRequired===true
       }
       if (value.sites && typeof value.sites === 'object') output.sites = Object.fromEntries(Object.keys(VM_SOURCES).filter(k => k in (value.sites as object)).map(k => [k, { ready: (value.sites as Record<string, { ready?: boolean }>)[k]?.ready === true }]))
       const device = safeDeviceAuthorization(value.deviceCode, personalChatGptAllowed(host.username))
@@ -103,7 +107,7 @@ export async function handleVmWorker(request: Request, path: string) {
       const settings = checked(await db().from('planner_vm_settings').select('sources').eq('username',host.username).single())
       await observeAccounts(host.username, (input.result as { sites: Record<string,{ready?:boolean;identity?:unknown}> }).sites, settings.sources)
     }
-    if (finished && !error && output.sites) checked(await db().from('planner_vm_jobs').update({ result: {} }).eq('username', host.username).eq('kind', 'browser_login').eq('status', 'completed'))
+    if (finished && !error && output.sites) for(const [source,site] of Object.entries(output.sites as Record<string,{ready:boolean}>))if(site.ready)await confirmBrowserConnection(host.username,source)
     return json({ ok: true })
   }
   throw new ApiError(404, 'Unknown worker action.')
@@ -206,7 +210,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
       const settings = checked(await db().from('planner_vm_settings').select('sources').eq('username', username).single())
       if (!settings.sources.includes(source)) throw new ApiError(400, 'Select this website in setup first.')
     }
-    const job = checked(await db().from('planner_vm_jobs').insert({ username, host_id: host.id, kind: path.endsWith('/open') ? 'browser_login' : 'browser_check', message: input.intent === 'open' ? 'open:' + source : source }).select(publicJob).single())
+    const job = checked(await db().from('planner_vm_jobs').insert({ username, host_id: host.id, kind: path.endsWith('/open') ? 'browser_login' : 'browser_check', message: input.intent === 'open' ? 'open:' + source : input.intent==='manage' ? 'manage:'+source : source }).select(publicJob).single())
     return json(job, 202)
   }
   if (path === '/api/agent/vm/pair') {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { agentAction, agentRequest } from '../lib/agent'
-import type { VmChat, VmJob, VmState } from '../lib/vm'
+import { VM_SOURCES, type VmChat, type VmJob, type VmState } from '../lib/vm'
 import { AgentSettings } from './AgentSettings'
 import { CloseIcon, MenuIcon, PlusIcon, SettingsIcon } from './Icons'
 
@@ -21,6 +21,7 @@ export function AgentView({ active }: { active: boolean }) {
   const [showArchived, setShowArchived] = useState(false)
   const [copied, setCopied] = useState('')
   const [chatAction, setChatAction] = useState<string | null>(null)
+  const [dismissedConnections,setDismissedConnections]=useState<string[]>([])
   const end = useRef<HTMLDivElement>(null)
   const host = state?.hosts[0]
   const claude = state?.settings.ai_provider === 'claude_code'
@@ -31,6 +32,7 @@ export function AgentView({ active }: { active: boolean }) {
   const title = state?.chats.find(c => c.id === chat)?.title || 'New chat'
   const archived = state?.chats.find(c=>c.id===chat)?.archived || false
   const visibleChats = state?.chats.filter(c=>Boolean(c.archived)===showArchived) || []
+  const confirmedConnection=state?.runs.find(r=>r.result.connected && r.result.source && !dismissedConnections.includes(r.id) && now-Date.parse(r.result.connectedAt || '')<300000)
   const closePanel = useCallback(() => setPanel(null), [])
   const refresh = useCallback(async () => {
     const next = await agentRequest<VmState>('vm'); setState(next); setNow(Date.now())
@@ -104,6 +106,7 @@ export function AgentView({ active }: { active: boolean }) {
     <section className="assistant-chat" aria-label="Assistant chat">
       <header className="assistant-chat-header"><div>{!sidebar && <button type="button" className="icon-btn" aria-label="Show chat sidebar" onClick={() => setSidebar(true)}><MenuIcon/></button>}<button type="button" className="icon-btn" aria-label="New chat" onClick={newChat}><PlusIcon/></button><div className="assistant-chat-title"><strong>{title}</strong><span>{state ? aiReady ? `${provider} connected` : 'Connect your AI to get started' : 'Loading…'}</span>{state && <span className={'assistant-power ' + power} role="status" aria-label="Virtual machine status"><i aria-hidden="true"/>VM {powerLabel}</span>}</div></div><div><button type="button" className="assistant-sites-button" onClick={() => setPanel('connections')}>Add sites</button><button type="button" className="icon-btn" aria-label="Agent settings" onClick={() => setPanel('settings')}><SettingsIcon/></button></div></header>
       {error && <p role="alert" className="assistant-error">{error}</p>}
+      {confirmedConnection?.result.source && <p role="status" className="agent-banner">{VM_SOURCES[confirmedConnection.result.source].name} connected. Your sign-in is saved on your private computer. <button aria-label="Dismiss connection confirmation" onClick={()=>setDismissedConnections(current=>[...current,confirmedConnection.id])}>Dismiss</button></p>}
       {archived && <p className="agent-banner">This chat is archived. <button disabled={Boolean(chatAction)} onClick={()=>{const item=state?.chats.find(c=>c.id===chat);if(item)void manageChat(item,'archive')}}>Restore chat</button></p>}
       {state?.provisioning?.error && <p role="alert" className="assistant-error">{state.provisioning.error}</p>}
       <div className="assistant-thread" aria-live="polite">

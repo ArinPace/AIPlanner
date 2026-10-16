@@ -64,7 +64,7 @@ export async function claudeChat({ dataDir, job, remote, origin, token, instruct
     browser: { command: process.execPath, args: [path.join(root, 'browser-tools.mjs')], env: { PLANNER_ENABLED_SOURCES: JSON.stringify(remote.sources) } },
   } }
   // Lease headers are transient and never written into the native credential store.
-  const args = ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--strict-mcp-config', '--mcp-config', JSON.stringify(mcp), '--tools', '', '--allowedTools', 'mcp__planner__*', 'mcp__browser__*', '--disallowedTools', 'mcp__planner__browser_open', 'mcp__planner__browser_read', 'mcp__planner__browser_close', '--append-system-prompt', instructions, ...(existing ? ['--resume', sessionId] : ['--session-id', sessionId])]
+  const args = ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--strict-mcp-config', '--mcp-config', JSON.stringify(mcp), '--tools', '', '--allowedTools', 'mcp__planner__*', 'mcp__browser__*', '--disallowedTools', 'mcp__planner__browser_open', 'mcp__planner__browser_read', 'mcp__planner__browser_close', 'mcp__planner__google_calendar_accounts', 'mcp__planner__google_calendar_read', '--append-system-prompt', instructions, ...(existing ? ['--resume', sessionId] : ['--session-id', sessionId])]
   const child = spawn(executable, args, { env: environment(dataDir), cwd: path.join(dataDir, 'workspace'), stdio: ['pipe', 'pipe', 'ignore'] })
   let reply = '', buffer = '', result
   const timer = setTimeout(() => child.kill(), 15 * 60000)

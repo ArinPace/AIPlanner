@@ -148,3 +148,24 @@ TimeGridView warnings. Re-run checks appropriate to subsequent changes.
   Actual successful Google website authentication remains pending user completion.
 - Added explicit Open VM browser action beside Calendar OAuth, preserving both
   independent connections. Scope/isolation routing tests and build pass.
+
+## 2026-10-16 VM-only Google and connection confirmation
+
+- After real VM browser read verified the requested Calendar account and 14,297
+  characters of authenticated calendar content, revoked/deleted the separate Google
+  OAuth grant through its owner-scoped API. Removed the external Google OAuth
+  section and Calendar OAuth buttons. Calendar now opens the saved VM browser.
+- Codex/Claude VM agents use Google browser reads; legacy Google API tools disabled
+  in those worker MCP configurations. Existing API implementation is retained for
+  compatibility but no Google OAuth account remains linked for the test owner.
+- Fixed open-site vs sign-in lifecycle: an open request that lands on a signed-out
+  page becomes a connection attempt and closes after verification. Account management
+  waits for an actual identity change before confirming. Authenticated Open site views
+  remain interactive. Worker confirmations persist a connected source/time on the job.
+- Confirmation survives closing Settings via an Agent-page success banner. The settings
+  flow auto-closes its popup after worker verification, including open requests that
+  encountered login. Desktop/320px mocked flow tests cover popup close and both banners.
+- Closed the one viewer tab created for the owner's completed manual sign-in. Original
+  VM browser profile and Google signed-in session retained. Actual verified browser
+  session survived the worker restart. Full production confirmation verification pending
+  this deployment's completion; previous notes about Google API scheduling are superseded.

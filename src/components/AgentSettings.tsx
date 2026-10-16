@@ -10,8 +10,6 @@ export function AgentSettings({ state, mode, aiReady, now, onClose, refresh }: {
   const dialog = useRef<HTMLDialogElement>(null)
   const popup = useRef<Window | null>(null)
   const popupUrl = useRef('')
-  const googlePopup = useRef<Window | null>(null)
-  const [googleStarted, setGoogleStarted] = useState(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -21,14 +19,14 @@ export function AgentSettings({ state, mode, aiReady, now, onClose, refresh }: {
   const [apiKey, setApiKey] = useState('')
   const [requestId, setRequestId] = useState<string | null>(null)
   const [pair, setPair] = useState<{ code: string } | null>(null)
-  const [connection, setConnection] = useState<{ label: string; started: number; cold: boolean; source?: VmSource; intent?: 'connect' | 'open' } | null>(null)
+  const [connection, setConnection] = useState<{ label: string; started: number; cold: boolean; source?: VmSource; intent?: 'connect' | 'open' | 'manage' } | null>(null)
   const [clock, setClock] = useState(0)
   const [popupBlocked, setPopupBlocked] = useState(false)
   const host = state.hosts[0]
   const requested = state.runs.find(r => r.id === requestId)
   const device = Date.parse(requested?.result.expiresAt || '') > now ? requested?.result.deviceCode : null
   const liveUrl = requested?.result.liveUrl && Date.parse(requested.result.expiresAt || '') > now ? requested.result.liveUrl : null
-  const verified = Boolean(connection?.source && connection.intent !== 'open' && Date.parse(state.settings.sites[connection.source]?.verifiedAt || '') >= connection.started)
+  const verified = Boolean(connection?.source && (connection.intent !== 'open' || requested?.result.signInRequired || requested?.result.connected) && Date.parse(state.settings.sites[connection.source]?.verifiedAt || '') >= connection.started)
   const interrupted = requested?.result.interrupted === true
   const expired = Boolean(requested?.result.expiresAt && Date.parse(requested.result.expiresAt) <= now && !verified)
   const waiting = Boolean(connection && !verified && !interrupted && !expired && !liveUrl && !error && requested?.status !== 'failed' && requested?.status !== 'cancelled')
@@ -51,11 +49,6 @@ export function AgentSettings({ state, mode, aiReady, now, onClose, refresh }: {
     if (label) label.textContent = `${percent}% · estimated`
   }, [waiting, stage, estimate, elapsed, detail, percent])
   useEffect(() => { dialog.current?.showModal() }, [])
-  useEffect(() => {
-    if (googleStarted && state.google?.connected && Date.parse(state.google.updatedAt || '') >= googleStarted) {
-      googlePopup.current?.close(); googlePopup.current=null
-    }
-  },[googleStarted,state.google?.connected,state.google?.updatedAt])
   useEffect(() => {
     if ((interrupted || expired) && popup.current && !popup.current.closed) {
       const doc = popup.current.document
@@ -96,7 +89,7 @@ export function AgentSettings({ state, mode, aiReady, now, onClose, refresh }: {
     setPopupBlocked(!popup.current)
     if (popup.current) { popup.current.opener = null; popup.current.document.open(); popup.current.document.write(connectionLoadingPage); popup.current.document.close(); popup.current.document.getElementById('connection-title')!.textContent = `Connecting ${label}` }
   }
-  function connect(source: VmSource, intent: 'connect' | 'open' = 'connect') {
+  function connect(source: VmSource, intent: 'connect' | 'open' | 'manage' = 'connect') {
     // Open synchronously in the click handler; delayed window.open is blocked.
     prepareSignInTab(VM_SOURCES[source].name)
     setConnection(current => current && { ...current, source, intent })
@@ -111,24 +104,6 @@ export function AgentSettings({ state, mode, aiReady, now, onClose, refresh }: {
     void perform(async () => {
       if (host?.capabilities.claudeConnected) { await agentAction('vm/provider', { provider: 'claude_code' }); setNotice('Using your connected Claude account.') }
       else { const job = await agentAction<VmJob>('vm/claude/connect'); setRequestId(job.id); setNotice('Preparing Claude authorization in the new tab. Your current AI stays connected.') }
-    })
-  }
-  function connectGoogle() {
-    const tab = window.open('about:blank','_blank')
-    if (!tab) { setError('Allow pop-ups for the planner, then try Google sign-in again.'); return }
-    tab.opener=null;tab.document.body.textContent='Opening Google Calendar authorization in your browser…'
-    googlePopup.current=tab
-    // oxlint-disable-next-line react/purity
-    setGoogleStarted(Date.now());setConnection(null);setRequestId(null)
-    void perform(async()=>{
-      try {
-        const next=[...new Set([...sources,'calendar' as const])];setSources(next);await save(next)
-        const result=await agentAction<{url:string}>('vm/google/connect')
-        const url=new URL(result.url)
-        if (url.origin!=='https://accounts.google.com') throw new Error('Google authorization could not be opened.')
-        tab.location.replace(url.href)
-        setNotice('Choose your Google account and allow read-only Calendar access. This does not sign that account into the VM browser.')
-      } catch(e) { tab.close();throw e }
     })
   }
   const aiConnections = <section className="assistant-settings-section"><h3>AI account</h3>
@@ -150,18 +125,8 @@ export function AgentSettings({ state, mode, aiReady, now, onClose, refresh }: {
       {(interrupted || expired) && <div className="assistant-connection-result" role="alert"><p>{interrupted ? 'The private browser was interrupted.' : 'The private browser view expired.'} Your saved sign-ins are retained.</p>{connection?.source && <button type="button" disabled={busy} onClick={() => connect(connection.source!, connection.intent)}>Reopen browser</button>}</div>}
       {waiting && <div className="assistant-connection-progress" aria-label="Connection progress"><strong>{connection?.intent === 'open' ? 'Opening' : 'Connecting'} {connection?.label}</strong><p role="status">{stage}</p><progress max="100" value={percent} aria-label="Estimated connection progress"/><span className="assistant-progress-percent">{percent}% · estimated</span><p>{estimate}</p><small>{elapsed}</small><p>{detail}</p>{popupBlocked && <p>The sign-in tab was blocked. An Open private sign-in browser link will appear here when it is ready.</p>}</div>}
       {mode === 'setup' && !aiReady && aiConnections}
-      {mode !== 'settings' && <section className="assistant-settings-section"><h3>Google Calendar accounts</h3><p>Authorize in your normal browser for scheduled Calendar access. Choose which account the agent uses by default.</p>
-        {!state.google?.configured && <p>Google authorization is awaiting app configuration. Private-browser connections remain available.</p>}
-        {state.google?.accounts.map(account=><div className="connection-account" key={account.id}><strong>{account.identity}</strong><small>{state.google?.activeAccountId===account.id ? 'Selected for agent and scheduled checks' : 'Connected Google account'}</small><div className="assistant-settings-actions">
-          <button disabled={busy || state.google?.activeAccountId===account.id} onClick={()=>void perform(async()=>{await agentAction('vm/google/select',{id:account.id});setNotice('Default Calendar account updated.')})}>Use account</button>
-          <button disabled={busy} onClick={()=>void perform(async()=>{const result=await agentAction<{identity:string;events:unknown[]}>('vm/google/check',{id:account.id});setNotice('Calendar access verified for '+result.identity+'. '+result.events.length+' upcoming events read.')})}>Test access</button>
-          <button disabled={busy} onClick={()=>{if(window.confirm('Revoke Calendar access and remove this Google account?'))void perform(async()=>{await agentAction('vm/google/disconnect',{id:account.id});setNotice('Google Calendar authorization removed.')})}}>Remove</button>
-        </div></div>)}
-        <button disabled={busy || !state.google?.configured} onClick={connectGoogle}>Add / reconnect Google account</button>
-        {googleStarted>0 && state.google?.connected && Date.parse(state.google.updatedAt || '')>=googleStarted && <p role="status">Google Calendar connected as {state.google.identity}.</p>}
-      </section>}
-      {mode !== 'settings' && <section className="assistant-settings-section"><h3>{mode === 'setup' ? 'Connect your websites' : 'Websites'}</h3><div className="assistant-sites">{(Object.entries(VM_SOURCES) as [VmSource, { name: string }][]).map(([id, source]) => <div className="assistant-site-group" key={id}><div className="assistant-site"><label><input type="checkbox" checked={sources.includes(id)} onChange={e => setSources(current => e.target.checked ? [...current, id] : current.filter(x => x !== id))}/><span><strong>{source.name}</strong><small>{id === 'calendar' && state.google?.connected ? 'Calendar API connected: ' + state.google.identity : state.settings.sites[id]?.ready ? 'Browser connected' : sources.includes(id) ? 'Sign-in needed' : 'Not connected'}{id === 'gradescope' ? ' - via Brightspace' : ''}</small></span></label><button type="button" disabled={id === 'calendar' ? busy || !state.google?.configured : busy || !host || Boolean(requested && ['queued','running'].includes(requested.status))} onClick={() => id === 'calendar' ? connectGoogle() : connect(id, state.settings.sites[id]?.ready ? 'open' : 'connect')}>{id === 'calendar' ? 'Sign in with Google' : state.settings.sites[id]?.ready ? 'Open site' : id === 'gradescope' ? 'Connect via Brightspace' : 'Connect'}</button>{id === 'calendar' && <button type="button" disabled={busy || !host || Boolean(requested && ['queued','running'].includes(requested.status))} onClick={()=>connect(id,'open')}>Open VM browser</button>}</div>
-        <BrowserAccounts accounts={(state.accounts || []).filter(a=>a.source===id)} connected={state.settings.sites[id]?.ready===true && state.settings.sources.includes(id)} busy={busy || !host || Boolean(requested && ['queued','running'].includes(requested.status))} onOpen={()=>connect(id,'open')} onEdit={(accountId,action,label)=>void perform(async()=>{await agentAction('vm/browser/accounts',{id:accountId,source:id,action,label});if(action==='remove' && state.accounts?.find(a=>a.id===accountId)?.active)setSources(current=>current.filter(s=>s!==id));setNotice(action==='rename' ? 'Account label saved.' : 'Account removed from planner. Use the website account menu to sign out of the website.')})}/>
+      {mode !== 'settings' && <section className="assistant-settings-section"><h3>{mode === 'setup' ? 'Connect your websites' : 'Websites'}</h3><div className="assistant-sites">{(Object.entries(VM_SOURCES) as [VmSource, { name: string }][]).map(([id, source]) => <div className="assistant-site-group" key={id}><div className="assistant-site"><label><input type="checkbox" checked={sources.includes(id)} onChange={e => setSources(current => e.target.checked ? [...current, id] : current.filter(x => x !== id))}/><span><strong>{source.name}</strong><small>{state.settings.sites[id]?.ready ? 'Browser connected' : sources.includes(id) ? 'Sign-in needed' : 'Not connected'}{id === 'gradescope' ? ' - via Brightspace' : ''}</small></span></label><button type="button" disabled={busy || !host || Boolean(requested && ['queued','running'].includes(requested.status))} onClick={() => connect(id, state.settings.sites[id]?.ready ? 'open' : 'connect')}>{state.settings.sites[id]?.ready ? 'Open site' : id === 'gradescope' ? 'Connect via Brightspace' : 'Connect'}</button></div>
+        <BrowserAccounts accounts={(state.accounts || []).filter(a=>a.source===id)} connected={state.settings.sites[id]?.ready===true && state.settings.sources.includes(id)} busy={busy || !host || Boolean(requested && ['queued','running'].includes(requested.status))} onOpen={()=>connect(id,'manage')} onEdit={(accountId,action,label)=>void perform(async()=>{await agentAction('vm/browser/accounts',{id:accountId,source:id,action,label});if(action==='remove' && state.accounts?.find(a=>a.id===accountId)?.active)setSources(current=>current.filter(s=>s!==id));setNotice(action==='rename' ? 'Account label saved.' : 'Account removed from planner. Use the website account menu to sign out of the website.')})}/>
       </div>)}</div><div className="assistant-settings-actions"><button disabled={busy} onClick={() => void perform(async () => { await save(); setNotice('Website choices saved.') })}>Save websites</button><button disabled={busy || !host || !sources.length} onClick={() => void perform(async () => { await save(); const job = await agentAction<VmJob>('vm/browser/check'); setRequestId(job.id); setNotice('Verifying connections...') })}>Verify connections</button></div>{requested?.kind === 'browser_check' && requested.status === 'completed' && <p role="status">Connections checked. Sites needing sign-in are marked above.</p>}</section>}
       {liveUrl && !verified && <div className="assistant-connection-result"><progress max="100" value="100" aria-label="Browser startup complete"/><strong>100% · Browser ready</strong><p>{connection?.intent === 'open' ? 'Your saved browser session is open.' : 'Complete sign-in in the new tab. We are checking for success automatically.'} Recordings are off.</p><a href={liveUrl} target="_blank" rel="noreferrer">Open private sign-in browser ↗</a></div>}
       {!waiting && requested && ['queued','running'].includes(requested.status) && <p role="status">Preparing your connection…</p>}
