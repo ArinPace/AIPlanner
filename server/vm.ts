@@ -9,6 +9,7 @@ import { touchVmActivity } from './vm-host.js'
 import { VM_SOURCES } from '../src/lib/vm.js'
 import { googleCalendarStatus, readGoogleCalendar, startGoogleCalendar, selectGoogleAccount, removeGoogleAccount } from './agent.js'
 import { observeAccounts, editBrowserAccount } from './browser-accounts.js'
+import { bulkManageChats } from './vm-chats.js'
 
 function checked<T>({ data, error }: { data: T; error: { code?: string } | null }): NonNullable<T> {
   if (error) throw new ApiError(error.code === '23505' ? 409 : 503, error.code === '23505' ? 'Another message is already waiting in this chat.' : 'Could not access your agent workspace.')
@@ -230,6 +231,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
     const title = typeof input.title === 'string' && input.title.trim() ? input.title.trim().slice(0, 100) : 'New conversation'
     return json(checked(await db().from('planner_vm_chats').insert({ username, title }).select('id,title,created_at,updated_at').single()), 201)
   }
+  if (path === '/api/agent/vm/chats/bulk') return json(await bulkManageChats(username,input))
   if (path === '/api/agent/vm/chats/archive' || path === '/api/agent/vm/chats/delete') {
     if (!uuid(input.id)) throw new ApiError(400,'Choose a chat.')
     const owned = checked(await db().from('planner_vm_chats').select('id').eq('id',input.id).eq('username',username).maybeSingle())
