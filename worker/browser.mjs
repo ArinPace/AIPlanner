@@ -12,6 +12,7 @@ import { googleBrowser, closeGoogleBrowser } from './google-browser.mjs'
 import { connectionMode, shouldConfirm } from './connection-mode.mjs'
 import { stableProfile, loginUsesStableProfile } from './browser-routing.mjs'
 import { sources } from './browser-sources.mjs'
+import { resumeGradescope } from './gradescope-launch.mjs'
 export { sources } from './browser-sources.mjs'
 export { googleBrowser, googleSources } from './google-browser.mjs'
 
@@ -190,6 +191,7 @@ export async function checkSites(dataDir, enabled) {
       await page.goto(googleAccountLanding(source,preferred[source]) || (source === 'slack' && saved.slack?.startsWith('https://app.slack.com/client/') ? saved.slack : sources[source]), { waitUntil: 'domcontentloaded', timeout: 40000 })
       if (source === 'slack') await page.locator('[data-qa="message_container"]').first().waitFor({timeout:30000}).catch(()=>{})
       await page.waitForTimeout(2000)
+      if(source==='gradescope' && enabled.includes('brightspace') && !await signedInBrowserPage(source,page) && await resumeGradescope(ctx,preferred.gradescope))await page.goto(sources.gradescope,{waitUntil:'domcontentloaded',timeout:30000})
       const text = (await page.locator('body').innerText()).slice(0, 12000)
       sites[source] = { ready: signedInPage(source, page.url(), text, await page.locator('input[type=password]:visible').count() > 0) }
       if (sites[source].ready) sites[source].identity = await browserAccountIdentity(source,page)

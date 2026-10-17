@@ -19,6 +19,23 @@ export async function readPageImage(context, page, result, slack, index, { origi
   }
   if (!selected) throw new Error('Image moved while loading. Read the page again.')
   let bytes, mimeType, quality = 'rendered image'
+  if(!slack && original && new URL(result.url).hostname.replace(/^www\./,'')==='instagram.com'){
+    try{
+      let url=await selected.evaluate(n=>n.currentSrc || n.src)
+      for(let i=0;i<4;i++){
+        const u=new URL(url)
+        if(u.protocol!=='https:' || u.username || u.password || !(u.hostname.endsWith('.cdninstagram.com') || u.hostname.endsWith('.fbcdn.net')))break
+        const response=await context.request.get(url,{maxRedirects:0,timeout:20000})
+        try{
+          if([301,302,303,307,308].includes(response.status())){url=new URL(response.headers().location,url).href;continue}
+          if(!response.ok() || Number(response.headers()['content-length']||0)>15*1024*1024)break
+          const body=await response.body(),mime=imageMime(body)
+          if(mime && body.length<=15*1024*1024){bytes=body;mimeType=mime;quality='original Instagram image; overlay excluded'}
+          break
+        }finally{await response.dispose()}
+      }
+    }catch{/* The rendered image remains a fallback if original bytes are unavailable. */}
+  }
   if (slack && original) {
     // Read only the attachment linked from the selected message. Browser-owned
     // requests carry its existing session; cookies/tokens are never exposed.

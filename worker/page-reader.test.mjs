@@ -7,6 +7,7 @@ test('Albert reads allowed SIS frames while excluding sign-in and unrelated fram
   const browser=await chromium.launch({channel:'msedge',headless:true})
   try{
     const context=await browser.newContext()
+    context.request.get=async()=>({ok:()=>false,headers:()=>({}),dispose:async()=>{}})
     await context.route('https://albert.nyu.edu/**',r=>r.fulfill({contentType:'text/html',body:'<h1>Albert</h1><iframe src="https://sis.nyu.edu/student"></iframe><iframe src="https://sis.nyu.edu/login"></iframe><iframe src="https://unrelated.test/"></iframe>'}))
     await context.route('https://sis.nyu.edu/student',r=>r.fulfill({contentType:'text/html',body:'Student Center My Class Schedule Biology 101'}))
     await context.route('https://sis.nyu.edu/login',r=>r.fulfill({contentType:'text/html',body:'Private login content <input type="password">'}))

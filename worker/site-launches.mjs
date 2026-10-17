@@ -12,8 +12,16 @@ export function googleAccountLanding(source,href) {
     return match ? u.origin+site[1]+'/u/'+match[1]+'/' : null
   }catch{return null}
 }
-export function selectedBrowserDestination(href,saved) {
+export function selectedBrowserDestination(href,saved,documentAccount='drive') {
   const u=new URL(href)
+  if(u.hostname==='app.slack.com' && saved.slack)try{
+    const channel=new URL(saved.slack),match=channel.pathname.match(/^\/client\/([A-Z0-9]+)\/[CG][A-Z0-9]+\/?$/)
+    if(channel.origin===u.origin && match && (u.pathname==='/' || u.pathname.replace(/\/$/,'')==='/client/'+match[1]))return channel.href
+  }catch{}
+  if(['docs.google.com','forms.google.com'].includes(u.hostname)){
+    const account=googleAccountLanding(documentAccount,saved[documentAccount])?.match(/\/u\/(\d+)\//)?.[1]
+    if(account!==undefined)u.searchParams.set('authuser',account)
+  }
   for(const source of Object.keys(googleSites)){
     const landing=googleAccountLanding(source,saved[source])
     if(landing && googleAccountLanding(source,href)) {
@@ -22,7 +30,7 @@ export function selectedBrowserDestination(href,saved) {
       return u.href
     }
   }
-  return href
+  return u.href
 }
 export async function siteLaunches(dataDir) {
   const saved=JSON.parse(await readFile(path.join(dataDir,'site-launches.json'),'utf8').catch(()=>'{}'))
