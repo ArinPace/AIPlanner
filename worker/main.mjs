@@ -9,6 +9,7 @@ import { tomlValue } from './config-args.mjs'
 import { connectPersonalChatGpt, disconnectPersonalChatGpt } from './oauth.mjs'
 import { connectPersonalDevice, disconnectPersonalDevice, personalCodexStatus } from './device-auth.mjs'
 import { claudeStatus, connectClaude, disconnectClaude, claudeChat } from './claude.mjs'
+import { whatsappPermissionText } from './whatsapp-permission.mjs'
 
 const dataDir = process.env.PLANNER_DATA_DIR || '/var/lib/planner'
 const workerStartedAt = new Date().toISOString()
@@ -67,9 +68,10 @@ async function chat(job, auth, remote) {
     'mcp_servers.browser.tool_timeout_sec': 300,
     'mcp_servers.browser.args': [path.join(root, 'browser-tools.mjs')],
     'mcp_servers.browser.env': { PLANNER_ENABLED_SOURCES: JSON.stringify(remote.sources) },
+    'mcp_servers.browser.env_vars': ['PLANNER_WORKER_TOKEN', 'PLANNER_ORIGIN'],
   }
   for (const [key, value] of Object.entries(overrides)) args.push('-c', `${key}=${tomlValue(value)}`)
-  const env = { ...process.env, CODEX_HOME: path.join(dataDir, 'codex'), ...(auth.access_token ? { ACCESS_TOKEN: auth.access_token } : {}), PLANNER_WORKER_TOKEN: config.token, PLANNER_ENABLED_SOURCES: JSON.stringify(remote.sources) }
+  const env = { ...process.env, CODEX_HOME: path.join(dataDir, 'codex'), ...(auth.access_token ? { ACCESS_TOKEN: auth.access_token } : {}), PLANNER_WORKER_TOKEN: config.token, PLANNER_ORIGIN: origin.href, PLANNER_ENABLED_SOURCES: JSON.stringify(remote.sources) }
   delete env.OPENAI_API_KEY; delete env.CODEX_API_KEY
   let rpc, reply = '', threadId = job.thread_id, resolveDone, rejectDone, completed = false
   const done = new Promise((resolve, reject) => { resolveDone = resolve; rejectDone = reject }); done.catch(() => {})
@@ -84,7 +86,7 @@ async function chat(job, auth, remote) {
   const timeout = setTimeout(() => { rejectDone(new Error('The run exceeded its 15-minute limit.')); rpc.close() }, 15 * 60000)
   try {
     await rpc.initialize()
-    const params = { cwd: path.join(dataDir, 'workspace'), ...(process.env.PLANNER_MODEL ? { model: process.env.PLANNER_MODEL } : auth.type === 'codex' ? {} : { model: 'gpt-6-luna' }), approvalPolicy: 'never', sandbox: 'workspace-write', developerInstructions: instructions }
+    const params = { cwd: path.join(dataDir, 'workspace'), ...(process.env.PLANNER_MODEL ? { model: process.env.PLANNER_MODEL } : auth.type === 'codex' ? {} : { model: 'gpt-6-luna' }), approvalPolicy: 'never', sandbox: 'workspace-write', developerInstructions: instructions + '\n\n' + whatsappPermissionText(remote.whatsappReadConsentAt) }
     const thread = await rpc.request(threadId ? 'thread/resume' : 'thread/start', { ...params, ...(threadId ? { threadId, excludeTurns: true } : {}) }, 60000)
     threadId = thread.thread.id
     await report()

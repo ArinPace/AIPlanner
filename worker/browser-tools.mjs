@@ -14,6 +14,7 @@ import { browserEndpoint } from './browser-routing.mjs'
 import { resumeGradescope } from './gradescope-launch.mjs'
 import { findSlackChannel } from './source-readiness.mjs'
 import { readWhatsApp } from './whatsapp-reader.mjs'
+import { requireWhatsAppPermission } from './whatsapp-permission.mjs'
 
 async function connectBrowser(destination,profiles) {
   const dataDir=process.env.PLANNER_DATA_DIR || '/var/lib/planner'
@@ -68,6 +69,11 @@ server.registerTool('browser_read_whatsapp_chat', {
   let connection
   try {
     if (!enabled.includes('whatsapp')) throw new Error('WhatsApp is not enabled.')
+    await requireWhatsAppPermission(async () => {
+      const response = await fetch(new URL('/api/agent/vm/worker/config', process.env.PLANNER_ORIGIN), { method: 'POST', headers: { Authorization: 'Bearer ' + process.env.PLANNER_WORKER_TOKEN, 'Content-Type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(15000) })
+      if (!response.ok) throw new Error('Could not verify current WhatsApp permission. No conversation was opened.')
+      return response.json()
+    })
     const saved = await siteLaunches(process.env.PLANNER_DATA_DIR || '/var/lib/planner')
     connection = await connectBrowser(sources.whatsapp, saved.browserProfiles)
     return { content: [{ type: 'text', text: JSON.stringify(await readWhatsApp(connection.contexts()[0], { chatName })) }] }
