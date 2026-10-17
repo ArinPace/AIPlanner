@@ -197,7 +197,8 @@ export function mergeUpdates(calendarState: StoredState, filesState: FilesState,
     if (updates.length && !files.folders.some(x=>x.id===root)) files.folders.push({ id:root,parentId:null,name:'Agent updates',color:'#1a73e8',labels:['Synced'],updatedAt:now })
     for (const update of updates) {
       const key = sha(update.source + ':' + update.url + ':' + update.title).slice(0,24), legacyId = 'agent-'+key
-      const normalized=(update.course || update.source).trim().toLowerCase().replace(/\s+/g,' ')
+      const courseName=(update.course || update.source).trim().replace(/ [a-f0-9]{6}$/i,'')
+      const normalized=courseName.toLowerCase().replace(/\s+/g,' ')
       const matching=files.folders.find(f=>f.id.startsWith('agent-course-') && f.name.replace(/ [a-f0-9]{6}$/,'').trim().toLowerCase().replace(/\s+/g,' ')===normalized)
       const courseId = matching?.id || 'agent-course-'+sha(normalized).slice(0,20)
       // Generic source pages can use the same URL/title for multiple courses.
@@ -206,7 +207,7 @@ export function mergeUpdates(calendarState: StoredState, filesState: FilesState,
       const scopedId = legacyId+'-'+sha(courseId).slice(0,8)
       const legacyFile = files.files.find(x=>x.id===legacyId)
       const id = files.files.some(x=>x.id===scopedId) || legacyFile && legacyFile.folderId!==courseId ? scopedId : legacyId
-      if (!files.folders.some(x=>x.id===courseId)) files.folders.push({id:courseId,parentId:root,name:(safeName(update.course || update.source).slice(0,90)||'Subject'),color:'#1a73e8',labels:[update.source],updatedAt:now})
+      if (!files.folders.some(x=>x.id===courseId)) files.folders.push({id:courseId,parentId:root,name:(safeName(courseName).slice(0,90)||'Subject'),color:'#1a73e8',labels:[update.source],updatedAt:now})
       const content = `${update.title}\n\n${update.summary}\n\nSource: ${update.url}\n${update.dueAt ? 'Due: '+update.dueAt : ''}`.trim()
       const existingFile = files.files.find(x=>x.id===id)
       // Preserve manual edits. A changed source gets a separate snapshot beside an edited note.
@@ -230,9 +231,11 @@ export async function applyUpdates(username: string, run: any, output: ReturnTyp
   for (let retry=0; retry<3; retry++) {
     const c = check(await db().from('planner_calendars').select('state,revision').eq('username',username).single())
     const f = check(await db().from('planner_files').select('state,revision').eq('username',username).single())
-    const {calendar,files} = mergeUpdates(c.state,f.state,output.updates)
+    let calendar:StoredState,files:FilesState
+    try { ({calendar,files}=mergeUpdates(c.state,f.state,output.updates)) }
+    catch(error){throw new ApiError(422,error instanceof Error?error.message:'Invalid source updates. No changes were saved.')}
     const response = await db().rpc('planner_apply_sync',{p_username:username,p_run:run.id,p_calendar_revision:c.revision,p_files_revision:f.revision,p_calendar:calendar,p_files:files,p_summary:output.summary})
-    if (!response.error) return
+    if (!response.error) {if(response.data!==true)throw new ApiError(409,'This collection is no longer active. No changes were saved.');return}
     if (response.error.code !== '40001' || retry===2) check(response)
   }
 }

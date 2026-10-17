@@ -119,7 +119,16 @@ export function createPlannerMcp(username: string, scopes: string[]) {
       if (created.error?.code === '23505') throw new ApiError(409,'Another sync is active, or this request is processing. Read run history before retrying.')
       run = storage(created)
     } else if (JSON.stringify(run.updates) !== JSON.stringify(output.updates)) throw new ApiError(409,'This requestKey belongs to a different collection. Use a new key.')
-    if (!run.applied_at) await applyUpdates(username,run,output)
+    if (!run.applied_at) {
+      if(run.status==='cancelled')throw new ApiError(409,'This collection was cancelled. Use a new requestKey for a new collection.')
+      if(run.status==='failed'){
+        const retried=await db().from('planner_agent_runs').update({status:'running',error:null,finished_at:null}).eq('id',run.id).eq('username',username).eq('status','failed')
+        if(retried.error?.code==='23505')throw new ApiError(409,'Another collection is active. Wait for it before retrying.')
+        storage(retried)
+      }
+      try {await applyUpdates(username,run,output)}
+      catch(error){await db().from('planner_agent_runs').update({status:'failed',error:error instanceof ApiError?error.message:'Source updates could not be saved. Retry the same requestKey.',finished_at:new Date().toISOString()}).eq('id',run.id).eq('username',username).is('applied_at',null).in('status',['running','applying']);throw error}
+    }
     const saved = storage(await db().from('planner_agent_runs').select('id,status,applied_at,summary').eq('username',username).eq('id',run.id).single())
     return {...saved,updateCount:output.updates.length}
   })

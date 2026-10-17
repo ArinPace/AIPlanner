@@ -67,3 +67,8 @@ test('subject overview combines sources, reuses case-insensitive course folders 
  const latest=second.files.files.find(f=>f.name==='Subject overview - latest sources')!;assert.match(latest.content,/Read chapter one/);assert.match(latest.content,/Birthdays.java/);
  const third=mergeUpdates(second.calendar,second.files,[{...update,summary:'Updated requirement'}]);assert.equal(third.files.files.filter(f=>f.name==='Subject overview - latest sources').length,1);
 })
+
+test('agent can reuse the actual legacy folder name including its generated suffix',()=>{
+ const legacy={folders:[{id:'agent-synced-updates',parentId:null,name:'Agent updates',color:'#1a73e8',labels:['Synced'],updatedAt:new Date().toISOString()},{id:'agent-course-df6262',parentId:'agent-synced-updates',name:'Intro to Computer Science df6262',color:'#1a73e8',labels:['brightspace'],updatedAt:new Date().toISOString()}],files:[],documents:[]};
+ const result=mergeUpdates(calendar,legacy,[{...update,course:'Intro to Computer Science df6262'}]);assert.equal(result.files.folders.length,2);assert.equal(result.files.files.find(f=>f.id.startsWith('agent-'))!.folderId,'agent-course-df6262');
+})
