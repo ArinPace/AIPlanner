@@ -131,6 +131,8 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   const [filesUnsaved, setFilesUnsaved] = useState(false)
   const [cursor, setCursor] = useState(() => new Date())
   const [view, setView] = useState<CalendarView>('month')
+  const [filesSidebar,setFilesSidebar]=useState(()=>window.innerWidth>600)
+  const [agentSidebar,setAgentSidebar]=useState(()=>window.innerWidth>700)
   const [sidebarOpen, setSidebarOpen] = useState(() => window.matchMedia('(min-width: 861px)').matches)
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [tags, setTags] = useState<Tag[]>([])
@@ -318,7 +320,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
         onViewChange={setView}
         onNavigate={navigate}
         onToday={() => setCursor(new Date())}
-        onToggleSidebar={() => setSidebarOpen((value) => !value)}
+        onToggleSidebar={() => {if(tab==='files')setFilesSidebar(v=>!v);else if(tab==='agent')setAgentSidebar(v=>!v);else setSidebarOpen(v=>!v)}}
         onCreate={() => openCreate(cursor)}
         onVisualZoomChange={(value) => setZoom(clampZoom(value))}
         onLogout={() => {
@@ -330,8 +332,8 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
         }}
       />
 
-      <div className="files-tab-panel" hidden={tab !== 'files'}><FilesView username={username} active={tab === 'files'} onUnsavedChange={setFilesUnsaved} /></div>
-      <div className="agent-tab-panel" hidden={tab !== 'agent'}><AgentView active={tab === 'agent'} /></div>
+      <div className="files-tab-panel" hidden={tab !== 'files'}><FilesView sidebar={filesSidebar} setSidebar={setFilesSidebar} username={username} active={tab === 'files'} onUnsavedChange={setFilesUnsaved} /></div>
+      <div className="agent-tab-panel" hidden={tab !== 'agent'}><AgentView sidebar={agentSidebar} setSidebar={setAgentSidebar} active={tab === 'agent'} /></div>
       <div className="app-body" hidden={tab !== 'calendar'}>
         <Sidebar
           open={sidebarOpen}

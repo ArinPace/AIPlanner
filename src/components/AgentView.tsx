@@ -12,7 +12,7 @@ function MessageTime({value,label}:{value:string|null|undefined;label:string}) {
   return <time className="assistant-message-time" dateTime={value} title={date.toLocaleString(undefined,{timeZoneName:'short'})} aria-label={label+': '+date.toLocaleString()}>{date.toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'})}</time>
 }
 const pending = (job: VmJob) => ['queued', 'running'].includes(job.status)
-export function AgentView({ active }: { active: boolean }) {
+export function AgentView({ active, sidebar, setSidebar }: { active: boolean; sidebar:boolean; setSidebar:(open:boolean)=>void }) {
   const [state, setState] = useState<VmState | null>(null)
   const [chat, setChat] = useState<string | null>(null)
   const selectedChat = useRef<string | null>(null)
@@ -22,7 +22,6 @@ export function AgentView({ active }: { active: boolean }) {
   const [busy, setBusy] = useState(false)
   const [loadingChat, setLoadingChat] = useState(false)
   const [now, setNow] = useState(0)
-  const [sidebar, setSidebar] = useState(() => window.innerWidth > 700)
   const [panel, setPanel] = useState<'setup' | 'connections' | 'settings' | null>(null)
   const [showArchived, setShowArchived] = useState(false)
   const [showBin,setShowBin]=useState(false)

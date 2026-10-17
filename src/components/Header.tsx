@@ -54,7 +54,7 @@ export function Header({
   return (
     <header className="app-header">
       <div className="header-left">
-        <button type="button" hidden={tab !== 'calendar'} className="icon-btn menu-btn" aria-label="Toggle sidebar" onClick={onToggleSidebar}>
+        <button type="button" className="icon-btn menu-btn" title="Show or hide sidebar" aria-label="Toggle sidebar" onClick={onToggleSidebar}>
           <MenuIcon />
         </button>
         <div className="brand">
