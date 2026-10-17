@@ -1,3 +1,4 @@
+import { sources as sourceUrls } from './browser-sources.mjs'
 import { readFile, writeFile, mkdir, rename, unlink } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
@@ -91,7 +92,7 @@ async function chat(job, auth, remote) {
     const thread = await rpc.request(threadId ? 'thread/resume' : 'thread/start', { ...params, ...(threadId ? { threadId, excludeTurns: true } : {}) }, 60000)
     threadId = thread.thread.id
     await report()
-    await rpc.request('turn/start', { threadId, input: [{ type: 'text', text: `Enabled websites: ${JSON.stringify(remote.sources)}.\n\n${job.message}` }] })
+    await rpc.request('turn/start', { threadId, input: [{ type: 'text', text: `Enabled websites: ${JSON.stringify(Object.fromEntries(remote.sources.map(source=>[source,sourceUrls[source]])))}.\n\n${job.message}` }] })
     await done
     return { reply, threadId }
   } finally { clearInterval(heartbeat); clearTimeout(timeout); rpc.close() }

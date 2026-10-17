@@ -4,7 +4,7 @@ import { ApiError, db } from './cloud.js'
 import { bu, settings } from './agent.js'
 import { storage } from './mcp-auth.js'
 
-const hosts: Record<string,string[]> = { brightspace:['brightspace.nyu.edu'], gradescope:['www.gradescope.com','gradescope.com'], gmail:['mail.google.com'], calendar:['calendar.google.com'], drive:['drive.google.com','docs.google.com'], slack:['app.slack.com'], instagram:['www.instagram.com','instagram.com'], x:['x.com','www.x.com'] }
+const hosts: Record<string,string[]> = { albert:['albert.nyu.edu','sis.nyu.edu'], whatsapp:['web.whatsapp.com'], brightspace:['brightspace.nyu.edu'], gradescope:['www.gradescope.com','gradescope.com'], gmail:['mail.google.com'], calendar:['calendar.google.com'], drive:['drive.google.com','docs.google.com'], slack:['app.slack.com'], instagram:['www.instagram.com','instagram.com'], x:['x.com','www.x.com'] }
 export function browserUrl(value: string, sources: string[]) {
   let url: URL
   try { url = new URL(value) } catch { throw new ApiError(400,'Use a source webpage URL.') }

@@ -6,6 +6,8 @@ export const VM_SOURCES = {
   drive: { name: 'Google Drive', url: 'https://drive.google.com/drive/u/0/my-drive' },
   slack: { name: 'Slack', url: 'https://app.slack.com/' },
   instagram: { name: 'Instagram', url: 'https://www.instagram.com/' },
+  albert: { name: 'NYU Albert', url: 'https://albert.nyu.edu/' },
+  whatsapp: { name: 'WhatsApp', url: 'https://web.whatsapp.com/' },
   x: { name: 'X', url: 'https://x.com/home' },
 } as const
 export type VmSource = keyof typeof VM_SOURCES

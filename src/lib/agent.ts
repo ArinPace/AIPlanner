@@ -1,6 +1,6 @@
 import { getToken } from './api'
 
-export type AgentSource = 'brightspace' | 'gradescope' | 'gmail' | 'calendar' | 'drive' | 'slack' | 'instagram' | 'x'
+export type AgentSource = 'brightspace' | 'gradescope' | 'gmail' | 'calendar' | 'drive' | 'slack' | 'instagram' | 'x' | 'albert' | 'whatsapp'
 export interface AgentRun {
   id: string; kind: string; status: string; trigger: string; task: string
   created_at: string; finished_at: string | null; summary: string | null; error: string | null

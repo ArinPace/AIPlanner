@@ -2,6 +2,15 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { signedInPage, brightspaceCourse } from './site-status.mjs'
 
+test('Albert and WhatsApp confirmation rejects login/QR walls and accepts authenticated evidence',()=>{
+  assert.equal(signedInPage('albert','https://albert.nyu.edu/','NYU Albert Sign in NetID Password'),false)
+  assert.equal(signedInPage('albert','https://sis.nyu.edu/psc/csprod/EMPLOYEE/SA/c/SA_LEARNER_SERVICES.SSS_STUDENT_CENTER.GBL','Student Center My Class Schedule'),true)
+  assert.equal(signedInPage('albert','https://sis.nyu.edu.evil.test/','Student Center Academics'),false)
+  assert.equal(signedInPage('whatsapp','https://web.whatsapp.com/','Log into WhatsApp Scan the QR code'),false)
+  assert.equal(signedInPage('whatsapp','https://web.whatsapp.com/','Chats Communities Search New chat'),true)
+  assert.equal(signedInPage('whatsapp','https://web.whatsapp.com/','Chats Search',true),false)
+})
+
 test('sign-in confirmation requires the correct site and authenticated page evidence', () => {
   assert.equal(signedInPage('brightspace','https://brightspace.nyu.edu/d2l/home/123','Welcome to Brightspace. Course Home Content'),true)
   assert.equal(signedInPage('gradescope','https://www.gradescope.com/courses/123','Assignments Course Dashboard'),true)

@@ -1354,7 +1354,7 @@ textarea {
   .files-panels.has-editor .files-list { overflow: visible; }
 }
 @media (max-width: 600px) {
-  .files-sidebar { display: none; }
+  .files-sidebar { display: flex; position: absolute; inset: 0 auto 0 0; z-index: 5; width: min(280px, 86vw); }
   .files-content { padding: 16px; }
   .files-heading h1 { font-size: 23px; }
   .files-filters label:not(.files-search) { flex: 1; }
@@ -1712,3 +1712,19 @@ textarea {
 .assistant-connection-spinner { width: 16px; height: 16px; flex-shrink: 0; border: 2px solid #ddd; border-top-color: #333; border-radius: 50%; animation: connection-spin 1s linear infinite; }
 @keyframes connection-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .assistant-connection-spinner { animation: none; } }
+
+/* Folder navigation stays available at every window size. */
+.files-workspace { position: relative; }
+.files-sidebar-toggle { align-self: flex-start; margin-bottom: 12px; }
+.folder-tree-row { display: flex; align-items: center; min-width: 0; }
+.folder-tree-row .folder-nav { min-width: 0; flex: 1; padding-left: 5px; }
+.folder-disclosure, .folder-disclosure-space { flex: 0 0 24px; width: 24px; }
+.folder-disclosure { border: 0; background: transparent; height: 32px; border-radius: 4px; }
+.folder-disclosure:hover { background: #e8f0fe; }
+.files-bin-target.is-drag-over { background: #fce8e6; outline: 2px dashed #d93025; }
+.files-sidebar-scrim { display: none; }
+.files-sidebar-heading { gap: 2px; padding-left: 0; }
+.files-sidebar-heading .text-btn { margin-right: auto; white-space: nowrap; }
+@media (max-width: 600px) {
+  .files-sidebar-scrim { display: block; position: absolute; inset: 0; z-index: 4; border: 0; background: #0005; }
+}

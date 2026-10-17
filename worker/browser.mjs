@@ -17,7 +17,7 @@ export { googleBrowser, googleSources } from './google-browser.mjs'
 
 async function signedInBrowserPage(source, page) {
   for (const frame of page.frames()) {
-    if (new URL(frame.url()).hostname.replace(/^www\./,'') !== new URL(sources[source]).hostname.replace(/^www\./,'')) continue
+    if (!(source==='albert' && new URL(frame.url()).hostname==='sis.nyu.edu') && new URL(frame.url()).hostname.replace(/^www\./,'') !== new URL(sources[source]).hostname.replace(/^www\./,'')) continue
     const text = await frame.locator('body').innerText({ timeout: 1500 }).catch(() => '')
     if (signedInPage(source, frame.url(), text, await frame.locator('input[type=password]:visible').count().catch(() => 0) > 0)) return true
   }
