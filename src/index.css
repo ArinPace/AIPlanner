@@ -1592,6 +1592,7 @@ textarea {
 .files-bulk-toolbar input, .files-select-box { flex: 0 0 17px; width: 17px; height: 17px; accent-color: #1a73e8; }
 .files-selection-row { display: flex; gap: 12px; align-items: center; min-width: 0; }
 .files-selection-row .text-file-row { flex: 1; min-width: 0; width: 100%; }
+.document-info strong { overflow-wrap: anywhere; }
 .assistant-chat-row:has(details[open]) { padding-bottom: 88px; }
 .assistant-chat-options summary { cursor: pointer; list-style: none; display: grid; place-items: center; height: 42px; border-radius: 8px; color: #666; font-size: 20px; }
 .assistant-chat-options summary::-webkit-details-marker { display: none; }
