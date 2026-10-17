@@ -8,6 +8,18 @@ const calendar: StoredState = {events:[],tags:[],hiddenTagIds:[],zoom:1}
 const files: FilesState = {folders:[],files:[],documents:[]}
 const update = {source:'brightspace',course:'Intro to CS',title:'Assignment 2',url:'https://brightspace.nyu.edu/d2l/assignment/2',summary:'Birthdays.java',dueAt:'2026-09-27T23:59:00-04:00'}
 
+test('identical source URLs and titles in different courses never overwrite each other',()=>{
+  const other={...update,course:'Cohort Leadership',summary:'Different course instructions'}
+  const first=mergeUpdates(calendar,files,[update,other])
+  assert.equal(first.files.files.length,2)
+  assert.notEqual(first.files.files[0].folderId,first.files.files[1].folderId)
+  assert.equal(first.calendar.events.length,2)
+  const refreshed=mergeUpdates(first.calendar,first.files,[{...other,summary:'Updated leadership instructions'}])
+  assert.equal(refreshed.files.files.length,2)
+  assert.match(refreshed.files.files[0].content,/Birthdays.java/)
+  assert.match(refreshed.files.files[1].content,/Updated leadership instructions/)
+})
+
 test('Albert and WhatsApp updates require their actual source hosts',()=>{
   for(const [source,url] of [['albert','https://sis.nyu.edu/student'],['whatsapp','https://web.whatsapp.com/']]){
     assert.equal(parseUpdates({summary:'Checked',needsLogin:false,updates:[{...update,source,url}]}).updates[0].source,source)
