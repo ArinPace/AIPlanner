@@ -118,24 +118,28 @@ export async function handleVmRequest(request: Request, path: string, username: 
   const url = new URL(request.url)
   if (request.method === 'GET' && path === '/api/agent/vm') {
     checked(await db().from('planner_vm_settings').upsert({ username }, { onConflict: 'username', ignoreDuplicates: true }))
-    const [hosts, chats, settings, runs, provisioning, accounts] = await Promise.all([
+    const [hosts, chats, settings, runs, provisioning, accounts, deletedChats] = await Promise.all([
       db().from('planner_vm_hosts').select(publicHost).eq('username', username).is('revoked_at', null).order('created_at', { ascending: false }),
-      db().from('planner_vm_chats').select('id,title,archived,created_at,updated_at').eq('username', username).order('updated_at', { ascending: false }).limit(100),
+      db().from('planner_vm_chats').select('id,title,archived,created_at,updated_at').eq('username', username).is('deleted_at',null).order('updated_at', { ascending: false }).limit(100),
       db().from('planner_vm_settings').select('sources,schedule_enabled,sites,ai_provider,schedule').eq('username', username).single(),
       db().from('planner_vm_jobs').select(publicJob).eq('username', username).order('created_at', { ascending: false }).limit(20),
       db().from('planner_vm_provisioning').select('status,error,wake_until,power_state,power_updated_at').eq('username', username).maybeSingle(),
       db().from('planner_browser_accounts').select('id,source,identity,label,active,verified_at').eq('username',username).order('verified_at',{ascending:false}),
+      db().from('planner_vm_chats').select('id,title,archived,created_at,updated_at,deleted_at').eq('username',username).not('deleted_at','is',null).gt('deleted_at',new Date(Date.now()-30*86400000).toISOString()).order('deleted_at',{ascending:false}).limit(1000),
     ])
     const machine = checked(provisioning) || null
     const connectedHosts = checked(hosts).map(h => ({ ...h, online: hostOnline(h.heartbeat_at) }))
     const wantsWake = Date.parse(machine?.wake_until || '') > Date.now() || checked(runs).some(r => ['queued','running'].includes(r.status))
     const freshPower = Date.now() - Date.parse(machine?.power_updated_at || '') < 60000
     const power = !connectedHosts.length ? 'preparing' : freshPower ? machine?.power_state === 'Running' ? 'online' : wantsWake ? 'starting' : 'offline' : connectedHosts.some(h => h.online) ? 'online' : wantsWake ? 'starting' : 'offline'
-    return json({ hosts: connectedHosts, power, accounts:checked(accounts), google:await googleCalendarStatus(username), chats: checked(chats), settings: checked(settings), runs: checked(runs), provisioning: machine, personalChatGptAvailable: personalChatGptAllowed(username), hostedChatGptAvailable: false, recordings: false })
+    const bin=checked(deletedChats),removed=new Set(bin.map(c=>c.id))
+    return json({ hosts: connectedHosts, power, accounts:checked(accounts), google:await googleCalendarStatus(username), chats: checked(chats), deletedChats:bin, settings: checked(settings), runs: checked(runs).filter(r=>!removed.has(r.chat_id)), provisioning: machine, personalChatGptAvailable: personalChatGptAllowed(username), hostedChatGptAvailable: false, recordings: false })
   }
   if (request.method === 'GET' && path === '/api/agent/vm/messages') {
     const chatId = url.searchParams.get('chat')
     if (!uuid(chatId)) throw new ApiError(400, 'Choose a chat.')
+    const owned=checked(await db().from('planner_vm_chats').select('id').eq('username',username).eq('id',chatId).is('deleted_at',null).maybeSingle())
+    if(!owned)throw new ApiError(404,'Chat not found. Restore deleted chats from the Bin first.')
     return json({ jobs: checked(await db().from('planner_vm_jobs').select(publicJob).eq('username', username).eq('chat_id', chatId).order('created_at', { ascending: false }).limit(100)).reverse() })
   }
   if (request.method !== 'POST') throw new ApiError(405, 'Use POST.')
@@ -234,16 +238,8 @@ export async function handleVmRequest(request: Request, path: string, username: 
   if (path === '/api/agent/vm/chats/bulk') return json(await bulkManageChats(username,input))
   if (path === '/api/agent/vm/chats/archive' || path === '/api/agent/vm/chats/delete') {
     if (!uuid(input.id)) throw new ApiError(400,'Choose a chat.')
-    const owned = checked(await db().from('planner_vm_chats').select('id').eq('id',input.id).eq('username',username).maybeSingle())
-    if (!owned) throw new ApiError(404,'Chat not found.')
-    if (path.endsWith('/archive')) {
-      if (typeof input.archived !== 'boolean') throw new ApiError(400,'Choose archive or restore.')
-      checked(await db().from('planner_vm_chats').update({ archived:input.archived }).eq('id',input.id).eq('username',username))
-    } else {
-      // The owned chat's jobs cascade; their leases become invalid immediately.
-      checked(await db().from('planner_vm_chats').delete().eq('id',input.id).eq('username',username))
-    }
-    return json({ok:true})
+    if(path.endsWith('/archive') && typeof input.archived!=='boolean')throw new ApiError(400,'Choose archive or restore.')
+    return json(await bulkManageChats(username,{ids:[input.id],action:path.endsWith('/delete')?'delete':input.archived?'archive':'restore'}))
   }
   if (path === '/api/agent/vm/cancel') {
     if (!uuid(input.id)) throw new ApiError(400, 'Choose a run.')
@@ -254,7 +250,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
     if (!uuid(input.chatId)) throw new ApiError(400, 'Choose a chat.')
     let message: string
     try { message = vmMessage(input.message) } catch (e) { throw new ApiError(400, (e as Error).message) }
-    const chat = checked(await db().from('planner_vm_chats').select('id,thread_id,archived').eq('id', input.chatId).eq('username', username).maybeSingle())
+    const chat = checked(await db().from('planner_vm_chats').select('id,thread_id,archived').eq('id', input.chatId).eq('username', username).is('deleted_at',null).maybeSingle())
     if (!chat) throw new ApiError(404, 'Chat not found.')
     if (chat.archived) throw new ApiError(409,'Restore this archived chat before sending a message.')
     const host = checked(await db().from('planner_vm_hosts').select('id').eq('username', username).is('revoked_at', null).maybeSingle())

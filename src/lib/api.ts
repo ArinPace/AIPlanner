@@ -86,6 +86,9 @@ export function loadFiles() {
 export function saveFiles(state: FilesState) {
   return request<{ ok: boolean; revision?: number }>('/api/files', { method: 'PUT', body: JSON.stringify(state) })
 }
+export interface FileBinEntry {id:string;names:string[];item_count:number;deleted_at:string;expires_at:string}
+export function loadFileBin(){return request<{items:FileBinEntry[]}>('/api/files/bin')}
+export function fileBinAction(action:'trash'|'restore'|'purge',ids:string[],revision:number){return request<FilesState>('/api/files/'+action,{method:'POST',body:JSON.stringify({ids,revision})})}
 
 export async function uploadPdf(folderId: string, file: File) {
   if (!(await file.slice(0, 1024).text()).includes('%PDF-')) throw new Error('Choose a valid PDF file.')

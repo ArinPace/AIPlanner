@@ -8,6 +8,7 @@ import { handleMcpRequest } from './mcp.js'
 import { handleChatLinks } from './chat-links.js'
 import { handleVmRequest, handleVmWorker } from './vm.js'
 import { handleVmPool, queuePersonalVm, registerVmHost, touchVmActivity } from './vm-host.js'
+import { handleFilesBin, preserveRemovedFiles } from './files-bin.js'
 
 const BUCKET = 'planner-pdfs'
 let client: SupabaseClient | undefined
@@ -77,7 +78,7 @@ async function setFiles(username: string, next: FilesState, previous: FilesState
   if (!rows.length) throw new ApiError(409, 'Files changed in another tab. Reload to see the latest version before saving again.')
   return { ...state, revision: rows[0].revision }
 }
-async function cleanupUploads(username: string) {
+export async function cleanupUploads(username: string) {
   const uploads = dataResult(await db().from('planner_uploads').select('id,storage_path').eq('username', username).or(`status.eq.deleted,and(status.eq.pending,expires_at.lt.${new Date().toISOString()})`))
   if (!uploads.length) return
   const { error } = await db().storage.from(BUCKET).remove(uploads.map((upload) => upload.storage_path))
@@ -150,6 +151,7 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
       const row = dataResult(await db().from('planner_calendars').select('state,revision').eq('username', username).single())
       return json({ ...row.state, revision: row.revision })
     }
+    if (['/api/files/bin','/api/files/trash','/api/files/restore','/api/files/purge'].includes(path))return await handleFilesBin(request,path,username)
     if (path === '/api/calendar' && method === 'PUT') {
       const input = await body(request)
       if (!Array.isArray(input.events) || !Array.isArray(input.tags) || !Array.isArray(input.hiddenTagIds)) throw new ApiError(400, 'Invalid calendar data.')
@@ -173,9 +175,7 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
         const uploads = dataResult(await db().from('planner_uploads').select('id,size,status').eq('username', username).in('id', pdfs.map((pdf) => pdf.id)))
         if (pdfs.some((pdf) => !uploads.some((upload) => upload.id === pdf.id && upload.status === 'complete' && upload.size === pdf.size))) throw new ApiError(400, 'A PDF is not available in this account. Reload your files.')
       }
-      const saved = await setFiles(username, input, previous)
-      const removed = (previous.documents ?? []).filter((document) => document.kind === 'pdf' && !input.documents?.some((item) => item.id === document.id))
-      if (removed.length) result(await db().from('planner_uploads').update({ status: 'deleted' }).eq('username', username).in('id', removed.map((document) => document.id)))
+      const saved = await preserveRemovedFiles(username,input,previous) || await setFiles(username, input, previous)
       await cleanupUploads(username)
       return json({ ok: true, revision: saved.revision })
     }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { downloadPdf, loadFiles, saveFiles, uploadPdf } from '../lib/api'
+import { downloadPdf, loadFiles, saveFiles, uploadPdf, loadFileBin, fileBinAction, type FileBinEntry } from '../lib/api'
 import { TAG_COLORS } from '../lib/colors'
 import { descendantIds, folderPath, validateFilesState, type FilesState, type PlannerFolder, type PlannerTextFile, type PlannerDocument } from '../lib/files'
 import { CloseIcon, PlusIcon, TrashIcon } from './Icons'
@@ -86,6 +86,10 @@ export function FilesView({ active, onUnsavedChange }: { active: boolean; onUnsa
   const [labelFilter, setLabelFilter] = useState('')
   const [sort, setSort] = useState('name')
   const [notice, setNotice] = useState('')
+  const [bin,setBin]=useState(false)
+  const [binItems,setBinItems]=useState<FileBinEntry[]>([])
+  const [selecting,setSelecting]=useState(false)
+  const [selectedIds,setSelectedIds]=useState<string[]>([])
   const saving = useRef(false)
   const storedFile = state?.files.find((file) => file.id === fileDraft?.id)
   const dirty = Boolean(fileDraft && (!storedFile || fileDraft.name !== storedFile.name || fileDraft.content !== storedFile.content || fileDraft.folderId !== storedFile.folderId))
@@ -105,12 +109,13 @@ export function FilesView({ active, onUnsavedChange }: { active: boolean; onUnsa
       if (refreshing || document.visibilityState === 'hidden') return
       refreshing = true
       try {
-        const data = await loadFiles(); validateFilesState(data)
+        const [data,deleted]=await Promise.all([loadFiles(),loadFileBin()]); validateFilesState(data)
         if (cancelled) return
         setState(current => current && current.revision !== undefined && current.revision === data.revision ? current : data)
         setFileDraft(current => current ? data.files.find(file => file.id === current.id) ?? null : null)
         setFolderId(current => current && data.folders.some(folder => folder.id === current) ? current : null)
         setLoadError('')
+        setBinItems(deleted.items)
       } catch (err) { if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Could not load your files.') }
       finally { refreshing = false }
     }
@@ -143,7 +148,7 @@ export function FilesView({ active, onUnsavedChange }: { active: boolean; onUnsa
   }
   function openFolder(id: string | null) {
     if (!mayLeaveEditor()) return
-    setFolderId(id); setFileDraft(null); setQuery(''); setLabelFilter(''); setError(''); setNotice('')
+    setBin(false);setSelectedIds([]);setSelecting(false);setFolderId(id); setFileDraft(null); setQuery(''); setLabelFilter(''); setError(''); setNotice('')
   }
   function openFile(file: PlannerTextFile) {
     if (!mayLeaveEditor()) return
@@ -161,18 +166,12 @@ export function FilesView({ active, onUnsavedChange }: { active: boolean; onUnsa
     if (await persist({ ...state, files: [...state.files.filter((item) => item.id !== file.id), file] })) setFileDraft(file)
   }
   async function deleteFile() {
-    if (!state || !fileDraft || busy || !window.confirm(`Delete “${fileDraft.name}”? This cannot be undone.`)) return
-    if (await persist({ ...state, files: state.files.filter((file) => file.id !== fileDraft.id) })) setFileDraft(null)
+    if (!fileDraft)return
+    await binAction('trash',[fileDraft.id])
   }
   async function deleteFolder(folder: PlannerFolder) {
     if (!state || busy) return
-    const ids = descendantIds(state.folders, folder.id)
-    const fileCount = state.files.filter((file) => ids.has(file.folderId)).length + (state.documents ?? []).filter((document) => ids.has(document.folderId)).length
-    if (!window.confirm(`Delete “${folder.name}”, its ${ids.size - 1} subfolder(s), and ${fileCount} file(s) and link(s)? This cannot be undone.`)) return
-    if (await persist({ ...state, folders: state.folders.filter((item) => !ids.has(item.id)), files: state.files.filter((file) => !ids.has(file.folderId)), documents: (state.documents ?? []).filter((document) => !ids.has(document.folderId)) })) {
-      if (folderId && ids.has(folderId)) setFolderId(folder.parentId)
-      if (fileDraft && ids.has(fileDraft.folderId)) setFileDraft(null)
-    }
+    await binAction('trash',[folder.id])
   }
   async function addPdf(file: File) {
     if (!folderId || saving.current) return
@@ -184,8 +183,21 @@ export function FilesView({ active, onUnsavedChange }: { active: boolean; onUnsa
     finally { saving.current = false; setBusy(false) }
   }
   async function deleteDocument(document: PlannerDocument) {
-    if (!state || busy || !window.confirm(`Delete “${document.name}”? This cannot be undone.`)) return
-    await persist({ ...state, documents: (state.documents ?? []).filter((item) => item.id !== document.id) })
+    await binAction('trash',[document.id])
+  }
+  async function binAction(action:'trash'|'restore'|'purge',ids:string[]){
+    if(!state || busy || !ids.length || !mayLeaveEditor())return
+    if(action==='trash' && !window.confirm(`Move ${ids.length} selected item(s) to the Bin? Selected folders include everything inside them. Restore them within 30 days.`))return
+    if(action==='purge' && !window.confirm('Permanently delete the selected Bin items? This cannot be undone.'))return
+    saving.current=true;setBusy(true);setError('')
+    try{
+      const saved=await fileBinAction(action,ids,state.revision!)
+      setState(saved);setFileDraft(null);setSelectedIds([]);setSelecting(false)
+      setFolderId(current=>saved.folders.some(f=>f.id===current)?current:null)
+      setBinItems((await loadFileBin()).items)
+      setNotice(action==='trash'?'Moved to Bin. You can restore these items for 30 days.':action==='restore'?'Items restored.':'Items permanently deleted.')
+    }catch(e){setError(e instanceof Error?e.message:'Could not update the Bin.')}
+    finally{saving.current=false;setBusy(false)}
   }
   async function getPdf(document: PlannerDocument) {
     setError('')
@@ -223,10 +235,15 @@ export function FilesView({ active, onUnsavedChange }: { active: boolean; onUnsa
   const compare = (a: { name: string; updatedAt: string }, b: { name: string; updatedAt: string }) => sort === 'updated' ? b.updatedAt.localeCompare(a.updatedAt) : a.name.localeCompare(b.name, undefined, { numeric: true })
   visibleFolders.sort(compare); visibleFiles.sort(compare); visibleDocuments.sort(compare)
 
+  function selectBox(item:{id:string;name:string}) {
+    return <input type="checkbox" className="files-select-box" aria-label={'Select '+item.name} checked={selectedIds.includes(item.id)} disabled={busy || selectedIds.length>=100 && !selectedIds.includes(item.id)} onChange={e=>setSelectedIds(ids=>e.target.checked?[...ids,item.id]:ids.filter(id=>id!==item.id))}/>
+  }
+  if(bin)return <main className="files-workspace"><aside className="files-sidebar"><button className="folder-nav" onClick={()=>{setBin(false);setSelectedIds([])}}>Back to Files</button></aside><section className="files-content" aria-label="Files Bin"><h1>Bin</h1><p className="quiet">Deleted items are kept for 30 days, then permanently deleted. Items deleted together are restored together.</p><div className="files-bulk-toolbar"><label><input type="checkbox" aria-label="Select all Bin items" checked={binItems.length>0 && binItems.slice(0,100).every(i=>selectedIds.includes(i.id))} disabled={busy} onChange={e=>setSelectedIds(e.target.checked?binItems.slice(0,100).map(i=>i.id):[])}/>Select all (up to 100)</label><span>{selectedIds.length} selected</span><button className="today-btn" disabled={busy || !selectedIds.length} onClick={()=>void binAction('restore',selectedIds)}>Restore selected</button><button className="danger-btn" disabled={busy || !selectedIds.length} onClick={()=>void binAction('purge',selectedIds)}>Delete permanently</button></div>{error && <p role="alert" className="save-banner">{error}</p>}<p role="status">{busy?'Updating Bin...':notice}</p><div className="files-list">{binItems.map(item=><article className="document-row" key={item.id}>{selectBox({id:item.id,name:item.names.join(', ')})}<div className="document-info"><strong>{item.names.join(', ')}</strong><p className="quiet">{item.item_count} item(s) - Deleted {new Date(item.deleted_at).toLocaleString()} - {Math.max(0,Math.ceil((Date.parse(item.expires_at)-Date.now())/86400000))} days left</p><button className="text-btn" disabled={busy} onClick={()=>void binAction('restore',[item.id])}>Restore</button></div></article>)}{!binItems.length && <p className="quiet">Bin is empty.</p>}</div></section></main>
   return <main className="files-workspace">
     <aside className="files-sidebar" aria-label="Folders">
       <div className="files-sidebar-heading"><h2>My folders</h2><button type="button" className="icon-btn" aria-label="New folder" disabled={busy} onClick={() => { setError(''); setFolderDraft({ id: crypto.randomUUID(), parentId: folderId, name: '', labels: [], color: TAG_COLORS[state.folders.length % TAG_COLORS.length], updatedAt: new Date().toISOString() }) }}><PlusIcon /></button></div>
       <button type="button" className={`folder-nav ${folderId === null ? 'is-active' : ''}`} onClick={() => openFolder(null)}><FolderIcon size={20} />All files</button>
+      <button type="button" className="folder-nav" onClick={()=>{if(mayLeaveEditor()){setBin(true);setFileDraft(null);setSelectedIds([]);setError('');setNotice('')}}}><TrashIcon size={18}/>Bin ({binItems.reduce((n,i)=>n+i.item_count,0)})</button>
       <nav className="folder-navigation" aria-label="Browse folders">{state.folders.map((folder) => ({ folder, path: folderPath(state.folders, folder.id) })).sort((a, b) => a.path.map((part) => part.name).join('/').localeCompare(b.path.map((part) => part.name).join('/'))).map(({ folder, path: parts }) => <button type="button" key={folder.id} className={`folder-nav ${folderId === folder.id ? 'is-active' : ''}`} style={{ paddingLeft: 12 + Math.min(parts.length - 1, 5) * 14 }} title={parts.map((part) => part.name).join(' / ')} onClick={() => openFolder(folder.id)}><FolderIcon color={folder.color} size={20} /><span>{folder.name}</span></button>)}</nav>
       {!state.folders.length && <p className="quiet files-sidebar-hint">Create a folder for your class notes, ideas, or plans.</p>}
       <p className="quiet files-sidebar-foot">{state.folders.length} folders · {state.files.length + (state.documents?.length ?? 0)} items</p>
@@ -236,14 +253,15 @@ export function FilesView({ active, onUnsavedChange }: { active: boolean; onUnsa
       <div className="files-title-row"><div className="files-heading">{currentFolder && <FolderIcon color={currentFolder.color} size={34} />}<div><h1>{currentFolder?.name ?? 'Files'}</h1><p className="quiet">{currentFolder ? 'Notes and documents, right where they belong.' : 'Notes, PDFs, and links, organized in one place.'}</p></div></div><div className="files-actions"><button type="button" className="today-btn" disabled={busy} onClick={() => { setError(''); setFolderDraft({ id: crypto.randomUUID(), parentId: folderId, name: '', labels: [], color: TAG_COLORS[state.folders.length % TAG_COLORS.length], updatedAt: new Date().toISOString() }) }}><PlusIcon size={16} />New folder</button><button type="button" className="primary-btn" disabled={!folderId || busy} title={!folderId ? 'Open a folder first to create a text file' : undefined} onClick={newFile}><PlusIcon size={16} />New text file</button><button type="button" className="today-btn" disabled={!folderId || busy} onClick={() => uploadRef.current?.click()}>Upload PDF</button><button type="button" className="today-btn" disabled={!folderId || busy} onClick={newLink}>Add link</button><input ref={uploadRef} className="sr-only" type="file" accept="application/pdf,.pdf" aria-label="Upload PDF file" disabled={!folderId || busy} onChange={(event) => { const file = event.target.files?.[0]; if (file) void addPdf(file); event.target.value = '' }} /></div></div>
       {currentFolder && <div className="folder-details">{currentFolder.labels.map((label) => <span className="file-label" key={label}>{label}</span>)}<button type="button" className="text-btn" disabled={busy} onClick={() => { setError(''); setFolderDraft(currentFolder) }}>Edit folder · labels · color · location</button><button type="button" className="danger-btn" disabled={busy} onClick={() => void deleteFolder(currentFolder)}><TrashIcon size={16} />Delete folder</button></div>}
       <div className="files-filters"><label className="files-search"><span className="sr-only">Search files and folders</span><input type="text" placeholder="Search all folders, files, links, or text…" value={query} onChange={(event) => setQuery(event.target.value)} /></label><label><span className="sr-only">Filter by label</span><select value={labelFilter} onChange={(event) => setLabelFilter(event.target.value)}><option value="">All labels</option>{allLabels.map((label) => <option key={label}>{label}</option>)}</select></label><label><span className="sr-only">Sort files and folders</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="name">Name A–Z</option><option value="updated">Recently updated</option></select></label></div>
+      <div className="files-bulk-toolbar"><button type="button" className="today-btn" disabled={busy} onClick={()=>{setSelecting(v=>!v);setSelectedIds([])}}>{selecting?'Cancel selection':'Select items'}</button>{selecting && <><label><input type="checkbox" aria-label="Select all visible files" disabled={busy} checked={[...visibleFolders,...visibleFiles,...visibleDocuments].length>0 && [...visibleFolders,...visibleFiles,...visibleDocuments].slice(0,100).every(i=>selectedIds.includes(i.id))} onChange={e=>setSelectedIds(e.target.checked?[...visibleFolders,...visibleFiles,...visibleDocuments].slice(0,100).map(i=>i.id):[])}/>Select all (up to 100)</label><span>{selectedIds.length} selected</span><button type="button" className="danger-btn" disabled={busy || !selectedIds.length} onClick={()=>void binAction('trash',selectedIds)}>Move selected to Bin</button></>}</div>
       <div className="files-status" role="status">{busy ? 'Saving…' : dirty ? 'Unsaved text changes — click Save text file' : notice}</div>
       {error && !folderDraft && !documentDraft && <p role="alert" className="save-banner">{error}</p>}
       <div className={`files-panels ${fileDraft ? 'has-editor' : ''}`}>
         <div className="files-list">
           {searching && <p className="quiet files-result-count">{visibleFolders.length + visibleFiles.length + visibleDocuments.length} results across all folders <button type="button" className="text-btn" onClick={() => { setQuery(''); setLabelFilter('') }}>Clear search</button></p>}
-          {visibleFolders.map((folder) => <article key={folder.id} className="folder-card"><button type="button" className="folder-card-open" onClick={() => openFolder(folder.id)}><FolderIcon color={folder.color} size={36} /><div><strong>{folder.name}</strong><p className="quiet">{searching ? folderPath(state.folders, folder.parentId).map((part) => part.name).join(' / ') || 'All files' : `${state.folders.filter((item) => item.parentId === folder.id).length} folders · ${state.files.filter((file) => file.folderId === folder.id).length + (state.documents ?? []).filter((document) => document.folderId === folder.id).length} items`}</p><div className="file-labels">{folder.labels.map((label) => <span className="file-label" key={label}>{label}</span>)}</div></div></button><button type="button" className="text-btn" aria-label={`Edit folder ${folder.name}`} disabled={busy} onClick={() => { setError(''); setFolderDraft(folder) }}>Edit</button></article>)}
-          {visibleFiles.map((file) => <button type="button" key={file.id} className={`text-file-row ${fileDraft?.id === file.id ? 'is-active' : ''}`} onClick={() => openFile(file)}><FileIcon /><div><strong>{file.name}</strong><p className="quiet">{searching ? folderPath(state.folders, file.folderId).map((part) => part.name).join(' / ') : new Date(file.updatedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</p><p className="file-preview">{file.content.slice(0, 120) || 'Empty text file'}</p></div></button>)}
-          {visibleDocuments.map((document) => <article className="document-row" key={document.id}><div className="document-kind" aria-hidden="true">{document.kind === 'pdf' ? 'PDF' : '↗'}</div><div className="document-info"><strong>{document.name}</strong><p className="quiet">{document.kind === 'pdf' ? `${Math.max(1, Math.round((document.size ?? 0) / 1024)).toLocaleString()} KB · PDF document` : document.url}</p>{searching && <p className="quiet">{folderPath(state.folders, document.folderId).map((part) => part.name).join(' / ')}</p>}<div className="document-actions">{document.kind === 'link' ? <a href={document.url} target="_blank" rel="noopener noreferrer">Open link ↗</a> : <button type="button" className="text-btn accent-link" onClick={() => void getPdf(document)}>Download PDF</button>}<button type="button" className="text-btn" aria-label={`Edit ${document.name}`} disabled={busy} onClick={() => { setError(''); setDocumentDraft(document) }}>Edit / move</button><button type="button" className="danger-btn" aria-label={`Delete ${document.name}`} disabled={busy} onClick={() => void deleteDocument(document)}><TrashIcon size={14} /></button></div></div></article>)}
+          {visibleFolders.map((folder) => <article key={folder.id} className="folder-card">{selecting && selectBox(folder)}<button type="button" className="folder-card-open" onClick={() => openFolder(folder.id)}><FolderIcon color={folder.color} size={36} /><div><strong>{folder.name}</strong><p className="quiet">{searching ? folderPath(state.folders, folder.parentId).map((part) => part.name).join(' / ') || 'All files' : `${state.folders.filter((item) => item.parentId === folder.id).length} folders · ${state.files.filter((file) => file.folderId === folder.id).length + (state.documents ?? []).filter((document) => document.folderId === folder.id).length} items`}</p><div className="file-labels">{folder.labels.map((label) => <span className="file-label" key={label}>{label}</span>)}</div></div></button><button type="button" className="text-btn" aria-label={`Edit folder ${folder.name}`} disabled={busy} onClick={() => { setError(''); setFolderDraft(folder) }}>Edit</button></article>)}
+          {visibleFiles.map((file) => <div key={file.id} className="files-selection-row">{selecting && selectBox(file)}<button type="button" className={`text-file-row ${fileDraft?.id === file.id ? 'is-active' : ''}`} onClick={() => openFile(file)}><FileIcon /><div><strong>{file.name}</strong><p className="quiet">{searching ? folderPath(state.folders, file.folderId).map((part) => part.name).join(' / ') : new Date(file.updatedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</p><p className="file-preview">{file.content.slice(0, 120) || 'Empty text file'}</p></div></button></div>)}
+          {visibleDocuments.map((document) => <article className="document-row" key={document.id}>{selecting && selectBox(document)}<div className="document-kind" aria-hidden="true">{document.kind === 'pdf' ? 'PDF' : '↗'}</div><div className="document-info"><strong>{document.name}</strong><p className="quiet">{document.kind === 'pdf' ? `${Math.max(1, Math.round((document.size ?? 0) / 1024)).toLocaleString()} KB · PDF document` : document.url}</p>{searching && <p className="quiet">{folderPath(state.folders, document.folderId).map((part) => part.name).join(' / ')}</p>}<div className="document-actions">{document.kind === 'link' ? <a href={document.url} target="_blank" rel="noopener noreferrer">Open link ↗</a> : <button type="button" className="text-btn accent-link" onClick={() => void getPdf(document)}>Download PDF</button>}<button type="button" className="text-btn" aria-label={`Edit ${document.name}`} disabled={busy} onClick={() => { setError(''); setDocumentDraft(document) }}>Edit / move</button><button type="button" className="danger-btn" aria-label={`Delete ${document.name}`} disabled={busy} onClick={() => void deleteDocument(document)}><TrashIcon size={14} /></button></div></div></article>)}
           {!visibleFolders.length && !visibleFiles.length && !visibleDocuments.length && <div className="files-empty"><FolderIcon color={currentFolder?.color} size={56} /><h2>{searching ? 'No matches found' : folderId ? 'Room for your next idea' : 'Start with a folder'}</h2><p className="quiet">{searching ? 'Try a different search or label.' : folderId ? 'Create a text file, upload a PDF, save a link, or add a subfolder.' : 'Add a folder, choose its color, and keep your notes, PDFs, and links inside.'}</p>{!searching && <button type="button" className="primary-btn" onClick={folderId ? newFile : () => { setError(''); setFolderDraft({ id: crypto.randomUUID(), parentId: null, name: '', labels: [], color: TAG_COLORS[0], updatedAt: new Date().toISOString() }) }}>{folderId ? 'Create text file' : 'Create your first folder'}</button>}</div>}
         </div>
         {fileDraft && <form className="text-editor" onSubmit={saveFile}>

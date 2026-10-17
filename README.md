@@ -240,6 +240,32 @@ schedule to avoid duplicate collectors. Offline slots are not backfilled.
 
 ## Validation
 
+### Recycle Bins and website browser routing
+
+Files supports selection across folders, notes, links and PDFs. Deletion moves
+the selected items and folder descendants into a private 30-day Bin. A bulk
+deletion is shown as one group and restores together. Restores preserve content
+and folder metadata, rename name conflicts, and use a recovery folder when the
+original parent no longer exists. Existing PUT-based deletions also go to Bin.
+PDF objects remain private and intact until final deletion. File Bin changes and
+Files revisions commit in one service-only database transaction.
+
+Chat deletion, including bulk deletion, retains the chat and messages for 30
+days, cancels pending/running work, and hides the chat until restored. Restoring
+retains archive status. Both Bins offer explicit permanent deletion with a UI
+confirmation. Chat Bin expiry cascades through planner job/message records.
+The `ai-planner-bin-retention` database cron purges expired records every five
+minutes; the existing minute-based authenticated agent tick removes PDF objects
+marked for deletion through the Storage API and retries failures. Cleanup does
+not require an open client or running per-user VM. These Bins use hosted storage.
+
+All new website connections now use installed regular Chrome with default
+security settings. Browser sources share one registry; future entries inherit
+the same setup, verification and agent page/image routing. Old browser sessions
+are retained without copying cookies and migrate source-by-source on explicit
+reconnect, or when opening an expired session. Google and X always use regular
+Chrome. Identity-provider policies and MFA can still require user action.
+
 ```powershell
 npm run build
 npx tsx --test server/agent.test.ts server/mcp.test.ts server/vm.test.ts

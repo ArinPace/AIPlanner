@@ -11,16 +11,14 @@ test('bulk chat actions validate the entire selection and mutate only owned IDs 
   let writes=0,requests=0
   globalThis.fetch=async(input,init)=>{
     const req=new Request(input,init),url=new URL(req.url);requests++
-    assert.equal(url.hostname,'chats.test');assert.ok(url.pathname.endsWith('/planner_vm_chats'));assert.equal(url.searchParams.get('username'),'eq.arin')
-    const filter=url.searchParams.get('id')!;assert.ok(filter.startsWith('in.('))
-    const ids=filter.slice(4,-1).split(',').map(id=>id.replaceAll('"',''))
-    if(req.method==='GET')return Response.json(ids.filter(id=>rows.has(id)).map(id=>({id})))
+    assert.equal(url.hostname,'chats.test');assert.ok(url.pathname.endsWith('/rpc/planner_manage_chats'))
+    const body=await req.json() as {p_username:string;p_ids:string[];p_action:string}
+    assert.equal(body.p_username,'arin');const ids=body.p_ids
+    if(ids.some(id=>!rows.has(id)))return Response.json({code:'P0001',message:'Some selected chats are unavailable.'},{status:400})
     writes++
-    if(req.method==='PATCH'){
-      const patch=await req.json() as {archived:boolean}
-      for(const id of ids)if(rows.has(id))rows.get(id)!.archived=patch.archived
-    }else {assert.equal(req.method,'DELETE');for(const id of ids)rows.delete(id)}
-    return Response.json(ids.map(id=>({id})))
+    if(body.p_action==='archive' || body.p_action==='restore')for(const id of ids)rows.get(id)!.archived=body.p_action==='archive'
+    if(body.p_action==='purge')for(const id of ids)rows.delete(id)
+    return Response.json({ok:true,ids,count:ids.length})
   }
   try {
     for(const input of [{ids:[],action:'delete'},{ids:[a,'bad'],action:'archive'},{ids:[a],action:'unknown'},{ids:Array(101).fill(a),action:'delete'}])await assert.rejects(()=>bulkManageChats('arin',input))
@@ -29,6 +27,8 @@ test('bulk chat actions validate the entire selection and mutate only owned IDs 
     const archived=await bulkManageChats('arin',{ids:[a,b,a],action:'archive'})
     assert.equal(archived.count,2);assert.equal(writes,1);assert.ok([...rows.values()].every(row=>row.archived))
     await bulkManageChats('arin',{ids:[a,b],action:'restore'});assert.equal(writes,2);assert.ok([...rows.values()].every(row=>!row.archived))
-    await bulkManageChats('arin',{ids:[a,b],action:'delete'});assert.equal(rows.size,0);assert.equal(writes,3)
+    await bulkManageChats('arin',{ids:[a,b],action:'delete'});assert.equal(rows.size,2);assert.equal(writes,3)
+    await bulkManageChats('arin',{ids:[a,b],action:'untrash'});assert.equal(rows.size,2)
+    await bulkManageChats('arin',{ids:[a,b],action:'purge'});assert.equal(rows.size,0)
   }finally{globalThis.fetch=oldFetch;for(const key of keys){if(env[key]===undefined)delete process.env[key];else process.env[key]=env[key]}}
 })

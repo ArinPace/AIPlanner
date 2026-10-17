@@ -23,6 +23,7 @@ export function AgentView({ active }: { active: boolean }) {
   const [sidebar, setSidebar] = useState(() => window.innerWidth > 700)
   const [panel, setPanel] = useState<'setup' | 'connections' | 'settings' | null>(null)
   const [showArchived, setShowArchived] = useState(false)
+  const [showBin,setShowBin]=useState(false)
   const [copied, setCopied] = useState('')
   const [chatAction, setChatAction] = useState<string | null>(null)
   const [selecting,setSelecting]=useState(false)
@@ -37,7 +38,7 @@ export function AgentView({ active }: { active: boolean }) {
   const powerLabel = { online: 'Online', offline: 'Offline', starting: 'Starting', preparing: 'Preparing' }[power]
   const title = state?.chats.find(c => c.id === chat)?.title || 'New chat'
   const archived = state?.chats.find(c=>c.id===chat)?.archived || false
-  const visibleChats = state?.chats.filter(c=>Boolean(c.archived)===showArchived) || []
+  const visibleChats = showBin ? state?.deletedChats || [] : state?.chats.filter(c=>Boolean(c.archived)===showArchived) || []
   const confirmedConnection=state?.runs.find(r=>r.result.connected && r.result.source && !dismissedConnections.includes(r.id) && now-Date.parse(r.result.connectedAt || '')<300000)
   const closePanel = useCallback(() => setPanel(null), [])
   const refresh = useCallback(async () => {
@@ -52,7 +53,7 @@ export function AgentView({ active }: { active: boolean }) {
     if (!active) return
     selectedChat.current=null
     const initial = window.setTimeout(() => {
-      setChat(null);setJobs([]);setMessage('');setError('');setLoadingChat(false);setPanel(null);setShowArchived(false);setSelecting(false);setSelectedIds([])
+      setChat(null);setJobs([]);setMessage('');setError('');setLoadingChat(false);setPanel(null);setShowArchived(false);setShowBin(false);setSelecting(false);setSelectedIds([])
       void refresh().catch(e => setError(e.message))
     }, 0)
     const timer = window.setInterval(() => void refresh().catch(e => setError(e.message)), 4000)
@@ -68,16 +69,17 @@ export function AgentView({ active }: { active: boolean }) {
     finally { if (selectedChat.current === id) setLoadingChat(false) }
   }
   function newChat() {
-    setShowArchived(false)
+    setShowArchived(false);setShowBin(false)
     setSelecting(false);setSelectedIds([])
     selectedChat.current = null; setChat(null); setJobs([]); setMessage(''); setError(''); setLoadingChat(false)
     if (window.innerWidth <= 700) setSidebar(false)
   }
-  async function manageSelected(action:'archive'|'restore'|'delete') {
+  async function manageSelected(action:'archive'|'restore'|'delete'|'untrash'|'purge') {
     if(chatAction || !selectedIds.length)return
     const ids=selectedIds.filter(id=>visibleChats.some(c=>c.id===id))
     if(!ids.length)return
-    if(action==='delete' && !window.confirm(`Permanently delete ${ids.length} selected chat${ids.length===1?'':'s'} and all their messages? This cannot be undone.`))return
+    if(action==='delete' && !window.confirm(`Move ${ids.length} selected chat(s) to the Bin? You can restore them for 30 days.`))return
+    if(action==='purge' && !window.confirm(`Permanently delete ${ids.length} selected chat(s) and their messages? This cannot be undone.`))return
     setChatAction('bulk');setError('')
     try {
       const result=await agentAction<{ids:string[]}>('vm/chats/bulk',{ids,action})
@@ -89,7 +91,7 @@ export function AgentView({ active }: { active: boolean }) {
   }
   async function manageChat(item: VmChat, action: 'archive' | 'delete') {
     if (chatAction) return
-    if (action === 'delete' && !window.confirm(`Delete “${item.title}” and its messages from the planner?`)) return
+    if (action === 'delete' && !window.confirm(`Move “${item.title}” to the Bin? You can restore it for 30 days.`)) return
     setChatAction(item.id); setError('')
     try {
       await agentAction('vm/chats/'+action,{ id:item.id, ...(action==='archive'?{archived:!item.archived}:{}) })
@@ -118,15 +120,17 @@ export function AgentView({ active }: { active: boolean }) {
     {sidebar && <aside className="assistant-sidebar" aria-label="Chat sidebar">
       <div className="assistant-sidebar-top"><strong>Your chats</strong><button type="button" className="icon-btn" aria-label="Hide chat sidebar" onClick={() => setSidebar(false)}><CloseIcon size={18}/></button></div>
       <button type="button" className="assistant-new-chat" onClick={newChat}><PlusIcon size={18}/>New chat</button>
-      <button type="button" className="assistant-archive-toggle" disabled={Boolean(chatAction)} aria-pressed={showArchived} onClick={()=>{setShowArchived(v=>!v);setSelectedIds([]);setSelecting(false)}}>{showArchived?'Back to chats':'Archived chats'}</button>
+      <button type="button" className="assistant-archive-toggle" disabled={Boolean(chatAction)} aria-pressed={showArchived} onClick={()=>{setShowBin(false);setShowArchived(v=>!v);setSelectedIds([]);setSelecting(false)}}>{showArchived?'Back to chats':'Archived chats'}</button>
+      <button type="button" className="assistant-archive-toggle" aria-pressed={showBin} disabled={Boolean(chatAction)} onClick={()=>{setShowBin(v=>!v);setSelectedIds([]);setSelecting(false)}}>{showBin?'Back from Bin':'Bin'}{!showBin && Boolean(state?.deletedChats?.length) && ' ('+state!.deletedChats!.length+')'}</button>
+      {showBin && <p className="assistant-bin-note">Deleted chats stay here for 30 days. Restoring keeps their messages and archive status.</p>}
       <button type="button" className="assistant-archive-toggle" disabled={Boolean(chatAction) || !visibleChats.length} aria-pressed={selecting} onClick={()=>{setSelecting(v=>!v);setSelectedIds([])}}>{selecting?'Cancel selection':'Select chats'}</button>
       {selecting && <div className="assistant-bulk-actions" aria-label="Selected chat actions">
-        <label><input type="checkbox" aria-label="Select all visible chats" disabled={Boolean(chatAction)} checked={visibleChats.length>0 && visibleChats.every(c=>selectedIds.includes(c.id))} onChange={e=>setSelectedIds(e.target.checked?visibleChats.map(c=>c.id):[])}/>Select all ({visibleChats.length})</label>
+        <label><input type="checkbox" aria-label="Select all visible chats" disabled={Boolean(chatAction)} checked={visibleChats.length>0 && visibleChats.slice(0,100).every(c=>selectedIds.includes(c.id))} onChange={e=>setSelectedIds(e.target.checked?visibleChats.slice(0,100).map(c=>c.id):[])}/>Select all ({visibleChats.length})</label>
         <span role="status">{selectedIds.length} selected</span>
-        <div><button type="button" disabled={!selectedIds.length || Boolean(chatAction)} onClick={()=>void manageSelected(showArchived?'restore':'archive')}>{showArchived?'Restore selected':'Archive selected'}</button><button type="button" className="assistant-bulk-delete" disabled={!selectedIds.length || Boolean(chatAction)} onClick={()=>void manageSelected('delete')}>Delete selected</button></div>
+        <div><button type="button" disabled={!selectedIds.length || Boolean(chatAction)} onClick={()=>void manageSelected(showBin?'untrash':showArchived?'restore':'archive')}>{showBin || showArchived?'Restore selected':'Archive selected'}</button><button type="button" className="assistant-bulk-delete" disabled={!selectedIds.length || Boolean(chatAction)} onClick={()=>void manageSelected(showBin?'purge':'delete')}>{showBin?'Delete permanently':'Delete selected'}</button></div>
         {chatAction==='bulk' && <span role="status">Updating chats…</span>}
       </div>}
-      <nav aria-label="Conversations" className="assistant-conversations">{visibleChats.map(item => <div className={'assistant-chat-row'+(selecting?' is-selecting':'')} key={item.id}>{selecting && <input type="checkbox" aria-label={'Select '+item.title} disabled={Boolean(chatAction)} checked={selectedIds.includes(item.id)} onChange={e=>setSelectedIds(ids=>e.target.checked?[...ids,item.id]:ids.filter(id=>id!==item.id))}/>}<button type="button" title={item.title} aria-current={item.id === chat ? 'page' : undefined} onClick={() => void chooseChat(item.id)}>{item.title}</button>{!selecting && <details className="assistant-chat-options"><summary aria-label={'Options for '+item.title}>⋯</summary><div><button disabled={Boolean(chatAction)} onClick={()=>void manageChat(item,'archive')}>{item.archived?'Restore chat':'Archive chat'}</button><button disabled={Boolean(chatAction)} onClick={()=>void manageChat(item,'delete')}>Delete chat</button></div></details>}</div>)}{state && !visibleChats.length && <p>{showArchived?'No archived chats.':'No conversations yet.'}</p>}</nav>
+      <nav aria-label="Conversations" className="assistant-conversations">{visibleChats.map(item => <div className={'assistant-chat-row'+(selecting?' is-selecting':'')} key={item.id}>{selecting && <input type="checkbox" aria-label={'Select '+item.title} disabled={Boolean(chatAction)} checked={selectedIds.includes(item.id)} onChange={e=>setSelectedIds(ids=>e.target.checked?[...ids,item.id]:ids.filter(id=>id!==item.id))}/>}<button type="button" title={item.title} aria-current={item.id === chat ? 'page' : undefined} disabled={showBin} onClick={() => void chooseChat(item.id)}>{item.title}{showBin && item.deleted_at && <small className="assistant-bin-expiry">{Math.max(0,Math.ceil((Date.parse(item.deleted_at)+30*86400000-now)/86400000))} days left</small>}</button>{!selecting && !showBin && <details className="assistant-chat-options"><summary aria-label={'Options for '+item.title}>⋯</summary><div><button disabled={Boolean(chatAction)} onClick={()=>void manageChat(item,'archive')}>{item.archived?'Restore chat':'Archive chat'}</button><button disabled={Boolean(chatAction)} onClick={()=>void manageChat(item,'delete')}>Delete chat</button></div></details>}</div>)}{state && !visibleChats.length && <p>{showBin?'Bin is empty.':showArchived?'No archived chats.':'No conversations yet.'}</p>}</nav>
       <button type="button" className="assistant-sidebar-settings" onClick={() => setPanel('settings')}><SettingsIcon size={18}/>Settings</button>
     </aside>}
     {sidebar && <button type="button" className="assistant-sidebar-scrim" aria-label="Close chat sidebar" onClick={() => setSidebar(false)}/>}

@@ -1,3 +1,4 @@
+import { cleanupBinStorage } from './files-bin.js'
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { generateText, jsonSchema, stepCountIs, tool } from 'ai'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
@@ -320,6 +321,7 @@ export async function handleAgentRequest(request: Request,path: string,username:
     const signed=secret && /^\d{13}$/.test(timestamp) && Math.abs(Date.now()-Number(timestamp))<120000 && timingSafeEqual(Buffer.from(sha(signature)),Buffer.from(sha(createHmac('sha256',secret).update(timestamp).digest('hex'))))
     if (!secret || (!signed && !timingSafeEqual(Buffer.from(sha(header)),Buffer.from(sha('Bearer '+secret))))) throw new ApiError(401,'Unauthorized.')
     await expireMcpBrowsers()
+    await cleanupBinStorage()
     const users=check(await db().from('planner_agent_settings').select('username,schedule_enabled').limit(100))
     const now=new Date(), local=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hourCycle:'h23'}).formatToParts(now)
     const part=(type:string)=>local.find(x=>x.type===type)?.value || ''
