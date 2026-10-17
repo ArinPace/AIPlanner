@@ -330,7 +330,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
         }}
       />
 
-      <div className="files-tab-panel" hidden={tab !== 'files'}><FilesView active={tab === 'files'} onUnsavedChange={setFilesUnsaved} /></div>
+      <div className="files-tab-panel" hidden={tab !== 'files'}><FilesView username={username} active={tab === 'files'} onUnsavedChange={setFilesUnsaved} /></div>
       <div className="agent-tab-panel" hidden={tab !== 'agent'}><AgentView active={tab === 'agent'} /></div>
       <div className="app-body" hidden={tab !== 'calendar'}>
         <Sidebar
