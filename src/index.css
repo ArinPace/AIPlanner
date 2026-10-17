@@ -1938,3 +1938,6 @@ textarea {
 
 .time-view-scroll { display: flex; flex: 1; min-height: 0; min-width: 0; overflow-x: auto; }
 
+
+.files-sidebar-add { flex: 0 0 auto; }
+.files-sidebar-add .files-add-menu { right: 0; min-width: 190px; max-width: calc(100vw - 32px); z-index: 80; }
