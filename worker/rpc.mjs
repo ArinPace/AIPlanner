@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
 
 export class CodexRpc {
-  constructor(command, args, options, notify = () => {}) {
+  constructor(command, args, options, notify = () => {}, onRequest) {
     this.next = 0; this.pending = new Map(); this.notify = notify
     this.child = spawn(command, args, { ...options, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
     // Never relay stderr: provider errors can contain request headers or credentials.
@@ -12,7 +12,8 @@ export class CodexRpc {
     createInterface({ input: this.child.stdout }).on('line', line => {
       let message; try { message = JSON.parse(line) } catch { return }
       if (message.id !== undefined && message.method) {
-        this.send({ id: message.id, error: { code: -32601, message: 'Interactive approvals are unavailable during unattended runs. Ask the user in chat.' } })
+        if (onRequest) Promise.resolve().then(()=>onRequest(message.method,message.params)).then(result=>this.send({id:message.id,result})).catch(()=>this.send({id:message.id,error:{code:-32601,message:'Approval was declined, unavailable, or expired. Do not retry or bypass it.'}}))
+        else this.send({ id: message.id, error: { code: -32601, message: 'Interactive approvals are unavailable during unattended runs. Ask the user in chat.' } })
       } else if (message.id !== undefined) {
         const pending = this.pending.get(message.id)
         if (pending) { this.pending.delete(message.id); clearTimeout(pending.timer); if (message.error) pending.reject(new Error('Codex rejected the request. Check model access and reconnect AI if needed.')); else pending.resolve(message.result) }
@@ -30,7 +31,7 @@ export class CodexRpc {
   fail(error) { for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(error) } this.pending.clear() }
   close() { this.fail(new Error('Agent stopped.')); this.child.kill() }
   async initialize() {
-    await this.request('initialize', { clientInfo: { name: 'ai_planner', title: 'AI Planner', version: '0.1.0' } })
+    await this.request('initialize', { clientInfo: { name: 'ai_planner', title: 'AI Planner', version: '0.1.0' }, capabilities:{experimentalApi:true} })
     this.send({ method: 'initialized' })
   }
 }

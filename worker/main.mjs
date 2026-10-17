@@ -10,6 +10,7 @@ import { connectPersonalChatGpt, disconnectPersonalChatGpt } from './oauth.mjs'
 import { connectPersonalDevice, disconnectPersonalDevice, personalCodexStatus } from './device-auth.mjs'
 import { claudeStatus, connectClaude, disconnectClaude, claudeChat } from './claude.mjs'
 import { whatsappPermissionText } from './whatsapp-permission.mjs'
+import { relayApproval } from './approval-bridge.mjs'
 
 const dataDir = process.env.PLANNER_DATA_DIR || '/var/lib/planner'
 const workerStartedAt = new Date().toISOString()
@@ -79,14 +80,14 @@ async function chat(job, auth, remote) {
     if (method === 'item/agentMessage/delta') reply = (reply + (params.delta || '')).slice(0, 80000)
     if (method === 'turn/completed') { completed = true; if (params.turn.status === 'completed') resolveDone(); else rejectDone(new Error('The agent run failed or was interrupted.')) }
     if (method === 'error' && !params.willRetry) rejectDone(new Error('The AI provider could not complete this run. Check account access and model availability.'))
-  })
+  }, (method,params)=>relayApproval(method,params,{api,job,report:()=>report()}))
   rpc.child.on('exit', () => { if (!completed) rejectDone(new Error('The agent runtime stopped before completion.')) })
   const report = () => api('progress', { id: job.id, lease: job.lease, reply, threadId })
   const heartbeat = setInterval(() => void report().catch(error => { rejectDone(error); rpc.close() }), 20000)
   const timeout = setTimeout(() => { rejectDone(new Error('The run exceeded its 15-minute limit.')); rpc.close() }, 15 * 60000)
   try {
     await rpc.initialize()
-    const params = { cwd: path.join(dataDir, 'workspace'), ...(process.env.PLANNER_MODEL ? { model: process.env.PLANNER_MODEL } : auth.type === 'codex' ? {} : { model: 'gpt-6-luna' }), approvalPolicy: 'never', sandbox: 'workspace-write', developerInstructions: instructions + '\n\n' + whatsappPermissionText(remote.whatsappReadConsentAt) }
+    const params = { cwd: path.join(dataDir, 'workspace'), ...(process.env.PLANNER_MODEL ? { model: process.env.PLANNER_MODEL } : auth.type === 'codex' ? {} : { model: 'gpt-6-luna' }), approvalPolicy: job.kind === 'sync' ? 'never' : 'on-request', sandbox: 'workspace-write', developerInstructions: instructions + '\n\n' + whatsappPermissionText(remote.whatsappReadConsentAt) }
     const thread = await rpc.request(threadId ? 'thread/resume' : 'thread/start', { ...params, ...(threadId ? { threadId, excludeTurns: true } : {}) }, 60000)
     threadId = thread.thread.id
     await report()

@@ -1947,3 +1947,10 @@ textarea {
 
 .apple-editor-shell[data-body-has-title=true] .apple-note-title { display: none; }
 .apple-note-location input { min-width: 0; width: 100%; border: 1px solid #ccc; border-radius: 5px; padding: 7px; background: white; }
+/* Runtime decisions stay inside the conversation on desktop and mobile. */
+.assistant-approval { padding: 18px; margin: 16px 0; border: 1px solid #d9b95a; border-radius: 16px; background: #fffaf0; overflow-wrap: anywhere; }
+.assistant-approval fieldset { border: 0; padding: 0; margin: 16px 0; min-width: 0; }
+.assistant-approval legend { font-weight: 600; margin-bottom: 8px; }
+.assistant-approval label { display: flex; align-items: flex-start; gap: 10px; margin: 10px 0; }
+.assistant-approval input { flex: 0 0 auto; margin-top: 5px; }
+.assistant-approval button { padding: 10px 16px; }

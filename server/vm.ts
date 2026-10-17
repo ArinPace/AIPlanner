@@ -10,6 +10,7 @@ import { VM_SOURCES } from '../src/lib/vm.js'
 import { googleCalendarStatus, readGoogleCalendar, startGoogleCalendar, selectGoogleAccount, removeGoogleAccount } from './agent.js'
 import { observeAccounts, editBrowserAccount } from './browser-accounts.js'
 import { bulkManageChats } from './vm-chats.js'
+import { workerApproval, answerApproval } from './vm-approvals.js'
 
 function checked<T>({ data, error }: { data: T; error: { code?: string } | null }): NonNullable<T> {
   if (error) throw new ApiError(error.code === '23505' ? 409 : 503, error.code === '23505' ? 'Another message is already waiting in this chat.' : 'Could not access your agent workspace.')
@@ -57,6 +58,7 @@ export async function handleVmWorker(request: Request, path: string) {
     try { return await transport.handleRequest(request) } finally { await server.close() }
   }
   const input = await body(request)
+  if (path === '/api/agent/vm/worker/approval') return workerApproval(host,input)
   if (path === '/api/agent/vm/worker/claim') {
     const capabilities = safeWorkerStatus(input)
     if (capabilities.workerStartedAt && capabilities.workerStartedAt !== host.capabilities?.workerStartedAt) {
@@ -142,7 +144,10 @@ export async function handleVmRequest(request: Request, path: string, username: 
     if (!uuid(chatId)) throw new ApiError(400, 'Choose a chat.')
     const owned=checked(await db().from('planner_vm_chats').select('id').eq('username',username).eq('id',chatId).is('deleted_at',null).maybeSingle())
     if(!owned)throw new ApiError(404,'Chat not found. Restore deleted chats from the Bin first.')
-    return json({ jobs: checked(await db().from('planner_vm_jobs').select(publicJob).eq('username', username).eq('chat_id', chatId).order('created_at', { ascending: false }).limit(100)).reverse() })
+    const jobs=checked(await db().from('planner_vm_jobs').select(publicJob).eq('username', username).eq('chat_id', chatId).order('created_at', { ascending: false }).limit(100)).reverse()
+    const ids=jobs.filter(j=>j.status==='running').map(j=>j.id)
+    const approvals=ids.length?checked(await db().from('planner_vm_approvals').select('id,job_id,questions,expires_at').eq('username',username).in('job_id',ids).is('answers',null).gt('expires_at',new Date().toISOString())):[]
+    return json({ jobs:jobs.map(j=>({...j,approvals:approvals.filter(a=>a.job_id===j.id)})) })
   }
   if (request.method !== 'POST') throw new ApiError(405, 'Use POST.')
   const input = await body(request)
@@ -151,6 +156,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
     checked(await db().from('planner_vm_settings').upsert({ username, whatsapp_read_consent_at: input.allow ? new Date().toISOString() : null }, { onConflict: 'username' }))
     return json({ ok: true })
   }
+  if (path === '/api/agent/vm/approval') return answerApproval(username,input)
   if (path === '/api/agent/vm/google/connect') return startGoogleCalendar(username)
   if (path === '/api/agent/vm/browser/accounts') {
     if (!uuid(input.id)) throw new ApiError(400,'Choose an account.')
