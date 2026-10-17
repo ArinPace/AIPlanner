@@ -1,3 +1,4 @@
+import { refreshSubjectOverview } from './subject-folders.js'
 import { cleanupBinStorage } from './files-bin.js'
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { generateText, jsonSchema, stepCountIs, tool } from 'ai'
@@ -196,14 +197,16 @@ export function mergeUpdates(calendarState: StoredState, filesState: FilesState,
     if (updates.length && !files.folders.some(x=>x.id===root)) files.folders.push({ id:root,parentId:null,name:'Agent updates',color:'#1a73e8',labels:['Synced'],updatedAt:now })
     for (const update of updates) {
       const key = sha(update.source + ':' + update.url + ':' + update.title).slice(0,24), legacyId = 'agent-'+key
-      const courseId = 'agent-course-'+sha(update.course || update.source).slice(0,20)
+      const normalized=(update.course || update.source).trim().toLowerCase().replace(/\s+/g,' ')
+      const matching=files.folders.find(f=>f.id.startsWith('agent-course-') && f.name.replace(/ [a-f0-9]{6}$/,'').trim().toLowerCase().replace(/\s+/g,' ')===normalized)
+      const courseId = matching?.id || 'agent-course-'+sha(normalized).slice(0,20)
       // Generic source pages can use the same URL/title for multiple courses.
       // Retain existing IDs within their course, but never overwrite another
       // course's note when those source identifiers coincide.
       const scopedId = legacyId+'-'+sha(courseId).slice(0,8)
       const legacyFile = files.files.find(x=>x.id===legacyId)
       const id = files.files.some(x=>x.id===scopedId) || legacyFile && legacyFile.folderId!==courseId ? scopedId : legacyId
-      if (!files.folders.some(x=>x.id===courseId)) files.folders.push({id:courseId,parentId:root,name:(safeName(update.course || update.source).slice(0,70)||'Course')+' '+courseId.slice(-6),color:'#1a73e8',labels:[update.source],updatedAt:now})
+      if (!files.folders.some(x=>x.id===courseId)) files.folders.push({id:courseId,parentId:root,name:(safeName(update.course || update.source).slice(0,90)||'Subject'),color:'#1a73e8',labels:[update.source],updatedAt:now})
       const content = `${update.title}\n\n${update.summary}\n\nSource: ${update.url}\n${update.dueAt ? 'Due: '+update.dueAt : ''}`.trim()
       const existingFile = files.files.find(x=>x.id===id)
       // Preserve manual edits. A changed source gets a separate snapshot beside an edited note.
@@ -219,6 +222,7 @@ export function mergeUpdates(calendarState: StoredState, filesState: FilesState,
         else calendar.events.push({...event,agentSnapshot:snapshot})
       }
     }
+    for(const folder of files.folders.filter(f=>f.id.startsWith('agent-course-')))refreshSubjectOverview(files,folder.id,now)
     validateFilesState(files)
   return {calendar,files}
 }

@@ -8,6 +8,7 @@ export interface PlannerFolder {
 }
 
 export interface PlannerTextFile {
+  format?: 'note'
   id: string
   folderId: string | null
   name: string
@@ -100,6 +101,7 @@ export function validateFilesState(value: unknown): asserts value is FilesState 
   }
   for (const file of state.files) {
     if (!file || typeof file !== 'object') throw new Error('Invalid text file.')
+    if (file.format !== undefined && file.format !== 'note') throw new Error('Invalid note format.')
     if (file.folderId !== null && (typeof file.folderId !== 'string' || !folderIds.has(file.folderId))) throw new Error('Choose Files or an existing folder for your file.')
     checkItem(file, file.folderId, 'file')
     if (typeof file.content !== 'string' || file.content.length > 1000000) throw new Error('Text files can contain up to 1 million characters.')
