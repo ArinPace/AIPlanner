@@ -76,3 +76,18 @@ test('Gmail expands collapsed messages without treating attachments as read',asy
 test('exact Slack sidebar lookup finds an omitted public channel without returning DMs',async()=>{
  const browser=await chromium.launch({channel:'msedge',headless:true});try{const page=await browser.newPage();await page.route('https://app.slack.com/**',r=>r.fulfill({body:'<button data-qa="section_heading_button_plus__channels">Channels</button><input role="searchbox" aria-label="Channel or user name"><div data-item-key="C029FRLALCQ"><div class="p-channel_sidebar__channel">events</div></div><div data-item-key="D456"><div class="p-channel_sidebar__channel">events</div></div>'}));await page.goto('https://app.slack.com/client/E123/C456');const result=await findSlackChannel(page,'#events');assert.equal(result.channel.url,'https://app.slack.com/client/E123/C029FRLALCQ');await assert.rejects(()=>findSlackChannel(page,'events OR from:someone'));assert.equal((await findSlackChannel(page,'missing')).channel,null)}finally{await browser.close()}
 })
+
+test('modern Slack channel IDs and workspace selection never substitute another workspace',async()=>{
+ const browser=await chromium.launch({channel:'msedge',headless:true})
+ try{
+  const page=await browser.newPage()
+  await page.route('https://app.slack.com/**',r=>r.fulfill({body:'<button data-qa="team_sidebar_item" data-team="E123"><i data-qa="team-icon" aria-label="NYU Stern"></i></button><div class="p-channel_sidebar__channel" data-qa-channel-sidebar-channel-id="C123"><span data-qa="channel_sidebar_name_general">general</span></div><div class="p-channel_sidebar__channel" data-qa-channel-sidebar-channel-id="D123"><span data-qa="channel_sidebar_name_general">general</span></div>'}))
+  await page.goto('https://app.slack.com/client/E123/C999')
+  assert.deepEqual(await slackChannels(page),[{name:'general',url:'https://app.slack.com/client/E123/C123'}])
+  const missing=await findSlackChannel(page,'general',{workspace:'BTE',timeout:1000})
+  assert.equal(missing.code,'SLACK_WORKSPACE_UNAVAILABLE');assert.equal(missing.channel,null)
+  assert.equal(missing.workspaces[0].name,'NYU Stern')
+  const found=await findSlackChannel(page,'#general',{workspace:'NYU Stern',timeout:1000})
+  assert.equal(found.channel.url,'https://app.slack.com/client/E123/C123')
+ }finally{await browser.close()}
+})

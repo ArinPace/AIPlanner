@@ -81,9 +81,9 @@ server.registerTool('browser_read_whatsapp_chat', {
   finally { if (connection) await connection.close() }
 }))
 server.registerTool('browser_find_slack_channel',{
-  description:'Find one user-selected joined public Slack channel by exact name when the initial sidebar list omits it. Does not join channels, inspect DMs or read messages. Follow the returned channel URL with browser_read.',
-  inputSchema:{name:z.string().min(1).max(80)},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:true},
-},async({name})=>queued(async()=>{
+  description:'Find one user-selected joined Slack channel by exact name. Supply workspace when the user names a workspace, so a channel in another workspace is never substituted. Returns connected workspace names if unavailable; ask the user to connect the missing workspace rather than demand a channel URL. Does not join channels or inspect DMs. Follow the returned channel URL with browser_read.',
+  inputSchema:{name:z.string().min(1).max(80),workspace:z.string().min(1).max(150).optional()},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:true},
+},async({name,workspace})=>queued(async()=>{
   let connection,page
   try{
     if(!enabled.includes('slack'))throw new Error('Slack is not enabled.')
@@ -92,7 +92,7 @@ server.registerTool('browser_find_slack_channel',{
     if(!/^\/client\/[A-Z0-9]+\//.test(new URL(url).pathname))throw new Error('Open your signed-in workspace first.')
     connection=await connectBrowser(url,saved.browserProfiles);page=await connection.contexts()[0].newPage()
     await page.goto(url,{waitUntil:'domcontentloaded',timeout:45000})
-    return {content:[{type:'text',text:JSON.stringify(await findSlackChannel(page,name))}]}
+    return {content:[{type:'text',text:JSON.stringify(await findSlackChannel(page,name,{workspace}))}]}
   }catch{return {isError:true,content:[{type:'text',text:'The selected public channel could not be located. No channels were joined and no DMs were read.'}]}}
   finally{if(page)await page.close().catch(()=>{});if(connection)await connection.close()}
 }))

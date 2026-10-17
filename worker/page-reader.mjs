@@ -14,7 +14,7 @@ async function shadowTextFor(frame) { return await frame.locator('body').evaluat
       return parts.join('\n').slice(0,40000)
     })
 }
-import { isSlackWorkspace, isSlackChannel, slackMessages, waitForSource, gmailContent, slackChannels } from './source-readiness.mjs'
+import { isSlackWorkspace, isSlackChannel, slackMessages, waitForSource, gmailContent, slackChannels, slackWorkspaces } from './source-readiness.mjs'
 import { readGoogleDocument } from './google-doc-reader.mjs'
 import { brightspaceContents } from './brightspace-reader.mjs'
 import { readWhatsApp } from './whatsapp-reader.mjs'
@@ -63,6 +63,7 @@ export async function readBrowserPage(context, destination, { slackTimeout = 450
     const courseContent=await brightspaceContents(context,page.url()).catch(()=>null)
     if(courseContent?.modules)courseContent.modules=await page.evaluate(modules=>modules.map(({descriptionHtml,...module})=>{const parsed=new DOMParser().parseFromString(descriptionHtml,'text/html');return {...module,links:[...parsed.querySelectorAll('a[href]')].map(a=>({text:a.textContent,url:a.getAttribute('href')})).filter(a=>/^https:\/\//.test(a.url)).slice(0,50)}}),courseContent.modules)
     const channelLinks=isSlackWorkspace(new URL(page.url()))?await slackChannels(page):null
+    const workspaces=channelLinks?await slackWorkspaces(page):null
     const messages = slack ? await page.locator(slackMessages).evaluateAll(nodes => nodes.map(n => {
       const stamp = n.querySelector('a[data-ts]')
       return {
@@ -94,7 +95,7 @@ export async function readBrowserPage(context, destination, { slackTimeout = 450
       text: documentText?.text || (gmail ? (gmail.messages?.map(m=>m.text).join('\n\n') || gmail.rows.map(r=>r.preview).join('\n\n')).slice(0,50000) : messages ? messages.map(m => m.text).join('\n\n').slice(-40000) : ((await page.locator('body').innerText())+'\n'+shadowText+'\n'+frames.map(f=>f.text).join('\n')).slice(0, 50000)),
       ...(gmail || documentText ? {coverage:gmail?.coverage || documentText.coverage,...(gmail?{gmail}:{}),...(documentText?{document:{truncated:documentText.truncated}}:{})}:{}),
       ...(!documentText && new URL(page.url()).hostname==='docs.google.com' && /\/(?:document|spreadsheets)\//.test(new URL(page.url()).pathname)?{coverage:'Document body unavailable. This is rendered UI/shell text only, not a verified document read. Check document permissions and the selected Google account.',document:{unavailable:true}}:{}),
-      ...(channelLinks?{channels:channelLinks,coverage:slack?'Latest rendered public channel messages.':'Workspace navigation only; open a selected channel URL from channels before claiming any messages were checked.'}:{}),
+      ...(channelLinks?{channels:channelLinks,workspaces,coverage:slack?'Latest rendered public channel messages.':'Workspace navigation only; open a selected channel URL from channels before claiming any messages were checked.'}:{}),
       ...(frames.length ? { frames } : {}),
       ...(courseContent?{courseContent}:{}),
       links: [...(courseContent?.modules?.flatMap(m=>m.links) || []),...frames.flatMap(f=>f.links),...await page.locator('a[href],d2l-link[href],d2l-link-image[href],[role="link"][href]').evaluateAll(nodes => nodes.slice(0, 200).map(n => ({ text: n.textContent?.trim().slice(0,160), url:new URL(n.getAttribute('href'),document.baseURI).href })))].slice(0,300),

@@ -3,7 +3,7 @@ export const isSlackWorkspace=url=>url.hostname==='app.slack.com' && /^\/client\
 export const isSlackChannel=url=>isSlackWorkspace(url) && /^\/client\/[^/]+\/[CG][A-Z0-9]+\/?$/.test(url.pathname)
 
 export async function slackChannels(page) {
-  return page.locator('.p-channel_sidebar__channel,[data-qa="channel_sidebar_name"],a[href*="/client/"]').evaluateAll(nodes=>{
+  return page.locator('.p-channel_sidebar__channel,[data-qa="channel-sidebar-channel"],[data-qa^="channel_sidebar_name_"],[data-qa="channel_sidebar_name"],a[href*="/client/"]').evaluateAll(nodes=>{
     const workspace=location.pathname.match(/^\/client\/([A-Z0-9]+)/)?.[1]
     if(!workspace)return []
     const channels=new Map()
@@ -12,33 +12,50 @@ export async function slackChannels(page) {
       const href=node.getAttribute('href')
       if(href)try{id=new URL(href,location.href).pathname.match(/^\/client\/[^/]+\/([CG][A-Z0-9]+)\/?$/)?.[1]}catch{}
       for(let i=0;!id && current && i<5;i++,current=current.parentElement){
-        for(const attr of ['data-channel-id','data-item-key','data-item-id','id']){
+        for(const attr of ['data-qa-channel-sidebar-channel-id','data-channel-id','data-item-key','data-item-id','id']){
           const value=current.getAttribute(attr)||''
           const match=value.match(/^(?:channel[-_:])?([CG][A-Z0-9]+)$/)
           if(match){id=match[1];break}
         }
       }
       if(!id)continue
-      const name=(node.querySelector('[data-qa="channel_sidebar_name"]')?.textContent || node.textContent || '').trim().replace(/^#/,'').split('\n')[0].slice(0,100)
+      const name=(node.querySelector('[data-qa="channel_sidebar_name"],[data-qa^="channel_sidebar_name_"],.p-channel_sidebar__name')?.textContent || node.textContent || '').trim().replace(/^#/,'').split('\n')[0].slice(0,100)
       if(name && !channels.has(id))channels.set(id,{name,url:location.origin+'/client/'+workspace+'/'+id})
     }
     return [...channels.values()].slice(0,100)
   })
 }
 
-export async function findSlackChannel(page,name) {
+export async function slackWorkspaces(page) {
+  return page.locator('[data-qa="team_sidebar_item"][data-team]').evaluateAll(nodes=>nodes.map(n=>({id:n.getAttribute('data-team'),name:n.querySelector('[data-qa="team-icon"]')?.getAttribute('aria-label')?.trim(),url:location.origin+'/client/'+n.getAttribute('data-team')})).filter(w=>w.name && /^[A-Z0-9]+$/.test(w.id)))
+}
+
+export async function findSlackChannel(page,name,{workspace,timeout=30000}={}) {
   const selected=name.trim().replace(/^#/,'')
   if(!/^[a-z0-9][a-z0-9_-]{0,79}$/i.test(selected))throw new Error('Choose one exact public channel name.')
-  await page.locator('[data-qa="section_heading_button_plus__channels"]').waitFor({state:'attached',timeout:30000})
-  const filter=page.getByRole('searchbox',{name:'Channel or user name'})
-  if(!await filter.isVisible()){
-    await page.keyboard.press('Escape');await page.keyboard.press('Escape')
-    await page.keyboard.press('Control+k');await page.waitForTimeout(800);await page.keyboard.press('Escape')
+  await page.locator('[data-qa="team_sidebar_item"],.p-channel_sidebar__channel,[data-qa="channel-sidebar-channel"],[data-qa="section_heading_button_plus__channels"]').first().waitFor({state:'attached',timeout})
+  await page.keyboard.press('Escape');await page.keyboard.press('Escape')
+  const workspaces=await slackWorkspaces(page)
+  if(workspace){
+    const matches=workspaces.filter(w=>w.name.toLocaleLowerCase()===workspace.trim().toLocaleLowerCase())
+    if(matches.length!==1)return {channel:null,code:'SLACK_WORKSPACE_UNAVAILABLE',workspaces,coverage:'The requested workspace is not available in this saved Slack session. Connect that workspace through Add sites > Slack. No channel messages were read; a channel URL is not required.'}
+    if(new URL(page.url()).pathname.split('/')[2]!==matches[0].id){await page.goto(matches[0].url,{waitUntil:'domcontentloaded',timeout});await page.locator('.p-channel_sidebar__channel,[data-qa="channel-sidebar-channel"]').first().waitFor({timeout})}
   }
-  await filter.fill(selected,{timeout:5000})
-  await page.waitForTimeout(1500)
-  const matches=(await slackChannels(page)).filter(c=>c.name.toLowerCase()===selected.toLowerCase())
-  return {channel:matches.length===1?matches[0]:null,coverage:matches.length===1?'Exact joined public channel found through the sidebar filter. Read its URL to inspect messages.':'No unambiguous joined public channel found. No channel was joined and no direct messages were read.'}
+  const result=matches=>({channel:matches.length===1?matches[0]:null,workspaces,coverage:matches.length===1?'Exact joined channel found. Read its URL to inspect messages.':'No unambiguous joined channel found in this workspace. No channel was joined and no direct messages were read.'})
+  let matches=(await slackChannels(page)).filter(c=>c.name.toLowerCase()===selected.toLowerCase())
+  if(matches.length)return result(matches)
+  const filter=page.getByRole('searchbox',{name:'Channel or user name'})
+  if(!await filter.isVisible())return result([])
+  const initial=await filter.inputValue()
+  try{
+    await filter.fill(selected,{timeout:5000})
+    for(let i=0;i<10;i++){
+      await page.waitForTimeout(300)
+      matches=(await slackChannels(page)).filter(c=>c.name.toLowerCase()===selected.toLowerCase())
+      if(matches.length)return result(matches)
+    }
+    return result([])
+  }finally{await filter.fill(initial).catch(()=>{})}
 }
 
 export async function waitForSource(page,target,{timeout=30000}={}) {
