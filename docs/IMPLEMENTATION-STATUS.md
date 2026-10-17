@@ -1,5 +1,23 @@
 # AI Planner implementation handoff
 
+## 2026-10-18 agent Notes and planner controls
+
+- planner_save_note now defaults to a real Note; planner_save_text_file explicitly
+  creates plain text. update_item converts between formats in place and edits pins,
+  tags and rich JSON. Identity/content/location and unrelated metadata are preserved.
+- Changed Markdown invalidates an old rich snapshot; unchanged content/metadata
+  edits retain formatting. Read/search distinguish text from Notes. Search omits
+  rich JSON/source copies, and read_file returns them only with includeRichText.
+- Agent can create/rename/move/recolor/label folders, save links, edit calendar
+  events, manage calendar tag colors/visibility and change schedules. New Bin tools
+  list, trash and restore through the same owner-scoped atomic 30-day Bin as UI.
+  No permanent file deletion tool is exposed. PDF bytes still use the upload UI.
+- Worker instructions select Notes for note/checklist requests and require readback
+  of the saved format. User-requested Bin actions are allowed; external website
+  writes, messages, submissions and recordings remain outside these planner tools.
+- MCP scope, stale-revision, conversion, metadata, calendar tag and Bin roundtrip
+  tests pass. Live verification status is reported in the active task/chat.
+
 ## 2026-10-18 chat queue and response latency
 
 - The reported To do/Goals message waited behind the 12-minute full-source review,

@@ -33,6 +33,11 @@ test('MCP exposes discovery and checks write/browser scopes before any storage o
     for(const [name,args] of [
       ['planner_save_event',{id:'event',revision:0,title:'Changed'}],
       ['planner_update_item',{id:'file',revision:0,name:'Changed'}],
+      ['planner_save_note',{folderId:null,name:'No access',content:'text',revision:0}],
+      ['planner_save_text_file',{folderId:null,name:'No access',content:'text',revision:0}],
+      ['planner_trash_items',{ids:['file'],revision:0}],
+      ['planner_restore_items',{ids:['entry'],revision:0}],
+      ['planner_save_tag',{name:'School',color:'#123456',revision:0}],
     ] as const){
       const denied=await client.callTool({name,arguments:args})
       assert.equal(denied.isError,true);assert.match(JSON.stringify(denied.content),/planner:write/)
