@@ -359,6 +359,8 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
             <YearView
               cursor={cursor}
               occurrences={occurrences}
+              tags={tags}
+              hiddenTagIds={hiddenSet}
               onMonthOpen={(date) => {
                 setCursor(date)
                 setView('month')

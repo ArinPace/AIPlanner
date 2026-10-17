@@ -26,6 +26,11 @@
   recordings/transcription and Apple Intelligence are not implemented. No
   recordings were enabled. Media insertion currently accepts web image URLs;
   PDFs remain standalone Files attachments.
+- Year view uses segmented bars for each day's visible tag colors, including
+  expanded recurring and multi-day events. Hidden tags are omitted, untagged
+  events use default blue, and midnight ends do not color the following day.
+  Date labels expose event counts and tag names; phone widths use one column
+  of months to keep dates readable.
 
 ## Decisions
 

@@ -1,4 +1,4 @@
-import type { CalendarEvent, Tag } from '../types'
+import type { CalendarEvent, Tag } from '../types.js'
 
 export const TAG_COLORS = [
   '#1a73e8',

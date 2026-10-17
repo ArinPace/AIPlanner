@@ -675,7 +675,7 @@ p {
 
 .year-month-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 
 .year-dow,
@@ -692,7 +692,9 @@ p {
 }
 
 .year-day {
-  width: 28px;
+  width: 100%;
+  max-width: 28px;
+  padding: 0;
   margin: 1px auto;
   border: 0;
   background: transparent;
@@ -716,20 +718,27 @@ p {
   font-weight: 500;
 }
 
-.year-day.has-events::after {
-  content: '';
+.year-event-bar {
   position: absolute;
-  bottom: 2px;
+  bottom: 0;
   left: 50%;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--blue);
+  width: calc(100% - 4px);
+  max-width: 22px;
+  height: 3px;
+  border-radius: 2px;
+  display: flex;
+  overflow: hidden;
   transform: translateX(-50%);
+  pointer-events: none;
 }
 
-.year-day.is-today.has-events::after {
-  background: #fff;
+.year-event-bar > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.year-day.is-today .year-event-bar {
+  box-shadow: 0 0 0 1px #fff;
 }
 
 @media (max-width: 1200px) {
@@ -742,6 +751,10 @@ p {
   .year-view {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+@media (max-width: 480px) {
+  .year-view { grid-template-columns: minmax(0, 1fr); }
 }
 
 .month-dow {

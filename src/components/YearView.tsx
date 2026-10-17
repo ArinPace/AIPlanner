@@ -1,17 +1,17 @@
-import type { Occurrence } from '../types'
+import type { Occurrence, Tag } from '../types'
+import {yearDaySummary} from '../lib/yearCalendar'
 import {
-  endOfDay,
   getMonthGrid,
   isSameMonth,
   isToday,
-  overlaps,
-  startOfDay,
   WEEKDAYS_SHORT,
 } from '../lib/dates'
 
 type YearViewProps = {
   cursor: Date
   occurrences: Occurrence[]
+  tags: Tag[]
+  hiddenTagIds: Set<string>
   onMonthOpen: (date: Date) => void
   onDayOpen: (date: Date) => void
 }
@@ -20,7 +20,7 @@ function monthCursor(year: number, month: number): Date {
   return new Date(year, month, 1)
 }
 
-export function YearView({ cursor, occurrences, onMonthOpen, onDayOpen }: YearViewProps) {
+export function YearView({ cursor, occurrences, tags, hiddenTagIds, onMonthOpen, onDayOpen }: YearViewProps) {
   const year = cursor.getFullYear()
   const months = Array.from({ length: 12 }, (_, month) => monthCursor(year, month))
 
@@ -43,9 +43,9 @@ export function YearView({ cursor, occurrences, onMonthOpen, onDayOpen }: YearVi
               {days.map((day) => {
                 const outside = !isSameMonth(day, month)
                 const today = isToday(day)
-                const hasEvents = occurrences.some((item) =>
-                  overlaps(item.start, item.end, startOfDay(day), endOfDay(day)),
-                )
+                const summary=outside?{count:0,segments:[]}:yearDaySummary(day,occurrences,tags,hiddenTagIds)
+                const dateLabel=day.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric',year:'numeric'})
+                const label=dateLabel+(summary.count?` — ${summary.count} ${summary.count===1?'event':'events'}: ${summary.segments.map(segment=>segment.label).join(', ')}`:'')
                 return (
                   <button
                     key={day.toISOString()}
@@ -54,11 +54,14 @@ export function YearView({ cursor, occurrences, onMonthOpen, onDayOpen }: YearVi
                       'year-day',
                       outside ? 'is-outside' : '',
                       today ? 'is-today' : '',
-                      hasEvents ? 'has-events' : '',
+                      summary.count ? 'has-events' : '',
                     ].join(' ')}
                     onClick={() => onDayOpen(day)}
+                    aria-label={label}
+                    title={label}
                   >
-                    {day.getDate()}
+                    <span>{day.getDate()}</span>
+                    {summary.segments.length>0&&<span className="year-event-bar" aria-hidden="true">{summary.segments.map(segment=><span key={segment.color} style={{backgroundColor:segment.color}}/>)}</span>}
                   </button>
                 )
               })}
