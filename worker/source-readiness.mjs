@@ -26,6 +26,21 @@ export async function slackChannels(page) {
   })
 }
 
+export async function findSlackChannel(page,name) {
+  const selected=name.trim().replace(/^#/,'')
+  if(!/^[a-z0-9][a-z0-9_-]{0,79}$/i.test(selected))throw new Error('Choose one exact public channel name.')
+  await page.locator('[data-qa="section_heading_button_plus__channels"]').waitFor({state:'attached',timeout:30000})
+  const filter=page.getByRole('searchbox',{name:'Channel or user name'})
+  if(!await filter.isVisible()){
+    await page.keyboard.press('Escape');await page.keyboard.press('Escape')
+    await page.keyboard.press('Control+k');await page.waitForTimeout(800);await page.keyboard.press('Escape')
+  }
+  await filter.fill(selected,{timeout:5000})
+  await page.waitForTimeout(1500)
+  const matches=(await slackChannels(page)).filter(c=>c.name.toLowerCase()===selected.toLowerCase())
+  return {channel:matches.length===1?matches[0]:null,coverage:matches.length===1?'Exact joined public channel found through the sidebar filter. Read its URL to inspect messages.':'No unambiguous joined public channel found. No channel was joined and no direct messages were read.'}
+}
+
 export async function waitForSource(page,target,{timeout=30000}={}) {
   const host=target.hostname
   if(host==='mail.google.com'){
@@ -50,8 +65,15 @@ export async function waitForSource(page,target,{timeout=30000}={}) {
 
 export async function gmailContent(page,kind) {
   if(kind==='gmail-thread'){
-    const messages=await page.locator('.a3s').evaluateAll(nodes=>nodes.filter(n=>n.innerText?.trim()).map(n=>({text:n.innerText.slice(0,20000)})))
-    return {messages,coverage:'Loaded message bodies in the requested thread. Collapsed or unloaded messages and attachments are not included.'}
+    const expand=page.locator('[aria-label="Expand all"],[data-tooltip="Expand all"],[title="Expand all"]').first()
+    if(await expand.isVisible().catch(()=>false)){
+      await expand.click({timeout:5000})
+      await page.waitForFunction(()=>!document.querySelector('.kv') && !document.querySelector('[role="main"] [role="progressbar"]'),null,{timeout:20000}).catch(()=>{})
+    }
+    const messages=await page.locator('.a3s').evaluateAll(nodes=>nodes.filter(n=>n.innerText?.trim()).slice(0,100).map(n=>({text:n.innerText.slice(0,20000),truncated:n.innerText.length>20000})))
+    const collapsedMessages=await page.locator('.kv').count()
+    const attachments=await page.locator('[download],a[href*="view=att"],[data-tooltip="Download"]').evaluateAll(nodes=>nodes.slice(0,100).map(n=>({name:n.getAttribute('download') || n.getAttribute('aria-label') || n.textContent?.trim() || 'Attachment',read:false})))
+    return {messages,collapsedMessages,attachments,coverage:collapsedMessages?'Thread still contains '+collapsedMessages+' collapsed message(s); coverage is partial. Attachments have not been read.':'Loaded expanded message bodies (up to 100, 20,000 characters each; check truncated). Attachments, quoted content hidden by Gmail and unloaded history are not included.'}
   }
   const rows=await page.locator('tr.zA').evaluateAll(nodes=>nodes.slice(0,50).map(n=>{
     const child=n.querySelector('[data-legacy-thread-id]')

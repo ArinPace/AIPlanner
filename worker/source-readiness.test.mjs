@@ -2,7 +2,9 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { chromium } from 'playwright-core'
 import { readBrowserPage } from './page-reader.mjs'
-import { slackChannels } from './source-readiness.mjs'
+import { readGoogleDocument } from './google-doc-reader.mjs'
+import { gmailContent } from './source-readiness.mjs'
+import { slackChannels,findSlackChannel } from './source-readiness.mjs'
 import { readableUrl } from './browser-access.mjs'
 import { browserEndpoint } from './browser-routing.mjs'
 import { selectedBrowserDestination } from './site-launches.mjs'
@@ -60,4 +62,16 @@ test('Google Docs text export does not accept login HTML or unrelated redirect h
     assert.equal(blocked.document.unavailable,true)
     assert.equal(blocked.text.trim(),'Document canvas shell')
   }finally{await browser.close()}
+})
+
+test('Sheets reads the selected CSV tab and preserves the chosen Google account',async()=>{
+ const calls=[];const context={request:{get:async url=>{calls.push(String(url));return {ok:()=>true,status:()=>200,headers:()=>({'content-type':'text/csv'}),body:async()=>Buffer.from('Name,Team\nAda,8'),dispose:async()=>{}}}}};
+ const result=await readGoogleDocument(context,'https://docs.google.com/spreadsheets/d/sheet123/edit?authuser=school%40example.com#gid=42');const url=new URL(calls[0]);assert.equal(url.searchParams.get('gid'),'42');assert.equal(url.searchParams.get('format'),'csv');assert.equal(url.searchParams.get('authuser'),'school@example.com');assert.match(result.text,/Ada,8/);assert.match(result.coverage,/Other tabs/);
+})
+test('Gmail expands collapsed messages without treating attachments as read',async()=>{
+ const browser=await chromium.launch({channel:'msedge',headless:true});try{const page=await browser.newPage();await page.setContent('<button aria-label="Expand all" onclick="document.querySelector(\'.kv\').className=\'a3s\'">Expand all</button><div class="a3s">First message</div><div class="kv">Earlier collapsed message</div><a download="syllabus.pdf">Download</a>');const result=await gmailContent(page,'gmail-thread');assert.equal(result.messages.length,2);assert.equal(result.collapsedMessages,0);assert.equal(result.attachments[0].read,false)}finally{await browser.close()}
+})
+
+test('exact Slack sidebar lookup finds an omitted public channel without returning DMs',async()=>{
+ const browser=await chromium.launch({channel:'msedge',headless:true});try{const page=await browser.newPage();await page.route('https://app.slack.com/**',r=>r.fulfill({body:'<button data-qa="section_heading_button_plus__channels">Channels</button><input role="searchbox" aria-label="Channel or user name"><div data-item-key="C029FRLALCQ"><div class="p-channel_sidebar__channel">events</div></div><div data-item-key="D456"><div class="p-channel_sidebar__channel">events</div></div>'}));await page.goto('https://app.slack.com/client/E123/C456');const result=await findSlackChannel(page,'#events');assert.equal(result.channel.url,'https://app.slack.com/client/E123/C029FRLALCQ');await assert.rejects(()=>findSlackChannel(page,'events OR from:someone'));assert.equal((await findSlackChannel(page,'missing')).channel,null)}finally{await browser.close()}
 })

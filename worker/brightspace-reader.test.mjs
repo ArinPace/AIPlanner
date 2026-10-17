@@ -30,3 +30,9 @@ test('Gradescope resumes only the unambiguous course LTI route, stops at login a
     assert.equal(context.pages().length,1)
   }finally{await browser.close()}
 })
+
+test('description-only courses retain module material instead of appearing empty',async()=>{
+ const data={Modules:[{ModuleId:55,Title:'Syllabus',Topics:[],Modules:[],Description:{Text:'Read the syllabus',Html:'<a href="https://docs.google.com/document/d/example/edit">Syllabus</a>'}},{ModuleId:56,Title:'Hidden',IsHidden:true,Description:{Text:'Do not expose'}}]};
+ const context={request:{get:async()=>({ok:()=>true,headers:()=>({'content-type':'application/json'}),body:async()=>Buffer.from(JSON.stringify(data)),dispose:async()=>{}})}};
+ const result=await brightspaceContents(context,'https://brightspace.nyu.edu/d2l/le/lessons/123');assert.equal(result.topics.length,0);assert.equal(result.modules.length,1);assert.equal(result.modules[0].text,'Read the syllabus');assert.match(result.modules[0].descriptionHtml,/docs.google.com/);
+})
