@@ -1,4 +1,4 @@
-import { refreshSubjectOverview } from './subject-folders.js'
+import { refreshSubjectOverview,subjectTitle } from './subject-folders.js'
 import { cleanupBinStorage } from './files-bin.js'
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { generateText, jsonSchema, stepCountIs, tool } from 'ai'
@@ -197,9 +197,11 @@ export function mergeUpdates(calendarState: StoredState, filesState: FilesState,
     if (updates.length && !files.folders.some(x=>x.id===root)) files.folders.push({ id:root,parentId:null,name:'Agent updates',color:'#1a73e8',labels:['Synced'],updatedAt:now })
     for (const update of updates) {
       const key = sha(update.source + ':' + update.url + ':' + update.title).slice(0,24), legacyId = 'agent-'+key
-      const courseName=(update.course || update.source).trim().replace(/ [a-f0-9]{6}$/i,'')
+      const suppliedName=(update.course || update.source).trim()
+      const exact=files.folders.find(f=>f.id.startsWith('agent-course-') && f.name.toLowerCase()===suppliedName.toLowerCase())
+      const courseName=exact?subjectTitle(exact):suppliedName
       const normalized=courseName.toLowerCase().replace(/\s+/g,' ')
-      const matching=files.folders.find(f=>f.id.startsWith('agent-course-') && f.name.replace(/ [a-f0-9]{6}$/,'').trim().toLowerCase().replace(/\s+/g,' ')===normalized)
+      const matching=exact || files.folders.find(f=>f.id.startsWith('agent-course-') && subjectTitle(f).trim().toLowerCase().replace(/\s+/g,' ')===normalized)
       const courseId = matching?.id || 'agent-course-'+sha(normalized).slice(0,20)
       // Generic source pages can use the same URL/title for multiple courses.
       // Retain existing IDs within their course, but never overwrite another

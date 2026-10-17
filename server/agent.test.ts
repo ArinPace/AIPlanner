@@ -72,3 +72,7 @@ test('agent can reuse the actual legacy folder name including its generated suff
  const legacy={folders:[{id:'agent-synced-updates',parentId:null,name:'Agent updates',color:'#1a73e8',labels:['Synced'],updatedAt:new Date().toISOString()},{id:'agent-course-df6262',parentId:'agent-synced-updates',name:'Intro to Computer Science df6262',color:'#1a73e8',labels:['brightspace'],updatedAt:new Date().toISOString()}],files:[],documents:[]};
  const result=mergeUpdates(calendar,legacy,[{...update,course:'Intro to Computer Science df6262'}]);assert.equal(result.files.folders.length,2);assert.equal(result.files.files.find(f=>f.id.startsWith('agent-'))!.folderId,'agent-course-df6262');
 })
+
+test('real six-digit course codes are not mistaken for generated folder suffixes',()=>{
+ const result=mergeUpdates(calendar,files,[{...update,course:'Mathematics 123456'},{...update,course:'Mathematics 654321'}]);assert.equal(result.files.folders.filter(f=>f.id.startsWith('agent-course-')).length,2);assert.ok(result.files.files.some(f=>f.name==='Subject overview' && f.content.includes('# Mathematics 123456')))
+})

@@ -1,6 +1,9 @@
 import type { FilesState } from '../src/lib/files.js'
 
 const categories = ['Syllabus and subject information','Assignments and deadlines','Readings and resources','Announcements and other updates']
+export function subjectTitle(folder:{id:string;name:string}) {
+  return folder.id.startsWith('agent-course-') && folder.name.toLowerCase().endsWith(' '+folder.id.slice(-6).toLowerCase())?folder.name.slice(0,-7):folder.name
+}
 export function refreshSubjectOverview(state: FilesState, folderId: string, now: string) {
   const folder=state.folders.find(f=>f.id===folderId)
   if(!folder)return
@@ -15,7 +18,7 @@ export function refreshSubjectOverview(state: FilesState, folderId: string, now:
     groups[kind].push('### '+title+'\n\n'+excerpt)
   }
   for(const document of (state.documents || []).filter(d=>d.folderId===folderId))groups[2].push(document.kind==='link'?'['+document.name+']('+document.url+')':document.name+' (PDF in this folder)')
-  const content='# '+folder.name.replace(/ [a-f0-9]{6}$/,'')+'\n\nUpdated: '+now+'\n\nThis living subject reference contains saved material. Each review reports inaccessible sources; an update does not mean every source was accessible.\n\n'+categories.map((name,i)=>'## '+name+'\n\n'+(groups[i].join('\n\n') || 'No verified material saved yet.')).join('\n\n')
+  const content='# '+subjectTitle(folder)+'\n\nUpdated: '+now+'\n\nThis living subject reference contains saved material. Each review reports inaccessible sources; an update does not mean every source was accessible.\n\n'+categories.map((name,i)=>'## '+name+'\n\n'+(groups[i].join('\n\n') || 'No verified material saved yet.')).join('\n\n')
   const existing=state.files.find(f=>f.id===id)
   // Preserve personally edited overviews and refresh a predictable companion.
   const targetId=existing && existing.content!==existing.agentSnapshot?id+'-latest':id
