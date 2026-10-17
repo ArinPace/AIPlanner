@@ -30,7 +30,7 @@ export async function siteLaunches(dataDir) {
     // Retain existing sessions without copying any cookies. A future explicit
     // reconnect moves only that source to the normal Chrome profile.
     const legacy=await stat(path.join(dataDir,'browser','Default')).then(s=>s.isDirectory()).catch(()=>false)
-    const retained=legacy?Object.fromEntries(Object.keys(sources).filter(source=>!['calendar','x'].includes(source)).map(source=>[source,'legacy'])):{}
+    const retained=legacy?Object.fromEntries(['brightspace','gradescope','gmail','drive','slack','instagram'].map(source=>[source,'legacy'])):{}
     saved.browserProfiles={...retained,...saved.browserProfiles}
     saved.browserProfileVersion=1
     await saveLaunches(dataDir,saved)

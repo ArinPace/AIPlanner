@@ -32,7 +32,6 @@ export function MonthView({ cursor, zoom, occurrences, tags, onDayClick, onDayOp
   const [weekCount, setWeekCount] = useState(Math.max(6, monthWeeks))
   const days = getFilledMonthGrid(cursor, weekCount)
   const rows = days.length / 7
-  const maxVisible = Math.max(2, Math.round(3 * zoom))
 
   useEffect(() => {
     const node = scrollRef.current
@@ -57,14 +56,12 @@ export function MonthView({ cursor, zoom, occurrences, tags, onDayClick, onDayOp
       <div className="month-scroll" ref={scrollRef}>
         <div
           className="month-grid"
-          style={{ gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`, minHeight: rows * TARGET_WEEK_HEIGHT * Math.max(1, zoom) }}
+          style={{ gridTemplateRows: `repeat(${rows}, minmax(${TARGET_WEEK_HEIGHT * Math.max(1, zoom)}px, auto))`, minHeight: rows * TARGET_WEEK_HEIGHT * Math.max(1, zoom) }}
         >
         {days.map((day) => {
           const dayEvents = occurrences.filter((item) =>
             overlaps(item.start, item.end, startOfDay(day), endOfDay(day)),
           )
-          const visible = dayEvents.slice(0, maxVisible)
-          const extra = dayEvents.length - visible.length
           const outside = !isSameMonth(day, cursor)
 
           return (
@@ -84,7 +81,7 @@ export function MonthView({ cursor, zoom, occurrences, tags, onDayClick, onDayOp
                 {day.getDate()}
               </button>
               <div className="month-events">
-                {visible.map((item) => {
+                {dayEvents.map((item) => {
                   const color = eventColor(item.event, tags)
                   return (
                     <button
@@ -103,18 +100,6 @@ export function MonthView({ cursor, zoom, occurrences, tags, onDayClick, onDayOp
                     </button>
                   )
                 })}
-                {extra > 0 && (
-                  <button
-                    type="button"
-                    className="more-link"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      onDayOpen(day)
-                    }}
-                  >
-                    {extra} more
-                  </button>
-                )}
               </div>
             </div>
           )

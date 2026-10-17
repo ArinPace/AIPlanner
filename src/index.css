@@ -1728,3 +1728,11 @@ textarea {
 @media (max-width: 600px) {
   .files-sidebar-scrim { display: block; position: absolute; inset: 0; z-index: 4; border: 0; background: #0005; }
 }
+
+/* Month weeks grow with their contents, keeping complete event names visible. */
+.month-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.month-view .month-date { flex-shrink: 0; }
+.month-view .month-events { overflow: visible; flex-shrink: 0; }
+.month-view .event-chip { flex-shrink: 0; align-items: flex-start; padding: 4px 6px; line-height: 1.35; }
+.month-view .event-chip .event-title { min-width: 0; white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+.month-view .event-chip svg { flex-shrink: 0; }
