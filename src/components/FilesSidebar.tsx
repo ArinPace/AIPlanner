@@ -12,7 +12,7 @@ export function FilesSidebar({ state, folderId, bin, count, busy, collapsed, onC
 }) {
   const [overBin, setOverBin] = useState(false)
   return <aside className="files-sidebar" aria-label="Folders">
-    <div className="files-sidebar-heading"><button className="text-btn" aria-label="Open Files root" onClick={() => onOpen(null)}>My folders</button><button className="icon-btn" aria-label="New folder" disabled={busy} onClick={onNew}><PlusIcon/></button><button className="icon-btn" aria-label="Hide Files sidebar" onClick={onClose}><CloseIcon/></button></div>
+    <div className="files-sidebar-heading"><button className="text-btn files-root-button" aria-label="Open Files root" title="Show Files without opening a folder" onClick={() => onOpen(null)}>Files</button><button className="icon-btn" aria-label="New folder" disabled={busy} onClick={onNew}><PlusIcon/></button><button className="icon-btn" aria-label="Hide Files sidebar" onClick={onClose}><CloseIcon/></button></div>
     <button type="button" aria-label="Open Files Bin" className={'folder-nav files-bin-target '+(bin?'is-active ':'')+(overBin?'is-drag-over':'')} onClick={onBin}
       onDragOver={event => { if (!busy && event.dataTransfer.types.includes(FILE_DRAG)) { event.preventDefault(); event.dataTransfer.dropEffect='move'; setOverBin(true) } }}
       onDragLeave={() => setOverBin(false)} onDrop={event => {
