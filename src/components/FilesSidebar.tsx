@@ -2,6 +2,7 @@ import { useState, type DragEvent, type ReactNode } from 'react'
 import type { FilesState } from '../lib/files'
 import { navigationFolders } from '../lib/fileActions'
 import { CloseIcon, TrashIcon } from './Icons'
+import {FileTypeIcon} from './FileTypeIcon'
 
 export const FILE_DRAG = 'application/x-ai-planner-items'
 export function FilesSidebar({ selectedItemId,state, folderId, bin, count, busy, collapsed, onCollapse, onOpen, onItem, onBin, addButton, onClose, onDrag, onTrash }: {
@@ -14,7 +15,7 @@ export function FilesSidebar({ selectedItemId,state, folderId, bin, count, busy,
   const [overBin, setOverBin] = useState(false)
   const items=[...state.files,...(state.documents ?? [])].sort((a,b)=>a.name.localeCompare(b.name))
   function fileRow(item:typeof items[number],depth:number) {
-    return <button key={item.id} type="button" className={'folder-nav sidebar-file '+(selectedItemId===item.id?'is-active':'')} aria-current={selectedItemId===item.id?'page':undefined} style={{paddingLeft:24+Math.min(depth,8)*12}} title={item.name} aria-label={'Open file '+item.name} draggable={!busy} onDragStart={e=>onDrag(e,item.id)} onClick={()=>onItem(item.id)}><svg width="18" height="20" viewBox="0 0 20 24" fill="none" aria-hidden="true"><path d="M4 2h8l5 5v15H4zM12 2v6h5" stroke="currentColor" strokeWidth="1.4"/></svg><span>{item.name}</span></button>
+    return <button key={item.id} type="button" className={'folder-nav sidebar-file '+(selectedItemId===item.id?'is-active':'')} aria-current={selectedItemId===item.id?'page':undefined} style={{paddingLeft:24+Math.min(depth,8)*12}} title={item.name} aria-label={'Open file '+item.name} draggable={!busy} onDragStart={e=>onDrag(e,item.id)} onClick={()=>onItem(item.id)}>{'content' in item?<FileTypeIcon note={item.format==='note'} size={18}/>:<svg width="18" height="20" viewBox="0 0 20 24" fill="none" aria-hidden="true"><path d="M4 2h8l5 5v15H4zM12 2v6h5" stroke="currentColor" strokeWidth="1.4"/></svg>}<span>{item.name}</span></button>
   }
   return <aside className="files-sidebar" aria-label="Folders">
     <div className="files-sidebar-heading"><button className="text-btn files-root-button" aria-label="Open Files root" title="Show Files without opening a folder" onClick={() => onOpen(null)}>Files</button>{addButton}<button className="icon-btn" aria-label="Hide Files sidebar" onClick={onClose}><CloseIcon/></button></div>
