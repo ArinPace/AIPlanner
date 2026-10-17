@@ -1,5 +1,21 @@
 # AI Planner implementation handoff
 
+## 2026-10-18 chat queue and response latency
+
+- The reported To do/Goals message waited behind the 12-minute full-source review,
+  then completed in 18 seconds. Both notes were already saved; do not replay it.
+- Queue status now distinguishes another running task from VM startup and shows
+  elapsed wait/run time. The owner can explicitly stop the blocking task while
+  retaining their queued message. Returning to the tab refreshes status immediately.
+- Owner-scoped queue metadata is separate from the last 20 historical runs. Worker
+  progress also refreshes its host heartbeat, preserving Online during long runs.
+- Chat no longer starts both browser profiles before inference. Browser MCP tools
+  validate the enabled destination and start only the required saved profile on use.
+- Active worker updated. Live smoke tests: plain reply completed in 5 seconds;
+  signed-in Calendar browser check completed in 10 seconds. Browser and VM tests
+  and desktop/390px queue/cancel UI checks pass. Heavy tasks remain serialized per
+  VM; cancellation is explicit and already-saved changes are retained.
+
 ## 2026-10-18 source readers and rich Notes
 
 - Full live review completed with 27 saved updates and all six subject overviews

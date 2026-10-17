@@ -4,9 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { CodexRpc } from './rpc.mjs'
-import { browser, openLogin, checkSites, liveBrowserOpen, shutdownBrowser, closeLiveBrowser, observeSignIn, googleBrowser } from './browser.mjs'
-import { siteLaunches } from './site-launches.mjs'
-import { stableProfile } from './browser-routing.mjs'
+import { openLogin, checkSites, liveBrowserOpen, shutdownBrowser, closeLiveBrowser, observeSignIn } from './browser.mjs'
 import { tomlValue } from './config-args.mjs'
 import { connectPersonalChatGpt, disconnectPersonalChatGpt } from './oauth.mjs'
 import { connectPersonalDevice, disconnectPersonalDevice, personalCodexStatus } from './device-auth.mjs'
@@ -51,9 +49,6 @@ const instructions = `You are this user's AI Planner assistant. Use the planner 
 async function chat(job, auth, remote) {
   if (!auth) throw new Error('Connect an AI account in Setup first.')
   if (liveBrowserOpen()) throw new Error('Finish signing into your websites and select Verify connections before starting an agent run.')
-  const preferred=await siteLaunches(dataDir)
-  if(remote.sources.some(source=>!stableProfile(source,preferred.browserProfiles)))await browser(dataDir)
-  if(remote.sources.some(source=>stableProfile(source,preferred.browserProfiles)))await googleBrowser(dataDir)
   if (auth.type === 'claude') return claudeChat({ dataDir, job, remote, origin, token: config.token, instructions, progress: reply => api('progress', { id: job.id, lease: job.lease, reply }) })
   const root = path.dirname(fileURLToPath(import.meta.url)), node = process.execPath
   const executable = path.join(root, 'node_modules', '.bin', 'codex')
