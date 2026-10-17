@@ -4,21 +4,20 @@ import { navigationFolders } from '../lib/fileActions'
 import { CloseIcon, TrashIcon } from './Icons'
 
 export const FILE_DRAG = 'application/x-ai-planner-items'
-export function FilesSidebar({ showFiles=true,state, folderId, bin, count, busy, collapsed, onCollapse, onOpen, onItem, onBin, addButton, onClose, onDrag, onTrash }: {
-  showFiles?: boolean; state: FilesState; folderId: string | null; bin: boolean; count: number; busy: boolean
+export function FilesSidebar({ selectedItemId,state, folderId, bin, count, busy, collapsed, onCollapse, onOpen, onItem, onBin, addButton, onClose, onDrag, onTrash }: {
+  selectedItemId?: string; state: FilesState; folderId: string | null; bin: boolean; count: number; busy: boolean
   collapsed: Set<string>; onCollapse: (id: string) => void
   onOpen: (id: string | null) => void; onBin: () => void; addButton: ReactNode; onClose: () => void
   onItem: (id: string) => void
   onDrag: (event: DragEvent, id: string) => void; onTrash: (ids: string[]) => void
 }) {
   const [overBin, setOverBin] = useState(false)
-  const items=(showFiles?[...state.files,...(state.documents ?? [])]:[]).sort((a,b)=>a.name.localeCompare(b.name))
+  const items=[...state.files,...(state.documents ?? [])].sort((a,b)=>a.name.localeCompare(b.name))
   function fileRow(item:typeof items[number],depth:number) {
-    return <button key={item.id} type="button" className="folder-nav sidebar-file" style={{paddingLeft:24+Math.min(depth,8)*12}} title={item.name} aria-label={'Open file '+item.name} draggable={!busy} onDragStart={e=>onDrag(e,item.id)} onClick={()=>onItem(item.id)}><svg width="18" height="20" viewBox="0 0 20 24" fill="none" aria-hidden="true"><path d="M4 2h8l5 5v15H4zM12 2v6h5" stroke="currentColor" strokeWidth="1.4"/></svg><span>{item.name}</span></button>
+    return <button key={item.id} type="button" className={'folder-nav sidebar-file '+(selectedItemId===item.id?'is-active':'')} aria-current={selectedItemId===item.id?'page':undefined} style={{paddingLeft:24+Math.min(depth,8)*12}} title={item.name} aria-label={'Open file '+item.name} draggable={!busy} onDragStart={e=>onDrag(e,item.id)} onClick={()=>onItem(item.id)}><svg width="18" height="20" viewBox="0 0 20 24" fill="none" aria-hidden="true"><path d="M4 2h8l5 5v15H4zM12 2v6h5" stroke="currentColor" strokeWidth="1.4"/></svg><span>{item.name}</span></button>
   }
   return <aside className="files-sidebar" aria-label="Folders">
-    <div className="files-sidebar-heading"><button className="text-btn files-root-button" aria-label="Open Files root" title="Show Files without opening a folder" onClick={() => onOpen(null)}>{showFiles?'Files':'Notes'}</button>{addButton}<button className="icon-btn" aria-label="Hide Files sidebar" onClick={onClose}><CloseIcon/></button></div>
-    {!showFiles && <><p className="notes-account-label">AI Planner</p><button type="button" className={'folder-nav '+(!bin&&folderId===null?'is-active':'')} onClick={()=>onOpen(null)}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 6h7l2 2h9v12H3z" stroke="currentColor" strokeWidth="1.6"/></svg><span>All Notes</span><small className="note-folder-count">{state.files.filter(f=>f.format==='note').length}</small></button></>}
+    <div className="files-sidebar-heading"><button className="text-btn files-root-button" aria-label="Open Files root" title="Show Files without opening a folder" onClick={() => onOpen(null)}>Files</button>{addButton}<button className="icon-btn" aria-label="Hide Files sidebar" onClick={onClose}><CloseIcon/></button></div>
     <button type="button" aria-label="Open Files Bin" className={'folder-nav files-bin-target '+(bin?'is-active ':'')+(overBin?'is-drag-over':'')} onClick={onBin}
       onDragOver={event => { if (!busy && event.dataTransfer.types.includes(FILE_DRAG)) { event.preventDefault(); event.dataTransfer.dropEffect='move'; setOverBin(true) } }}
       onDragLeave={() => setOverBin(false)} onDrop={event => {
@@ -35,7 +34,7 @@ export function FilesSidebar({ showFiles=true,state, folderId, bin, count, busy,
       const children=state.folders.some(f=>f.parentId===folder.id) || files.length>0
       return <div key={folder.id}><div className="folder-tree-row" style={{paddingLeft:Math.min(path.length-1,8)*12}} draggable={!busy} onDragStart={e=>onDrag(e,folder.id)}>
         {children ? <button className="folder-disclosure" aria-label={(collapsed.has(folder.id)?'Expand ':'Collapse ')+folder.name} aria-expanded={!collapsed.has(folder.id)} onClick={()=>onCollapse(folder.id)}>{collapsed.has(folder.id)?'\u25b8':'\u25be'}</button> : <span className="folder-disclosure-space"/>}
-        <button className={'folder-nav '+(!bin && folderId===folder.id?'is-active':'')} title={path.map(f=>f.name).join(' / ')} onClick={()=>onOpen(folder.id)}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" fill={folder.color} fillOpacity=".16" stroke={folder.color} strokeWidth="1.6"/></svg><span>{folder.name}</span>{!showFiles&&<small className="note-folder-count">{state.files.filter(f=>f.format==='note'&&f.folderId===folder.id).length}</small>}</button>
+        <button className={'folder-nav '+(!bin && folderId===folder.id?'is-active':'')} title={path.map(f=>f.name).join(' / ')} onClick={()=>onOpen(folder.id)}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" fill={folder.color} fillOpacity=".16" stroke={folder.color} strokeWidth="1.6"/></svg><span>{folder.name}</span></button>
       </div>{!collapsed.has(folder.id) && files.map(item=>fileRow(item,path.length))}</div>
     })}</nav>
   </aside>

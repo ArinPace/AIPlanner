@@ -1941,3 +1941,6 @@ textarea {
 
 .files-sidebar-add { flex: 0 0 auto; }
 .files-sidebar-add .files-add-menu { right: 0; min-width: 190px; max-width: calc(100vw - 32px); z-index: 80; }
+
+.unified-note-editor { --notes-accent: #b78c00; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+@media print { .unified-notes-workspace { display: block !important; height: auto !important; overflow: visible !important; } }

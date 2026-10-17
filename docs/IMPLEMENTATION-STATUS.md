@@ -1,5 +1,16 @@
 # AI Planner implementation handoff
 
+## 2026-10-18 unified Files navigation
+
+- Latest user preference supersedes the earlier separate three-column Notes view.
+  Notes, text, PDFs and links share one Files sidebar and folder hierarchy. No
+  All Notes entry or separate notes-only list is rendered. Opening a Note shows
+  its rich editor beside that same sidebar, with the selected file highlighted.
+- Folder/root navigation returns to the mixed Files browser. Note search/tags use
+  the shared Files search. Formatting, checklists, autosave, pins, moving and export
+  remain in the editor. Existing data and note formats are unchanged.
+- Desktop/phone mixed-navigation and all five sidebar-add action checks pass.
+
 ## 2026-10-18 agent Notes and planner controls
 
 - planner_save_note now defaults to a real Note; planner_save_text_file explicitly
