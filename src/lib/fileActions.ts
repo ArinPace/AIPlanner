@@ -6,14 +6,12 @@ export function moveItems(state: FilesState, ids: string[], destination: string 
   const covered = new Set(folders.flatMap(f => [...descendantIds(state.folders, f.id)]))
   if (destination && (!state.folders.some(f => f.id === destination) || covered.has(destination))) throw new Error('Choose a destination outside the selected folders.')
   const insideSelection = (parent: string | null) => parent !== null && covered.has(parent)
-  const movingFiles = state.files.some(f => selected.has(f.id) && !insideSelection(f.folderId)) || state.documents?.some(f => selected.has(f.id) && !insideSelection(f.folderId))
-  if (movingFiles && !destination) throw new Error('Choose a folder for text files, PDFs, and links.')
   const updatedAt = new Date().toISOString()
   const next = {
     ...state,
     folders: state.folders.map(f => selected.has(f.id) && !insideSelection(f.parentId) ? { ...f, parentId: destination, updatedAt } : f),
-    files: state.files.map(f => selected.has(f.id) && !insideSelection(f.folderId) ? { ...f, folderId: destination!, updatedAt } : f),
-    documents: state.documents?.map(f => selected.has(f.id) && !insideSelection(f.folderId) ? { ...f, folderId: destination!, updatedAt } : f),
+    files: state.files.map(f => selected.has(f.id) && !insideSelection(f.folderId) ? { ...f, folderId: destination, updatedAt } : f),
+    documents: state.documents?.map(f => selected.has(f.id) && !insideSelection(f.folderId) ? { ...f, folderId: destination, updatedAt } : f),
   }
   validateFilesState(next)
   return next

@@ -13,8 +13,8 @@ export function buildTrash(state:FilesState,ids:string[]) {
   if(ids.some(id=>!all.some(item=>item.id===id)))throw new ApiError(409,'Some selected items changed. Refresh Files.')
   const folders=new Set<string>()
   for(const id of ids)if(state.folders.some(f=>f.id===id))for(const child of descendantIds(state.folders,id))folders.add(child)
-  const snapshot:FilesState={folders:state.folders.filter(f=>folders.has(f.id)),files:state.files.filter(f=>ids.includes(f.id) || folders.has(f.folderId)),documents:(state.documents || []).filter(d=>ids.includes(d.id) || folders.has(d.folderId))}
-  const names=[...snapshot.folders.filter(f=>!f.parentId || !folders.has(f.parentId)),...snapshot.files.filter(f=>!folders.has(f.folderId)),...(snapshot.documents || []).filter(d=>!folders.has(d.folderId))].map(f=>f.name)
+  const snapshot:FilesState={folders:state.folders.filter(f=>folders.has(f.id)),files:state.files.filter(f=>ids.includes(f.id) || folders.has(f.folderId ?? '')),documents:(state.documents || []).filter(d=>ids.includes(d.id) || folders.has(d.folderId ?? ''))}
+  const names=[...snapshot.folders.filter(f=>!f.parentId || !folders.has(f.parentId)),...snapshot.files.filter(f=>!folders.has(f.folderId ?? '')),...(snapshot.documents || []).filter(d=>!folders.has(d.folderId ?? ''))].map(f=>f.name)
   const removed=new Set([...snapshot.folders,...snapshot.files,...(snapshot.documents || [])].map(f=>f.id))
   return {state:{...state,folders:state.folders.filter(f=>!removed.has(f.id)),files:state.files.filter(f=>!removed.has(f.id)),documents:(state.documents || []).filter(f=>!removed.has(f.id))},entry:{names,snapshot,itemCount:removed.size}}
 }
@@ -36,7 +36,7 @@ export function restoreFiles(current:FilesState,snapshots:FilesState[]) {
   }
   let recovered:string|undefined
   for(const item of [...files,...documents]){
-    if(!folderIds.has(item.folderId)){
+    if(item.folderId !== null && !folderIds.has(item.folderId)){
       if(!recovered){recovered=randomUUID();state.folders.push({id:recovered,parentId:null,name:unique('Restored files',state.folders.filter(f=>!f.parentId).map(f=>f.name)),color:'#1a73e8',labels:[],updatedAt:new Date().toISOString()});folderIds.add(recovered)}
       item.folderId=recovered
     }

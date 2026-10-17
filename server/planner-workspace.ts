@@ -41,8 +41,8 @@ export function searchFiles(state:FilesState,args:{query?:string;folderId?:strin
   const path=(id:string|null)=>folderPath(state.folders,id).map(f=>f.name).join(' / ')
   const items=[
     ...state.folders.filter(f=>!included || included.has(f.id)).map(f=>({...f,kind:'folder',path:path(f.id),search:[f.name,...f.labels,path(f.id)].join(' ')})),
-    ...state.files.filter(f=>!included || included.has(f.folderId)).map(({content,...f})=>({...f,kind:'note',path:path(f.folderId),search:f.name+' '+content+' '+path(f.folderId)})),
-    ...(state.documents || []).filter(f=>!included || included.has(f.folderId)).map(f=>({...f,path:path(f.folderId),search:f.name+' '+(f.url || '')+' '+path(f.folderId)})),
+    ...state.files.filter(f=>!included || included.has(f.folderId ?? '')).map(({content,...f})=>({...f,kind:'note',path:path(f.folderId),search:f.name+' '+content+' '+path(f.folderId)})),
+    ...(state.documents || []).filter(f=>!included || included.has(f.folderId ?? '')).map(f=>({...f,path:path(f.folderId),search:f.name+' '+(f.url || '')+' '+path(f.folderId)})),
   ].filter(f=>f.search.toLowerCase().includes(query)).map(({search:_search,...item})=>item)
   return {items:items.slice(offset,offset+limit),total:items.length,offset,hasMore:offset+limit<items.length,searches:'Folder paths/labels, note contents, link URLs and PDF filenames. Read PDFs individually for their contents.'}
 }

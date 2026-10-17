@@ -183,7 +183,7 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
       const input = await body(request)
       const state = await filesFor(username)
       const id = randomUUID()
-      const document: PlannerDocument = { id, folderId: String(input.folderId ?? ''), name: String(input.name ?? '').trim(), kind: 'pdf', size: Number(input.size), updatedAt: new Date().toISOString() }
+      const document: PlannerDocument = { id, folderId: input.folderId === null ? null : String(input.folderId ?? ''), name: String(input.name ?? '').trim(), kind: 'pdf', size: Number(input.size), updatedAt: new Date().toISOString() }
       if (!document.name.toLowerCase().endsWith('.pdf')) throw new ApiError(400, 'Choose a PDF file.')
       validateFilesState({ ...state, documents: [...(state.documents ?? []), document] })
       const storagePath = `${username}/${id}.pdf`

@@ -9,7 +9,7 @@ export interface PlannerFolder {
 
 export interface PlannerTextFile {
   id: string
-  folderId: string
+  folderId: string | null
   name: string
   content: string
   updatedAt: string
@@ -25,7 +25,7 @@ export interface FilesState {
 
 export interface PlannerDocument {
   id: string
-  folderId: string
+  folderId: string | null
   name: string
   kind: 'pdf' | 'link'
   url?: string
@@ -100,14 +100,14 @@ export function validateFilesState(value: unknown): asserts value is FilesState 
   }
   for (const file of state.files) {
     if (!file || typeof file !== 'object') throw new Error('Invalid text file.')
-    if (typeof file.folderId !== 'string' || !folderIds.has(file.folderId)) throw new Error('Choose an existing folder for your file.')
+    if (file.folderId !== null && (typeof file.folderId !== 'string' || !folderIds.has(file.folderId))) throw new Error('Choose Files or an existing folder for your file.')
     checkItem(file, file.folderId, 'file')
     if (typeof file.content !== 'string' || file.content.length > 1000000) throw new Error('Text files can contain up to 1 million characters.')
   }
   if (state.documents !== undefined && !Array.isArray(state.documents)) throw new Error('Invalid documents data.')
   if ((state.documents?.length ?? 0) > 5000) throw new Error('Too many documents.')
   for (const document of state.documents ?? []) {
-    if (!document || typeof document !== 'object' || !folderIds.has(document.folderId)) throw new Error('Choose an existing folder for your document.')
+    if (!document || typeof document !== 'object' || document.folderId !== null && !folderIds.has(document.folderId)) throw new Error('Choose Files or an existing folder for your document.')
     checkItem(document, document.folderId, 'file')
     if (document.kind === 'link') {
       let url: URL

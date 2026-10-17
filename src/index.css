@@ -1037,6 +1037,8 @@ p {
 .time-header.days-7, .all-day-row.days-7, .time-body.days-7 { grid-template-columns: 64px repeat(7, minmax(0, 1fr)); }
 .time-header.days-1, .all-day-row.days-1, .time-body.days-1 { grid-template-columns: 64px minmax(0, 1fr); }
 .time-header { flex-shrink: 0; }
+.time-day-head { min-width: 0; }
+.time-day-head .num { max-width: 100%; }
 .all-day-row { flex-shrink: 0; max-height: 40vh; overflow-y: auto; }
 .all-day-cell { min-width: 0; }
 .time-scroll { min-height: 0; }

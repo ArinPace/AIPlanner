@@ -46,7 +46,7 @@ export function createPlannerMcp(username: string, scopes: string[]) {
     const events=row.state.events.filter(e=>(e.title+' '+e.description+' '+e.tagIds.map(id=>row.state.tags.find(t=>t.id===id)?.name || '').join(' ')).toLowerCase().includes(query)).sort((a,b)=>a.start.localeCompare(b.start))
     return {revision:row.revision,tags:row.state.tags,events:events.slice(offset,offset+limit),total:events.length,offset,hasMore:offset+limit<events.length,recurrence:'Base events; repeating series can occur after their stored start date.'}
   })
-  add('planner_files_search','Browse or search ALL internal Planner Files: nested folders, labels, note contents, links and PDF filenames. Optional folderId includes descendants. Returns IDs and paths; use planner_read_file for contents. PDF text is not searched here. Paginate for complete results.',{query:z.string().max(300).optional(),folderId:id.optional(),offset:z.number().int().nonnegative().optional(),limit:z.number().int().min(1).max(200).optional()},'planner:read',true,async args=>{
+  add('planner_files_search','Browse or search ALL internal Planner Files: nested folders, labels, note contents, links and PDF filenames. Optional folderId includes descendants. Returns IDs and paths; use planner_read_file for contents. PDF text is not searched here. Paginate for complete results.',{query:z.string().max(300).optional(),folderId:id.nullable().optional(),offset:z.number().int().nonnegative().optional(),limit:z.number().int().min(1).max(200).optional()},'planner:read',true,async args=>{
     const row=await filesRow(username)
     return {revision:row.revision,...searchFiles(row.state,args)}
   })
@@ -60,7 +60,7 @@ export function createPlannerMcp(username: string, scopes: string[]) {
     if(!document)throw new ApiError(404,'File not found.')
     return {...document,revision:row.revision,...(document.kind==='pdf'?await readPdf(username,document.id,args.pageStart || 1,args.pageCount || 5):{})}
   })
-  add('planner_update_item','Partially edit an existing internal Planner folder, note, link or PDF metadata. Rename/move any item; labels/color apply to folders, content to notes, url to links. Omitted fields and PDF bytes remain unchanged. Read current Files revision first.',{id,revision:z.number().int().nonnegative(),name:title.optional(),folderId:id.optional(),parentId:id.nullable().optional(),color:color.optional(),labels:labels.optional(),content:z.string().max(1000000).optional(),url:z.string().url().max(4000).optional()},'planner:write',false,async args=>{
+  add('planner_update_item','Partially edit an existing internal Planner folder, note, link or PDF metadata. Rename/move any item; labels/color apply to folders, content to notes, url to links. Omitted fields and PDF bytes remain unchanged. Read current Files revision first.',{id,revision:z.number().int().nonnegative(),name:title.optional(),folderId:id.nullable().optional(),parentId:id.nullable().optional(),color:color.optional(),labels:labels.optional(),content:z.string().max(1000000).optional(),url:z.string().url().max(4000).optional()},'planner:write',false,async args=>{
     const row=await filesRow(username)
     if(row.revision!==args.revision)throw new ApiError(409,'Read the latest Files revision before saving.')
     const folder=row.state.folders.find((f:any)=>f.id===args.id),note=row.state.files.find((f:any)=>f.id===args.id),document=(row.state.documents || []).find((f:any)=>f.id===args.id)
@@ -89,7 +89,7 @@ export function createPlannerMcp(username: string, scopes: string[]) {
     if (old) Object.assign(old,folder); else row.state.folders.push(folder)
     return {...await saveFiles(username,row.state,row.revision),folderId}
   })
-  add('planner_save_note','Create or update a text note inside a folder. Reuse an existing ID to edit it. Read the latest revision first.',{id:id.optional(),folderId:id,name:title,content:z.string().max(1000000),revision:z.number().int().nonnegative()},'planner:write',false,async args=>{
+  add('planner_save_note','Create or update a text note. Use folderId null for Files (top level), or an existing folder ID. Reuse an existing ID to edit it. Read the latest revision first.',{id:id.optional(),folderId:id.nullable(),name:title,content:z.string().max(1000000),revision:z.number().int().nonnegative()},'planner:write',false,async args=>{
     const row = await filesRow(username)
     if (row.revision !== args.revision) throw new ApiError(409,'Read the latest Files revision before saving.')
     const fileId = args.id || randomUUID(), old = row.state.files.find((f:any)=>f.id===fileId)
@@ -97,7 +97,7 @@ export function createPlannerMcp(username: string, scopes: string[]) {
     if (old) Object.assign(old,file); else row.state.files.push(file)
     return {...await saveFiles(username,row.state,row.revision),fileId}
   })
-  add('planner_save_link','Save a web link inside a folder. PDF uploads use the planner Files page; this tool stores links, not PDF bytes.',{id:id.optional(),folderId:id,name:title,url:z.string().url().max(4000),revision:z.number().int().nonnegative()},'planner:write',false,async args=>{
+  add('planner_save_link','Save a web link. Use folderId null for Files (top level), or an existing folder ID. PDF uploads use the planner Files page; this tool stores links, not PDF bytes.',{id:id.optional(),folderId:id.nullable(),name:title,url:z.string().url().max(4000),revision:z.number().int().nonnegative()},'planner:write',false,async args=>{
     const row = await filesRow(username)
     if (row.revision !== args.revision) throw new ApiError(409,'Read the latest Files revision before saving.')
     const documentId = args.id || randomUUID(), old = (row.state.documents || []).find((d:any)=>d.id===documentId)

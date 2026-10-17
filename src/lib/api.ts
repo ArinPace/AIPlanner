@@ -90,12 +90,12 @@ export interface FileBinEntry {id:string;names:string[];item_count:number;delete
 export function loadFileBin(){return request<{items:FileBinEntry[]}>('/api/files/bin')}
 export function fileBinAction(action:'trash'|'restore'|'purge',ids:string[],revision:number){return request<FilesState>('/api/files/'+action,{method:'POST',body:JSON.stringify({ids,revision})})}
 
-export async function uploadPdf(folderId: string, file: File) {
+export async function uploadPdf(folderId: string | null, file: File) {
   if (!(await file.slice(0, 1024).text()).includes('%PDF-')) throw new Error('Choose a valid PDF file.')
   const ticket = await request<{ mode: 'local' | 'signed'; id?: string; uploadUrl?: string }>('/api/files/upload/start', {
     method: 'POST', body: JSON.stringify({ folderId, name: file.name, size: file.size }),
   })
-  if (ticket.mode === 'local') return request<FilesState>(`/api/files/upload?folderId=${encodeURIComponent(folderId)}`, {
+  if (ticket.mode === 'local') return request<FilesState>(`/api/files/upload?folderId=${encodeURIComponent(folderId ?? '')}`, {
     method: 'POST', body: file, headers: { 'Content-Type': 'application/pdf', 'X-File-Name': encodeURIComponent(file.name) },
   })
   try {

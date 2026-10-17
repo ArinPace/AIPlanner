@@ -1,6 +1,17 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { buildTrash, restoreFiles, selection } from './files-bin.js'
+import { validateFilesState } from '../src/lib/files.js'
+
+test('top-level notes, links and PDFs validate and restore to Files without creating a folder',()=>{
+  const root:FilesState={folders:[],files:[{id:'root-note',folderId:null,name:'Root.txt',content:'Preserve root content',updatedAt:'2026-10-17T00:00:00Z'}],documents:[{id:'82400000-0000-4000-8000-000000000002',folderId:null,name:'Root.pdf',kind:'pdf',size:123,updatedAt:'2026-10-17T00:00:00Z'},{id:'root-link',folderId:null,name:'Root link',kind:'link',url:'https://example.org/',updatedAt:'2026-10-17T00:00:00Z'}]}
+  validateFilesState(root)
+  const trash=buildTrash(root,['root-note',...root.documents!.map(d=>d.id)])
+  assert.equal(trash.entry.itemCount,3)
+  assert.equal(trash.state.files.length,0)
+  assert.deepEqual(restoreFiles(trash.state,[trash.entry.snapshot]),root)
+  assert.throws(()=>validateFilesState({...root,files:[{...root.files[0],folderId:'missing'}]}),/existing folder/)
+})
 import type { FilesState } from '../src/lib/files.js'
 const now='2026-10-17T00:00:00Z'
 const state:FilesState={revision:7,folders:[{id:'parent',name:'School',parentId:null,color:'#123456',labels:['class'],updatedAt:now},{id:'child',name:'CS',parentId:'parent',color:'#654321',labels:[],updatedAt:now}],files:[{id:'note',name:'Notes.txt',folderId:'child',content:'Keep exact content',updatedAt:now}],documents:[{id:'82400000-0000-4000-8000-000000000001',name:'Assignment.pdf',folderId:'child',kind:'pdf',size:123,updatedAt:now},{id:'link',name:'Reading',folderId:'parent',kind:'link',url:'https://example.org/',updatedAt:now}]}

@@ -177,8 +177,8 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       if (!username) { send(res, 401, { error: 'Please sign in.' }); return true }
       const state = readFiles(username)
       validateFilesState(state)
-      const folderId = new URL(req.url ?? '', 'http://localhost').searchParams.get('folderId')
-      if (!folderId || !state.folders.some((folder) => folder.id === folderId)) {
+      const folderId = new URL(req.url ?? '', 'http://localhost').searchParams.get('folderId') || null
+      if (folderId !== null && !state.folders.some((folder) => folder.id === folderId)) {
         send(res, 400, { error: 'Choose an existing folder.' }); return true
       }
       let data: Buffer

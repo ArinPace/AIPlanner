@@ -13,7 +13,7 @@ test('bulk move preserves selected nested structure and file contents without mu
   assert.deepEqual(next.folders.find(f=>f.id==='parent')?.labels,['keep'])
   assert.equal(state.folders[0].parentId,null)
   assert.throws(()=>moveItems(state,['parent'],'child'),/outside/)
-  assert.throws(()=>moveItems(state,['note'],null),/Choose a folder/)
+  assert.equal(moveItems(state,['note'],null).files[0].folderId,null)
   assert.equal(moveItems(state,['note'],'target').files[0].folderId,'target')
 })
 test('collapsed navigation hides only descendants and preserves other branches',()=>{
