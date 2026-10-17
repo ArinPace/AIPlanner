@@ -59,9 +59,21 @@ export async function readBrowserPage(context, destination, { slackTimeout = 450
       visit(body)
       return parts.join('\n').slice(0,40000)
     })
+    // Albert renders its student pages in an NYU SIS frame. Read only frames
+    // whose destinations independently pass the enabled-source policy.
+    const frames = []
+    for (const frame of page.frames().filter(f => f !== page.mainFrame()).slice(0, 10)) {
+      try {
+        validate(frame.url())
+        if (!frame.url().startsWith('https://') || /(?:^|\/)(?:login|signin|auth|saml)(?:\/|$)/i.test(new URL(frame.url()).pathname) || await frame.locator('input[type=password]:visible').count()) continue
+        const text = await frame.locator('body').innerText({ timeout: 1500 })
+        frames.push({ url: frame.url(), text: text.slice(0, 20000) })
+      } catch { /* Unsupported frames and SSO pages are not source content. */ }
+    }
     const result = {
       title: await page.title(), url: page.url(),
-      text: messages ? messages.map(m => m.text).join('\n\n').slice(-40000) : ((await page.locator('body').innerText())+'\n'+shadowText).slice(0, 50000),
+      text: messages ? messages.map(m => m.text).join('\n\n').slice(-40000) : ((await page.locator('body').innerText())+'\n'+shadowText+'\n'+frames.map(f=>f.text).join('\n')).slice(0, 50000),
+      ...(frames.length ? { frames } : {}),
       links: await page.locator('a[href]').evaluateAll(nodes => nodes.slice(0, 200).map(n => ({ text: n.textContent?.trim().slice(0,160), url: n.href }))),
       images,
       ...(messages ? { messages, coverage: 'Latest rendered channel messages after scrolling to the end. browser_read automatically includes image pixels; browser_view_image can inspect additional images.' } : {}),

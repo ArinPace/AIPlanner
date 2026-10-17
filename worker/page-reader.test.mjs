@@ -3,6 +3,21 @@ import assert from 'node:assert/strict'
 import { chromium } from 'playwright-core'
 import { readBrowserPage } from './page-reader.mjs'
 
+test('Albert reads allowed SIS frames while excluding sign-in and unrelated frames',async()=>{
+  const browser=await chromium.launch({channel:'msedge',headless:true})
+  try{
+    const context=await browser.newContext()
+    await context.route('https://albert.nyu.edu/**',r=>r.fulfill({contentType:'text/html',body:'<h1>Albert</h1><iframe src="https://sis.nyu.edu/student"></iframe><iframe src="https://sis.nyu.edu/login"></iframe><iframe src="https://unrelated.test/"></iframe>'}))
+    await context.route('https://sis.nyu.edu/student',r=>r.fulfill({contentType:'text/html',body:'Student Center My Class Schedule Biology 101'}))
+    await context.route('https://sis.nyu.edu/login',r=>r.fulfill({contentType:'text/html',body:'Private login content <input type="password">'}))
+    await context.route('https://unrelated.test/**',r=>r.fulfill({contentType:'text/html',body:'Unrelated frame content'}))
+    const result=await readBrowserPage(context,'https://albert.nyu.edu/',{validate:url=>{if(!['albert.nyu.edu','sis.nyu.edu'].includes(new URL(url).hostname))throw Error('Outside enabled sources')}})
+    assert.match(result.text,/Biology 101/)
+    assert.equal(result.frames.length,1)
+    assert.doesNotMatch(result.text,/Private login|Unrelated frame/)
+  }finally{await browser.close()}
+})
+
 test('Slack reader waits beyond the app shell, returns messages and keeps existing tabs', async () => {
   const browser = await chromium.launch({ channel: 'msedge', headless: true })
   try {

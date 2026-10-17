@@ -7,6 +7,13 @@ import type { FilesState } from '../src/lib/files.js'
 const calendar: StoredState = {events:[],tags:[],hiddenTagIds:[],zoom:1}
 const files: FilesState = {folders:[],files:[],documents:[]}
 const update = {source:'brightspace',course:'Intro to CS',title:'Assignment 2',url:'https://brightspace.nyu.edu/d2l/assignment/2',summary:'Birthdays.java',dueAt:'2026-09-27T23:59:00-04:00'}
+
+test('Albert and WhatsApp updates require their actual source hosts',()=>{
+  for(const [source,url] of [['albert','https://sis.nyu.edu/student'],['whatsapp','https://web.whatsapp.com/']]){
+    assert.equal(parseUpdates({summary:'Checked',needsLogin:false,updates:[{...update,source,url}]}).updates[0].source,source)
+    assert.throws(()=>parseUpdates({summary:'Checked',needsLogin:false,updates:[{...update,source,url:'https://unrelated.test/'}]}),/unexpected source URL/)
+  }
+})
 test('sync creates nested notes and an exact timezone-aware deadline, without duplicates',()=>{
   const first=mergeUpdates(calendar,files,[update])
   const second=mergeUpdates(first.calendar,first.files,[update])

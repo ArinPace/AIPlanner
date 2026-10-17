@@ -44,6 +44,8 @@ test('profile migration preserves sessions and account choices without moving co
     const migrated=await siteLaunches(old)
     assert.equal(migrated.browserProfileVersion,1)
     assert.equal(migrated.browserProfiles.gmail,'legacy');assert.equal(migrated.browserProfiles.slack,'legacy');assert.equal(migrated.browserProfiles.drive,'stable')
+    assert.equal(stableProfile('albert',migrated.browserProfiles),true)
+    assert.equal(stableProfile('whatsapp',migrated.browserProfiles),true)
     assert.equal(migrated.gmail,'https://mail.google.com/mail/u/2/')
     for(const source of Object.keys(sources)){
       await rememberBrowserProfile(old,source)
