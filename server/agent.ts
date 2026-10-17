@@ -273,7 +273,7 @@ export async function refreshRuns(username: string) {
   const runs = check(await db().from('planner_agent_runs').select('*').eq('username',username).eq('kind','sync').in('status',['starting','running','applying']))
   for (const run of runs) {
     if (!run.provider_id) {
-      if (Date.parse(run.created_at) < Date.now()-120000) check(await db().from('planner_agent_runs').update({status:'failed',error:'Launch did not finish. Check Browser Use before retrying.',finished_at:new Date().toISOString()}).eq('id',run.id))
+      if (Date.parse(run.created_at) < Date.now()-120000) check(await db().from('planner_agent_runs').update({status:'failed',error:String(run.schedule_slot || '').startsWith('mcp:')?'Source updates did not finish saving. Retry the same collection request.':'Launch did not finish. Check Browser Use before retrying.',finished_at:new Date().toISOString()}).eq('id',run.id))
       continue
     }
     try {
