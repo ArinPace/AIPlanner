@@ -1019,10 +1019,27 @@ p {
 }
 
 .timed-event .event-title {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  display: block;
+  flex-shrink: 0;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
 }
+
+.timed-event { overflow-y: auto; overflow-x: hidden; min-width: 0; }
+.timed-event .event-time { flex-shrink: 0; }
+.timed-event .event-title svg { vertical-align: middle; margin-right: 4px; }
+.time-view .event-chip { flex-shrink: 0; align-items: flex-start; padding: 4px 6px; line-height: 1.35; }
+.time-view .event-chip .event-title { min-width: 0; white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+.time-view .event-chip svg { flex-shrink: 0; }
+.time-header.days-7, .all-day-row.days-7, .time-body.days-7 { grid-template-columns: 64px repeat(7, minmax(0, 1fr)); }
+.time-header.days-1, .all-day-row.days-1, .time-body.days-1 { grid-template-columns: 64px minmax(0, 1fr); }
+.time-header { flex-shrink: 0; }
+.all-day-row { flex-shrink: 0; max-height: 40vh; overflow-y: auto; }
+.all-day-cell { min-width: 0; }
+.time-scroll { min-height: 0; }
 
 .modal-backdrop {
   position: fixed;
