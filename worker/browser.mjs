@@ -8,9 +8,11 @@ import { allowedLivePath } from './browser-access.mjs'
 import { signedInPage, brightspaceCourse } from './site-status.mjs'
 import { siteLaunches, rememberLanding, googleAccountLanding, rememberBrowserProfile } from './site-launches.mjs'
 import { browserAccountIdentity } from './account-identity.mjs'
-import { googleBrowser, googleSources, closeGoogleBrowser } from './google-browser.mjs'
+import { googleBrowser, closeGoogleBrowser } from './google-browser.mjs'
 import { connectionMode, shouldConfirm } from './connection-mode.mjs'
-import { stableProfile } from './browser-routing.mjs'
+import { stableProfile, loginUsesStableProfile } from './browser-routing.mjs'
+import { sources } from './browser-sources.mjs'
+export { sources } from './browser-sources.mjs'
 export { googleBrowser, googleSources } from './google-browser.mjs'
 
 async function signedInBrowserPage(source, page) {
@@ -22,12 +24,6 @@ async function signedInBrowserPage(source, page) {
   return false
 }
 
-export const sources = {
-  brightspace: 'https://brightspace.nyu.edu/', gradescope: 'https://www.gradescope.com/',
-  gmail: 'https://mail.google.com/mail/u/0/', calendar: 'https://calendar.google.com/calendar/u/0/r',
-  drive: 'https://drive.google.com/drive/u/0/my-drive', slack: 'https://app.slack.com/',
-  instagram: 'https://www.instagram.com/', x: 'https://x.com/home',
-}
 let context, live
 export async function browser(dataDir) {
   if (!context) {
@@ -58,10 +54,16 @@ export async function openLogin(dataDir, source, intent = 'connect') {
     const saved = await siteLaunches(dataDir)
     destination = brightspaceCourse(saved.gradescope) || sources.brightspace
   }
-  const useStable=source==='x' || googleSources.has(source) && (intent!=='open' || stableProfile(source,preferred.browserProfiles))
+  let useStable=loginUsesStableProfile(source,intent,preferred.browserProfiles)
+  let result = await openView(dataDir, destination, 0, useStable)
+  let page=live.context.pages()[0]
+  // Open site may reveal that an old session expired. Its login must then move
+  // to regular Chrome too, before the user enters any credentials.
+  if(!useStable && !await signedInBrowserPage(source,page)){
+    result=await openView(dataDir,destination,0,true)
+    page=live.context.pages()[0];useStable=true
+  }
   if(useStable)await rememberBrowserProfile(dataDir,source)
-  const result = await openView(dataDir, destination, 0, useStable)
-  const page=live.context.pages()[0]
   const mode=connectionMode(intent,await signedInBrowserPage(source,page))
   if (live) { live.source = source; live.mode = mode; live.initialIdentity=await browserAccountIdentity(source,page); live.reported = false }
   if (source === 'gradescope') {

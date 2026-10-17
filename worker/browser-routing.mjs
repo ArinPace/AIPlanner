@@ -1,11 +1,17 @@
+import { sources } from './browser-sources.mjs'
 export const googleSources = new Set(['gmail','calendar','drive'])
 export const googleCdp = 'http://127.0.0.1:9223'
 export function stableProfile(source, profiles={}) {
-  // X's Google OAuth popup inherits its opener's browser. It must start in
-  // consumer Chrome too, rather than Chrome for Testing's automation launch.
-  return source==='calendar' || source==='x' || googleSources.has(source) && profiles[source]==='stable'
+  // Only explicitly retained old sessions use the legacy browser. Every new
+  // connection (including future sites) defaults to regular Chrome.
+  return source==='calendar' || source==='x' || profiles[source]!=='legacy'
 }
-export function browserEndpoint(url,profiles={}) {
-  const source={'mail.google.com':'gmail','calendar.google.com':'calendar','drive.google.com':'drive','x.com':'x','www.x.com':'x','twitter.com':'x','www.twitter.com':'x'}[new URL(url).hostname]
+export function loginUsesStableProfile(source,intent,profiles={}) {
+  return intent!=='open' || stableProfile(source,profiles)
+}
+export function browserEndpoint(url,profiles={},registry=sources) {
+  const host=new URL(url).hostname.replace(/^www\./,'')
+  const source=Object.keys(registry).find(key=>new URL(registry[key]).hostname.replace(/^www\./,'')===host) || (host==='twitter.com'?'x':null)
+  if(!source)throw new Error('Unknown browser source.')
   return stableProfile(source,profiles) ? googleCdp : 'http://127.0.0.1:9222'
 }

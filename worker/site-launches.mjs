@@ -1,6 +1,8 @@
-import { readFile, writeFile, rename } from 'node:fs/promises'
+import { readFile, writeFile, rename, stat } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { brightspaceCourse } from './site-status.mjs'
+import { sources } from './browser-sources.mjs'
 const googleSites={gmail:['mail.google.com','/mail'],calendar:['calendar.google.com','/calendar'],drive:['drive.google.com','/drive']}
 export function googleAccountLanding(source,href) {
   try {
@@ -23,14 +25,27 @@ export function selectedBrowserDestination(href,saved) {
   return href
 }
 export async function siteLaunches(dataDir) {
-  return JSON.parse(await readFile(path.join(dataDir,'site-launches.json'),'utf8').catch(()=>'{}'))
+  const saved=JSON.parse(await readFile(path.join(dataDir,'site-launches.json'),'utf8').catch(()=>'{}'))
+  if(saved.browserProfileVersion!==1){
+    // Retain existing sessions without copying any cookies. A future explicit
+    // reconnect moves only that source to the normal Chrome profile.
+    const legacy=await stat(path.join(dataDir,'browser','Default')).then(s=>s.isDirectory()).catch(()=>false)
+    const retained=legacy?Object.fromEntries(Object.keys(sources).filter(source=>!['calendar','x'].includes(source)).map(source=>[source,'legacy'])):{}
+    saved.browserProfiles={...retained,...saved.browserProfiles}
+    saved.browserProfileVersion=1
+    await saveLaunches(dataDir,saved)
+  }
+  return saved
+}
+async function saveLaunches(dataDir,saved){
+  const file=path.join(dataDir,'site-launches.json'),temporary=file+'.'+randomUUID()+'.tmp'
+  await writeFile(temporary,JSON.stringify(saved),{mode:0o600});await rename(temporary,file)
 }
 export async function rememberBrowserProfile(dataDir,source) {
-  if(!['gmail','calendar','drive'].includes(source))return
+  if(!(source in sources))throw new Error('Choose a supported website.')
   const saved=await siteLaunches(dataDir)
   saved.browserProfiles={...saved.browserProfiles,[source]:'stable'}
-  const file=path.join(dataDir,'site-launches.json')
-  await writeFile(file+'.tmp',JSON.stringify(saved),{mode:0o600});await rename(file+'.tmp',file)
+  await saveLaunches(dataDir,saved)
 }
 export async function rememberLanding(dataDir, source, href) {
   const u = new URL(href)
@@ -39,6 +54,5 @@ export async function rememberLanding(dataDir, source, href) {
   const saved = await siteLaunches(dataDir)
   if (saved[source] === url) return
   saved[source]=url
-  const file=path.join(dataDir,'site-launches.json')
-  await writeFile(file+'.tmp',JSON.stringify(saved),{mode:0o600});await rename(file+'.tmp',file)
+  await saveLaunches(dataDir,saved)
 }
