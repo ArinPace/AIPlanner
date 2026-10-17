@@ -10,7 +10,7 @@ import Highlight from '@tiptap/extension-highlight'
 import {TextStyleKit} from '@tiptap/extension-text-style'
 import {NoteIcon} from './NoteIcons'
 
-export function NoteEditor({value,richText,richTextSource,onChange,onNew,onDelete,onShare,onPin,pinned,onSearch,onMore,header,disabled=false}:{value:string;richText?:string;richTextSource?:string;onChange:(value:string,richText:string)=>void;onNew:()=>void;onDelete:()=>void;onShare:()=>void;onPin:()=>void;pinned:boolean;onSearch:()=>void;onMore:()=>void;disabled?:boolean;header?:ReactNode}){
+export function NoteEditor({value,richText,richTextSource,onChange,onNew,onDelete,onShare,onPin,pinned,onSearch,onMore,header,noteTitle,disabled=false}:{value:string;richText?:string;richTextSource?:string;onChange:(value:string,richText:string)=>void;onNew:()=>void;onDelete:()=>void;onShare:()=>void;onPin:()=>void;pinned:boolean;onSearch:()=>void;onMore:()=>void;disabled?:boolean;header?:ReactNode;noteTitle?:string}){
  const [menu,setMenu]=useState<'format'|'media'|'table'|null>(null),[attachment,setAttachment]=useState<'link'|'image'|null>(null),[url,setUrl]=useState('')
  const toolbar=useRef<HTMLDivElement>(null)
  const lastEmitted=useRef(value)
@@ -21,9 +21,12 @@ export function NoteEditor({value,richText,richTextSource,onChange,onNew,onDelet
  useEffect(()=>{if(editor && value!==lastEmitted.current && editor.getMarkdown()!==value && !editor.isFocused){let next:object|string=value;let type:'json'|'markdown'='markdown';if(richText&&richTextSource===value)try{next=JSON.parse(richText);type='json'}catch{};editor.commands.setContent(next,{contentType:type,emitUpdate:false});lastEmitted.current=value}},[editor,value,richText,richTextSource])
  useEffect(()=>{if(!menu)return;function close(e:MouseEvent){if(!toolbar.current?.contains(e.target as Node))setMenu(null)};function escape(e:KeyboardEvent){if(e.key==='Escape')setMenu(null)};document.addEventListener('mousedown',close);document.addEventListener('keydown',escape);return()=>{document.removeEventListener('mousedown',close);document.removeEventListener('keydown',escape)}},[menu])
  if(!editor)return <p role="status">Opening note...</p>
+ const first=editor.state.doc.firstChild
+ const normalize=(text:string)=>text.normalize('NFC').trim().replace(/\s+/g,' ').toLowerCase()
+ const bodyHasTitle=Boolean(noteTitle?.trim() && first?.type.name==='heading' && normalize(first.textContent)===normalize(noteTitle))
  const action=(fn:()=>void)=>{fn();setMenu(null)}
  function addLink(){if(!/^https?:\/\//i.test(url))return;if(attachment==='image')editor!.chain().focus().setImage({src:url,alt:'Note image'}).run();else if(editor!.state.selection.empty)editor!.chain().focus().insertContent({type:'text',text:url,marks:[{type:'link',attrs:{href:url}}]}).run();else editor!.chain().focus().setLink({href:url}).run();setAttachment(null);setUrl('')}
- return <div className="apple-editor-shell">
+ return <div className="apple-editor-shell" data-body-has-title={bodyHasTitle}>
   <div ref={toolbar} onMouseDown={event=>{if((event.target as Element).closest('button'))event.preventDefault()}} className="apple-note-toolbar" role="toolbar" aria-label="Note toolbar">
    <div className="apple-toolbar-leading"><button type="button" title="New note" aria-label="New note" onClick={onNew}><NoteIcon name="compose"/></button><button type="button" title="Move note to Bin" aria-label="Move note to Bin" onClick={onDelete}><NoteIcon name="trash"/></button></div>
    <div className="apple-format-tools">
