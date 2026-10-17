@@ -45,7 +45,7 @@ export async function handleVmWorker(request: Request, path: string) {
   const host = await workerIdentity(request)
   if (path === '/api/agent/vm/worker/config') {
     const settings = checked(await db().from('planner_vm_settings').select('*').eq('username', host.username).single())
-    return json({ sources: settings.sources, whatsappReadConsentAt: settings.whatsapp_read_consent_at, aiProvider: settings.ai_provider, credential: settings.credential ? openVmCredential(settings.credential) : null, personalChatGptAllowed: personalChatGptAllowed(host.username) })
+    return json({ sources: settings.sources, messageReadConsent:settings.message_read_consent, whatsappReadConsentAt: settings.whatsapp_read_consent_at, aiProvider: settings.ai_provider, credential: settings.credential ? openVmCredential(settings.credential) : null, personalChatGptAllowed: personalChatGptAllowed(host.username) })
   }
   if (path === '/api/agent/vm/worker/mcp') {
     const jobId = request.headers.get('x-planner-job'), lease = request.headers.get('x-planner-lease')
@@ -124,7 +124,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
     const [hosts, chats, settings, runs, provisioning, accounts, deletedChats, queue] = await Promise.all([
       db().from('planner_vm_hosts').select(publicHost).eq('username', username).is('revoked_at', null).order('created_at', { ascending: false }),
       db().from('planner_vm_chats').select('id,title,archived,created_at,updated_at').eq('username', username).is('deleted_at',null).order('updated_at', { ascending: false }).limit(100),
-      db().from('planner_vm_settings').select('sources,schedule_enabled,sites,ai_provider,schedule,whatsapp_read_consent_at').eq('username', username).single(),
+      db().from('planner_vm_settings').select('sources,schedule_enabled,sites,ai_provider,schedule,whatsapp_read_consent_at,message_read_consent').eq('username', username).single(),
       db().from('planner_vm_jobs').select(publicJob).eq('username', username).order('created_at', { ascending: false }).limit(20),
       db().from('planner_vm_provisioning').select('status,error,wake_until,power_state,power_updated_at').eq('username', username).maybeSingle(),
       db().from('planner_browser_accounts').select('id,source,identity,label,active,verified_at').eq('username',username).order('verified_at',{ascending:false}),
@@ -157,6 +157,14 @@ export async function handleVmRequest(request: Request, path: string, username: 
     return json({ ok: true })
   }
   if (path === '/api/agent/vm/approval') return answerApproval(username,input)
+  if (path === '/api/agent/vm/messages/permission') {
+    if(!['instagram','x','linkedin'].includes(String(input.source)) || typeof input.allow!=='boolean')throw new ApiError(400,'Choose a supported message source and permission.')
+    const previous=checked(await db().from('planner_vm_settings').select('message_read_consent,updated_at').eq('username',username).single())
+    const consent={...previous.message_read_consent,[String(input.source)]:input.allow?new Date().toISOString():null}
+    const rows=checked(await db().from('planner_vm_settings').update({message_read_consent:consent,updated_at:new Date().toISOString()}).eq('username',username).eq('updated_at',previous.updated_at).select('username'))
+    if(!rows.length)throw new ApiError(409,'Settings changed. Refresh and try again.')
+    return json({ok:true})
+  }
   if (path === '/api/agent/vm/google/connect') return startGoogleCalendar(username)
   if (path === '/api/agent/vm/browser/accounts') {
     if (!uuid(input.id)) throw new ApiError(400,'Choose an account.')

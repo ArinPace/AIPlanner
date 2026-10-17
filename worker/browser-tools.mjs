@@ -15,6 +15,8 @@ import { resumeGradescope } from './gradescope-launch.mjs'
 import { findSlackChannel } from './source-readiness.mjs'
 import { readWhatsApp } from './whatsapp-reader.mjs'
 import { requireWhatsAppPermission } from './whatsapp-permission.mjs'
+import { messageSites, listMessageThreads, readSelectedMessages } from './selected-messages.mjs'
+import { messagePermissionAllowed } from './message-permission.mjs'
 
 async function connectBrowser(destination,profiles) {
   const dataDir=process.env.PLANNER_DATA_DIR || '/var/lib/planner'
@@ -79,6 +81,25 @@ server.registerTool('browser_read_whatsapp_chat', {
     return { content: [{ type: 'text', text: JSON.stringify(await readWhatsApp(connection.contexts()[0], { chatName })) }] }
   } catch (error) { return { isError: true, content: [{ type: 'text', text: error.message }] } }
   finally { if (connection) await connection.close() }
+}))
+async function authorizedMessageConnection(source){
+  if(!enabled.includes(source) || !messageSites[source])throw new Error('Enable this message source in Add sites first.')
+  const response=await fetch(new URL('/api/agent/vm/worker/config',process.env.PLANNER_ORIGIN),{method:'POST',headers:{Authorization:'Bearer '+process.env.PLANNER_WORKER_TOKEN,'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(15000)})
+  if(!response.ok)throw new Error('Could not verify current message-reading permission.')
+  const config=await response.json()
+  if(!messagePermissionAllowed(config,source))throw new Error('Allow selected conversation reading for this source in Add sites first.')
+  const saved=await siteLaunches(process.env.PLANNER_DATA_DIR || '/var/lib/planner')
+  return connectBrowser(messageSites[source].inbox,saved.browserProfiles)
+}
+for(const action of ['list','read'])server.registerTool(action==='list'?'browser_list_message_threads':'browser_read_messages',{
+  description:action==='list'?'List visible conversation names from the signed-in Instagram, X or LinkedIn inbox. Requires saved message-reading consent. Does not open a conversation or return message previews. Use only when the user requests messages. Never unlock, reset or bypass encryption/passcodes.':'Open one existing conversation by its exact name from browser_list_message_threads or its validated conversation URL, and read rendered text. Requires explicit user-selected conversation or user-authorized inbox review. Opening may mark messages seen. No sending, reacting, composing or deleting. Media and older history are not included. Respect safety rejections; do not retry via another tool.',
+  inputSchema:action==='list'?{source:z.enum(['instagram','x','linkedin'])}:{source:z.enum(['instagram','x','linkedin']),name:z.string().trim().min(1).max(150).optional(),url:z.string().url().max(2000).optional()},
+  annotations:{readOnlyHint:action==='list',destructiveHint:false,openWorldHint:true},
+},async(args)=>queued(async()=>{
+  let connection
+  try{connection=await authorizedMessageConnection(args.source);const result=action==='list'?await listMessageThreads(connection.contexts()[0],args.source):await readSelectedMessages(connection.contexts()[0],args.source,args);return {content:[{type:'text',text:JSON.stringify(result)}]}}
+  catch(error){return {isError:true,content:[{type:'text',text:JSON.stringify({code:error.code || 'MESSAGE_READ_FAILED',message:error.code?error.message:'Message access failed. Verify source permission, sign-in and the exact selected conversation. No content read is verified.'})}]}}
+  finally{if(connection)await connection.close()}
 }))
 server.registerTool('browser_find_slack_channel',{
   description:'Find one user-selected joined Slack channel by exact name. Supply workspace when the user names a workspace, so a channel in another workspace is never substituted. Returns connected workspace names if unavailable; ask the user to connect the missing workspace rather than demand a channel URL. Does not join channels or inspect DMs. Follow the returned channel URL with browser_read.',

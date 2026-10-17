@@ -9,7 +9,7 @@ import { validateFilesState, type FilesState } from '../src/lib/files.js'
 import type { StoredState } from '../src/types.js'
 import { expireMcpBrowsers } from './mcp-browser.js'
 
-const SOURCES = ['brightspace', 'gradescope', 'gmail', 'calendar', 'drive', 'slack', 'instagram', 'x', 'albert', 'whatsapp'] as const
+const SOURCES = ['brightspace', 'gradescope', 'gmail', 'calendar', 'drive', 'slack', 'instagram', 'x', 'albert', 'whatsapp', 'linkedin'] as const
 const BASE = 'https://api.browser-use.com/api/v4'
 const ORIGIN = process.env.APP_ORIGIN || 'https://aiplanner-ten.vercel.app'
 const sha = (value: string) => createHash('sha256').update(value).digest('hex')
@@ -184,7 +184,7 @@ export function parseUpdates(value: unknown): { summary: string; needsLogin: boo
   for (const item of output.updates) {
     if (!item || !SOURCES.includes(item.source) || ['course','title','url','summary'].some(k=>typeof item[k] !== 'string') || !item.title.trim() || item.title.length>300 || item.course.length>200 || item.summary.length>12000 || item.url.length>4000) throw new ApiError(502, 'The agent returned an invalid update. No planner data was changed.')
     const url = new URL(item.url)
-    const hosts: Record<string,string[]> = { albert:['albert.nyu.edu','sis.nyu.edu'], whatsapp:['web.whatsapp.com'], brightspace:['brightspace.nyu.edu'], gradescope:['www.gradescope.com','gradescope.com'], gmail:['mail.google.com'], calendar:['calendar.google.com'], drive:['drive.google.com','docs.google.com'],slack:['app.slack.com','slack.com'],instagram:['www.instagram.com','instagram.com'],x:['x.com','www.x.com','twitter.com','www.twitter.com'] }
+    const hosts: Record<string,string[]> = { linkedin:['www.linkedin.com','linkedin.com'], albert:['albert.nyu.edu','sis.nyu.edu'], whatsapp:['web.whatsapp.com'], brightspace:['brightspace.nyu.edu'], gradescope:['www.gradescope.com','gradescope.com'], gmail:['mail.google.com'], calendar:['calendar.google.com'], drive:['drive.google.com','docs.google.com'],slack:['app.slack.com','slack.com'],instagram:['www.instagram.com','instagram.com'],x:['x.com','www.x.com','twitter.com','www.twitter.com'] }
     const expectedHost=hosts[item.source].includes(url.hostname) || (item.source==='slack' && url.hostname.endsWith('.slack.com'))
     if (url.protocol !== 'https:' || url.username || url.password || !expectedHost) throw new ApiError(502, 'The agent returned an unexpected source URL. No planner data was changed.')
     if (item.dueAt !== null && (typeof item.dueAt !== 'string' || !/T.*(?:Z|[+-]\d\d:\d\d)$/.test(item.dueAt) || !Number.isFinite(Date.parse(item.dueAt)))) throw new ApiError(502, 'The agent returned an ambiguous deadline. No planner data was changed.')

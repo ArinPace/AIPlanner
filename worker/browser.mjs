@@ -19,6 +19,10 @@ export { googleBrowser, googleSources } from './google-browser.mjs'
 
 async function signedInBrowserPage(source, page) {
   if (source === 'whatsapp') return whatsappSignedInPage(page)
+  if (source === 'linkedin') {
+    const url=new URL(page.url())
+    return url.origin==='https://www.linkedin.com' && !/^\/(?:login|checkpoint|challenge|authwall)/.test(url.pathname) && await page.locator('a[href*="/messaging/"]:visible').count()>0 && await page.locator('a[href*="/mynetwork/"]:visible').count()>0
+  }
   for (const frame of page.frames()) {
     if (!(source==='albert' && new URL(frame.url()).hostname==='sis.nyu.edu') && new URL(frame.url()).hostname.replace(/^www\./,'') !== new URL(sources[source]).hostname.replace(/^www\./,'')) continue
     const text = await frame.locator('body').innerText({ timeout: 1500 }).catch(() => '')
@@ -31,7 +35,9 @@ let context, live
 export async function browser(dataDir) {
   if (!context) {
     await mkdir(path.join(dataDir, 'browser'), { recursive: true, mode: 0o700 })
-    context = await chromium.launchPersistentContext(path.join(dataDir, 'browser'), {
+    const endpoint='http://127.0.0.1:9222'
+    const available=await fetch(endpoint+'/json/version',{signal:AbortSignal.timeout(1000)}).then(r=>r.ok).catch(()=>false)
+    context = available ? (await chromium.connectOverCDP(endpoint)).contexts()[0] : await chromium.launchPersistentContext(path.join(dataDir, 'browser'), {
       headless: false, viewport: null, env: { ...process.env, DISPLAY: ':99' },
       args: ['--remote-debugging-port=9222', '--remote-debugging-address=127.0.0.1', '--window-size=1440,900'],
     })
@@ -40,6 +46,7 @@ export async function browser(dataDir) {
   return context
 }
 export const liveBrowserOpen = () => Boolean(live)
+export const liveBrowserNeedsSignIn = () => Boolean(live && live.mode!=='open')
 export async function shutdownBrowser() { await closeLiveBrowser(); await closeGoogleBrowser(); if (context) await context.close() }
 export async function closeLiveBrowser() {
   if (!live) return
