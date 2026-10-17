@@ -2,8 +2,13 @@
 export function runtimeQuestions(method, params) {
   if(method==='mcpServer/elicitation/request') {
     if(!['form','openai/form','openaiForm'].includes(params.mode))throw new Error('Unsupported approval mode.')
+    if(params.requestedSchema?.type!=='object')throw new Error('Unsupported approval schema.')
     const properties=Object.entries(params.requestedSchema?.properties || {})
-    if(!properties.length || properties.length>3)throw new Error('Unsupported approval form.')
+    if(!properties.length){
+      if(typeof params.message!=='string' || !params.message.trim())throw new Error('Missing approval action.')
+      return [{id:'confirmation',question:params.message,options:['Allow once','Decline']}]
+    }
+    if(properties.length>3)throw new Error('Unsupported approval form.')
     return properties.map(([id,field])=>{
       const options=field.type==='boolean'?['Allow','Decline']:field.type==='string' && Array.isArray(field.enum) && field.enum.every(v=>typeof v==='string')?field.enum:null
       if(!options?.length)throw new Error('Unsupported approval field.')
@@ -25,7 +30,10 @@ export async function relayApproval(method,params,{api,job,report}){
     await new Promise(r=>setTimeout(r,2000))
     const status=await api('approval',{action:'poll',id:request.id,jobId:job.id,lease:job.lease})
     if(status.answers){
-      if(method==='mcpServer/elicitation/request')return {action:'accept',content:Object.fromEntries(questions.map(q=>[q.id,params.requestedSchema.properties[q.id].type==='boolean'?status.answers[q.id]==='Allow':status.answers[q.id]]))}
+      if(method==='mcpServer/elicitation/request'){
+        if(!Object.keys(params.requestedSchema.properties || {}).length)return status.answers.confirmation==='Allow once'?{action:'accept',content:{}}:{action:'decline',content:null}
+        return {action:'accept',content:Object.fromEntries(questions.map(q=>[q.id,params.requestedSchema.properties[q.id].type==='boolean'?status.answers[q.id]==='Allow':status.answers[q.id]]))}
+      }
       return {answers:Object.fromEntries(questions.map(q=>[q.id,{answers:[status.answers[q.id]]}]))}
     }
   }
