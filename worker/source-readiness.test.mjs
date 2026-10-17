@@ -89,5 +89,6 @@ test('modern Slack channel IDs and workspace selection never substitute another 
   assert.equal(missing.workspaces[0].name,'NYU Stern')
   const found=await findSlackChannel(page,'#general',{workspace:'NYU Stern',timeout:1000})
   assert.equal(found.channel.url,'https://app.slack.com/client/E123/C123')
+  assert.equal((await findSlackChannel(page,'general',{workspace:'Stern',timeout:1000})).channel.url,found.channel.url)
  }finally{await browser.close()}
 })

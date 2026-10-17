@@ -11,6 +11,7 @@ import { connectPersonalDevice, disconnectPersonalDevice, personalCodexStatus } 
 import { claudeStatus, connectClaude, disconnectClaude, claudeChat } from './claude.mjs'
 import { whatsappPermissionText } from './whatsapp-permission.mjs'
 import { relayApproval } from './approval-bridge.mjs'
+import { browserRuntimeEnv } from './browser-runtime-env.mjs'
 
 const dataDir = process.env.PLANNER_DATA_DIR || '/var/lib/planner'
 const workerStartedAt = new Date().toISOString()
@@ -68,7 +69,7 @@ async function chat(job, auth, remote) {
     'mcp_servers.browser.command': node,
     'mcp_servers.browser.tool_timeout_sec': 300,
     'mcp_servers.browser.args': [path.join(root, 'browser-tools.mjs')],
-    'mcp_servers.browser.env': { PLANNER_ENABLED_SOURCES: JSON.stringify(remote.sources) },
+    'mcp_servers.browser.env': { ...browserRuntimeEnv(dataDir), PLANNER_ENABLED_SOURCES: JSON.stringify(remote.sources) },
     'mcp_servers.browser.env_vars': ['PLANNER_WORKER_TOKEN', 'PLANNER_ORIGIN'],
   }
   for (const [key, value] of Object.entries(overrides)) args.push('-c', `${key}=${tomlValue(value)}`)

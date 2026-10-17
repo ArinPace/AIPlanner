@@ -37,7 +37,9 @@ export async function findSlackChannel(page,name,{workspace,timeout=30000}={}) {
   await page.keyboard.press('Escape');await page.keyboard.press('Escape')
   const workspaces=await slackWorkspaces(page)
   if(workspace){
-    const matches=workspaces.filter(w=>w.name.toLocaleLowerCase()===workspace.trim().toLocaleLowerCase())
+    const requested=workspace.trim().toLocaleLowerCase()
+    const exact=workspaces.filter(w=>w.name.toLocaleLowerCase()===requested)
+    const matches=exact.length?exact:workspaces.filter(w=>(' '+w.name.toLocaleLowerCase()+' ').includes(' '+requested+' '))
     if(matches.length!==1)return {channel:null,code:'SLACK_WORKSPACE_UNAVAILABLE',workspaces,coverage:'The requested workspace is not available in this saved Slack session. Connect that workspace through Add sites > Slack. No channel messages were read; a channel URL is not required.'}
     if(new URL(page.url()).pathname.split('/')[2]!==matches[0].id){await page.goto(matches[0].url,{waitUntil:'domcontentloaded',timeout});await page.locator('.p-channel_sidebar__channel,[data-qa="channel-sidebar-channel"]').first().waitFor({timeout})}
   }
