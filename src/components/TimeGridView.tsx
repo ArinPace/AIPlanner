@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CalendarEvent, CalendarView, Occurrence, Tag } from '../types'
 import { contrastText, eventColor } from '../lib/colors'
 import {
@@ -11,6 +11,7 @@ import {
   startOfDay,
 } from '../lib/dates'
 import { RepeatIcon } from './Icons'
+import {layoutTimeCards} from '../lib/timeLayout'
 
 type TimeGridViewProps = {
   cursor: Date
@@ -24,31 +25,6 @@ type TimeGridViewProps = {
 
 const BASE_HOUR_HEIGHT = 48
 const HOURS = Array.from({ length: 24 }, (_, index) => index)
-
-type LaidOut = Occurrence & { col: number; cols: number }
-
-function layoutDay(items: Occurrence[]): LaidOut[] {
-  const sorted = [...items].sort((a, b) => a.start.getTime() - b.start.getTime())
-  const columns: Occurrence[][] = []
-
-  for (const item of sorted) {
-    let placed = false
-    for (const column of columns) {
-      const last = column[column.length - 1]
-      if (last.end.getTime() <= item.start.getTime()) {
-        column.push(item)
-        placed = true
-        break
-      }
-    }
-    if (!placed) columns.push([item])
-  }
-
-  return sorted.map((item) => {
-    const col = columns.findIndex((column) => column.includes(item))
-    return { ...item, col: Math.max(col, 0), cols: Math.max(columns.length, 1) }
-  })
-}
 
 function clipToDay(item: Occurrence, day: Date): { start: Date; end: Date } | null {
   const dayStart = startOfDay(day)
@@ -64,6 +40,8 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
   const days = view === 'day' ? [startOfDay(cursor)] : getWeekDays(cursor)
   const scrollRef = useRef<HTMLDivElement>(null)
   const prevZoom = useRef(zoom)
+  const bodyRef=useRef<HTMLDivElement>(null)
+  const [cardHeights,setCardHeights]=useState<Record<string,number>>({})
   const hourHeight = Math.round(BASE_HOUR_HEIGHT * zoom)
 
   useEffect(() => {
@@ -82,11 +60,21 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
     prevZoom.current = zoom
   }, [zoom])
 
+  useEffect(()=>{
+    const observer=new ResizeObserver(entries=>setCardHeights(current=>{
+      let next=current
+      for(const entry of entries){const key=(entry.target as HTMLElement).dataset.layoutKey!;const height=Math.ceil(entry.target.getBoundingClientRect().height);if(Math.abs((current[key]??0)-height)>1){if(next===current)next={...current};next[key]=height}}
+      return next
+    }))
+    bodyRef.current?.querySelectorAll('.timed-event').forEach(node=>observer.observe(node))
+    return()=>observer.disconnect()
+  },[occurrences,view,cursor,hourHeight])
+
   const now = new Date()
   const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 60) * hourHeight
 
   return (
-    <div className="time-view">
+    <div className="time-view-scroll"><div className={`time-view is-${view}`}>
       <div className={`time-header days-${days.length}`}>
         <div className="gutter" />
         {days.map((day) => (
@@ -127,7 +115,7 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
       </div>
 
       <div className="time-scroll" ref={scrollRef}>
-        <div className={`time-body days-${days.length}`} style={{ height: 24 * hourHeight }}>
+        <div ref={bodyRef} className={`time-body days-${days.length}`} style={{ height: 24 * hourHeight }}>
           <div className="hours">
             {HOURS.map((hour) => (
               <div key={hour} className="hour-label" style={{ height: hourHeight }}>
@@ -138,7 +126,15 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
 
           {days.map((day) => {
             const timed = occurrences.filter((item) => !item.event.allDay && clipToDay(item, day))
-            const laidOut = layoutDay(timed)
+            const laidOut = layoutTimeCards(timed.map(item=>{
+              const clipped=clipToDay(item,day)!
+              const top=(clipped.start.getHours()*60+clipped.start.getMinutes())/60*hourHeight
+              const endMinutes=clipped.end.getHours()*60+clipped.end.getMinutes()+clipped.end.getSeconds()/60
+              const startMinutes=clipped.start.getHours()*60+clipped.start.getMinutes()
+              const height=Math.max((endMinutes-startMinutes)/60*hourHeight,18)
+              const key=day.toDateString()+'/'+item.event.id+'/'+item.start.toISOString()
+              return {item,key,top,height,bottom:top+Math.max(height,cardHeights[key]??0)}
+            }))
             const showNow = isToday(day)
 
             return (
@@ -158,15 +154,9 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
 
                 {showNow && <div className="now-line" style={{ top: nowTop }} />}
 
-                {laidOut.map((item) => {
-                  const clipped = clipToDay(item, day)
-                  if (!clipped) return null
-                  const startMinutes = clipped.start.getHours() * 60 + clipped.start.getMinutes()
-                  const endMinutes = clipped.end.getHours() * 60 + clipped.end.getMinutes() + clipped.end.getSeconds() / 60
-                  const top = (startMinutes / 60) * hourHeight
-                  const height = Math.max(((endMinutes - startMinutes) / 60) * hourHeight, 18)
-                  const width = `calc((100% - 8px) / ${item.cols})`
-                  const left = `calc(4px + ${item.col} * (100% - 8px) / ${item.cols})`
+                {laidOut.map(({item,key,top,height,col,cols}) => {
+                  const width = `calc((100% - 8px) / ${cols})`
+                  const left = `calc(4px + ${col} * (100% - 8px) / ${cols})`
                   const color = eventColor(item.event, tags)
 
                   return (
@@ -174,9 +164,11 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
                       key={`${item.event.id}-${item.start.toISOString()}`}
                       type="button"
                       className="timed-event"
+                      data-layout-key={key}
+                      title={`${item.event.title} - ${formatTimeCompact(item.start)} - ${formatTimeCompact(item.end)}`}
                       style={{
                         top,
-                        height,
+                        minHeight:height,
                         width,
                         left,
                         background: color,
@@ -188,7 +180,7 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
                         {item.event.recurrence.frequency !== 'none' && <RepeatIcon />}
                         {item.event.title || '(No title)'}
                       </span>
-                      <span className="event-time">{formatTimeCompact(item.start)}</span>
+                      <span className="event-time">{formatTimeCompact(item.start)} – {formatTimeCompact(item.end)}</span>
                     </button>
                   )
                 })}
@@ -197,6 +189,6 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
           })}
         </div>
       </div>
-    </div>
+    </div></div>
   )
 }
