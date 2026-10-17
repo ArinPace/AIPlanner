@@ -1,5 +1,15 @@
 // Only relay explicit runtime questions; never invent or automatically accept a grant.
 export function runtimeQuestions(method, params) {
+  if(method==='mcpServer/elicitation/request') {
+    if(!['form','openai/form','openaiForm'].includes(params.mode))throw new Error('Unsupported approval mode.')
+    const properties=Object.entries(params.requestedSchema?.properties || {})
+    if(!properties.length || properties.length>3)throw new Error('Unsupported approval form.')
+    return properties.map(([id,field])=>{
+      const options=field.type==='boolean'?['Allow','Decline']:field.type==='string' && Array.isArray(field.enum) && field.enum.every(v=>typeof v==='string')?field.enum:null
+      if(!options?.length)throw new Error('Unsupported approval field.')
+      return {id,question:[params.message,field.title,field.description].filter(Boolean).join('\n'),options}
+    })
+  }
   if (!['item/tool/requestUserInput','tool/requestUserInput'].includes(method)) throw new Error('Unsupported approval request.')
   if (!params.questions?.length || params.questions.length>3) throw new Error('Unsupported approval request.')
   return params.questions.map(q=>{
@@ -14,7 +24,10 @@ export async function relayApproval(method,params,{api,job,report}){
   while(Date.now()<Date.parse(request.expires_at)){
     await new Promise(r=>setTimeout(r,2000))
     const status=await api('approval',{action:'poll',id:request.id,jobId:job.id,lease:job.lease})
-    if(status.answers)return {answers:Object.fromEntries(questions.map(q=>[q.id,{answers:[status.answers[q.id]]}]))}
+    if(status.answers){
+      if(method==='mcpServer/elicitation/request')return {action:'accept',content:Object.fromEntries(questions.map(q=>[q.id,params.requestedSchema.properties[q.id].type==='boolean'?status.answers[q.id]==='Allow':status.answers[q.id]]))}
+      return {answers:Object.fromEntries(questions.map(q=>[q.id,{answers:[status.answers[q.id]]}]))}
+    }
   }
   throw new Error('Approval request expired.')
 }

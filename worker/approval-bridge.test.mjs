@@ -14,4 +14,6 @@ test('runtime approval bridge relays the user decision and never grants unsuppor
   }})
   assert.deepEqual(response,{answers:{q:{answers:['Decline']}}})
   assert.equal(calls[0].jobId,'job');assert.equal(calls[1].lease,'lease')
+  assert.deepEqual(runtimeQuestions('mcpServer/elicitation/request',{mode:'form',message:'Confirm selected read',requestedSchema:{properties:{approve:{type:'boolean'}}}}),[{id:'approve',question:'Confirm selected read',options:['Allow','Decline']}])
+  assert.throws(()=>runtimeQuestions('mcpServer/elicitation/request',{mode:'url'}))
 })
