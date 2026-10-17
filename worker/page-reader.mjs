@@ -17,9 +17,14 @@ async function shadowTextFor(frame) { return await frame.locator('body').evaluat
 import { isSlackWorkspace, isSlackChannel, slackMessages, waitForSource, gmailContent, slackChannels } from './source-readiness.mjs'
 import { readGoogleDocument } from './google-doc-reader.mjs'
 import { brightspaceContents } from './brightspace-reader.mjs'
+import { readWhatsApp } from './whatsapp-reader.mjs'
 
 export async function readBrowserPage(context, destination, { slackTimeout = 45000, validate = () => {}, inspect } = {}) {
   const target = new URL(destination)
+  if (target.origin === 'https://web.whatsapp.com') {
+    const result = await readWhatsApp(context)
+    return inspect ? await inspect(null, result, false) : result
+  }
   const slack = isSlackChannel(target)
   if(target.hostname==='app.slack.com' && /\/D[A-Z0-9]+(?:\/|$)/.test(target.pathname))throw new Error('Direct messages are outside this review. Choose a selected public channel.')
   const existing = slack && context.pages().find(p => {

@@ -13,6 +13,7 @@ import { rememberLanding, siteLaunches, selectedBrowserDestination } from './sit
 import { browserEndpoint } from './browser-routing.mjs'
 import { resumeGradescope } from './gradescope-launch.mjs'
 import { findSlackChannel } from './source-readiness.mjs'
+import { readWhatsApp } from './whatsapp-reader.mjs'
 
 async function connectBrowser(destination,profiles) {
   const dataDir=process.env.PLANNER_DATA_DIR || '/var/lib/planner'
@@ -56,7 +57,21 @@ server.registerTool('browser_read', {
     const page = JSON.parse(output.content[0].text)
     await rememberLanding(process.env.PLANNER_DATA_DIR || '/var/lib/planner','slack',page.url).catch(()=>{})
     return output
-  } catch (error) { const known=['SLACK_NOT_READY','GMAIL_NOT_READY','FORM_NOT_READY','NEEDS_LOGIN'].includes(error.code);return { isError: true, content: [{ type: 'text', text:JSON.stringify({code:known?error.code:'READ_FAILED',needsLogin:error.code==='NEEDS_LOGIN',message:known?error.message:'This page could not be read. Check whether it is enabled and signed in, and report incomplete access.'}) }] } }
+  } catch (error) { const known=['SLACK_NOT_READY','GMAIL_NOT_READY','FORM_NOT_READY','WHATSAPP_NOT_READY','NEEDS_LOGIN'].includes(error.code);return { isError: true, content: [{ type: 'text', text:JSON.stringify({code:known?error.code:'READ_FAILED',needsLogin:error.code==='NEEDS_LOGIN',message:known?error.message:'This page could not be read. Check whether it is enabled and signed in, and report incomplete access.'}) }] } }
+  finally { if (connection) await connection.close() }
+}))
+server.registerTool('browser_read_whatsapp_chat', {
+  description: 'Open and read one WhatsApp chat/group by its exact displayed name, only when selected by the user or saved review instructions. Never send messages. Opening may mark messages read. Returns rendered text only, not older history or media.',
+  inputSchema: { chatName: z.string().trim().min(1).max(200) },
+  annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+}, async ({ chatName }) => queued(async () => {
+  let connection
+  try {
+    if (!enabled.includes('whatsapp')) throw new Error('WhatsApp is not enabled.')
+    const saved = await siteLaunches(process.env.PLANNER_DATA_DIR || '/var/lib/planner')
+    connection = await connectBrowser(sources.whatsapp, saved.browserProfiles)
+    return { content: [{ type: 'text', text: JSON.stringify(await readWhatsApp(connection.contexts()[0], { chatName })) }] }
+  } catch (error) { return { isError: true, content: [{ type: 'text', text: error.message }] } }
   finally { if (connection) await connection.close() }
 }))
 server.registerTool('browser_find_slack_channel',{
