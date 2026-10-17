@@ -236,6 +236,12 @@ export async function handleVmRequest(request: Request, path: string, username: 
     return json(checked(await db().from('planner_vm_chats').insert({ username, title }).select('id,title,created_at,updated_at').single()), 201)
   }
   if (path === '/api/agent/vm/chats/bulk') return json(await bulkManageChats(username,input))
+  if (path === '/api/agent/vm/chats/rename') {
+    if(!uuid(input.id) || typeof input.title!=='string' || !input.title.trim() || input.title.trim().length>100)throw new ApiError(400,'Use a chat name between 1 and 100 characters.')
+    const rows=checked(await db().from('planner_vm_chats').update({title:input.title.trim(),updated_at:new Date().toISOString()}).eq('username',username).eq('id',input.id).is('deleted_at',null).select('id,title'))
+    if(!rows.length)throw new ApiError(404,'Chat not found. Restore it from the Bin before renaming.')
+    return json({ok:true,chat:rows[0]})
+  }
   if (path === '/api/agent/vm/chats/archive' || path === '/api/agent/vm/chats/delete') {
     if (!uuid(input.id)) throw new ApiError(400,'Choose a chat.')
     if(path.endsWith('/archive') && typeof input.archived!=='boolean')throw new ApiError(400,'Choose archive or restore.')

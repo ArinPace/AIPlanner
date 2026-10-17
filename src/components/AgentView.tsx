@@ -3,6 +3,8 @@ import { agentAction, agentRequest } from '../lib/agent'
 import { VM_SOURCES, type VmChat, type VmJob, type VmState } from '../lib/vm'
 import { AgentSettings } from './AgentSettings'
 import { CloseIcon, MenuIcon, PlusIcon, SettingsIcon } from './Icons'
+import { RenameDialog } from './RenameDialog'
+import { binDaysLeft } from '../lib/bin'
 
 function MessageTime({value,label}:{value:string|null|undefined;label:string}) {
   if(!value || !Number.isFinite(Date.parse(value)))return null
@@ -24,6 +26,7 @@ export function AgentView({ active }: { active: boolean }) {
   const [panel, setPanel] = useState<'setup' | 'connections' | 'settings' | null>(null)
   const [showArchived, setShowArchived] = useState(false)
   const [showBin,setShowBin]=useState(false)
+  const [renameChat,setRenameChat]=useState<VmChat|null>(null)
   const [copied, setCopied] = useState('')
   const [chatAction, setChatAction] = useState<string | null>(null)
   const [selecting,setSelecting]=useState(false)
@@ -130,7 +133,7 @@ export function AgentView({ active }: { active: boolean }) {
         <div><button type="button" disabled={!selectedIds.length || Boolean(chatAction)} onClick={()=>void manageSelected(showBin?'untrash':showArchived?'restore':'archive')}>{showBin || showArchived?'Restore selected':'Archive selected'}</button><button type="button" className="assistant-bulk-delete" disabled={!selectedIds.length || Boolean(chatAction)} onClick={()=>void manageSelected(showBin?'purge':'delete')}>{showBin?'Delete permanently':'Delete selected'}</button></div>
         {chatAction==='bulk' && <span role="status">Updating chats…</span>}
       </div>}
-      <nav aria-label="Conversations" className="assistant-conversations">{visibleChats.map(item => <div className={'assistant-chat-row'+(selecting?' is-selecting':'')} key={item.id}>{selecting && <input type="checkbox" aria-label={'Select '+item.title} disabled={Boolean(chatAction)} checked={selectedIds.includes(item.id)} onChange={e=>setSelectedIds(ids=>e.target.checked?[...ids,item.id]:ids.filter(id=>id!==item.id))}/>}<button type="button" title={item.title} aria-current={item.id === chat ? 'page' : undefined} disabled={showBin} onClick={() => void chooseChat(item.id)}>{item.title}{showBin && item.deleted_at && <small className="assistant-bin-expiry">{Math.max(0,Math.ceil((Date.parse(item.deleted_at)+30*86400000-now)/86400000))} days left</small>}</button>{!selecting && !showBin && <details className="assistant-chat-options"><summary aria-label={'Options for '+item.title}>⋯</summary><div><button disabled={Boolean(chatAction)} onClick={()=>void manageChat(item,'archive')}>{item.archived?'Restore chat':'Archive chat'}</button><button disabled={Boolean(chatAction)} onClick={()=>void manageChat(item,'delete')}>Delete chat</button></div></details>}</div>)}{state && !visibleChats.length && <p>{showBin?'Bin is empty.':showArchived?'No archived chats.':'No conversations yet.'}</p>}</nav>
+      <nav aria-label="Conversations" className="assistant-conversations">{visibleChats.map(item => <div className={'assistant-chat-row'+(selecting?' is-selecting':'')} key={item.id}>{selecting && <input type="checkbox" aria-label={'Select '+item.title} disabled={Boolean(chatAction)} checked={selectedIds.includes(item.id)} onChange={e=>setSelectedIds(ids=>e.target.checked?[...ids,item.id]:ids.filter(id=>id!==item.id))}/>}<button type="button" title={item.title} aria-current={item.id === chat ? 'page' : undefined} disabled={showBin} onClick={() => void chooseChat(item.id)}>{item.title}{showBin && item.deleted_at && <small className="assistant-bin-expiry">{binDaysLeft(Date.parse(item.deleted_at)+30*86400000,now)} days left</small>}</button>{!selecting && !showBin && <details className="assistant-chat-options"><summary aria-label={'Options for '+item.title}>⋯</summary><div><button disabled={Boolean(chatAction)} onClick={()=>{setError('');setRenameChat(item)}}>Rename chat</button><button disabled={Boolean(chatAction)} onClick={()=>void manageChat(item,'archive')}>{item.archived?'Restore chat':'Archive chat'}</button><button disabled={Boolean(chatAction)} onClick={()=>void manageChat(item,'delete')}>Delete chat</button></div></details>}</div>)}{state && !visibleChats.length && <p>{showBin?'Bin is empty.':showArchived?'No archived chats.':'No conversations yet.'}</p>}</nav>
       <button type="button" className="assistant-sidebar-settings" onClick={() => setPanel('settings')}><SettingsIcon size={18}/>Settings</button>
     </aside>}
     {sidebar && <button type="button" className="assistant-sidebar-scrim" aria-label="Close chat sidebar" onClick={() => setSidebar(false)}/>}
@@ -148,6 +151,7 @@ export function AgentView({ active }: { active: boolean }) {
       </div>
       <div className="assistant-compose-wrap"><form className="assistant-compose" onSubmit={e => { e.preventDefault(); void send() }}><label className="sr-only" htmlFor="assistant-message">Message your assistant</label><textarea id="assistant-message" placeholder="Message your assistant…" value={message} rows={2} maxLength={12000} onChange={e => setMessage(e.target.value)} onKeyDown={e => { if (e.key==='Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send() } }}/><div><button type="button" className="assistant-compose-connect" onClick={() => setPanel(aiReady ? 'connections' : 'setup')}>{aiReady ? '+ Add sites' : 'Connect AI'}</button><button type="submit" className="assistant-send" aria-label="Send message" disabled={busy || loadingChat || archived || !message.trim() || !aiReady || !host || jobs.some(pending)}>↑</button></div></form><p className="assistant-compose-note">Your assistant can make mistakes. Check important details.</p></div>
     </section>
+    {renameChat && <RenameDialog key={renameChat.id} initialValue={renameChat.title} kind="chat" busy={Boolean(chatAction)} error={error} onClose={()=>{setRenameChat(null);setError('')}} onSave={async name=>{if(chatAction)return;setChatAction(renameChat.id);setError('');try{await agentAction('vm/chats/rename',{id:renameChat.id,title:name});setRenameChat(null);await refresh()}catch(e){setError(e instanceof Error?e.message:'Could not rename chat.')}finally{setChatAction(null)}}}/>}
     {state && panel && <AgentSettings state={state} now={now} mode={panel} aiReady={aiReady} onClose={closePanel} refresh={refresh}/>}
   </main>
 }
