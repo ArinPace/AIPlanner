@@ -1,5 +1,5 @@
 export type VmSchedule = { timezone: string; times: string[]; instructions?: string }
-export const DEFAULT_REVIEW_INSTRUCTIONS = 'Check every enabled source for new announcements, assignments and deadline changes. Read the planner first, save verified updates with planner_apply_updates, and report sources that were checked or unavailable. Do not invent deadlines or overwrite manual edits.'
+export const DEFAULT_REVIEW_INSTRUCTIONS = 'Check every enabled source for new announcements, assignments and deadline changes. Read the planner first, save verified updates with planner_apply_updates, and report sources that were checked or unavailable. Maintain one canonical folder per subject and refresh its Subject overview with verified syllabus information, assignments, deadlines, readings, resources and updates. Reuse existing course names across sources. Do not invent deadlines or overwrite manual edits.'
 export const DEFAULT_VM_SCHEDULE: VmSchedule = { timezone: 'America/New_York', times: ['07:00', '17:00'] }
 export function validateSchedule(value: unknown): VmSchedule {
   const input = value as Partial<VmSchedule> | null

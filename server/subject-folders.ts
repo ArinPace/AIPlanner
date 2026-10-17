@@ -10,7 +10,9 @@ export function refreshSubjectOverview(state: FilesState, folderId: string, now:
   for(const note of notes){
     const title=note.content.split('\n')[0].replace(/^#+\s*/,'') || note.name
     const kind=/syllabus|course overview|subject information/i.test(title)?0:/assignment|homework|deadline|quiz|exam|due|essay/i.test(title)?1:/reading|resource|lecture|slides|memo/i.test(title)?2:3
-    groups[kind].push('### '+title+'\n\n'+note.content.split('\n').slice(1).join('\n').trim())
+    const body=note.content.split('\n').slice(1).join('\n').trim()
+    const excerpt=body.length>1800?body.slice(0,1800)+'\n\nContinued in '+note.name+'.\n'+body.split('\n').filter(line=>/^(Source:|Due:)/.test(line)).join('\n'):body
+    groups[kind].push('### '+title+'\n\n'+excerpt)
   }
   for(const document of (state.documents || []).filter(d=>d.folderId===folderId))groups[2].push(document.kind==='link'?'['+document.name+']('+document.url+')':document.name+' (PDF in this folder)')
   const content='# '+folder.name.replace(/ [a-f0-9]{6}$/,'')+'\n\nUpdated: '+now+'\n\nThis living subject reference contains saved material. Each review reports inaccessible sources; an update does not mean every source was accessible.\n\n'+categories.map((name,i)=>'## '+name+'\n\n'+(groups[i].join('\n\n') || 'No verified material saved yet.')).join('\n\n')

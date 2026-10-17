@@ -1805,3 +1805,4 @@ textarea {
 .note-attachment { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; }
 .note-attachment label { flex: 1; display: grid; gap: 4px; }
 @media(max-width:600px) { .note-reading { padding: 4px 0 20px; } .note-toolbar button { padding: 8px; } }
+.files-fields > .field, .files-fields select, .files-fields input { min-width: 0; max-width: 100%; }

@@ -15,7 +15,7 @@ $all = & $multipass list --format json | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0) { throw 'Could not contact Multipass.' }
 $existing = $all.list | Where-Object name -eq $vmName
 if (!$existing) {
-  & $multipass launch 24.04 --name $vmName --cpus 2 --memory 4G --disk 25G --timeout 300
+  & $multipass launch 24.04 --name $vmName --cpus 4 --memory 8G --disk 25G --timeout 300
   if ($LASTEXITCODE -ne 0) { throw 'VM creation failed.' }
 } elseif ($existing.state -ne 'Running') {
   & $multipass start $vmName

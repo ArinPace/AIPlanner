@@ -8,8 +8,9 @@ import { FilesSidebar, FILE_DRAG } from './FilesSidebar'
 import { BulkFilesDialog } from './BulkFilesDialog'
 import { moveItems } from '../lib/fileActions'
 import { MenuIcon } from './Icons'
-const NoteEditor=lazy(()=>import('./NoteEditor').then(module=>({default:module.NoteEditor})))
 import { binDaysLeft } from '../lib/bin'
+
+const NoteEditor=lazy(()=>import('./NoteEditor').then(module=>({default:module.NoteEditor})))
 
 function FolderIcon({ color = '#1a73e8', size = 28 }: { color?: string; size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" fill={color} opacity=".16" /><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" stroke={color} strokeWidth="1.6" /></svg>
