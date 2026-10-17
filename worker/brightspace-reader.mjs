@@ -18,6 +18,6 @@ export async function brightspaceContents(context,href,{includeLaunch=false}={})
       for(const key of ['Modules','Topics','Structure'])if(Array.isArray(node[key]))for(const child of node[key])visit(child,parts)
     }
     if(Array.isArray(data))data.forEach(n=>visit(n));else visit(data)
-    return {courseId:id,topics:topics.slice(0,300),modules:modules.slice(0,200),coverage:'Permission-checked content index and module descriptions. Some courses publish requirements and links directly in module descriptions with zero topics. Follow linked documents and topics; this is not a complete course-content review.'}
+    return {courseId:id,topics:topics.slice(0,300),modules:modules.slice(0,200),truncated:topics.length>300 || modules.length>200,totalTopics:topics.length,totalModules:modules.length,coverage:'Permission-checked content index and module descriptions. Some courses publish requirements and links directly in module descriptions with zero topics. Follow linked documents and topics; this is not a complete course-content review.'}
   }finally{await response.dispose()}
 }

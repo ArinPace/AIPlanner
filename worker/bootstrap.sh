@@ -16,6 +16,7 @@ id planner >/dev/null 2>&1 || useradd --system --create-home --home-dir /var/lib
 chmod 700 /var/lib/planner
 install -d -m 0755 /opt/planner
 cp -a /home/ubuntu/planner-worker/. /opt/planner/
+bash /opt/planner/configure-memory.sh
 bash /opt/planner/install-google-chrome.sh
 cd /opt/planner
 npm ci --omit=dev
