@@ -6,6 +6,7 @@ import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { allowedLivePath } from './browser-access.mjs'
 import { signedInPage, brightspaceCourse } from './site-status.mjs'
+import { whatsappSignedInPage } from './whatsapp-status.mjs'
 import { siteLaunches, rememberLanding, googleAccountLanding, rememberBrowserProfile } from './site-launches.mjs'
 import { browserAccountIdentity } from './account-identity.mjs'
 import { googleBrowser, closeGoogleBrowser } from './google-browser.mjs'
@@ -17,6 +18,7 @@ export { sources } from './browser-sources.mjs'
 export { googleBrowser, googleSources } from './google-browser.mjs'
 
 async function signedInBrowserPage(source, page) {
+  if (source === 'whatsapp') return whatsappSignedInPage(page)
   for (const frame of page.frames()) {
     if (!(source==='albert' && new URL(frame.url()).hostname==='sis.nyu.edu') && new URL(frame.url()).hostname.replace(/^www\./,'') !== new URL(sources[source]).hostname.replace(/^www\./,'')) continue
     const text = await frame.locator('body').innerText({ timeout: 1500 }).catch(() => '')
@@ -192,8 +194,7 @@ export async function checkSites(dataDir, enabled) {
       if (source === 'slack') await page.locator('[data-qa="message_container"]').first().waitFor({timeout:30000}).catch(()=>{})
       await page.waitForTimeout(2000)
       if(source==='gradescope' && enabled.includes('brightspace') && !await signedInBrowserPage(source,page) && await resumeGradescope(ctx,preferred.gradescope))await page.goto(sources.gradescope,{waitUntil:'domcontentloaded',timeout:30000})
-      const text = (await page.locator('body').innerText()).slice(0, 12000)
-      sites[source] = { ready: signedInPage(source, page.url(), text, await page.locator('input[type=password]:visible').count() > 0) }
+      sites[source] = { ready: await signedInBrowserPage(source, page) }
       if (sites[source].ready) sites[source].identity = await browserAccountIdentity(source,page)
     } catch { sites[source] = { ready: false } } finally { await page.close() }
   }
