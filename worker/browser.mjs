@@ -58,7 +58,7 @@ export async function openLogin(dataDir, source, intent = 'connect') {
     const saved = await siteLaunches(dataDir)
     destination = brightspaceCourse(saved.gradescope) || sources.brightspace
   }
-  const useStable=googleSources.has(source) && (intent!=='open' || stableProfile(source,preferred.browserProfiles))
+  const useStable=source==='x' || googleSources.has(source) && (intent!=='open' || stableProfile(source,preferred.browserProfiles))
   if(useStable)await rememberBrowserProfile(dataDir,source)
   const result = await openView(dataDir, destination, 0, useStable)
   const page=live.context.pages()[0]

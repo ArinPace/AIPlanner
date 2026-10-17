@@ -49,7 +49,7 @@ async function chat(job, auth, remote) {
   if (!auth) throw new Error('Connect an AI account in Setup first.')
   if (liveBrowserOpen()) throw new Error('Finish signing into your websites and select Verify connections before starting an agent run.')
   await browser(dataDir)
-  if(remote.sources.some(source=>googleSources.has(source)))await googleBrowser(dataDir)
+  if(remote.sources.some(source=>source==='x' || googleSources.has(source)))await googleBrowser(dataDir)
   if (auth.type === 'claude') return claudeChat({ dataDir, job, remote, origin, token: config.token, instructions, progress: reply => api('progress', { id: job.id, lease: job.lease, reply }) })
   const root = path.dirname(fileURLToPath(import.meta.url)), node = process.execPath
   const executable = path.join(root, 'node_modules', '.bin', 'codex')

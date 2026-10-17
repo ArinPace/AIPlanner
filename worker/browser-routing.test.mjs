@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { browserEndpoint } from './browser-routing.mjs'
+import { browserEndpoint, stableProfile } from './browser-routing.mjs'
 import { readableUrl } from './browser-access.mjs'
 
 test('Google sources use the separate stable profile and cannot redirect other sites into it',()=>{
@@ -12,4 +12,11 @@ test('Google sources use the separate stable profile and cannot redirect other s
   assert.equal(browserEndpoint('https://drive.google.com/drive/u/0/'),'http://127.0.0.1:9222')
   assert.throws(()=>readableUrl('https://calendar.google.com.evil.test/',['calendar'],sources))
   assert.throws(()=>readableUrl('https://calendar.google.com/calendar/u/1/r',['slack'],sources))
+})
+
+test('X uses consumer Chrome for sign-in popups, connection checks and agent reads',()=>{
+  assert.equal(stableProfile('x'),true)
+  for(const url of ['https://x.com/home','https://www.x.com/i/flow/login','https://twitter.com/home'])assert.equal(browserEndpoint(url),'http://127.0.0.1:9223')
+  assert.equal(browserEndpoint('https://x.com.evil.example/'),'http://127.0.0.1:9222')
+  assert.equal(stableProfile('slack'),false)
 })
