@@ -1806,3 +1806,119 @@ textarea {
 .note-attachment label { flex: 1; display: grid; gap: 4px; }
 @media(max-width:600px) { .note-reading { padding: 4px 0 20px; } .note-toolbar button { padding: 8px; } }
 .files-fields > .field, .files-fields select, .files-fields input { min-width: 0; max-width: 100%; }
+/* Notes follows the three-column Mac Notes layout; Files keeps its own browser. */
+.apple-notes-workspace { --notes-accent: #b78c00; background: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+.apple-notes-workspace .files-sidebar { width: 218px; flex-basis: 218px; padding: 14px 8px 0; background: #f5f5f5; border-right: 1px solid #ddd; }
+.apple-notes-workspace .files-sidebar-heading { padding: 0 10px 12px; }
+.apple-notes-workspace .files-root-button { color: #666; font-size: 13px; }
+.apple-notes-workspace .folder-nav { font-size: 13px; border-radius: 6px; padding-top: 8px; padding-bottom: 8px; }
+.apple-notes-workspace .folder-nav.is-active { background: #ffcc27; color: #282828; }
+.apple-notes-workspace .folder-nav svg { color: #555; }
+.apple-notes-content { display: grid; grid-template-columns: 280px minmax(0,1fr); grid-template-rows: 44px minmax(0,1fr); flex: 1; min-width: 0; min-height: 0; color: #292929; }
+.apple-notes-content button { cursor: pointer; }
+.apple-notes-navigation { grid-column: 1; grid-row: 1; display: flex; align-items: center; gap: 5px; padding: 5px 10px; background: #fafafa; border-right: 1px solid #ddd; }
+.apple-notes-navigation > span { font-size: 12px; color: #777; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.apple-notes-navigation button, .apple-note-toolbar button, .apple-list-toolbar > button { width: 32px; height: 32px; border: 0; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; color: #686868; background: transparent; flex-shrink: 0; }
+.apple-notes-navigation button:hover, .apple-note-toolbar button:hover, .apple-list-toolbar > button:hover { background: #eee; }
+.apple-note-toolbar button:disabled { opacity: .35; cursor: default; }
+.apple-notes-list-pane { grid-column: 1; grid-row: 2; background: #fff; border-right: 1px solid #ddd; min-height: 0; display: flex; flex-direction: column; }
+.apple-list-toolbar { display: flex; align-items: center; gap: 5px; padding: 6px 14px 12px; }
+.apple-list-toolbar > div { min-width: 0; flex: 1; }
+.apple-list-toolbar strong { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; }
+.apple-list-toolbar small { display: block; font-size: 11px; color: #8b8b8b; margin-top: 3px; }
+.apple-list-toolbar select { width: 23px; border: none; background: transparent; font-size: 0; cursor: pointer; }
+.apple-list-toolbar option { font-size: 13px; }
+.apple-note-search { display: flex; align-items: center; gap: 6px; margin: 0 12px 12px; padding: 5px 8px; border: 1px solid #ddd; background: #f3f3f3; border-radius: 6px; color: #888; }
+.apple-note-search input { min-width: 0; width: 100%; border: 0; outline: none; background: transparent; font-size: 12px; padding: 2px; }
+.apple-note-summaries { min-height: 0; overflow-y: auto; flex: 1; padding: 0 10px; }
+.apple-note-summaries h3 { font-size: 13px; font-weight: 650; margin: 14px 9px 7px; }
+.apple-note-summary { padding: 12px 14px; text-align: left; border: 0; border-bottom: 1px solid #e9e9e9; border-radius: 0; background: transparent; color: #2e2e2e; width: 100%; min-width: 0; }
+.apple-note-summary.is-selected { background: #e9e9e9; border-bottom-color: transparent; border-radius: 7px; }
+.apple-note-summary strong { font-size: 13px; font-weight: 650; display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.apple-note-summary strong svg { display: inline; vertical-align: middle; color: var(--notes-accent); }
+.apple-note-summary p { color: #888; font-size: 12px; line-height: 1.5; margin: 5px 0 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.apple-note-summary time { color: #555; margin-right: 6px; }
+.apple-note-summary small { font-size: 11px; color: #a47d00; }
+.apple-note-summaries.is-gallery { display: grid; grid-template-columns: repeat(auto-fit,minmax(115px,1fr)); align-content: start; gap: 9px; }
+.apple-note-summaries.is-gallery h3 { margin: 8px 0; }
+.apple-note-summaries.is-gallery .apple-note-summary { min-height: 130px; border: 1px solid #e1e1e1; border-radius: 9px; }
+.apple-notes-list-pane > footer { text-align: center; color: #999; font-size: 10px; padding: 10px; border-top: 1px solid #eee; }
+.apple-note-detail { grid-column: 2; grid-row: 1 / span 2; min-width: 0; min-height: 0; position: relative; display: flex; flex-direction: column; background: #fff; }
+.apple-editor-shell { min-height: 0; display: flex; flex: 1; flex-direction: column; }
+.apple-note-toolbar { height: 48px; flex-shrink: 0; display: flex; align-items: center; gap: 12px; justify-content: space-between; padding: 5px 10px; }
+.apple-toolbar-leading, .apple-format-tools, .apple-toolbar-trailing { display: flex; align-items: center; gap: 1px; }
+.apple-format-tools { padding: 2px 7px; border-radius: 18px; background: #fafafa; }
+.apple-aa { font: 600 18px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+.apple-toolbar-popover { position: relative; }
+.apple-format-menu, .apple-note-more { position: absolute; z-index: 60; top: 36px; min-width: 210px; padding: 6px; border: 1px solid #ddd; border-radius: 10px; background: #fafafaf5; box-shadow: 0 7px 24px #0003; backdrop-filter: blur(16px); }
+.apple-format-menu button, .apple-note-more button { color: #303030; width: 100%; height: auto; min-height: 30px; text-align: left; justify-content: flex-start; padding: 6px 12px; border: 0; border-radius: 5px; background: transparent; font-size: 13px; display: block; }
+.apple-format-menu button:hover, .apple-note-more button:hover { background: #e6e6e6; }
+.apple-style-grid { border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+.apple-style-grid button:first-child { font-size: 20px; font-weight: 700; }
+.apple-style-grid button:nth-child(2) { font-size: 16px; font-weight: 650; }
+.apple-style-grid button:nth-child(3) { font-weight: 600; }
+.apple-inline-formats { display: flex; border-bottom: 1px solid #ddd; padding: 5px 0; }
+.apple-inline-formats button { justify-content: center; text-align: center; }
+.apple-inline-formats button[aria-pressed=true] { background: #e8dbab; }
+.apple-highlight-colors { display: flex; gap: 13px; padding: 10px; border-bottom: 1px solid #ddd; margin-bottom: 5px; }
+.apple-highlight-colors button { width: 21px; min-height: 21px; height: 21px; border-radius: 50%; padding: 0; }
+.apple-note-heading { padding: 4px 30px 0; flex-shrink: 0; }
+.apple-note-heading > time { display: block; text-align: center; font-size: 11px; color: #999; margin: 3px 0 15px; }
+.apple-note-title { border: 0; padding: 0; margin: 0 0 4px; width: 100%; min-width: 0; outline: none; font-size: 24px; font-weight: 700; line-height: 1.3; color: #252525; background: transparent; }
+.apple-note-title::placeholder { color: #b5b5b5; }
+.apple-note-tags { display: flex; gap: 5px; flex-wrap: wrap; }
+.apple-note-tags button { border: 0; padding: 2px 0; background: transparent; color: var(--notes-accent); font-size: 12px; }
+.apple-editor-shell > .tiptap { flex: 1; min-height: 0; }
+.apple-editor-shell > div:last-child { min-height: 0; flex: 1; overflow: auto; }
+.apple-note-document { outline: none; font-size: 15px; line-height: 1.5; padding: 8px 30px 100px; min-height: 100%; overflow-wrap: anywhere; }
+.apple-note-document p { margin: 0 0 .7em; }
+.apple-note-document h1 { font-size: 24px; line-height: 1.3; margin: .5em 0; }
+.apple-note-document h2 { font-size: 20px; line-height: 1.3; margin: .7em 0 .4em; }
+.apple-note-document h3 { font-size: 17px; margin: .7em 0 .4em; }
+.apple-note-document ul, .apple-note-document ol { padding-left: 25px; margin: .5em 0 1em; }
+.apple-note-document li p { margin: 0; }
+.apple-note-document ul[data-type=taskList] { list-style: none; padding-left: 0; }
+.apple-note-document li[data-checked] { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 6px; }
+.apple-note-document li[data-checked] > label { flex: 0 0 18px; user-select: none; padding-top: 3px; }
+.apple-note-document li[data-checked] > div { flex: 1; min-width: 0; }
+.apple-note-document li[data-checked] input { appearance: none; width: 17px; height: 17px; border: 1.4px solid #bbb; border-radius: 50%; position: relative; margin: 0; cursor: pointer; }
+.apple-note-document li[data-checked] input:checked { background: #d4a300; border-color: #d4a300; }
+.apple-note-document li[data-checked] input:checked::after { content: ''; position: absolute; left: 5px; top: 2px; width: 4px; height: 8px; border-right: 1.5px solid white; border-bottom: 1.5px solid white; transform: rotate(40deg); }
+.apple-note-document li[data-checked=true] > div > p { color: #888; }
+.apple-note-document blockquote { border-left: 3px solid #d3b64c; padding-left: 14px; margin-left: 0; color: #555; }
+.apple-note-document img { max-width: 100%; height: auto; border-radius: 3px; }
+.apple-note-document a { color: #a77e00; text-decoration: underline; }
+.apple-note-document pre { background: #f5f5f5; border-radius: 6px; padding: 14px; overflow-x: auto; }
+.apple-note-document code { font-family: ui-monospace, monospace; font-size: 13px; }
+.apple-note-document table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 1em 0; }
+.apple-note-document td, .apple-note-document th { min-width: 50px; border: 1px solid #d9d9d9; padding: 6px 9px; vertical-align: top; position: relative; }
+.apple-note-document .selectedCell::after { background: #e6cc6466; content: ''; position: absolute; inset: 0; pointer-events: none; }
+.apple-note-document .column-resize-handle { position: absolute; top: 0; right: -2px; bottom: -2px; width: 4px; background: #d6ae18; pointer-events: none; }
+.apple-note-document .tableWrapper { overflow-x: auto; }
+.apple-note-save { flex-shrink: 0; padding: 7px 18px; border-top: 1px solid #f0f0f0; font-size: 10px; color: #999; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.apple-note-save button { border: 0; background: transparent; color: #a67b00; font-size: 11px; }
+.apple-note-save button:disabled { opacity: .5; }
+.apple-note-error { font-size: 12px; color: #b3261e; margin: 5px 18px; }
+.apple-note-more { top: 45px; right: 20px; }
+.apple-attachment-form, .apple-note-location { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; padding: 12px 25px; background: #faf9f4; border-bottom: 1px solid #e8e6dd; }
+.apple-attachment-form label, .apple-note-location label { display: grid; flex: 1; min-width: 150px; gap: 4px; font-size: 12px; }
+.apple-attachment-form input, .apple-note-location select { min-width: 0; max-width: 100%; border: 1px solid #ccc; border-radius: 5px; padding: 7px; background: white; }
+.apple-attachment-form button, .apple-note-location button { border: 0; border-radius: 5px; background: #e9e4cf; padding: 7px 10px; }
+.apple-no-notes, .apple-note-placeholder { text-align: center; padding: 40px 15px; color: #999; }
+.apple-note-placeholder { margin: auto; }
+.apple-note-placeholder h2 { font-size: 20px; font-weight: 500; }
+.apple-note-placeholder p { font-size: 13px; }
+.apple-no-notes button, .apple-note-placeholder button { border: 0; background: transparent; color: #a67b00; }
+.notes-list-hidden { grid-template-columns: minmax(0,1fr); grid-template-rows: 35px minmax(0,1fr); }
+.notes-list-hidden .apple-notes-navigation { border: 0; background: #fff; }
+.notes-list-hidden .apple-note-detail { grid-column: 1; grid-row: 2; }
+@media(max-width:1100px) { .apple-notes-workspace .files-sidebar { width: 190px; flex-basis: 190px; } .apple-notes-content { grid-template-columns: 240px minmax(0,1fr); } .apple-note-toolbar { gap: 3px; padding: 4px; } .apple-note-toolbar button { width: 28px; } .apple-format-tools { padding: 1px 2px; } .apple-toolbar-trailing button[aria-label='Pin note'], .apple-toolbar-trailing button[aria-label='Unpin note'] { display: none; } }
+@media(max-width:800px) { .apple-notes-content { grid-template-columns: minmax(0,1fr); grid-template-rows: 38px minmax(0,1fr); } .apple-notes-navigation { border-right: 0; } .apple-notes-list-pane { grid-column: 1; grid-row: 2; z-index: 2; } .apple-note-detail { grid-column: 1; grid-row: 2; } .apple-notes-content:not(.notes-list-hidden) .apple-note-detail { visibility: hidden; } .apple-note-heading { padding: 3px 20px 0; } .apple-note-document { padding: 8px 20px 80px; } .apple-note-toolbar button[aria-label=Undo], .apple-note-toolbar button[aria-label=Redo] { display: none; } .apple-note-toolbar { padding: 3px 10px; } .apple-note-title { font-size: 23px; } .apple-format-menu { left: -35px; } }
+@media print { body:has(.apple-note-document) .app-header, body:has(.apple-note-document) .files-sidebar, .apple-note-toolbar, .apple-notes-navigation, .apple-notes-list-pane, .apple-note-save, .apple-note-more { display: none !important; } .apple-notes-workspace, .apple-notes-content, .apple-note-detail, .apple-editor-shell, .apple-editor-shell > div:last-child { display: block !important; height: auto !important; overflow: visible !important; } .apple-note-detail { visibility: visible !important; } }
+.apple-notes-workspace .folder-nav span { flex: 1; min-width: 0; }
+.apple-notes-workspace .folder-nav svg path { stroke: currentColor; fill: none; }
+.notes-account-label { font-size: 11px; font-weight: 600; color: #999; padding: 10px 13px 5px; margin: 0; }
+.note-folder-count { color: #999; flex: 0 0 auto; font-size: 12px; }
+.apple-notes-workspace .folder-nav.is-active .note-folder-count { color: #6d5700; }
+
+.apple-note-title { field-sizing: content; resize: none; display: block; overflow: hidden; min-height: 1.3em; font-family: inherit; }

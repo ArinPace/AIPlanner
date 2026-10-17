@@ -9,6 +9,10 @@ export interface PlannerFolder {
 
 export interface PlannerTextFile {
   format?: 'note'
+  richText?: string
+  richTextSource?: string
+  pinned?: boolean
+  tags?: string[]
   id: string
   folderId: string | null
   name: string
@@ -102,6 +106,16 @@ export function validateFilesState(value: unknown): asserts value is FilesState 
   for (const file of state.files) {
     if (!file || typeof file !== 'object') throw new Error('Invalid text file.')
     if (file.format !== undefined && file.format !== 'note') throw new Error('Invalid note format.')
+    if(file.pinned!==undefined && typeof file.pinned!=='boolean')throw new Error('Invalid pinned note.')
+    if(file.tags!==undefined && (!Array.isArray(file.tags) || file.tags.length>20 || file.tags.some(t=>typeof t!=='string'||t.length>40)))throw new Error('Use up to 20 note tags, 40 characters each.')
+    if(file.richText!==undefined){
+      if(file.format!=='note' || typeof file.richText!=='string' || file.richText.length>1000000 || typeof file.richTextSource!=='string' || file.richTextSource.length>1000000)throw new Error('Invalid rich note.')
+      let doc
+      try{doc=JSON.parse(file.richText)}catch{throw new Error('Invalid note document.')}
+      if(doc?.type!=='doc')throw new Error('Invalid note document.')
+      const nodes=[{node:doc,depth:0}];let count=0
+      while(nodes.length){const {node,depth}=nodes.pop()!;if(++count>20000 || depth>64 || !node || typeof node.type!=='string')throw new Error('This note is too complex. Split it into smaller notes.');if(node.type==='image' && !/^https?:\/\//i.test(node.attrs?.src || ''))throw new Error('Use a web URL for note images.');if(node.content){if(!Array.isArray(node.content))throw new Error('Invalid note content.');for(const child of node.content)nodes.push({node:child,depth:depth+1})}}
+    }
     if (file.folderId !== null && (typeof file.folderId !== 'string' || !folderIds.has(file.folderId))) throw new Error('Choose Files or an existing folder for your file.')
     checkItem(file, file.folderId, 'file')
     if (typeof file.content !== 'string' || file.content.length > 1000000) throw new Error('Text files can contain up to 1 million characters.')

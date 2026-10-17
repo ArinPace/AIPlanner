@@ -1,5 +1,32 @@
 # AI Planner implementation handoff
 
+## 2026-10-18 source readers and rich Notes
+
+- Full live review completed with 27 saved updates and all six subject overviews
+  refreshed. Empty Brightspace topics now retain module descriptions and links;
+  Gmail expands loaded threads; Sheets exports respect the chosen/default tab;
+  the Slack resolver found the existing #events channel without joining channels.
+- Browser tools queue sequentially, bound image sizes and have a 300-second tool
+  timeout. The active test VM has 8 GB RAM and 4 GB swap. Failed source saves
+  release their collection for retry; legacy subject folders are reused.
+- Coverage is explicit: attachments, comments, other sheet tabs, unselected
+  Instagram handles and signed-out sources are not claimed read. Scheduled
+  instructions retain 07:00/17:00 America/New_York and the three verified Slack URLs.
+- Notes now uses the Mac Notes three-column arrangement and toolbar. Rich text,
+  native list continuation/exit, nested checklists, tables, highlights, web links,
+  URL images, undo/redo, date groups, search, pinning, move, gallery/list, sharing,
+  Markdown export, print and autosave are implemented. Plain text files remain.
+- Rich JSON preserves formatting while Markdown remains available to agents and
+  search. A snapshot mismatch after an agent edit reparses current Markdown.
+  Saves merge into the latest Files state and reject conflicting same-note edits.
+- Desktop/390px live checks passed lists, formatting, tables, links, highlights,
+  checked items and save/reopen persistence. Temporary fixtures are removed.
+- This is a web implementation of Notes' layout and editing, not full native
+  Apple feature parity: iCloud collaboration, locked notes, camera/Continuity,
+  recordings/transcription and Apple Intelligence are not implemented. No
+  recordings were enabled. Media insertion currently accepts web image URLs;
+  PDFs remain standalone Files attachments.
+
 ## Decisions
 
 - Current MVP uses one persistent Hyper-V VM per account, on the Windows host.

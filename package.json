@@ -12,6 +12,15 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",
     "@supabase/supabase-js": "2.117.3",
+    "@tiptap/extension-highlight": "^3.32.0",
+    "@tiptap/extension-image": "^3.32.0",
+    "@tiptap/extension-table": "^3.32.0",
+    "@tiptap/extension-task-item": "^3.32.0",
+    "@tiptap/extension-task-list": "^3.32.0",
+    "@tiptap/extension-text-style": "^3.32.0",
+    "@tiptap/markdown": "^3.32.0",
+    "@tiptap/react": "^3.32.0",
+    "@tiptap/starter-kit": "^3.32.0",
     "@vercel/oidc": "3.2.0",
     "ai": "7.0.138",
     "jose": "6.2.12",
@@ -19,8 +28,6 @@
     "playwright-core": "1.64.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1",
     "zod": "4.3.6"
   },
   "devDependencies": {
