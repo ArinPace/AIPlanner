@@ -109,7 +109,7 @@ export function AgentView({ active, sidebar, setSidebar }: { active: boolean; si
     if (window.innerWidth <= 700) setSidebar(false)
   }
   async function resetMain(){
-    if(!window.confirm('Reset Main Chat completely? This permanently clears its messages, task list, learned estimates and planning preferences. Saved Files, other chats and calendar events remain. Stop all Main Chat tasks first. This cannot be undone.'))return
+    if(!window.confirm('Reset Main Chat completely? This permanently clears its messages, task list, learned estimates, planning preferences and private agent memory. Saved Files, other chats and calendar events remain. Stop all Main Chat tasks first. This cannot be undone.'))return
     setChatAction('reset-main');setError('')
     try{await planningRequest({action:'reset-main',confirm:'RESET MAIN CHAT'});setJobs([]);setMessage('');await refresh()}
     catch(e){setError(e instanceof Error?e.message:'Could not reset Main Chat.')}

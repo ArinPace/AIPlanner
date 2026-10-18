@@ -1,3 +1,4 @@
+import {registerAgentMemory} from './agent-memory.js'
 import {SUBJECT_ORGANIZATION} from './subject-folders.js'
 import { randomUUID, createHash } from 'node:crypto'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
@@ -50,6 +51,7 @@ export function createPlannerMcp(username: string, scopes: string[]) {
   })
   registerPlannerControls(add,username)
   registerPlanningTools(add,username)
+  registerAgentMemory(add,username)
   add('planner_bulk_update_items','Atomically edit up to 100 user-selected Files items: rename/move folders, notes, text files, PDFs and links; folder labels/color; note content, format, pins and tags. Each patch has the same fields as planner_update_item. Read current Files revision first. All edits succeed together or none do; unrelated contents and PDF bytes are preserved.',{revision:z.number().int().nonnegative(),items:z.array(z.object(plannerItemPatch)).min(1).max(100)},'planner:write',false,async args=>{
     const row=await filesRow(username)
     if(row.revision!==args.revision)throw new ApiError(409,'Read the latest Files revision before saving.')
