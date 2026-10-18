@@ -1,3 +1,4 @@
+import { PlannerDate as Date } from '../lib/timezone.js'
 import { useEffect, useRef, useState } from 'react'
 import type { CalendarEvent, Tag } from '../types'
 import { expandEvent } from '../lib/recurrence'

@@ -1,8 +1,10 @@
+import { PlannerDate as Date } from './timezone.js'
 import type {Occurrence, Tag} from '../types.js'
 import {DEFAULT_EVENT_COLOR, isEventVisible} from './colors.js'
 
 // Occurrences are already expanded for the visible year, including recurrence.
 export function yearDaySummary(day: Date, occurrences: Occurrence[], tags: Tag[], hiddenTagIds: Set<string>) {
+  day=new Date(day)
   const start=new Date(day.getFullYear(),day.getMonth(),day.getDate())
   const end=new Date(day.getFullYear(),day.getMonth(),day.getDate()+1)
   const colors=new Map<string,Set<string>>()

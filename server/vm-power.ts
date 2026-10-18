@@ -6,18 +6,18 @@ export function validateSchedule(value: unknown): VmSchedule {
   if (!input || typeof input.timezone !== 'string' || input.timezone.length > 80 || !Array.isArray(input.times) || input.times.length < 1 || input.times.length > 6 || input.times.some(t => typeof t !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(t))) throw new Error('Choose a timezone and one to six valid daily times.')
   try { new Intl.DateTimeFormat('en', { timeZone: input.timezone }).format() } catch { throw new Error('Choose a valid timezone.') }
   if(input.instructions!==undefined && (typeof input.instructions!=='string' || input.instructions.length>12000))throw new Error('Review instructions must be text of at most 12,000 characters.')
-  return { timezone: input.timezone, times: [...new Set(input.times)].sort(), ...(input.instructions===undefined?{}:{instructions:input.instructions.trim()}) }
+  return { timezone: DEFAULT_VM_SCHEDULE.timezone, times: [...new Set(input.times)].sort(), ...(input.instructions===undefined?{}:{instructions:input.instructions.trim()}) }
 }
 export function scheduledReviewMessage(schedule:VmSchedule){
-  return DEFAULT_REVIEW_INSTRUCTIONS+'\n\nSaved review instructions:\n'+(schedule.instructions || DEFAULT_REVIEW_INSTRUCTIONS)
+  return 'Planner timezone: America/New_York (EST/EDT). Interpret unspecified planner times as New York time and report times in that timezone.\n'+DEFAULT_REVIEW_INSTRUCTIONS+'\n\nSaved review instructions:\n'+(schedule.instructions || DEFAULT_REVIEW_INSTRUCTIONS)
 }
 export function scheduleSlot(now = new Date(), schedule = DEFAULT_VM_SCHEDULE, prewake = true): string | null {
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: schedule.timezone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(now.getTime() + (prewake ? 2 * 60000 : 0)))
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: DEFAULT_VM_SCHEDULE.timezone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(now.getTime() + (prewake ? 2 * 60000 : 0)))
   const p = (type: string) => parts.find(x => x.type === type)?.value || ''
   const current = Number(p('hour')) * 60 + Number(p('minute'))
   const time = [...schedule.times].sort().reverse().find(t => { const [h,m] = t.split(':').map(Number); return current >= h * 60 + m && current < h * 60 + m + 60 })
   if (!time) return null
-  return `${p('year')}-${p('month')}-${p('day')} ${time.endsWith(':00') ? time.slice(0,2) : time}${schedule.timezone === DEFAULT_VM_SCHEDULE.timezone ? '' : ' ' + schedule.timezone}`
+  return `${p('year')}-${p('month')}-${p('day')} ${time.endsWith(':00') ? time.slice(0,2) : time}`
 }
 export function shouldRunVm(input: { wakeUntil?: string | null; jobs: { status: string; kind: string; result?: { expiresAt?: string }; schedule_slot?: string | null; finished_at?: string | null }[]; scheduled: boolean; schedule?: VmSchedule }, now = new Date()): boolean {
   if (input.wakeUntil && Date.parse(input.wakeUntil) > now.getTime()) return true

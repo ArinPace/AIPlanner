@@ -1,3 +1,4 @@
+import { PlannerDate as Date } from './timezone.js'
 import type { CalendarEvent, Occurrence, Recurrence } from '../types.js'
 import { addDays, addMonths, addYears, daysBetween, endOfDateInput, overlaps } from './dates.js'
 
@@ -66,7 +67,9 @@ export function expandEvent(event: CalendarEvent, rangeStart: Date, rangeEnd: Da
 
   while (current <= rangeEnd && guard < 800) {
     if (until && current > until) break
-    const end = new Date(current.getTime() + duration)
+    const end = event.allDay
+      ? new Date(current.getFullYear(),current.getMonth(),current.getDate()+daysBetween(eventStart,eventEnd),eventEnd.getHours(),eventEnd.getMinutes(),eventEnd.getSeconds(),eventEnd.getMilliseconds())
+      : new Date(current.getTime() + duration)
     if (overlaps(current, end, rangeStart, rangeEnd)) {
       occurrences.push({ event, start: current, end })
     }

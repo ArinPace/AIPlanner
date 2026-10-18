@@ -1,3 +1,4 @@
+import { PlannerDate as Date } from '../lib/timezone.js'
 import { urgencyColor } from '../lib/urgencyColor'
 import { useEffect, useRef, useState, useMemo } from 'react'
 import type { CalendarEvent, CalendarView, Occurrence, Tag } from '../types'

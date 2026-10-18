@@ -1,3 +1,4 @@
+import { PlannerDate as Date } from '../src/lib/timezone.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import type {CalendarEvent,Occurrence,Tag} from '../src/types.js'

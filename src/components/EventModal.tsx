@@ -131,7 +131,7 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
 
         {!draft.allDay && (
           <label className="field">
-            <span>Time</span>
+            <span>Time (New York)</span>
             <div className="field-row">
               <input type="time" value={draft.startTime} onChange={(event) => update('startTime', event.target.value)} />
               {!draft.reminder && <><span className="field-sep">to</span>

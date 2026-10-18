@@ -14,7 +14,7 @@ export async function readAutomationSettings(username:string){
   const row=await automationRow(username)
   if(!row)throw new ApiError(503,'Scheduled review settings are unavailable.')
   const schedule=row.schedule || DEFAULT_VM_SCHEDULE
-  return {enabled:row.schedule_enabled,timezone:schedule.timezone,times:schedule.times,instructions:schedule.instructions || DEFAULT_REVIEW_INSTRUCTIONS,sources:row.sources,updatedAt:row.updated_at,connections:Object.fromEntries(row.sources.map((source:string)=>[source,{connected:row.sites?.[source]?.ready===true}]))}
+  return {enabled:row.schedule_enabled,timezone:DEFAULT_VM_SCHEDULE.timezone,times:schedule.times,instructions:schedule.instructions || DEFAULT_REVIEW_INSTRUCTIONS,sources:row.sources,updatedAt:row.updated_at,connections:Object.fromEntries(row.sources.map((source:string)=>[source,{connected:row.sites?.[source]?.ready===true}]))}
 }
 export async function updateAutomationSettings(username:string,input:{expectedUpdatedAt:string;enabled?:boolean;timezone?:string;times?:string[];instructions?:string;sources?:string[]}){
   const current=await readAutomationSettings(username)

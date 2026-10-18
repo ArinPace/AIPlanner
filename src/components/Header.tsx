@@ -82,7 +82,7 @@ export function Header({
             <ChevronIcon className="flip" />
           </button>
         </div>
-        <h1 className="range-title">{formatRangeLabel(cursor, view)}</h1>
+        <h1 className="range-title">{formatRangeLabel(cursor, view)}</h1><span className="calendar-timezone" title="America/New_York ? adjusts for daylight saving">New York (ET)</span>
         </>}
       </div>
 
