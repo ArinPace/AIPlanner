@@ -363,8 +363,9 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
           {(loadError || saveError) && <p className="save-banner">{loadError || saveError}</p>}
           {view === 'year' ? (
             <YearView
+              key={cursor.getFullYear()}
               cursor={cursor}
-              occurrences={occurrences}
+              events={events}
               tags={tags}
               hiddenTagIds={hiddenSet}
               onMonthOpen={(date) => {

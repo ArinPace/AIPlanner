@@ -1,6 +1,7 @@
 import { PlannerDate as Date } from '../lib/timezone.js'
-import { useLayoutEffect, useRef } from 'react'
-import type { Occurrence, Tag } from '../types'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { CalendarEvent, Tag } from '../types'
+import { expandEvents } from '../lib/recurrence'
 import {yearDaySummary} from '../lib/yearCalendar'
 import {
   getMonthGrid,
@@ -11,7 +12,7 @@ import {
 
 type YearViewProps = {
   cursor: Date
-  occurrences: Occurrence[]
+  events: CalendarEvent[]
   tags: Tag[]
   hiddenTagIds: Set<string>
   onMonthOpen: (date: Date) => void
@@ -22,10 +23,13 @@ function monthCursor(year: number, month: number): Date {
   return new Date(year, month, 1)
 }
 
-export function YearView({ cursor, occurrences, tags, hiddenTagIds, onMonthOpen, onDayOpen }: YearViewProps) {
+export function YearView({ cursor, events, tags, hiddenTagIds, onMonthOpen, onDayOpen }: YearViewProps) {
   const year = cursor.getFullYear()
-  const months = Array.from({ length: 12 }, (_, month) => monthCursor(year, month))
+  const [years, setYears] = useState({ start: year - 1, end: year + 1 })
+  const months = Array.from({ length: (years.end - years.start + 1) * 12 }, (_, month) => monthCursor(years.start, month))
+  const occurrences = useMemo(() => expandEvents(events, monthCursor(years.start, 0), monthCursor(years.end + 1, 0)), [events, years.start, years.end])
   const viewRef = useRef<HTMLDivElement>(null)
+  const prependAnchor = useRef<{ height: number; top: number } | null>(null)
   const currentMonthRef = useRef<HTMLElement>(null)
   const currentMonth = new Date().getMonth()
 
@@ -36,15 +40,33 @@ export function YearView({ cursor, occurrences, tags, hiddenTagIds, onMonthOpen,
     view.scrollTop += month.getBoundingClientRect().top - view.getBoundingClientRect().top
   }, [year, currentMonth])
 
+  useLayoutEffect(() => {
+    const view = viewRef.current
+    const anchor = prependAnchor.current
+    if (view && anchor) {
+      view.scrollTop = anchor.top + view.scrollHeight - anchor.height
+      prependAnchor.current = null
+    }
+  }, [years.start])
+
   return (
-    <div className="year-view" ref={viewRef}>
+    <div className="year-view" ref={viewRef} onScroll={() => {
+      const view = viewRef.current
+      if (!view || prependAnchor.current) return
+      if (view.scrollTop < 200) {
+        prependAnchor.current = { height: view.scrollHeight, top: view.scrollTop }
+        setYears(current => ({ ...current, start: current.start - 1 }))
+      } else if (view.scrollHeight - view.scrollTop - view.clientHeight < 400) {
+        setYears(current => ({ ...current, end: current.end + 1 }))
+      }
+    }}>
       {months.map((month) => {
         const days = getMonthGrid(month)
         const label = month.toLocaleDateString(undefined, { month: 'long' })
         return (
-          <section key={month.toISOString()} className="year-month" ref={month.getMonth() === currentMonth ? currentMonthRef : undefined}>
+          <section key={month.toISOString()} className="year-month" ref={month.getFullYear() === year && month.getMonth() === currentMonth ? currentMonthRef : undefined}>
             <button type="button" className="year-month-title" onClick={() => onMonthOpen(month)}>
-              {label}
+              {label} {month.getFullYear()}
             </button>
             <div className="year-month-grid">
               {WEEKDAYS_SHORT.map((day, index) => (
