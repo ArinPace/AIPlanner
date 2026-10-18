@@ -29,7 +29,7 @@ export async function listMessageThreads(context,source){
   return {source,threads:threads.map(t=>{let url=null;try{url=selectedMessageUrl(source,t.url)}catch{}return {...t,url}}),coverage:'Visible conversation names only, up to 30; previews and message bodies are not returned. No chat has been opened.'}
  }finally{await page.close()}
 }
-export async function readSelectedMessages(context,source,{name,url}={}){
+export async function readSelectedMessages(context,source,{name,url,inspect}={}){
  const site=messageSites[source];if(!site)throw Error('Unsupported message source.')
  if(Boolean(name)===Boolean(url))throw Error('Provide one exact conversation name or one conversation URL.')
  if(url)selectedMessageUrl(source,url)
@@ -47,7 +47,8 @@ export async function readSelectedMessages(context,source,{name,url}={}){
   await page.locator(site.messages).first().waitFor({timeout:15000}).catch(()=>{})
   await checkMessageWall(page)
   const messages=await page.locator(site.messages).evaluateAll(nodes=>nodes.filter(n=>n.getClientRects().length && !n.matches('[contenteditable="true"]')).slice(-30).map(n=>({text:n.innerText.slice(0,10000),timestamp:n.querySelector('time')?.getAttribute('datetime') || null})).filter(m=>m.text.trim()))
-  if(!messages.length)throw failure('MESSAGE_CONTENT_UNAVAILABLE','The selected conversation opened but its message bodies were not readable. Do not count the inbox, composer or a loading screen as content coverage.')
-  return {source,url:page.url(),messages,coverage:'Up to 30 rendered messages from the selected conversation only. Older/unloaded history and media are not covered. Opening can mark messages seen. No message was sent.'}
+  if(!messages.length && !await page.locator(site.messages).locator('img,canvas').count())throw failure('MESSAGE_CONTENT_UNAVAILABLE','The selected conversation opened but its message bodies were not readable. Do not count the inbox, composer or a loading screen as content coverage.')
+  const result={source,url:page.url(),messages,coverage:'Up to 30 rendered messages from the selected conversation only. Older/unloaded history and unopened files are not covered. Opening can mark messages seen. No message was sent.'}
+  return inspect?await inspect(page,result,site.messages):result
  }finally{await page.close()}
 }

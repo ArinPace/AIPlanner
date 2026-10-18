@@ -1,3 +1,4 @@
+import { messageImages } from './message-images.mjs'
 import { browserQueue } from './browser-queue.mjs'
 const queued=browserQueue()
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
@@ -65,10 +66,10 @@ server.registerTool('browser_read', {
   finally { if (connection) await connection.close() }
 }))
 server.registerTool('browser_read_whatsapp_chat', {
-  description: 'Open and read one WhatsApp chat/group by its exact displayed name, only when selected by the user or saved review instructions. Never send messages. Opening may mark messages read. Returns rendered text only, not older history or media.',
-  inputSchema: { chatName: z.string().trim().min(1).max(200) },
+  description: 'Open and read one WhatsApp chat/group by its exact displayed name, only when selected by the user or saved review instructions. Never send messages. Opening may mark messages read. Automatically returns rendered text and image pixels from the selected chat. Inspect those images, including their text. Older/unloaded history and unopened files are not covered. Use imageIndex to inspect another listed image.',
+  inputSchema: { chatName: z.string().trim().min(1).max(200), imageIndex:z.number().int().min(0).max(500).optional() },
   annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
-}, async ({ chatName }) => queued(async () => {
+}, async ({ chatName,imageIndex }) => queued(async () => {
   let connection
   try {
     if (!enabled.includes('whatsapp')) throw new Error('WhatsApp is not enabled.')
@@ -79,7 +80,7 @@ server.registerTool('browser_read_whatsapp_chat', {
     })
     const saved = await siteLaunches(process.env.PLANNER_DATA_DIR || '/var/lib/planner')
     connection = await connectBrowser(sources.whatsapp, saved.browserProfiles)
-    return { content: [{ type: 'text', text: JSON.stringify(await readWhatsApp(connection.contexts()[0], { chatName })) }] }
+    return await readWhatsApp(connection.contexts()[0], { chatName,inspect:(page,result,selector,options)=>messageImages(page,result,selector,{...options,imageIndex}) })
   } catch (error) { return { isError: true, content: [{ type: 'text', text: error.message }] } }
   finally { if (connection) await connection.close() }
 }))
@@ -93,8 +94,8 @@ async function authorizedMessageConnection(source){
   return connectBrowser(source==='slack'?sources.slack:messageSites[source].inbox,saved.browserProfiles)
 }
 for(const action of ['list','read'])server.registerTool(action==='list'?'browser_list_slack_dms':'browser_read_slack_dm',{
- description:action==='list'?'List existing Slack direct conversations in one named connected workspace. Returns names and DM URLs, no message bodies. Requires Slack conversation-reading permission. Collapsed or unloaded sidebar conversations may be missing.':'Read rendered messages from one exact user-selected existing Slack DM in a named workspace, using its exact listed name or DM URL. Opening may mark it read. Never send, compose, react, join, or delete. Unloaded history, attachments and unopened reply threads are not covered.',
- inputSchema:action==='list'?{workspace:z.string().trim().min(1).max(150)}:{workspace:z.string().trim().min(1).max(150),name:z.string().trim().min(1).max(200).optional(),url:z.string().url().max(2000).optional()},
+ description:action==='list'?'List existing Slack direct conversations in one named connected workspace. Returns names and DM URLs, no message bodies. Requires Slack conversation-reading permission. Collapsed or unloaded sidebar conversations may be missing.':'Read rendered messages from one exact user-selected existing Slack DM in a named workspace, using its exact listed name or DM URL. Opening may mark it read. Never send, compose, react, join, or delete. Automatically includes message image pixels; inspect them as part of the read. Use imageIndex for additional listed images. Unloaded history, unopened files and unopened reply threads are not covered.',
+ inputSchema:action==='list'?{workspace:z.string().trim().min(1).max(150)}:{workspace:z.string().trim().min(1).max(150),name:z.string().trim().min(1).max(200).optional(),url:z.string().url().max(2000).optional(),imageIndex:z.number().int().min(0).max(500).optional()},
  annotations:{readOnlyHint:action==='list',destructiveHint:false,openWorldHint:true},
 },async(args)=>queued(async()=>{
  let connection,page
@@ -103,18 +104,18 @@ for(const action of ['list','read'])server.registerTool(action==='list'?'browser
   const saved=await siteLaunches(process.env.PLANNER_DATA_DIR || '/var/lib/planner')
   page=await connection.contexts()[0].newPage()
   await page.goto(readableUrl(selectedBrowserDestination(sources.slack,saved),enabled,sources),{waitUntil:'domcontentloaded',timeout:45000})
-  const result=action==='list'?await listSlackDms(page,args.workspace):await readSlackDm(page,args)
-  return {content:[{type:'text',text:JSON.stringify(result)}]}
+  const result=action==='list'?await listSlackDms(page,args.workspace):await readSlackDm(page,{...args,inspect:(page,result,selector,options)=>messageImages(page,result,selector,{...options,imageIndex:args.imageIndex})})
+  return action==='read'?result:{content:[{type:'text',text:JSON.stringify(result)}]}
  }catch(error){return {isError:true,content:[{type:'text',text:JSON.stringify({code:'SLACK_DM_UNAVAILABLE',message:error.message})}]}}
  finally{if(page)await page.close().catch(()=>{});if(connection)await connection.close()}
 }))
 for(const action of ['list','read'])server.registerTool(action==='list'?'browser_list_message_threads':'browser_read_messages',{
-  description:action==='list'?'List visible conversation names from the signed-in Instagram, X or LinkedIn inbox. Requires saved message-reading consent. Does not open a conversation or return message previews. Use only when the user requests messages. Never unlock, reset or bypass encryption/passcodes.':'Open one existing conversation by its exact name from browser_list_message_threads or its validated conversation URL, and read rendered text. Requires explicit user-selected conversation or user-authorized inbox review. Opening may mark messages seen. No sending, reacting, composing or deleting. Media and older history are not included. Respect safety rejections; do not retry via another tool.',
-  inputSchema:action==='list'?{source:z.enum(['instagram','x','linkedin'])}:{source:z.enum(['instagram','x','linkedin']),name:z.string().trim().min(1).max(150).optional(),url:z.string().url().max(2000).optional()},
+  description:action==='list'?'List visible conversation names from the signed-in Instagram, X or LinkedIn inbox. Requires saved message-reading consent. Does not open a conversation or return message previews. Use only when the user requests messages. Never unlock, reset or bypass encryption/passcodes.':'Open one existing conversation by its exact name from browser_list_message_threads or its validated conversation URL, and read rendered text and image pixels. Inspect the automatically attached images. Use imageIndex to inspect another listed image. Requires explicit user-selected conversation or user-authorized inbox review. Opening may mark messages seen. No sending, reacting, composing or deleting. Unopened files, video/audio and older unloaded history are not included. Respect safety rejections; do not retry via another tool.',
+  inputSchema:action==='list'?{source:z.enum(['instagram','x','linkedin'])}:{source:z.enum(['instagram','x','linkedin']),name:z.string().trim().min(1).max(150).optional(),url:z.string().url().max(2000).optional(),imageIndex:z.number().int().min(0).max(500).optional()},
   annotations:{readOnlyHint:action==='list',destructiveHint:false,openWorldHint:true},
 },async(args)=>queued(async()=>{
   let connection
-  try{connection=await authorizedMessageConnection(args.source);const result=action==='list'?await listMessageThreads(connection.contexts()[0],args.source):await readSelectedMessages(connection.contexts()[0],args.source,args);return {content:[{type:'text',text:JSON.stringify(result)}]}}
+  try{connection=await authorizedMessageConnection(args.source);const result=action==='list'?await listMessageThreads(connection.contexts()[0],args.source):await readSelectedMessages(connection.contexts()[0],args.source,{...args,inspect:(page,result,selector,options)=>messageImages(page,result,selector,{...options,imageIndex:args.imageIndex})});return action==='read'?result:{content:[{type:'text',text:JSON.stringify(result)}]}}
   catch(error){return {isError:true,content:[{type:'text',text:JSON.stringify({code:error.code || 'MESSAGE_READ_FAILED',message:error.code?error.message:'Message access failed. Verify source permission, sign-in and the exact selected conversation. No content read is verified.'})}]}}
   finally{if(connection)await connection.close()}
 }))

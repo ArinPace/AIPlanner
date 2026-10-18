@@ -50,7 +50,7 @@ export async function findSlackDm(page,name){
   return []
  }finally{await search.fill(initial).catch(()=>{})}
 }
-export async function readSlackDm(page,{workspace,name,url,timeout=30000}){
+export async function readSlackDm(page,{workspace,name,url,timeout=30000,inspect}){
  if(Boolean(name)===Boolean(url))throw Error('Provide one exact conversation name or one existing DM URL.')
  if(url)slackDmUrl(url)
  const selected=await selectDmWorkspace(page,workspace,{timeout})
@@ -66,6 +66,7 @@ export async function readSlackDm(page,{workspace,name,url,timeout=30000}){
  await page.locator(slackMessages).first().waitFor({timeout})
  if(slackDmUrl(page.url()).replace(/\/$/,'')!==destination.replace(/\/$/,''))throw Error('Slack opened a different conversation. No messages were read.')
  const messages=await page.locator(slackMessages).evaluateAll(nodes=>nodes.filter(n=>n.getClientRects().length).slice(-50).map(n=>({text:n.innerText.slice(0,10000),timestamp:n.getAttribute('data-msg-ts') || n.getAttribute('data-item-key')})).filter(m=>m.text.trim()))
- if(!messages.length)throw Error('The selected DM has no readable rendered message bodies.')
- return {workspace:selected.name,url:page.url(),messages,coverage:'Up to 50 rendered messages from the selected existing DM only. Older history, replies in unopened threads and attachments are not covered. Opening may mark messages read. Nothing was sent.'}
+ if(!messages.length && !await page.locator(slackMessages).locator('img,canvas').count())throw Error('The selected DM has no readable rendered message bodies.')
+ const result={workspace:selected.name,url:page.url(),messages,coverage:'Up to 50 rendered messages from the selected existing DM only. Older history, replies in unopened threads and unopened files are not covered. Opening may mark messages read. Nothing was sent.'}
+ return inspect?await inspect(page,result,slackMessages,{limit:50}):result
 }
