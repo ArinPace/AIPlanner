@@ -109,6 +109,7 @@ export async function handleVmWorker(request: Request, path: string) {
     }
     const result = checked(await db().rpc('planner_vm_report', { p_host: host.id, p_job: input.id, p_lease: input.lease, p_reply: reply, p_error: error, p_finished: finished, p_thread: threadId, p_result: output }))
     if (!result) throw new ApiError(409, 'This job was cancelled or its lease expired.')
+    if(typeof input.turnId==='string' && /^[A-Za-z0-9_-]{1,200}$/.test(input.turnId))checked(await db().from('planner_vm_jobs').update({native_turn_id:input.turnId}).eq('id',input.id).eq('username',host.username).eq('host_id',host.id).eq('lease',input.lease))
     checked(await db().from('planner_vm_hosts').update({heartbeat_at:new Date().toISOString()}).eq('id',host.id).eq('username',host.username).is('revoked_at',null))
     if (finished && !error && input.result && typeof input.result === 'object' && 'sites' in input.result) {
       const settings = checked(await db().from('planner_vm_settings').select('sources').eq('username',host.username).single())
@@ -126,12 +127,12 @@ export async function handleVmRequest(request: Request, path: string, username: 
     checked(await db().from('planner_vm_settings').upsert({ username }, { onConflict: 'username', ignoreDuplicates: true }))
     const [hosts, chats, settings, runs, provisioning, accounts, deletedChats, queue] = await Promise.all([
       db().from('planner_vm_hosts').select(publicHost).eq('username', username).is('revoked_at', null).order('created_at', { ascending: false }),
-      db().from('planner_vm_chats').select('id,title,archived,created_at,updated_at').eq('username', username).is('deleted_at',null).order('updated_at', { ascending: false }).limit(100),
+      db().from('planner_vm_chats').select('id,title,archived,parent_chat_id,parent_job_id,created_at,updated_at').eq('username', username).is('deleted_at',null).order('updated_at', { ascending: false }).limit(100),
       db().from('planner_vm_settings').select('sources,schedule_enabled,sites,ai_provider,schedule,whatsapp_read_consent_at,message_read_consent').eq('username', username).single(),
       db().from('planner_vm_jobs').select(publicJob).eq('username', username).order('created_at', { ascending: false }).limit(20),
       db().from('planner_vm_provisioning').select('status,error,wake_until,power_state,power_updated_at').eq('username', username).maybeSingle(),
       db().from('planner_browser_accounts').select('id,source,identity,label,active,verified_at').eq('username',username).order('verified_at',{ascending:false}),
-      db().from('planner_vm_chats').select('id,title,archived,created_at,updated_at,deleted_at').eq('username',username).not('deleted_at','is',null).gt('deleted_at',new Date(Date.now()-30*86400000).toISOString()).order('deleted_at',{ascending:false}).limit(1000),
+      db().from('planner_vm_chats').select('id,title,archived,parent_chat_id,parent_job_id,created_at,updated_at,deleted_at').eq('username',username).not('deleted_at','is',null).gt('deleted_at',new Date(Date.now()-30*86400000).toISOString()).order('deleted_at',{ascending:false}).limit(1000),
       db().from('planner_vm_jobs').select('id,chat_id,kind,status,started_at').eq('username',username).in('status',['queued','running']).order('created_at',{ascending:true}).limit(100),
     ])
     const machine = checked(provisioning) || null
@@ -269,6 +270,14 @@ export async function handleVmRequest(request: Request, path: string, username: 
     return json(checked(await db().from('planner_vm_chats').insert({ username, title }).select('id,title,created_at,updated_at').single()), 201)
   }
   if (path === '/api/agent/vm/chats/bulk') return json(await bulkManageChats(username,input))
+  if(path === '/api/agent/vm/chats/branch'){
+    if(!uuid(input.jobId))throw new ApiError(400,'Choose a message to branch.')
+    let edited:string|undefined
+    if(input.message!==undefined){try{edited=vmMessage(input.message)}catch{throw new ApiError(400,'Enter a message between 1 and 12000 characters.')}}
+    const {data,error}=await db().rpc('planner_branch_chat',{p_username:username,p_job:input.jobId,...(edited===undefined?{}:{p_edit:edited})})
+    if(error)throw new ApiError(error.code==='P0001'?409:503,error.code==='P0001'?error.message:'Could not branch this chat.')
+    return json(data,201)
+  }
   if (path === '/api/agent/vm/chats/rename') {
     if(!uuid(input.id) || typeof input.title!=='string' || !input.title.trim() || input.title.trim().length>100)throw new ApiError(400,'Use a chat name between 1 and 100 characters.')
     const rows=checked(await db().from('planner_vm_chats').update({title:input.title.trim(),updated_at:new Date().toISOString()}).eq('username',username).eq('id',input.id).is('deleted_at',null).select('id,title'))

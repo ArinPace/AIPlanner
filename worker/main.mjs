@@ -15,8 +15,8 @@ import { browserRuntimeEnv } from './browser-runtime-env.mjs'
 import { messagePermissionText } from './message-permission.mjs'
 import {refreshRuntimeInstructions} from './runtime-instructions.mjs'
 import {plannerGuidance} from './planner-guidance.mjs'
-import {attachmentInput} from './chat-attachments.mjs'
 import {continuationPrompt,monitorRun} from './run-control.mjs'
+import {branchInput} from './branch-input.mjs'
 
 const dataDir = process.env.PLANNER_DATA_DIR || '/var/lib/planner'
 const workerStartedAt = new Date().toISOString()
@@ -90,7 +90,7 @@ async function chat(job, auth, remote) {
     if (method === 'error' && !params.willRetry) rejectDone(new Error('The AI provider could not complete this run. Check account access and model availability.'))
   }, (method,params)=>relayApproval(method,params,{api,job,report:()=>report()}))
   rpc.child.on('exit', () => { if (!completed) rejectDone(new Error('The agent runtime stopped before completion.')) })
-  const report = () => api('progress', { id: job.id, lease: job.lease, reply, threadId })
+  const report = () => api('progress', { id: job.id, lease: job.lease, reply, threadId,turnId })
   const stopMonitor = monitorRun(report,async error=>{
     if(threadId && turnId)await rpc.request('turn/interrupt',{threadId,turnId},5000).catch(()=>{})
     rejectDone(error);rpc.close()
@@ -99,12 +99,14 @@ async function chat(job, auth, remote) {
   try {
     await rpc.initialize()
     const params = { cwd: path.join(dataDir, 'workspace'), ...(process.env.PLANNER_MODEL ? { model: process.env.PLANNER_MODEL } : auth.type === 'codex' ? {} : { model: 'gpt-6-luna' }), approvalPolicy: job.kind === 'sync' ? 'never' : 'on-request', sandbox: 'workspace-write', developerInstructions: instructions + '\n\n' + whatsappPermissionText(remote.whatsappReadConsentAt) + '\n\n' + messagePermissionText(remote.messageReadConsent) }
-    const thread = await rpc.request(threadId ? 'thread/resume' : 'thread/start', { ...params, ...(threadId ? { threadId, excludeTurns: true } : {}) }, 60000)
+    const fork=!threadId && job.fork_thread_id && job.fork_turn_id
+    const thread = await rpc.request(fork?'thread/fork':threadId ? 'thread/resume' : 'thread/start', { ...params, ...(fork?{threadId:job.fork_thread_id,lastTurnId:job.fork_turn_id,excludeTurns:true}:threadId ? { threadId, excludeTurns: true } : {}) }, 60000)
     threadId = thread.thread.id
     await refreshRuntimeInstructions(rpc,{threadId,instructions:params.developerInstructions+'\n\n'+plannerGuidance,dataDir,resumed:true})
     await report()
-    const started=await rpc.request('turn/start', { threadId, input: attachmentInput(`Enabled websites: ${JSON.stringify(Object.fromEntries(remote.sources.map(source=>[source,sourceUrls[source]])))}.\n\n${continuationPrompt(job)}`,job.attachment_payload) })
+    const started=await rpc.request('turn/start', { threadId, input: branchInput(job,`Enabled websites: ${JSON.stringify(Object.fromEntries(remote.sources.map(source=>[source,sourceUrls[source]])))}.\n\n${continuationPrompt(job)}`,{nativeHistory:Boolean(fork || job.native_turn_id)}) })
     turnId=started.turn.id
+    await report()
     await done
     return { reply, threadId }
   } finally { stopMonitor(); clearTimeout(timeout); rpc.close() }

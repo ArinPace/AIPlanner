@@ -1,3 +1,4 @@
+import {branchInput} from './branch-input.mjs'
 import {continuationPrompt,monitorRun} from './run-control.mjs'
 // Native Claude Code owns authentication and token refresh. No token extraction.
 import { spawn } from 'node:child_process'
@@ -9,7 +10,6 @@ import { openView } from './browser.mjs'
 import { whatsappPermissionText } from './whatsapp-permission.mjs'
 import { browserRuntimeEnv } from './browser-runtime-env.mjs'
 import {plannerGuidance} from './planner-guidance.mjs'
-import {claudeAttachmentInput} from './chat-attachments.mjs'
 import { messagePermissionText } from './message-permission.mjs'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
@@ -96,7 +96,7 @@ export async function claudeChat({ dataDir, job, remote, origin, token, instruct
         }
       })
       child.on('exit', code => code === 0 && result && !result.is_error ? resolve() : reject(new Error('Claude could not complete this run. Check its connection and subscription limits.')))
-      child.stdin.end(JSON.stringify({type:'user',message:{role:'user',content:claudeAttachmentInput(`Enabled websites: ${JSON.stringify(remote.sources)}.\n\n${continuationPrompt(job)}`,job.attachment_payload)}})+'\n')
+      child.stdin.end(JSON.stringify({type:'user',message:{role:'user',content:branchInput(job,`Enabled websites: ${JSON.stringify(remote.sources)}.\n\n${continuationPrompt(job)}`,{claude:true,nativeHistory:Boolean(existing)})}})+'\n')
     })
     sessions[key] = sessionId
     await writeFile(sessionPath, JSON.stringify(sessions), { mode: 0o600 })
