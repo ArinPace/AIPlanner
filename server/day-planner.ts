@@ -8,6 +8,7 @@ import type {CalendarEvent} from '../src/types.js'
 
 const minute=60000
 export function buildDayPlan(profile:PlanningProfile,events:CalendarEvent[],date:string,count:number,now=new Date()){
+ if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(profile.wake)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(profile.sleep)||profile.sleep<=profile.wake)throw new Error('Confirm this user\'s wake/sleep routine in Main Chat before building their day.')
  const start=new Date(date+'T00:00:00'),end=addDays(start,count)
  const completed=new Set(profile.tasks.filter(task=>task.status==='done').map(task=>task.id))
  const retained=removeCompletedTodoBlocks(events,completed,now.getTime()).filter(event=>!event.planning || event.planning.locked || new Date(event.start)<now || new Date(event.start)<start || new Date(event.start)>=end)

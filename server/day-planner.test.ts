@@ -5,8 +5,18 @@ import {DEFAULT_PLANNING,intensityFor,type PlanningTask} from '../src/lib/planni
 import {PlannerDate as Date} from '../src/lib/timezone.js'
 import type {CalendarEvent} from '../src/types.js'
 const task=(id:string,urgency:number,minutes=60):PlanningTask=>({id,title:id,urgency,minutes,category:'study',deadline:null,preferredDays:[],earliestDate:null,status:'todo',source:'test',goal:''})
-const profile=()=>({...structuredClone(DEFAULT_PLANNING),enabled:true,onboarded:true,intensity:80})
+const profile=()=>({...structuredClone(DEFAULT_PLANNING),enabled:true,onboarded:true,intensity:80,wake:'07:00',sleep:'23:00',readyMinutes:30,windDownMinutes:30,meals:[{title:'Lunch',time:'13:00',minutes:30}]})
 const now=new Date('2026-10-19T00:00:00-04:00')
+test('routines are learned rather than universal presets; a lunch-only user gets no extra meals',()=>{
+ assert.equal(DEFAULT_PLANNING.wake,'');assert.equal(DEFAULT_PLANNING.sleep,'')
+ assert.deepEqual(DEFAULT_PLANNING.meals,[])
+ assert.equal(DEFAULT_PLANNING.readyMinutes,0);assert.equal(DEFAULT_PLANNING.windDownMinutes,0)
+ assert.throws(()=>buildDayPlan(structuredClone(DEFAULT_PLANNING),[],'2026-10-19',1,now),/Confirm this user's wake\/sleep/)
+ const p=profile();p.readyMinutes=0;p.windDownMinutes=0
+ const result=buildDayPlan(p,[],'2026-10-19',1,now)
+ assert.ok(result.events.some(event=>event.title==='Lunch'))
+ for(const title of ['Breakfast','Dinner','Get ready for the day','Wind down / get ready for bed'])assert.equal(result.events.some(event=>event.title===title),false)
+})
 function fixed(id:string,start:string,end:string):CalendarEvent{return {id,title:id,start,end,allDay:false,description:'',tagIds:[],recurrence:{frequency:'none',interval:1,until:null}}}
 test('fixed commitments survive; deadlines precede urgency; plans do not overlap',()=>{
  const p=profile();p.tasks=[task('urgent',99),{...task('deadline',10),deadline:'2026-10-19T12:00:00-04:00'}]
