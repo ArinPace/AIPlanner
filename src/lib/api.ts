@@ -4,6 +4,7 @@ import type { FilesState } from './files'
 
 const TOKEN_KEY = 'ai-planner-token'
 export function planningRequest<T>(input?:unknown):Promise<T>{return request<T>('/api/planning',input===undefined?{}:{method:'POST',body:JSON.stringify(input)})}
+export function noteHistoryRequest<T>(noteId:string,options:{before?:number;versionId?:number;offset?:number}={}):Promise<T>{return request<T>('/api/files/history?'+new URLSearchParams({noteId,...Object.fromEntries(Object.entries(options).map(([key,value])=>[key,String(value)]))}))}
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY)

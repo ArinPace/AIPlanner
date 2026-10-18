@@ -8,6 +8,7 @@ import { handleMcpRequest } from './mcp.js'
 import { handleChatLinks } from './chat-links.js'
 import { handleVmRequest, handleVmWorker } from './vm.js'
 import {handlePlanning} from './planning.js'
+import {readNoteHistory} from './note-history.js'
 import { handleVmPool, queuePersonalVm, registerVmHost, touchVmActivity } from './vm-host.js'
 import { handleFilesBin, preserveRemovedFiles } from './files-bin.js'
 
@@ -145,6 +146,13 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
     const username = await sessionUser(request)
     if (!username) throw new ApiError(401, 'Please sign in.')
     if (path === '/api/planning') return await handlePlanning(request,username)
+    if(path==='/api/files/history'&&method==='GET'){
+      const params=new URL(request.url).searchParams,noteId=params.get('noteId')||''
+      if(!noteId||noteId.length>200)throw new ApiError(400,'Choose a note.')
+      const args:{noteId:string;before?:number;versionId?:number;offset?:number}={noteId}
+      for(const key of ['before','versionId','offset'] as const)if(params.has(key)){const value=Number(params.get(key));if(!Number.isSafeInteger(value)||value<0)throw new ApiError(400,'Invalid history page.');args[key]=value}
+      return json(await readNoteHistory(username,args))
+    }
     if (path === '/api/agent/vm/host/register' && method === 'POST') return await registerVmHost(username)
     if (path === '/api/agent/vm' || path.startsWith('/api/agent/vm/')) return await handleVmRequest(request, path, username)
     if (path === '/api/agent/chats' || path === '/api/agent/chats/remove' || path === '/api/agent/mcp/disconnect') return await handleChatLinks(request, path, username)

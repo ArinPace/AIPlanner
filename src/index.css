@@ -2080,3 +2080,14 @@ html, body { touch-action: pan-x pan-y; }
 .timed-event.is-short { justify-content:center; }
 .timed-event.is-short .event-title { line-height:14px; }
 .timed-event.is-tiny .event-title, .timed-event.is-tiny .event-time { display:none; }
+
+.planning-note-tabs { display:flex; gap:4px; padding:8px 20px; flex-shrink:0; border-bottom:1px solid var(--line); }
+.planning-note-tabs button { border:0; border-radius:8px; padding:7px 14px; background:transparent; color:var(--muted); }
+.planning-note-tabs [aria-selected=true] { background:color-mix(in srgb,var(--blue) 12%,transparent); color:var(--blue); }
+.note-history { overflow:auto; min-height:0; flex:1; padding:20px; color:var(--text); }
+.note-history ol { padding:0; list-style:none; }
+.note-history li button { width:100%; text-align:left; padding:12px; background:transparent; color:inherit; border:1px solid var(--line); border-radius:8px; margin-bottom:6px; }
+.note-history small { display:block; color:var(--muted); }
+.note-history-comparison { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.note-history pre { white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; font-size:14px; }
+@media(max-width:600px) { .note-history-comparison { grid-template-columns:minmax(0,1fr); } }
