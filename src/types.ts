@@ -16,6 +16,7 @@ export interface Tag {
 
 export interface CalendarEvent {
   id: string
+  reminder?: boolean
   urgency?: number | null
   title: string
   description: string
@@ -42,6 +43,7 @@ export interface StoredState {
 }
 
 export interface EventDraft {
+  reminder?: boolean
   urgency?: number | null
   title: string
   description: string

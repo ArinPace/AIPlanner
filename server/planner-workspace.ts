@@ -10,7 +10,7 @@ const recurrence = z.object({frequency:z.enum(['none','daily','weekly','monthly'
 export const eventPatch = {
   id:z.string().min(1).max(100).optional(), revision:z.number().int().nonnegative(),
   title:z.string().trim().min(1).max(300).optional(),description:z.string().max(20000).optional(),
-  start:datetime.optional(),end:datetime.optional(),allDay:z.boolean().optional(),
+  start:datetime.optional(),end:datetime.optional(),allDay:z.boolean().optional(),reminder:z.boolean().optional(),
   tagIds:z.array(z.string().min(1).max(100)).max(100).optional(),recurrence:recurrence.optional(),
   urgency:z.number().int().min(0).max(99).nullable().optional(),
 }
@@ -25,6 +25,7 @@ export async function saveEvent(username:string,args:EventPatch) {
   if(args.id && !old)throw new ApiError(404,'Event not found. Omit id to create a new event.')
   const {revision:_revision,id:_id,...patch}=args
   const event={description:'',allDay:false,tagIds:[],recurrence:{frequency:'none',interval:1,until:null},...old,...Object.fromEntries(Object.entries(patch).filter(([,v])=>v!==undefined)),id:old?.id || randomUUID()} as CalendarEvent
+  if(event.reminder && !event.allDay && event.start)event.end=new Date(Date.parse(event.start)+1).toISOString()
   if(!event.title || !event.start || !event.end)throw new ApiError(400,'New events require title, start and end with explicit timezone offsets.')
   if(Date.parse(event.end)<Date.parse(event.start))throw new ApiError(400,'Event end must follow its start.')
   if(event.tagIds.some(id=>!row.state.tags.some(t=>t.id===id)))throw new ApiError(400,'Choose tag IDs returned by planner_calendar_read.')

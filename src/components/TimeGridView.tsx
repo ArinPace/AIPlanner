@@ -118,7 +118,7 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
       </div>
 
       <div className="time-scroll" ref={scrollRef}>
-        <div ref={bodyRef} className={`time-body days-${days.length}`} style={{ height: 24 * hourHeight }}>
+        <div ref={bodyRef} className={`time-body days-${days.length}`} style={{ height: 24 * hourHeight, marginBottom: 90 }}>
           <div className="hours">
             {HOURS.map((hour) => (
               <div key={hour} className="hour-label" style={{ height: hourHeight }}>
@@ -166,9 +166,9 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
                     <button
                       key={`${item.event.id}-${item.start.toISOString()}`}
                       type="button"
-                      className="timed-event"
+                      className={`timed-event ${item.event.reminder?'reminder-event':''}`}
                       data-layout-key={key}
-                      title={`${item.event.title} - ${formatTimeCompact(item.start)} - ${formatTimeCompact(item.end)}`}
+                      title={`${item.event.reminder?'Reminder: ':''}${item.event.title} - ${formatTimeCompact(item.start)}${item.event.reminder?'':' - '+formatTimeCompact(item.end)}`}
                       style={{
                         top,
                         minHeight:height,
@@ -184,7 +184,7 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
                         {item.event.recurrence.frequency !== 'none' && <RepeatIcon />}
                         {item.event.title || '(No title)'}
                       </span>
-                      <span className="event-time">{formatTimeCompact(item.start)} – {formatTimeCompact(item.end)}</span>
+                      <span className="event-time">{item.event.reminder?'Reminder ? '+formatTimeCompact(item.start):formatTimeCompact(item.start)+' ? '+formatTimeCompact(item.end)}</span>
                     </button>
                   )
                 })}

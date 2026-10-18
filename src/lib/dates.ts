@@ -1,4 +1,4 @@
-import type { CalendarView } from '../types'
+import type { CalendarView } from '../types.js'
 
 export const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
 export const WEEKDAYS_SHORT = ['S', 'M', 'T', 'W', 'T', 'F', 'S'] as const

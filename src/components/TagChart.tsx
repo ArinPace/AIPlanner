@@ -18,7 +18,7 @@ export function TagChart({events,tags,cursor,onClose}:{events:CalendarEvent[];ta
   for(const occurrence of occurrences){
    const hours=Math.max(0,Math.min(end.getTime(),occurrence.end.getTime())-Math.max(start.getTime(),occurrence.start.getTime()))/3600000
    if(!hours)continue
-   for(const row of buckets){row.count++;row.hours+=hours}
+   for(const row of buckets){row.count++;row.hours+=event.reminder?0:hours}
   }
  }
  const total=rows.reduce((sum,row)=>sum+row[metric],0)
@@ -29,6 +29,6 @@ export function TagChart({events,tags,cursor,onClose}:{events:CalendarEvent[];ta
   <div className="tag-chart-controls"><label>Month <input aria-label="Statistics month" type="month" value={month} onChange={e=>{if(e.target.value)setMonth(e.target.value)}} /></label><label>Measure <select aria-label="Chart measure" value={metric} onChange={e=>setMetric(e.target.value as 'count'|'hours')}><option value="count">Number of events</option><option value="hours">Time (hours)</option></select></label></div>
   {total>0?<div className="tag-pie" role="img" aria-label={`Events by tag: ${rows.filter(row=>row[metric]>0).map(row=>`${row.name}: ${row[metric].toLocaleString(undefined,{maximumFractionDigits:1})} ${metric==='hours'?'hours':'events'}`).join(', ')}`} style={{background:`conic-gradient(${slices.join(',')})`}} />:<p>No events in this month.</p>}
   <table className="tag-chart-table"><thead><tr><th>Tag</th><th>Events</th><th>Hours</th></tr></thead><tbody>{rows.map(row=><tr key={row.id}><td><span className="tag-swatch" style={{background:row.color}} />{row.name}</td><td>{row.count}</td><td>{row.hours.toLocaleString(undefined,{maximumFractionDigits:1})}</td></tr>)}</tbody></table>
-  <p className="tag-chart-help">Includes hidden tags and recurring occurrences. Events with multiple tags count toward each tag. Time is clipped to this month; all-day events count as 24 hours per full day. Overlapping events are counted separately.</p>
+  <p className="tag-chart-help">Includes hidden tags and recurring occurrences. Events with multiple tags count toward each tag. Time is clipped to this month; reminders have no duration; all-day events count as 24 hours per full day. Overlapping events are counted separately.</p>
  </dialog>
 }

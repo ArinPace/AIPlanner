@@ -55,11 +55,11 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
       titleRef.current?.focus()
       return
     }
-    if (draft.endDate < draft.date) {
+    if (!draft.reminder && draft.endDate < draft.date) {
       setError('The end date must be on or after the start date.')
       return
     }
-    if (!draft.allDay && draft.date === draft.endDate && draft.endTime <= draft.startTime) {
+    if (!draft.reminder && !draft.allDay && draft.date === draft.endDate && draft.endTime <= draft.startTime) {
       setError('The end time must be after the start time.')
       return
     }
@@ -96,6 +96,8 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
           </button>
         </div>
 
+        <label className="field"><span>Type</span><select aria-label="Event type" value={draft.reminder?'reminder':'event'} onChange={e=>onChange({...draft,reminder:e.target.value==='reminder',endDate:draft.date})}><option value="event">Event</option><option value="reminder">Reminder</option></select></label>
+        {draft.reminder && <p className="quiet">A deadline or reminder with no duration. Choose a time, or leave it in the all-day row.</p>}
         <label className="field event-urgency-field">
           <span>Urgency <small>(optional)</small></span>
           <input type="number" aria-label="Event urgency" style={urgencyColor(draft.urgency)} min="0" max="99" step="1" inputMode="numeric" placeholder="None" value={draft.urgency ?? ''} onChange={event=>update('urgency',event.target.value===''?null:Number(event.target.value))}/>
@@ -117,14 +119,14 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
               }}
               required
             />
-            <span className="field-sep">to</span>
-            <input type="date" value={draft.endDate} onChange={(event) => update('endDate', event.target.value)} required />
+            {!draft.reminder && <><span className="field-sep">to</span>
+            <input type="date" value={draft.endDate} onChange={(event) => update('endDate', event.target.value)} required /></>}
           </div>
         </label>
 
         <label className="check-row">
           <input type="checkbox" checked={draft.allDay} onChange={(event) => update('allDay', event.target.checked)} />
-          All day
+          {draft.reminder ? 'No specific time' : 'All day'}
         </label>
 
         {!draft.allDay && (
@@ -132,8 +134,8 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
             <span>Time</span>
             <div className="field-row">
               <input type="time" value={draft.startTime} onChange={(event) => update('startTime', event.target.value)} />
-              <span className="field-sep">to</span>
-              <input type="time" value={draft.endTime} onChange={(event) => update('endTime', event.target.value)} />
+              {!draft.reminder && <><span className="field-sep">to</span>
+              <input type="time" value={draft.endTime} onChange={(event) => update('endTime', event.target.value)} /></>}
             </div>
           </label>
         )}

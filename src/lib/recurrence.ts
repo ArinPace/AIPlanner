@@ -1,5 +1,5 @@
-import type { CalendarEvent, Occurrence, Recurrence } from '../types'
-import { addDays, addMonths, addYears, daysBetween, endOfDateInput, overlaps } from './dates'
+import type { CalendarEvent, Occurrence, Recurrence } from '../types.js'
+import { addDays, addMonths, addYears, daysBetween, endOfDateInput, overlaps } from './dates.js'
 
 function nextOccurrence(date: Date, recurrence: Recurrence): Date {
   switch (recurrence.frequency) {
@@ -52,7 +52,7 @@ function firstOnOrAfter(eventStart: Date, rangeStart: Date, recurrence: Recurren
 export function expandEvent(event: CalendarEvent, rangeStart: Date, rangeEnd: Date): Occurrence[] {
   const eventStart = new Date(event.start)
   const eventEnd = new Date(event.end)
-  const duration = Math.max(eventEnd.getTime() - eventStart.getTime(), 60_000)
+  const duration = event.reminder && !event.allDay ? 1 : Math.max(eventEnd.getTime() - eventStart.getTime(), 60_000)
   const until = event.recurrence.until ? endOfDateInput(event.recurrence.until) : null
 
   if (event.recurrence.frequency === 'none') {

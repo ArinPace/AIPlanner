@@ -218,7 +218,7 @@ export function mergeUpdates(calendarState: StoredState, filesState: FilesState,
       if (target && target.content === target.agentSnapshot) { target.content=content; target.agentSnapshot=content; target.updatedAt=now }
       else if (!target) files.files.push({id:fileId,folderId:courseId,name:(safeName(update.title).slice(0,55)||'Update')+' '+fileId.slice(-8)+'.txt',content,agentSnapshot:content,updatedAt:now})
       if (update.dueAt) {
-        const event = {id,title:update.title,description:update.summary+'\n\n'+update.url,start:new Date(update.dueAt).toISOString(),end:new Date(Date.parse(update.dueAt)+15*60000).toISOString(),allDay:false,tagIds:[],recurrence:{frequency:'none' as const,interval:1,until:null}}
+        const event = {id,title:update.title,description:update.summary+'\n\n'+update.url,start:new Date(update.dueAt).toISOString(),end:new Date(Date.parse(update.dueAt)+1).toISOString(),allDay:false,reminder:true,tagIds:[],recurrence:{frequency:'none' as const,interval:1,until:null}}
         const old = calendar.events.find(x=>x.id===id)
         const snapshot = eventSnapshot(event)
         if (old) { if (old.agentSnapshot === eventSnapshot(old)) Object.assign(old,event,{agentSnapshot:snapshot}) }

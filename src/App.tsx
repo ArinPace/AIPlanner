@@ -58,6 +58,7 @@ function draftFromEvent(event: CalendarEvent): EventDraft {
   const start = new Date(event.start)
   const end = new Date(event.end)
   return {
+    reminder: event.reminder,
     urgency: event.urgency,
     title: event.title,
     description: event.description,
@@ -73,9 +74,10 @@ function draftFromEvent(event: CalendarEvent): EventDraft {
 
 function eventFromDraft(draft: EventDraft, id: string): CalendarEvent {
   const start = draft.allDay ? startOfDateInput(draft.date) : combineDateAndTime(draft.date, draft.startTime)
-  const end = draft.allDay ? endOfDateInput(draft.endDate) : combineDateAndTime(draft.endDate, draft.endTime)
+  const end = draft.reminder && !draft.allDay ? new Date(start.getTime()+1) : draft.allDay ? endOfDateInput(draft.reminder?draft.date:draft.endDate) : combineDateAndTime(draft.endDate, draft.endTime)
   return {
     id,
+    reminder: Boolean(draft.reminder),
     ...(draft.urgency===undefined?{}:{urgency:draft.urgency}),
     title: draft.title.trim(),
     description: draft.description.trim(),
