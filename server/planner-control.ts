@@ -6,7 +6,8 @@ import {bulkManageChats} from './vm-chats.js'
 import type {StoredState} from '../src/types.js'
 
 export const plannerGuide={
- version:'2026-10-18',
+ version:'2026-10-19',
+ planning:{read:'planner_planning_read',preferences:'planner_planning_update',tasks:'planner_task_save',feedback:'planner_task_feedback',replan:'planner_replan',rules:'Main Chat is the protected user hub. Read persistent goals, tasks and learned preferences at the start of conversations. Ask about routine, fixed time, realistic estimates, deadlines, goals and meaningful rest; save confirmed context. Planning setup must be confirmed before publishing. Only future unlocked agent-created blocks may be rearranged automatically; existing user commitments remain fixed. Intensity: default, weekday, day override; recovery caps at 20. Missed task feedback raises urgency by 10, actual duration feedback updates category estimates. Never infer task completion from time passing. Preview/replan reports infeasible work rather than inventing available time.'},
  urgency:{scale:'Optional whole number 0–99; higher means more urgent. Blank means unset.',calendar:'planner_save_event accepts optional urgency; omit to preserve, null to clear.',checklists:'Notes store checklist urgency in rich taskItem attrs and Markdown as - [ ] [urgency:7] Task. Preserve these markers during note edits. New checklist items start unset.'},
  purpose:'Control the signed-in user’s saved AI Planner data through tools. Do not claim an action succeeded without reading back the saved result.',
  calendar:{read:'planner_calendar_read',write:'planner_save_event',remove:'planner_delete_events',tags:['planner_save_tag','planner_delete_tags'],rules:'Internal calendar is independent of Google Calendar. All planner display, wall-clock event input and scheduled reviews use America/New_York (EST/EDT, respecting daylight saving). Interpret unspecified planner times as New York; preserve source instants and explicit source timezone evidence. Set reminder:true for a deadline/reminder with no duration. Set allDay:true for no specific time; otherwise start is the single reminder time and end is normalized automatically. Reminders contribute zero hours in tag statistics. Optional urgency is a whole number 0–99, higher means more urgent. Omit to preserve existing urgency; null clears it. Read latest calendar revision before every mutation. Dates require explicit timezone offsets. Calendar reads return base series, not expanded occurrences. Recurring changes/removals affect the series; ask about scope when ambiguous.'},
@@ -38,7 +39,7 @@ export function registerPlannerControls(add:Add,username:string){
   return {saved:true,removedIds:[...new Set(args.ids)],revision:saved[0].revision}
  })
  add('planner_chats_read','List/search this user’s agent chats by title, including archive or Bin state. Paginate for complete results. Returns metadata only; use planner_chat_messages for conversation contents.',{state:z.enum(['active','archived','bin','all']).optional(),query:z.string().max(200).optional(),offset:z.number().int().nonnegative().optional(),limit:z.number().int().min(1).max(100).optional()},'planner:read',true,async args=>{
-  let q=db().from('planner_vm_chats').select('id,title,archived,deleted_at,created_at,updated_at',{count:'exact'}).eq('username',username)
+  let q=db().from('planner_vm_chats').select('id,title,is_main,archived,deleted_at,created_at,updated_at',{count:'exact'}).eq('username',username)
   if(args.state==='bin')q=q.not('deleted_at','is',null)
   else if(args.state!=='all')q=q.is('deleted_at',null).eq('archived',args.state==='archived')
   if(args.query)q=q.ilike('title','%'+args.query.replace(/[\\%_]/g,'\\$&')+'%')

@@ -3,6 +3,7 @@ import { DEFAULT_TAGS } from './storage'
 import type { FilesState } from './files'
 
 const TOKEN_KEY = 'ai-planner-token'
+export function planningRequest<T>(input?:unknown):Promise<T>{return request<T>('/api/planning',input===undefined?{}:{method:'POST',body:JSON.stringify(input)})}
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY)

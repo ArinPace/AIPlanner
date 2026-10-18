@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { applyTheme, readTheme } from '../lib/theme'
 import { DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM, ZOOM_STEP } from '../lib/zoom'
 import { CloseIcon } from './Icons'
+import {PlanningSettings} from './PlanningSettings'
 
 type SettingsPanelProps = {
   zoom: number
@@ -16,14 +17,15 @@ function shortcutMod(): string {
 export function SettingsPanel({ zoom, onZoomChange, onClose }: SettingsPanelProps) {
   const mod = shortcutMod()
   const [theme, setTheme] = useState(readTheme)
+  const [planningOpen,setPlanningOpen]=useState(false)
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape'&&!planningOpen) onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose,planningOpen])
 
   return (
     <div className="settings-panel" role="dialog" aria-label="Settings">
@@ -41,6 +43,8 @@ export function SettingsPanel({ zoom, onZoomChange, onClose }: SettingsPanelProp
           applyTheme(next)
         }} />
       </label>
+      <button type="button" className="today-btn" onClick={()=>setPlanningOpen(true)}>Planning & intensity</button>
+      {planningOpen&&<PlanningSettings onClose={()=>setPlanningOpen(false)}/>}
       <label className="settings-field">
         <span>Display size</span>
         <div className="settings-zoom-row">

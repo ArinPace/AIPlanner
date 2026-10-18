@@ -15,6 +15,7 @@ export interface Tag {
 }
 
 export interface CalendarEvent {
+  planning?: {kind:'task'|'break'|'routine'|'sleep';taskId?:string;locked:boolean}
   id: string
   reminder?: boolean
   urgency?: number | null

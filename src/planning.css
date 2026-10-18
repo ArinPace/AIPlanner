@@ -1,0 +1,16 @@
+.planning-dialog { width: min(600px,calc(100% - 24px)); }
+.planning-dialog > * + * { margin-top: 16px; }
+.planning-dialog .quiet { font-size: 12px; line-height: 1.5; }
+.planning-field { display: grid; gap: 8px; font-size: 14px; }
+.planning-field input:not([type=range]), .planning-field textarea, .planning-weekdays input, .planning-hours input, .planning-date > input { min-width: 0; max-width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; background: var(--panel); color: var(--text); }
+.planning-field input[type=range] { width: 100%; accent-color: var(--blue); }
+.planning-toggle { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.5; }
+.planning-toggle input { margin-top: 4px; }
+.planning-weekdays, .planning-date { border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+.planning-weekdays label { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 7px 0; }
+.planning-weekdays input { width: 115px; }
+.planning-date > * + * { margin-top: 12px; }
+.planning-hours { display: flex; gap: 16px; }
+.planning-hours label { display: grid; gap: 6px; flex: 1; min-width: 0; }
+.day-intensity-button { border: 1px solid var(--line); border-radius: 12px; padding: 4px 9px; background: var(--panel); color: var(--blue); font-size: 11px; }
+@media(max-width:600px) { .planning-dialog input:not([type=range]), .planning-dialog textarea { font-size: 16px; } }

@@ -13,6 +13,7 @@ export const eventPatch = {
   start:datetime.optional(),end:datetime.optional(),allDay:z.boolean().optional(),reminder:z.boolean().optional(),
   tagIds:z.array(z.string().min(1).max(100)).max(100).optional(),recurrence:recurrence.optional(),
   urgency:z.number().int().min(0).max(99).nullable().optional(),
+  planningLocked:z.boolean().optional(),
 }
 type EventPatch = z.infer<z.ZodObject<typeof eventPatch>>
 export async function calendarRow(username:string):Promise<{state:StoredState;revision:number}> {
@@ -23,8 +24,9 @@ export async function saveEvent(username:string,args:EventPatch) {
   if(row.revision!==args.revision)throw new ApiError(409,'Read the latest calendar revision before saving.')
   const old=args.id ? row.state.events.find(e=>e.id===args.id) : undefined
   if(args.id && !old)throw new ApiError(404,'Event not found. Omit id to create a new event.')
-  const {revision:_revision,id:_id,...patch}=args
+  const {revision:_revision,id:_id,planningLocked,...patch}=args
   const event={description:'',allDay:false,tagIds:[],recurrence:{frequency:'none',interval:1,until:null},...old,...Object.fromEntries(Object.entries(patch).filter(([,v])=>v!==undefined)),id:old?.id || randomUUID()} as CalendarEvent
+  if(planningLocked!==undefined){if(!old?.planning)throw new ApiError(400,'Only planner-created blocks have a planning lock.');event.planning={...old.planning,locked:planningLocked}}
   if(event.reminder && !event.allDay && event.start)event.end=new Date(Date.parse(event.start)+1).toISOString()
   if(!event.title || !event.start || !event.end)throw new ApiError(400,'New events require title, start and end with explicit timezone offsets.')
   if(Date.parse(event.end)<Date.parse(event.start))throw new ApiError(400,'Event end must follow its start.')

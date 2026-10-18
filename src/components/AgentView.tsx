@@ -13,6 +13,7 @@ import { CloseIcon, MenuIcon, PlusIcon, SettingsIcon } from './Icons'
 import { RenameDialog } from './RenameDialog'
 import { binDaysLeft } from '../lib/bin'
 import {vmJobStatus} from '../lib/vmJobStatus'
+import {planningRequest} from '../lib/api'
 
 function MessageTime({value,label}:{value:string|null|undefined;label:string}) {
   if(!value || !Number.isFinite(Date.parse(value)))return null
@@ -26,6 +27,7 @@ export function AgentView({ active, sidebar, setSidebar }: { active: boolean; si
   const [branching,setBranching]=useState(false)
   const [chat, setChat] = useState<string | null>(null)
   const selectedChat = useRef<string | null>(null)
+  const openMainOnLoad = useRef(true)
   const [jobs, setJobs] = useState<VmJob[]>([])
   const [message, setMessage] = useState('')
   const [dictating,setDictating]=useState(false)
@@ -59,7 +61,11 @@ export function AgentView({ active, sidebar, setSidebar }: { active: boolean; si
   const closePanel = useCallback(() => setPanel(null), [])
   const refresh = useCallback(async () => {
     const next = await agentRequest<VmState>('vm'); setState(next); setNow(Date.now())
-    const id = selectedChat.current
+    let id = selectedChat.current
+    if (!id && openMainOnLoad.current) {
+      id = next.chats.find(item=>item.is_main)?.id || null
+      if (id) {openMainOnLoad.current=false;selectedChat.current=id;setChat(id)}
+    }
     if (id) {
       const result = await agentRequest<{ jobs: VmJob[] }>('vm/messages?chat=' + encodeURIComponent(id))
       if (selectedChat.current === id) setJobs(result.jobs)
@@ -68,6 +74,7 @@ export function AgentView({ active, sidebar, setSidebar }: { active: boolean; si
   useEffect(() => {
     if (!active) return
     selectedChat.current=null
+    openMainOnLoad.current=true
     const initial = window.setTimeout(() => {
       attachmentEpoch.current++;setAttachments([]);setChat(null);setJobs([]);setMessage('');setError('');setLoadingChat(false);setPanel(null);setShowArchived(false);setShowBin(false);setSelecting(false);setSelectedIds([])
       void refresh().catch(e => setError(e.message))
@@ -85,6 +92,7 @@ export function AgentView({ active, sidebar, setSidebar }: { active: boolean; si
   const lastReply = jobs.at(-1)?.reply
   useEffect(() => { end.current?.scrollIntoView({ block: 'nearest' }) }, [chat, jobs.length, lastReply])
   async function chooseChat(id: string) {
+    openMainOnLoad.current=false
     attachmentEpoch.current++;setAttachments([]);selectedChat.current = id; setChat(id); setJobs([]); setMessage(''); setError(''); setLoadingChat(true)
     if (window.innerWidth <= 700) setSidebar(false)
     try { const result = await agentRequest<{ jobs: VmJob[] }>('vm/messages?chat=' + encodeURIComponent(id)); if (selectedChat.current === id) setJobs(result.jobs) }
@@ -92,14 +100,22 @@ export function AgentView({ active, sidebar, setSidebar }: { active: boolean; si
     finally { if (selectedChat.current === id) setLoadingChat(false) }
   }
   function newChat() {
+    openMainOnLoad.current=false
     setShowArchived(false);setShowBin(false)
     setSelecting(false);setSelectedIds([])
     attachmentEpoch.current++;setAttachments([]);selectedChat.current = null; setChat(null); setJobs([]); setMessage(''); setError(''); setLoadingChat(false)
     if (window.innerWidth <= 700) setSidebar(false)
   }
+  async function resetMain(){
+    if(!window.confirm('Reset Main Chat completely? This permanently clears its messages, task list, learned estimates and planning preferences. Saved Files, other chats and calendar events remain. Stop all Main Chat tasks first. This cannot be undone.'))return
+    setChatAction('reset-main');setError('')
+    try{await planningRequest({action:'reset-main',confirm:'RESET MAIN CHAT'});setJobs([]);setMessage('');await refresh()}
+    catch(e){setError(e instanceof Error?e.message:'Could not reset Main Chat.')}
+    finally{setChatAction(null)}
+  }
   async function manageSelected(action:'archive'|'restore'|'delete'|'untrash'|'purge') {
     if(chatAction || !selectedIds.length)return
-    const ids=selectedIds.filter(id=>visibleChats.some(c=>c.id===id))
+    const ids=selectedIds.filter(id=>visibleChats.some(c=>c.id===id&&!c.is_main))
     if(!ids.length)return
     if(action==='delete' && !window.confirm(`Move ${ids.length} selected chat(s) to the Bin? You can restore them for 30 days.`))return
     if(action==='purge' && !window.confirm(`Permanently delete ${ids.length} selected chat(s) and their messages? This cannot be undone.`))return
@@ -166,18 +182,18 @@ export function AgentView({ active, sidebar, setSidebar }: { active: boolean; si
   return <main className={'assistant-app' + (sidebar ? ' sidebar-open' : '')}>
     {sidebar && <aside className="assistant-sidebar" aria-label="Chat sidebar">
       <div className="assistant-sidebar-top"><strong>Your chats</strong><button type="button" className="icon-btn" aria-label="Hide chat sidebar" onClick={() => setSidebar(false)}><CloseIcon size={18}/></button></div>
-      <button type="button" className="assistant-new-chat" onClick={newChat}><PlusIcon size={18}/>New chat</button>
+      <button type="button" className="assistant-new-chat" onClick={newChat}><PlusIcon size={18}/>New chat</button>{state?.chats.find(c=>c.id===chat)?.is_main && <button type="button" className="assistant-archive-toggle" disabled={Boolean(chatAction)} onClick={()=>void resetMain()}>Reset Main Chat</button>}
       <button type="button" className="assistant-archive-toggle" disabled={Boolean(chatAction)} aria-pressed={showArchived} onClick={()=>{setShowBin(false);setShowArchived(v=>!v);setSelectedIds([]);setSelecting(false)}}>{showArchived?'Back to chats':'Archived chats'}</button>
       <button type="button" className="assistant-archive-toggle" aria-pressed={showBin} disabled={Boolean(chatAction)} onClick={()=>{setShowBin(v=>!v);setSelectedIds([]);setSelecting(false)}}>{showBin?'Back from Bin':'Bin'}{!showBin && Boolean(state?.deletedChats?.length) && ' ('+state!.deletedChats!.length+')'}</button>
       {showBin && <p className="assistant-bin-note">Deleted chats stay here for 30 days. Restoring keeps their messages and archive status.</p>}
       <button type="button" className="assistant-archive-toggle" disabled={Boolean(chatAction) || !visibleChats.length} aria-pressed={selecting} onClick={()=>{setSelecting(v=>!v);setSelectedIds([])}}>{selecting?'Cancel selection':'Select chats'}</button>
       {selecting && <div className="assistant-bulk-actions" aria-label="Selected chat actions">
-        <label><input type="checkbox" aria-label="Select all visible chats" disabled={Boolean(chatAction)} checked={visibleChats.length>0 && visibleChats.slice(0,100).every(c=>selectedIds.includes(c.id))} onChange={e=>setSelectedIds(e.target.checked?visibleChats.slice(0,100).map(c=>c.id):[])}/>Select all ({visibleChats.length})</label>
+        <label><input type="checkbox" aria-label="Select all visible chats" disabled={Boolean(chatAction)} checked={visibleChats.some(c=>!c.is_main) && visibleChats.filter(c=>!c.is_main).slice(0,100).every(c=>selectedIds.includes(c.id))} onChange={e=>setSelectedIds(e.target.checked?visibleChats.filter(c=>!c.is_main).slice(0,100).map(c=>c.id):[])}/>Select all ({visibleChats.length})</label>
         <span role="status">{selectedIds.length} selected</span>
         <div><button type="button" disabled={!selectedIds.length || Boolean(chatAction)} onClick={()=>void manageSelected(showBin?'untrash':showArchived?'restore':'archive')}>{showBin || showArchived?'Restore selected':'Archive selected'}</button><button type="button" className="assistant-bulk-delete" disabled={!selectedIds.length || Boolean(chatAction)} onClick={()=>void manageSelected(showBin?'purge':'delete')}>{showBin?'Delete permanently':'Delete selected'}</button></div>
         {chatAction==='bulk' && <span role="status">Updating chats…</span>}
       </div>}
-      <nav aria-label="Conversations" className="assistant-conversations">{visibleChats.map(item => <div className={'assistant-chat-row'+(selecting?' is-selecting':'')} key={item.id}>{selecting && <input type="checkbox" aria-label={'Select '+item.title} disabled={Boolean(chatAction)} checked={selectedIds.includes(item.id)} onChange={e=>setSelectedIds(ids=>e.target.checked?[...ids,item.id]:ids.filter(id=>id!==item.id))}/>}<button type="button" title={item.title} aria-current={item.id === chat ? 'page' : undefined} disabled={showBin} onClick={() => void chooseChat(item.id)}>{item.title}{showBin && item.deleted_at && <small className="assistant-bin-expiry">{binDaysLeft(Date.parse(item.deleted_at)+30*86400000,now)} days left</small>}</button>{!selecting && !showBin && <details className="assistant-chat-options"><summary aria-label={'Options for '+item.title}>⋯</summary><div><button disabled={Boolean(chatAction)} onClick={()=>{setError('');setRenameChat(item)}}>Rename chat</button><button disabled={Boolean(chatAction)} onClick={()=>void manageChat(item,'archive')}>{item.archived?'Restore chat':'Archive chat'}</button><button disabled={Boolean(chatAction)} onClick={()=>void manageChat(item,'delete')}>Delete chat</button></div></details>}</div>)}{state && !visibleChats.length && <p>{showBin?'Bin is empty.':showArchived?'No archived chats.':'No conversations yet.'}</p>}</nav>
+      <nav aria-label="Conversations" className="assistant-conversations">{visibleChats.map(item => <div className={'assistant-chat-row'+(selecting?' is-selecting':'')} key={item.id}>{selecting && !item.is_main && <input type="checkbox" aria-label={'Select '+item.title} disabled={Boolean(chatAction)} checked={selectedIds.includes(item.id)} onChange={e=>setSelectedIds(ids=>e.target.checked?[...ids,item.id]:ids.filter(id=>id!==item.id))}/>}<button type="button" title={item.title} aria-current={item.id === chat ? 'page' : undefined} disabled={showBin} onClick={() => void chooseChat(item.id)}>{item.title}{showBin && item.deleted_at && <small className="assistant-bin-expiry">{binDaysLeft(Date.parse(item.deleted_at)+30*86400000,now)} days left</small>}</button>{!item.is_main && !selecting && !showBin && <details className="assistant-chat-options"><summary aria-label={'Options for '+item.title}>⋯</summary><div><button disabled={Boolean(chatAction)} onClick={()=>{setError('');setRenameChat(item)}}>Rename chat</button><button disabled={Boolean(chatAction)} onClick={()=>void manageChat(item,'archive')}>{item.archived?'Restore chat':'Archive chat'}</button><button disabled={Boolean(chatAction)} onClick={()=>void manageChat(item,'delete')}>Delete chat</button></div></details>}</div>)}{state && !visibleChats.length && <p>{showBin?'Bin is empty.':showArchived?'No archived chats.':'No conversations yet.'}</p>}</nav>
       <button type="button" className="assistant-sidebar-settings" onClick={() => setPanel('settings')}><SettingsIcon size={18}/>Settings</button>
     </aside>}
     {sidebar && <button type="button" className="assistant-sidebar-scrim" aria-label="Close chat sidebar" onClick={() => setSidebar(false)}/>}
@@ -190,7 +206,7 @@ export function AgentView({ active, sidebar, setSidebar }: { active: boolean; si
       {state?.provisioning?.error && <p role="alert" className="assistant-error">{state.provisioning.error}</p>}
       <div className="assistant-thread" aria-live="polite">
         <div className="assistant-thread-content">
-          {!jobs.length && <div className="assistant-welcome"><span className="assistant-spark">✦</span><h1>{loadingChat ? 'Opening your chat…' : 'What can I help with?'}</h1><p>{aiReady ? 'Plan your day, organize your files, or check your connected sites.' : 'Connect your AI account once. Then keep the conversation here.'}</p>{state && !aiReady && <button type="button" className="assistant-primary" onClick={() => setPanel('setup')}>Connect AI</button>}</div>}
+          {!jobs.length && <div className="assistant-welcome"><span className="assistant-spark">✦</span><h1>{loadingChat ? 'Opening your chat…' : 'What can I help with?'}</h1><p>{aiReady ? 'Tell me your goals, wake/sleep times, fixed commitments and to-dos. How long do tasks usually take, which days suit routines, and what helps you recover? I will use your feedback to improve each plan.' : 'Connect your AI account once. Then keep the conversation here.'}</p>{state && !aiReady && <button type="button" className="assistant-primary" onClick={() => setPanel('setup')}>Connect AI</button>}</div>}
           {jobs.map(job => <article key={job.id} className="assistant-turn"><div className="assistant-user-message">{job.message}{Boolean(job.attachments?.length) && <ChatAttachments items={job.attachments!} jobId={job.id} onError={setError}/>}<MessageTime value={job.created_at} label="Message sent"/><button type="button" className="assistant-copy" aria-label="Copy your message" onClick={()=>void copyMessage(job.message,job.id+'-user')}>{copied===job.id+'-user'?'Copied':'Copy'}</button><button type="button" className="assistant-copy" disabled={branching} onClick={()=>setEditingJob(job)}>Edit</button></div>{job.reply && <div className="assistant-reply">{job.reply}<MessageTime value={job.finished_at || job.started_at || job.created_at} label={pending(job)?"Reply started":"Assistant replied"}/><button type="button" className="assistant-copy" aria-label="Copy assistant message" onClick={()=>void copyMessage(job.reply,job.id+'-reply')}>{copied===job.id+'-reply'?'Copied':'Copy'}</button>{job.status==='completed' && <button type="button" className="assistant-copy" disabled={branching} onClick={()=>void branch(job).catch(e=>setError(e.message))}>{branching?'Branching?':'Branch chat'}</button>}</div>}{pending(job) && job.approvals?.map(request=><AgentApproval key={request.id} request={request} onAnswered={refresh}/>)}{(pending(job) || job.status==='paused') && <div className="assistant-working">{job.status!=='paused' && <span className="assistant-pulse"/>}{vmJobStatus(job,state,now)}{job.status==='queued' && activeTask && activeTask.id!==job.id && <button type="button" onClick={()=>{if(window.confirm('Stop the other task currently using your VM? Changes it already saved will be kept.'))void agentAction('vm/cancel',{id:activeTask.id}).then(refresh).catch(e=>setError(e.message))}}>Stop current task</button>}<AgentRunControls job={job} onChanged={refresh} onError={setError}/></div>}{job.result.steered && <p className="assistant-steered">Continued with your follow-up below.</p>}{job.error && <p role="alert" className="assistant-error">{job.error}</p>}</article>)}<div ref={end}/>
         </div>
       </div>

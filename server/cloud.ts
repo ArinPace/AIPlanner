@@ -7,6 +7,7 @@ import { handleAgentRequest } from './agent.js'
 import { handleMcpRequest } from './mcp.js'
 import { handleChatLinks } from './chat-links.js'
 import { handleVmRequest, handleVmWorker } from './vm.js'
+import {handlePlanning} from './planning.js'
 import { handleVmPool, queuePersonalVm, registerVmHost, touchVmActivity } from './vm-host.js'
 import { handleFilesBin, preserveRemovedFiles } from './files-bin.js'
 
@@ -143,6 +144,7 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
     }
     const username = await sessionUser(request)
     if (!username) throw new ApiError(401, 'Please sign in.')
+    if (path === '/api/planning') return await handlePlanning(request,username)
     if (path === '/api/agent/vm/host/register' && method === 'POST') return await registerVmHost(username)
     if (path === '/api/agent/vm' || path.startsWith('/api/agent/vm/')) return await handleVmRequest(request, path, username)
     if (path === '/api/agent/chats' || path === '/api/agent/chats/remove' || path === '/api/agent/mcp/disconnect') return await handleChatLinks(request, path, username)
@@ -235,6 +237,7 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
     throw new ApiError(404, 'Not found.')
   } catch (error) {
     if (error instanceof ApiError) return json({ error: error.message }, error.status)
+    if (error instanceof Error && error.name==='ZodError') return json({error:'Invalid values. Check dates, times, intensity and required fields.'},400)
     if (error instanceof Error && /Names must|already exists|folder|file|document|link|label|color|Invalid|Too many|workspace/i.test(error.message)) return json({ error: error.message }, 400)
     console.error('Planner API failed', { path, method, type: error instanceof Error ? error.name : 'unknown' })
     return json({ error: 'Could not complete this request. Please try again.' }, 500)

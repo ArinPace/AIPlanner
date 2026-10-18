@@ -14,6 +14,8 @@ import {
   startOfDay,
 } from '../lib/dates'
 import {layoutTimeCards} from '../lib/timeLayout'
+import {PlanningButton} from './PlanningSettings'
+import {toDateInput} from '../lib/dates'
 
 type TimeGridViewProps = {
   cursor: Date
@@ -84,6 +86,7 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
           return <section className="mobile-week-day" key={day.toISOString()}>
             <div className="mobile-week-heading">
               <h3 className={isToday(day) ? 'is-today' : ''}>{day.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</h3>
+              <PlanningButton date={toDateInput(day)}/>
               <button type="button" className="text-btn" aria-label={'Add event on ' + day.toDateString()} onClick={() => onSlotClick(startOfDay(day), true)}>+</button>
             </div>
             {items.length === 0 && <p className="mobile-week-empty">No events</p>}
@@ -107,6 +110,7 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
           <div key={day.toISOString()} className={`time-day-head ${isToday(day) ? 'is-today' : ''}`}>
             <span className="dow">{day.toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase()}</span>
             <span className="num">{day.getDate()}</span>
+            {view==='day'&&<PlanningButton date={toDateInput(day)}/>}
           </div>
         ))}
       </div>

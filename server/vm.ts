@@ -9,7 +9,7 @@ import { touchVmActivity } from './vm-host.js'
 import { VM_SOURCES } from '../src/lib/vm.js'
 import { googleCalendarStatus, readGoogleCalendar, startGoogleCalendar, selectGoogleAccount, removeGoogleAccount } from './agent.js'
 import { observeAccounts, editBrowserAccount } from './browser-accounts.js'
-import { bulkManageChats } from './vm-chats.js'
+import { bulkManageChats,ensureMainChat } from './vm-chats.js'
 import { workerApproval, answerApproval, rememberedBrowserTools } from './vm-approvals.js'
 import {validateAttachments,attachmentSummaries} from './chat-attachments.js'
 
@@ -85,7 +85,13 @@ export async function handleVmWorker(request: Request, path: string) {
     }
     const slot = scheduleSlot(new Date(), settings.schedule || DEFAULT_VM_SCHEDULE, false)
     if (settings.schedule_enabled && settings.sources.length && slot) {
-      checked(await db().from('planner_vm_jobs').upsert({ username: host.username, host_id: host.id, kind: 'sync', schedule_slot: slot, message: scheduledReviewMessage(settings.schedule || DEFAULT_VM_SCHEDULE) }, { onConflict: 'username,schedule_slot', ignoreDuplicates: true }))
+      const mainId=await ensureMainChat(host.username)
+      const main=checked(await db().from('planner_vm_chats').select('thread_id').eq('id',mainId).eq('username',host.username).single())
+      const active=checked(await db().from('planner_vm_jobs').select('id').eq('username',host.username).eq('chat_id',mainId).in('status',['queued','running','paused']).limit(1))
+      if(!active.length){
+        const queued=await db().from('planner_vm_jobs').upsert({ username: host.username, host_id: host.id,chat_id:mainId,thread_id:main.thread_id, kind: 'sync', schedule_slot: slot, message: scheduledReviewMessage(settings.schedule || DEFAULT_VM_SCHEDULE) }, { onConflict: 'username,schedule_slot', ignoreDuplicates: true })
+        if(queued.error?.code!=='23505')checked(queued)
+      }
     }
     const job = checked(await db().rpc('planner_vm_claim', { p_host: host.id }))
     return json({ job: job || null })
@@ -124,10 +130,11 @@ export async function handleVmWorker(request: Request, path: string) {
 export async function handleVmRequest(request: Request, path: string, username: string) {
   const url = new URL(request.url)
   if (request.method === 'GET' && path === '/api/agent/vm') {
+    await ensureMainChat(username)
     checked(await db().from('planner_vm_settings').upsert({ username }, { onConflict: 'username', ignoreDuplicates: true }))
     const [hosts, chats, settings, runs, provisioning, accounts, deletedChats, queue] = await Promise.all([
       db().from('planner_vm_hosts').select(publicHost).eq('username', username).is('revoked_at', null).order('created_at', { ascending: false }),
-      db().from('planner_vm_chats').select('id,title,archived,parent_chat_id,parent_job_id,created_at,updated_at').eq('username', username).is('deleted_at',null).order('updated_at', { ascending: false }).limit(100),
+      db().from('planner_vm_chats').select('id,title,is_main,archived,parent_chat_id,parent_job_id,created_at,updated_at').eq('username', username).is('deleted_at',null).order('is_main',{ascending:false}).order('updated_at', { ascending: false }).limit(100),
       db().from('planner_vm_settings').select('sources,schedule_enabled,sites,ai_provider,schedule,whatsapp_read_consent_at,message_read_consent').eq('username', username).single(),
       db().from('planner_vm_jobs').select(publicJob).eq('username', username).order('created_at', { ascending: false }).limit(20),
       db().from('planner_vm_provisioning').select('status,error,wake_until,power_state,power_updated_at').eq('username', username).maybeSingle(),
@@ -306,7 +313,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
     const attachments=validateAttachments(input.attachments)
     let message: string
     try { message = vmMessage(attachments.length && !String(input.message||'').trim()?'Please review the attached files.':input.message) } catch (e) { throw new ApiError(400, (e as Error).message) }
-    const chat = checked(await db().from('planner_vm_chats').select('id,thread_id,archived').eq('id', input.chatId).eq('username', username).is('deleted_at',null).maybeSingle())
+    const chat = checked(await db().from('planner_vm_chats').select('id,thread_id,archived,is_main').eq('id', input.chatId).eq('username', username).is('deleted_at',null).maybeSingle())
     if (!chat) throw new ApiError(404, 'Chat not found.')
     if (chat.archived) throw new ApiError(409,'Restore this archived chat before sending a message.')
     const host = checked(await db().from('planner_vm_hosts').select('id').eq('username', username).is('revoked_at', null).maybeSingle())
@@ -317,7 +324,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
     if(delivery.error?.code==='23505')delivery=await db().rpc('planner_vm_chat_control',deliveryArgs)
     const {data:sent,error:sendError}=delivery
     if(sendError)throw new ApiError(['P0001','23505'].includes(sendError.code)?409:503,'Could not send this message. Refresh the chat and try again.')
-    checked(await db().from('planner_vm_chats').update({ updated_at: new Date().toISOString(), ...(String(input.title || '') ? { title: String(input.title).slice(0, 100) } : {}) }).eq('id', chat.id).eq('username', username))
+    checked(await db().from('planner_vm_chats').update({ updated_at: new Date().toISOString(), ...(!chat.is_main&&String(input.title || '') ? { title: String(input.title).slice(0, 100) } : {}) }).eq('id', chat.id).eq('username', username))
     return json(sent, 202)
   }
   throw new ApiError(404, 'Unknown VM action.')

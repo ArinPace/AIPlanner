@@ -1,5 +1,10 @@
 import { ApiError, db } from './cloud.js'
 import { uuid } from './vm-validation.js'
+export async function ensureMainChat(username:string){
+ const result=await db().rpc('planner_ensure_main_chat',{p_username:username})
+ if(result.error)throw new ApiError(503,'Could not open Main Chat.')
+ return result.data as string
+}
 
 export async function bulkManageChats(username:string,input:{ids?:unknown;action?:unknown}) {
   if(!Array.isArray(input.ids) || !input.ids.length || input.ids.length>100 || input.ids.some(id=>!uuid(id)))throw new ApiError(400,'Select between 1 and 100 valid chats.')
