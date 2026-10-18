@@ -46,7 +46,10 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
   const scrollRef = useRef<HTMLDivElement>(null)
   const prevZoom = useRef(zoom)
   const bodyRef=useRef<HTMLDivElement>(null)
-  const hourHeight = Math.round(BASE_HOUR_HEIGHT * zoom)
+  // Give short activities a readable row without expanding cards past their time bounds.
+  const visibleDurations=occurrences.filter(item=>!item.event.allDay&&!item.event.reminder&&days.some(day=>clipToDay(item,day))).map(item=>(item.end.getTime()-item.start.getTime())/60000).filter(minutes=>minutes>=5)
+  const shortest=Math.min(30,...visibleDurations)
+  const hourHeight = Math.max(Math.round(BASE_HOUR_HEIGHT * zoom),Math.ceil(22*60/shortest))
 
   useEffect(() => {
     const node = scrollRef.current
@@ -182,7 +185,7 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
                     <button
                       key={`${item.event.id}-${item.start.toISOString()}`}
                       type="button"
-                      className={`timed-event ${item.event.reminder?'reminder-event':''} ${height<32?'is-short':''}`} 
+                      className={`timed-event ${item.event.reminder?'reminder-event':''} ${height<32?'is-short':''} ${height<14?'is-tiny':''}`} 
                       data-layout-key={key}
                       title={`${item.event.reminder?'Reminder: ':''}${item.event.title} - ${formatTimeCompact(item.start)}${item.event.reminder?'':' - '+formatTimeCompact(item.end)}`}
                       style={{

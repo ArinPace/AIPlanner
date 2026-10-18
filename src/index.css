@@ -2076,3 +2076,7 @@ html, body { touch-action: pan-x pan-y; }
 .timed-event { box-sizing:border-box; }
 .timed-event.is-short { padding-top:0; padding-bottom:0; }
 .timed-event.is-short .event-time { display:none; }
+
+.timed-event.is-short { justify-content:center; }
+.timed-event.is-short .event-title { line-height:14px; }
+.timed-event.is-tiny .event-title, .timed-event.is-tiny .event-time { display:none; }
