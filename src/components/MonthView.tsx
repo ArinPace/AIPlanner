@@ -96,7 +96,7 @@ export function MonthView({ cursor, zoom, occurrences, tags, onDayClick, onDayOp
                     >
                       {item.event.recurrence.frequency !== 'none' && <RepeatIcon />}
                       {!item.event.allDay && <span className="event-time">{formatTimeCompact(item.start)}</span>}
-                      <span className="event-title">{item.event.title || '(No title)'}</span>
+                      <span className="event-title">{item.event.urgency!=null && <span className="event-urgency-badge" aria-label={'Urgency '+item.event.urgency}>{item.event.urgency}</span>}{item.event.title || '(No title)'}</span>
                     </button>
                   )
                 })}

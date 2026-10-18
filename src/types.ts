@@ -16,6 +16,7 @@ export interface Tag {
 
 export interface CalendarEvent {
   id: string
+  urgency?: number | null
   title: string
   description: string
   start: string
@@ -41,6 +42,7 @@ export interface StoredState {
 }
 
 export interface EventDraft {
+  urgency?: number | null
   title: string
   description: string
   date: string

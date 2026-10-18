@@ -95,6 +95,11 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
           </button>
         </div>
 
+        <label className="field event-urgency-field">
+          <span>Urgency <small>(optional)</small></span>
+          <input type="number" aria-label="Event urgency" min="0" max="999" step="1" inputMode="numeric" placeholder="None" value={draft.urgency ?? ''} onChange={event=>update('urgency',event.target.value===''?null:Number(event.target.value))}/>
+          <small>0–999 · higher numbers mean more urgent. Leave blank for none.</small>
+        </label>
         <label className="field">
           <span>Date</span>
           <div className="field-row">

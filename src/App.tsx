@@ -58,6 +58,7 @@ function draftFromEvent(event: CalendarEvent): EventDraft {
   const start = new Date(event.start)
   const end = new Date(event.end)
   return {
+    urgency: event.urgency,
     title: event.title,
     description: event.description,
     date: toDateInput(start),
@@ -75,6 +76,7 @@ function eventFromDraft(draft: EventDraft, id: string): CalendarEvent {
   const end = draft.allDay ? endOfDateInput(draft.endDate) : combineDateAndTime(draft.endDate, draft.endTime)
   return {
     id,
+    ...(draft.urgency===undefined?{}:{urgency:draft.urgency}),
     title: draft.title.trim(),
     description: draft.description.trim(),
     start: start.toISOString(),
