@@ -87,7 +87,7 @@ export function Header({
       </div>
 
       <div className="header-right">
-        {tab === 'calendar' && <><div className="view-switch" role="tablist" aria-label="Calendar view">
+        {tab === 'calendar' && <div className="view-switch" role="tablist" aria-label="Calendar view">
           {VIEWS.map((option) => (
             <button
               key={option}
@@ -100,7 +100,7 @@ export function Header({
               {option[0].toUpperCase() + option.slice(1)}
             </button>
           ))}
-        </div>
+        </div>}
         <div className="settings-wrap" ref={settingsRef}>
           <button
             type="button"
@@ -119,7 +119,6 @@ export function Header({
             />
           )}
         </div>
-        </>}
         <div className="user-chip">
           <span>{username}</span>
           <button type="button" className="text-btn" onClick={onLogout}>

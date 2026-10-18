@@ -1,4 +1,5 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { applyTheme, readTheme } from '../lib/theme'
 import { DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM, ZOOM_STEP } from '../lib/zoom'
 import { CloseIcon } from './Icons'
 
@@ -14,6 +15,7 @@ function shortcutMod(): string {
 
 export function SettingsPanel({ zoom, onZoomChange, onClose }: SettingsPanelProps) {
   const mod = shortcutMod()
+  const [theme, setTheme] = useState(readTheme)
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -31,6 +33,14 @@ export function SettingsPanel({ zoom, onZoomChange, onClose }: SettingsPanelProp
           <CloseIcon />
         </button>
       </div>
+      <label className="settings-theme">
+        <span>Dark mode</span>
+        <input type="checkbox" role="switch" checked={theme === 'dark'} onChange={event => {
+          const next = event.target.checked ? 'dark' : 'light'
+          setTheme(next)
+          applyTheme(next)
+        }} />
+      </label>
       <label className="settings-field">
         <span>Display size</span>
         <div className="settings-zoom-row">

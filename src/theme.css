@@ -1,0 +1,56 @@
+.settings-theme { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 12px 0; }
+.settings-theme input { width: 36px; height: 20px; accent-color: var(--blue); cursor: pointer; }
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #17191d;
+  --panel: #202329;
+  --text: #eceef2;
+  --muted: #abb1bc;
+  --line: #3a3e47;
+  --blue: #8ab4ff;
+  --blue-dark: #a9c7ff;
+  --blue-soft: #253653;
+  --danger: #ff9288;
+  --shadow: 0 2px 6px #0006;
+  --shadow-lg: 0 8px 28px #0008;
+}
+:root[data-theme='dark'] :is(.app-header, .sidebar, .settings-panel, .modal, .event-modal, dialog, .files-dialog, .login-card,
+ .files-content, .files-panels, .files-list, .text-editor, .assistant-app, .assistant-chat,
+ .apple-note-detail, .apple-notes-workspace, .apple-notes-list-pane, .unified-note-editor) {
+  background: var(--bg); color: var(--text); border-color: var(--line);
+}
+:root[data-theme='dark'] :is(.files-sidebar, .assistant-sidebar, .workspace-tabs, .files-layout-switch,
+ .assistant-compose, .assistant-user-message, .apple-format-tools, .apple-format-menu, .apple-note-more,
+ .assistant-chat-options > div, .files-add-menu, .agent-card, .vm-card, .file-label, .tag-chip, .month-cell.is-outside) {
+  background: var(--panel); color: var(--text); border-color: var(--line);
+}
+:root[data-theme='dark'] :is(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']), textarea, select) {
+  background-color: var(--panel); color: var(--text); border-color: var(--line);
+}
+:root[data-theme='dark'] :is(.today-btn, .create-btn, .view-switch, .view-switch button, .files-actions button,
+ .files-selection-actions button, .files-toolbar button, .files-layout-switch button, .assistant-sites-button,
+ .folder-card, .document-row, .text-file-row, .chat-attachment, .secondary-btn) {
+  background-color: var(--panel); color: var(--text); border-color: var(--line);
+}
+:root[data-theme='dark'] :is(.workspace-tabs button.is-active, .view-switch button.is-active,
+ .folder-nav.is-active, .assistant-conversations button[aria-current], .files-layout-switch button[aria-pressed='true']) {
+  background: var(--blue-soft); color: var(--blue);
+}
+:root[data-theme='dark'] :is(.assistant-conversations button, .assistant-new-chat, .assistant-sidebar-settings,
+ .assistant-compose textarea, .apple-note-title, .apple-format-menu button, .apple-note-more button,
+ .apple-note-summary, .apple-note-summary strong, .apple-note-document, .files-heading h1) { color: var(--text); }
+:root[data-theme='dark'] :is(.assistant-copy, .assistant-attach, .assistant-compose-connect, .assistant-working,
+ .assistant-chat-title span, .assistant-conversations p, .assistant-welcome p, .workspace-tabs button,
+ .apple-note-summary p, .apple-note-toolbar button, .apple-notes-navigation, .apple-note-save, .calendar-timezone) { color: var(--muted); }
+:root[data-theme='dark'] :is(.month-cell.is-today, .hour-slot:hover, .folder-nav:hover,
+ .assistant-conversations button:hover, .assistant-new-chat:hover, .apple-note-summary:hover) { background: #242f40; }
+:root[data-theme='dark'] :is(.apple-note-summary.is-selected, .apple-note-summary[aria-current='true']) { background: #443b21; }
+:root[data-theme='dark'] :is(.apple-note-document td, .apple-note-document th, .apple-note-toolbar,
+ .apple-notes-navigation, .apple-note-save, .apple-note-summaries.is-gallery .apple-note-summary) { border-color: var(--line); }
+:root[data-theme='dark'] .apple-note-document code { background: var(--panel); color: var(--text); }
+:root[data-theme='dark'] .assistant-send { background: #e6e8ed; color: #17191d; }
+:root[data-theme='dark'] .assistant-error { background: #452824; color: #ffc1b9; }
+:root[data-theme='dark'] .assistant-approval { background: #38301e; color: var(--text); }
+:root[data-theme='dark'] .month-cell.is-outside .month-date { color: #8b929d; }
+:root[data-theme='dark'] :is(.year-day.is-today, .month-date.is-today, .time-day-head.is-today .num) { color: #111b2a; }
+:root[data-theme='dark'] :is(.year-day:hover, .folder-card:hover, .text-file-row:hover) { background: #242f40; }
