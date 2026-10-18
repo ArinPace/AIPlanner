@@ -13,8 +13,7 @@ const time=z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)
 const score=z.number().int().min(0).max(100)
 export const profilePatch=z.object({enabled:z.boolean().optional(),onboarded:z.boolean().optional(),wake:time.optional(),sleep:time.optional(),intensity:score.optional(),weekdays:z.array(score.nullable()).length(7).optional(),overrides:z.record(day,score).refine(v=>Object.keys(v).length<=400).optional(),recoveryUntil:day.nullable().optional(),goals:z.string().max(12000).optional(),preferences:z.string().max(12000).optional(),readyMinutes:z.number().int().min(0).max(180).optional(),windDownMinutes:z.number().int().min(0).max(180).optional(),meals:z.array(z.object({title:z.string().trim().min(1).max(80),time,minutes:z.number().int().min(5).max(180)})).max(10).optional(),breakActivities:z.array(z.string().trim().min(1).max(200)).min(1).max(30).optional()}).strict()
 export const taskSchema=z.object({id:z.string().uuid().optional(),title:z.string().trim().min(1).max(300),category:z.string().trim().min(1).max(80),urgency:z.number().int().min(0).max(99),minutes:z.number().int().min(5).max(10080),deadline:z.string().datetime({offset:true}).nullable(),preferredDays:z.array(z.number().int().min(0).max(6)).max(7),earliestDate:day.nullable(),status:z.enum(['todo','done']),source:z.string().max(1000),goal:z.string().max(1000)})
-export async function readPlanning(username:string,reconcile=true){
- if(reconcile)await syncTodoCompletion(username)
+export async function readPlanning(username:string){
  storage(await db().from('planner_planning').upsert({username},{onConflict:'username',ignoreDuplicates:true}))
  const row=storage(await db().from('planner_planning').select('state,revision,started_at').eq('username',username).single())
  const files=storage(await db().from('planner_files').select('state').eq('username',username).maybeSingle())
@@ -28,7 +27,7 @@ async function save(username:string,revision:number,profile:PlanningProfile){
 
 export async function syncTodoCompletion(username:string){
  for(let attempt=0;attempt<3;attempt++){
-  const row=await readPlanning(username,false)
+  const row=await readPlanning(username)
   const files=storage(await db().from('planner_files').select('state').eq('username',username).maybeSingle())
   if(!files)return
   const ids=completedTodoTasks(files.state,row.profile.tasks)
@@ -96,7 +95,7 @@ export async function changePlanning(username:string,input:{revision:number;patc
  return {...saved,startedAt:row.startedAt,saved:true,plan,replanError}
 }
 export async function handlePlanning(request:Request,username:string){
- if(request.method==='GET')return json(await readPlanning(username))
+ if(request.method==='GET'){await syncTodoCompletion(username);return json(await readPlanning(username))}
  if(request.method!=='POST')throw new ApiError(405,'Use GET or POST.')
  const input=await body(request)
  if(input.action==='start'){

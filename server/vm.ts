@@ -152,6 +152,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
     const freshPower = Date.now() - Date.parse(machine?.power_updated_at || '') < 60000
     const power = !connectedHosts.length ? 'preparing' : freshPower ? machine?.power_state === 'Running' ? 'online' : wantsWake ? 'starting' : 'offline' : connectedHosts.some(h => h.online) ? 'online' : wantsWake ? 'starting' : 'offline'
     const bin=checked(deletedChats),removed=new Set(bin.map(c=>c.id))
+    await (await import('./planning.js')).syncTodoCompletion(username)
     const planning=await readPlanning(username)
     return json({ planning:{startedAt:planning.startedAt,ready:planning.profile.onboarded,revision:planning.revision},queue:{active:checked(queue).find(job=>job.status==='running')||null,queuedIds:checked(queue).filter(job=>['queued','waiting'].includes(job.status)).map(job=>job.id)}, hosts: connectedHosts, power, accounts:checked(accounts), google:await googleCalendarStatus(username), chats: checked(chats), deletedChats:bin, settings: checked(settings), runs: checked(runs).filter(r=>!removed.has(r.chat_id)), provisioning: machine, personalChatGptAvailable: personalChatGptAllowed(username), hostedChatGptAvailable: false, recordings: false })
   }
