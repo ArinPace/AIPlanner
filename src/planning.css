@@ -22,3 +22,9 @@
 .planning-start-card small { display: block; margin-top: 10px; color: var(--muted); }
 .planning-start-card button { max-width: 100%; height: auto; min-height: 40px; white-space: normal; }
 @media(max-width:600px) { .planning-dialog input:not([type=range]), .planning-dialog textarea { font-size: 16px; } }
+
+.assistant-planning-toolbar { flex-shrink:0; display:flex; align-items:center; flex-wrap:wrap; gap:8px 14px; padding:8px 18px; border-bottom:1px solid var(--line); }
+.assistant-planning-toolbar button { font-size:13px; padding:8px 12px; min-height:36px; height:auto; white-space:normal; }
+.assistant-planning-toolbar > span { font-size:12px; color:var(--muted); }
+.assistant-planning-toolbar :is(small,p) { flex-basis:100%; margin:0; font-size:12px; }
+@media(max-width:600px) { .assistant-planning-toolbar > span { display:none; } }
