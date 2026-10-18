@@ -237,11 +237,12 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   }, [tab])
 
   const hiddenSet = useMemo(() => new Set(hiddenTagIds), [hiddenTagIds])
+  const visibleEvents = useMemo(() => events.filter(event => isEventVisible(event, hiddenSet)), [events, hiddenSet])
   const range = useMemo(() => visibleRange(cursor, view), [cursor, view])
   const occurrences = useMemo(() => {
-    const visible = events.filter((event) => isEventVisible(event, hiddenSet))
-    return expandEvents(visible, range.start, range.end)
-  }, [events, hiddenSet, range.end, range.start])
+    if (view === 'month' || view === 'year') return []
+    return expandEvents(visibleEvents, range.start, range.end)
+  }, [visibleEvents, view, range.end, range.start])
 
   function navigate(direction: -1 | 1) {
     if (view === 'year') setCursor(addYears(cursor, direction))
@@ -381,7 +382,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
             <MonthView
               cursor={cursor}
               zoom={zoom}
-              events={events.filter(event => isEventVisible(event, hiddenSet))}
+              events={visibleEvents}
               onMonthChange={setCursor}
               tags={tags}
               onDayClick={(date) => openCreate(date)}

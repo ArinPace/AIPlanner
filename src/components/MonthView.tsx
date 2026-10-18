@@ -1,6 +1,6 @@
 import { eventAppearance } from '../lib/eventAppearance'
 import { urgencyColor } from '../lib/urgencyColor'
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CalendarEvent, Tag } from '../types'
 import { expandEvents } from '../lib/recurrence'
 import { eventColor } from '../lib/colors'
@@ -11,7 +11,6 @@ import {
   startOfWeek,
   isSameMonth,
   isToday,
-  overlaps,
   startOfDay,
   WEEKDAYS,
 } from '../lib/dates'
@@ -33,19 +32,26 @@ export function MonthView({ cursor, zoom, events, onMonthChange, tags, onDayClic
   const scrollRef = useRef<HTMLDivElement>(null)
   const monthKey = cursor.getFullYear() + '-' + cursor.getMonth()
   const [range, setRange] = useState(() => ({ start: startOfWeek(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1)), weeks: 18 }))
-  const days = Array.from({ length: range.weeks * 7 }, (_, index) => addDays(range.start, index))
+  const days = useMemo(() => Array.from({ length: range.weeks * 7 }, (_, index) => addDays(range.start, index)), [range])
   const rows = range.weeks
   const occurrences = useMemo(() => expandEvents(events, range.start, endOfDay(addDays(range.start, range.weeks * 7 - 1))), [events, range])
+  const dayItems = useMemo(() => days.map(day => {
+    const start = startOfDay(day).getTime(), end = endOfDay(day).getTime()
+    return occurrences.filter(item => item.start.getTime() < end && item.end.getTime() > start)
+  }), [days, occurrences])
+  const scrollFrame = useRef<number | null>(null)
+  useEffect(() => () => { if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current) }, [])
   const reportedMonth = useRef<string | null>(null)
   const jumpedMonth = useRef<string | null>(null)
-  const prependAnchor = useRef<{ height: number; top: number } | null>(null)
+  const prependAnchor = useRef<{ day: string; top: number } | null>(null)
 
   useLayoutEffect(() => {
     const node = scrollRef.current
     if (!node) return
     if (prependAnchor.current) {
       const anchor = prependAnchor.current
-      node.scrollTop = anchor.top + node.scrollHeight - anchor.height
+      const cell = node.querySelector<HTMLElement>('[data-day="' + anchor.day + '"]')
+      if (cell) node.scrollTop += cell.getBoundingClientRect().top - node.getBoundingClientRect().top - anchor.top
       prependAnchor.current = null
     }
     if (reportedMonth.current === monthKey) {
@@ -64,13 +70,18 @@ export function MonthView({ cursor, zoom, events, onMonthChange, tags, onDayClic
     node.scrollTop += cell.getBoundingClientRect().top - node.getBoundingClientRect().top
   }, [monthKey, range, cursor])
 
-  function handleScroll() {
+  function updateScroll() {
     const node = scrollRef.current
     if (!node || prependAnchor.current) return
     const top = node.getBoundingClientRect().top
-    const cells = Array.from(node.querySelectorAll<HTMLElement>('[data-day]'))
-    const firstRow = cells.findIndex((cell, index) => index % 7 === 0 && cell.getBoundingClientRect().bottom > top + 30)
-    const day = firstRow >= 0 ? cells[firstRow + 6]?.dataset.day : undefined
+    const cells = node.querySelectorAll<HTMLElement>('[data-day]')
+    let low = 0, high = rows - 1
+    while (low < high) {
+      const mid = Math.floor((low + high) / 2)
+      if (cells[mid * 7].getBoundingClientRect().bottom > top + 30) high = mid
+      else low = mid + 1
+    }
+    const day = cells[low * 7 + 6]?.dataset.day
     if (day) {
       const date = new Date(day)
       const key = date.getFullYear() + '-' + date.getMonth()
@@ -80,11 +91,20 @@ export function MonthView({ cursor, zoom, events, onMonthChange, tags, onDayClic
       }
     }
     if (node.scrollTop < 200) {
-      prependAnchor.current = { height: node.scrollHeight, top: node.scrollTop }
-      setRange(current => ({ start: addDays(current.start, -28), weeks: current.weeks + 4 }))
+      prependAnchor.current = { day: cells[low * 7].dataset.day!, top: cells[low * 7].getBoundingClientRect().top - top }
+      setRange(current => ({ start: addDays(current.start, -28), weeks: Math.min(26, current.weeks + 4) }))
     } else if (node.scrollHeight - node.scrollTop - node.clientHeight < 400) {
-      setRange(current => ({ ...current, weeks: current.weeks + 4 }))
+      prependAnchor.current = { day: cells[low * 7].dataset.day!, top: cells[low * 7].getBoundingClientRect().top - top }
+      setRange(current => ({ start: current.weeks >= 26 ? addDays(current.start, 28) : current.start, weeks: Math.min(26, current.weeks + 4) }))
     }
+  }
+
+  function handleScroll() {
+    if (scrollFrame.current !== null) return
+    scrollFrame.current = requestAnimationFrame(() => {
+      scrollFrame.current = null
+      updateScroll()
+    })
   }
 
   return (
@@ -99,10 +119,8 @@ export function MonthView({ cursor, zoom, events, onMonthChange, tags, onDayClic
           className="month-grid"
           style={{ gridTemplateRows: `repeat(${rows}, minmax(${TARGET_WEEK_HEIGHT * Math.max(1, zoom)}px, auto))`, minHeight: rows * TARGET_WEEK_HEIGHT * Math.max(1, zoom) }}
         >
-        {days.map((day) => {
-          const dayEvents = occurrences.filter((item) =>
-            overlaps(item.start, item.end, startOfDay(day), endOfDay(day)),
-          )
+        {days.map((day, index) => {
+          const dayEvents = dayItems[index]
           const outside = !isSameMonth(day, cursor)
 
           return (
