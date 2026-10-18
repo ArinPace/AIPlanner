@@ -28,3 +28,5 @@ original thread for new turns. A currently running original task is left alone.
 Checks include cutoff/owner isolation and original preservation in a rolled-back
 database transaction, attachment input tests, build/lint, and production UI
 branch/edit workflow verification.
+
+Production verification: native checkpoint branching and edit/regenerate both retained EARLY57 and excluded the later FUTURE93 message; the branch retained attachment code FILE38. A simulated legacy branch without a native checkpoint returned EARLY57 FILE38 NONE as expected. All temporary verification chats were archived. Worker reports and chat controls acquire chat/job locks in the same order to avoid a concurrent-control deadlock.

@@ -2004,3 +2004,5 @@ textarea {
 .assistant-run-controls { display:inline-flex; gap:8px; align-items:center; }.assistant-steered { font-size:13px; color:#666; }
 
 .assistant-turn .assistant-copy { display:inline-flex; margin-right:6px; }
+
+.assistant-branch-banner { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }.assistant-branch-banner .assistant-copy { margin:0; }
