@@ -2070,3 +2070,5 @@ html, body { touch-action: pan-x pan-y; }
 .assistant-file-drop > div { display: grid; gap: 8px; text-align: center; padding: 24px; color: var(--text, #202124); }
 .assistant-file-drop strong { font-size: 22px; }
 .assistant-file-drop span { font-size: 14px; color: var(--muted, #666); }
+
+.folder-tree-row.is-drag-over, .folder-card.is-drag-over, .files-root-button.is-drag-over { outline: 2px dashed var(--blue); outline-offset: -2px; background: color-mix(in srgb, var(--blue) 12%, transparent); }
