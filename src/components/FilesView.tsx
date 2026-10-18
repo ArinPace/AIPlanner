@@ -164,7 +164,7 @@ export function FilesView({ active, username, sidebar, setSidebar, onUnsavedChan
     try {
       const saved = await saveFiles(next)
       setState({ ...next, revision: saved.revision ?? next.revision })
-      setNotice('All changes saved')
+      setNotice(saved.planningSyncError || 'All changes saved')
       return true
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save. Please try again.')

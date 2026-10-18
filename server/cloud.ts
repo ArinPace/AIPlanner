@@ -181,7 +181,9 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
       }
       const saved = await preserveRemovedFiles(username,input,previous) || await setFiles(username, input, previous)
       await cleanupUploads(username)
-      return json({ ok: true, revision: saved.revision })
+      let planningSyncError:string|undefined
+      try{await (await import('./planning.js')).syncTodoCompletion(username)}catch{planningSyncError='Note saved; calendar completion sync is pending. Open Agent to retry.'}
+      return json({ ok: true, revision: saved.revision, planningSyncError })
     }
     if (path === '/api/files/upload/start' && method === 'POST') {
       const input = await body(request)

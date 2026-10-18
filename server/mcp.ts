@@ -30,7 +30,9 @@ async function saveFiles(username: string, state: FilesState, revision: number) 
   validateFilesState(state)
   const rows = storage(await db().from('planner_files').update({state,revision:revision+1,updated_at:new Date().toISOString()}).eq('username',username).eq('revision',revision).select('revision'))
   if (!rows.length) throw new ApiError(409,'Files changed while you were editing. Read them again before retrying.')
-  return {saved:true,revision:rows[0].revision}
+  let planningSyncError:string|undefined
+  try{await (await import('./planning.js')).syncTodoCompletion(username)}catch{planningSyncError='Files saved, but calendar completion sync is pending. Read planning to retry before claiming calendar cleanup succeeded.'}
+  return {saved:true,revision:rows[0].revision,planningSyncError}
 }
 
 export function createPlannerMcp(username: string, scopes: string[]) {

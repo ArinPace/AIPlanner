@@ -1,3 +1,4 @@
+import {completedTodoTasks,removeCompletedTodoBlocks,todoChecklist} from './todo-completion.js'
 import {randomUUID} from 'node:crypto'
 import {z} from 'zod'
 import {ApiError,db,json,body} from './cloud.js'
@@ -12,16 +13,43 @@ const time=z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)
 const score=z.number().int().min(0).max(100)
 export const profilePatch=z.object({enabled:z.boolean().optional(),onboarded:z.boolean().optional(),wake:time.optional(),sleep:time.optional(),intensity:score.optional(),weekdays:z.array(score.nullable()).length(7).optional(),overrides:z.record(day,score).refine(v=>Object.keys(v).length<=400).optional(),recoveryUntil:day.nullable().optional(),goals:z.string().max(12000).optional(),preferences:z.string().max(12000).optional(),readyMinutes:z.number().int().min(0).max(180).optional(),windDownMinutes:z.number().int().min(0).max(180).optional(),meals:z.array(z.object({title:z.string().trim().min(1).max(80),time,minutes:z.number().int().min(5).max(180)})).max(10).optional(),breakActivities:z.array(z.string().trim().min(1).max(200)).min(1).max(30).optional()}).strict()
 export const taskSchema=z.object({id:z.string().uuid().optional(),title:z.string().trim().min(1).max(300),category:z.string().trim().min(1).max(80),urgency:z.number().int().min(0).max(99),minutes:z.number().int().min(5).max(10080),deadline:z.string().datetime({offset:true}).nullable(),preferredDays:z.array(z.number().int().min(0).max(6)).max(7),earliestDate:day.nullable(),status:z.enum(['todo','done']),source:z.string().max(1000),goal:z.string().max(1000)})
-export async function readPlanning(username:string){
+export async function readPlanning(username:string,reconcile=true){
+ if(reconcile)await syncTodoCompletion(username)
  storage(await db().from('planner_planning').upsert({username},{onConflict:'username',ignoreDuplicates:true}))
  const row=storage(await db().from('planner_planning').select('state,revision,started_at').eq('username',username).single())
- return {profile:{...structuredClone(DEFAULT_PLANNING),...row.state} as PlanningProfile,revision:Number(row.revision),startedAt:row.started_at as string|null}
+ const files=storage(await db().from('planner_files').select('state').eq('username',username).maybeSingle())
+ return {profile:{...structuredClone(DEFAULT_PLANNING),...row.state} as PlanningProfile,revision:Number(row.revision),startedAt:row.started_at as string|null,todoChecklist:files?todoChecklist(files.state):[]}
 }
 async function save(username:string,revision:number,profile:PlanningProfile){
  const rows=storage(await db().from('planner_planning').update({state:profile,revision:revision+1,updated_at:new Date().toISOString()}).eq('username',username).eq('revision',revision).select('revision'))
  if(!rows.length)throw new ApiError(409,'Planning changed. Read the latest profile before retrying.')
  return {profile,revision:revision+1}
 }
+
+export async function syncTodoCompletion(username:string){
+ for(let attempt=0;attempt<3;attempt++){
+  const row=await readPlanning(username,false)
+  const files=storage(await db().from('planner_files').select('state').eq('username',username).maybeSingle())
+  if(!files)return
+  const ids=completedTodoTasks(files.state,row.profile.tasks)
+  if(!ids.size)return
+  if(row.profile.tasks.some(task=>ids.has(task.id)&&task.status!=='done')){
+   for(const task of row.profile.tasks)if(ids.has(task.id))task.status='done'
+   try{await save(username,row.revision,row.profile)}catch(error){if(error instanceof ApiError&&error.status===409)continue;throw error}
+  }
+  // Checkbox completion clears linked work even when auto-replanning is off.
+  // The initial calendar-start gate still applies to all automated writes.
+  if(!row.startedAt)return
+  const calendar=await calendarRow(username)
+  const events=removeCompletedTodoBlocks(calendar.state.events,ids)
+  if(events.length===calendar.state.events.length)return
+  const result=await db().from('planner_calendars').update({state:{...calendar.state,events},revision:calendar.revision+1,updated_at:new Date().toISOString()}).eq('username',username).eq('revision',calendar.revision).select('revision')
+  if(result.error)throw new ApiError(503,'Could not clear completed To do work from the calendar.')
+  if(result.data?.length)return
+ }
+ throw new ApiError(409,'Planning changed while syncing To do completion. Retry with the latest state.')
+}
+
 export async function planDays(username:string,input:{date:string;days:number;preview?:boolean;revision:number}){
  const {date,days,preview}=z.object({date:day,days:z.number().int().min(1).max(14),preview:z.boolean().optional()}).parse(input)
  const row=await readPlanning(username)
@@ -31,6 +59,7 @@ export async function planDays(username:string,input:{date:string;days:number;pr
  if(!preview&&!row.startedAt)throw new ApiError(409,'The user must click Start planning my calendar in Main Chat before any calendar is populated.')
  const calendar=await calendarRow(username)
  const result=buildDayPlan(row.profile,calendar.state.events,date,days)
+ for(const item of row.todoChecklist.filter(item=>!item.checked))if(!row.profile.tasks.some(task=>task.source===item.source&&task.status==='todo'))result.warnings.push(item.title+': unfinished To do item needs a linked task and duration estimate before it can be scheduled. Do not omit it from the plan review.')
  if(!preview){const saved=await db().rpc('planner_commit_day_plan',{p_username:username,p_revision:row.revision,p_calendar_revision:calendar.revision,p_calendar:{...calendar.state,events:result.events}});if(saved.error)throw new ApiError(409,saved.error.message)}
  return {saved:!preview,added:result.added,warnings:result.warnings,from:result.from,through:result.through,revision:preview?calendar.revision:calendar.revision+1,events:result.events.filter(e=>e.planning&&e.start>=new Date(date+'T00:00:00').toISOString())}
 }

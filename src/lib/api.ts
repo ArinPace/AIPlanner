@@ -84,8 +84,10 @@ export function loadFiles() {
   return request<FilesState>('/api/files')
 }
 
-export function saveFiles(state: FilesState) {
-  return request<{ ok: boolean; revision?: number }>('/api/files', { method: 'PUT', body: JSON.stringify(state) })
+export async function saveFiles(state: FilesState) {
+  const saved=await request<{ ok: boolean; revision?: number; planningSyncError?:string }>('/api/files', { method: 'PUT', body: JSON.stringify(state) })
+  window.dispatchEvent(new Event('planner-calendar-refresh'))
+  return saved
 }
 export interface FileBinEntry {id:string;names:string[];item_count:number;deleted_at:string;expires_at:string}
 export function loadFileBin(){return request<{items:FileBinEntry[]}>('/api/files/bin')}

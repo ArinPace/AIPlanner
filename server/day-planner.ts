@@ -1,3 +1,4 @@
+import {removeCompletedTodoBlocks} from './todo-completion.js'
 import {randomUUID} from 'node:crypto'
 import {PlannerDate as Date} from '../src/lib/timezone.js'
 import {addDays,toDateInput} from '../src/lib/dates.js'
@@ -8,7 +9,8 @@ import type {CalendarEvent} from '../src/types.js'
 const minute=60000
 export function buildDayPlan(profile:PlanningProfile,events:CalendarEvent[],date:string,count:number,now=new Date()){
  const start=new Date(date+'T00:00:00'),end=addDays(start,count)
- const retained=events.filter(event=>!event.planning || event.planning.locked || new Date(event.start)<now || new Date(event.start)<start || new Date(event.start)>=end)
+ const completed=new Set(profile.tasks.filter(task=>task.status==='done').map(task=>task.id))
+ const retained=removeCompletedTodoBlocks(events,completed,now.getTime()).filter(event=>!event.planning || event.planning.locked || new Date(event.start)<now || new Date(event.start)<start || new Date(event.start)>=end)
  const fixed=expandEvents(retained.filter(e=>!e.reminder),start,end)
  const remaining=new Map(profile.tasks.filter(t=>t.status==='todo').map(t=>[t.id,Math.max(5,Math.round(t.minutes*(profile.learning[t.category]?.ratio ?? 1)))]))
  // Preserve work already allocated outside the range being rebuilt.
