@@ -77,7 +77,6 @@ export async function claudeChat({ dataDir, job, remote, origin, token, instruct
   const child = spawn(executable, args, { env: environment(dataDir), cwd: path.join(dataDir, 'workspace'), stdio: ['pipe', 'pipe', 'ignore'] })
   const partial=job.continuation && job.reply?job.reply+'\n\n':''
   let reply = partial, buffer = '', result, checkpoint=Promise.resolve()
-  const timer = setTimeout(() => child.kill(), 15 * 60000)
   const stopMonitor = monitorRun(()=>progress(reply),async()=>{child.kill()})
   try {
     await new Promise((resolve, reject) => {
@@ -101,5 +100,5 @@ export async function claudeChat({ dataDir, job, remote, origin, token, instruct
     sessions[key] = sessionId
     await writeFile(sessionPath, JSON.stringify(sessions), { mode: 0o600 })
     return { reply, threadId: job.thread_id }
-  } finally { clearTimeout(timer); stopMonitor(); child.kill(); await checkpoint }
+  } finally { stopMonitor(); child.kill(); await checkpoint }
 }

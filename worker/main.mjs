@@ -95,7 +95,6 @@ async function chat(job, auth, remote) {
     if(threadId && turnId)await rpc.request('turn/interrupt',{threadId,turnId},5000).catch(()=>{})
     rejectDone(error);rpc.close()
   })
-  const timeout = setTimeout(() => { rejectDone(new Error('The run exceeded its 15-minute limit.')); rpc.close() }, 15 * 60000)
   try {
     await rpc.initialize()
     const params = { cwd: path.join(dataDir, 'workspace'), ...(process.env.PLANNER_MODEL ? { model: process.env.PLANNER_MODEL } : auth.type === 'codex' ? {} : { model: 'gpt-6-luna' }), approvalPolicy: job.kind === 'sync' ? 'never' : 'on-request', sandbox: 'workspace-write', developerInstructions: instructions + '\n\n' + whatsappPermissionText(remote.whatsappReadConsentAt) + '\n\n' + messagePermissionText(remote.messageReadConsent) }
@@ -109,7 +108,7 @@ async function chat(job, auth, remote) {
     await report()
     await done
     return { reply, threadId }
-  } finally { stopMonitor(); clearTimeout(timeout); rpc.close() }
+  } finally { stopMonitor(); rpc.close() }
 }
 let signedIn = false, identity = null, pendingSites = {}
 const claudePending = path.join(dataDir, 'claude-login-pending')
