@@ -1,3 +1,4 @@
+import { urgencyColor } from '../lib/urgencyColor'
 import { useEffect, useRef, useState, useMemo } from 'react'
 import type { CalendarEvent, CalendarView, Occurrence, Tag } from '../types'
 import { contrastText, eventColor } from '../lib/colors'
@@ -107,7 +108,7 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
                     }}
                   >
                     {item.event.recurrence.frequency !== 'none' && <RepeatIcon />}
-                    <span className="event-title">{item.event.urgency!=null && <span className="event-urgency-badge" aria-label={'Urgency '+item.event.urgency}>{item.event.urgency}</span>}{item.event.title || '(No title)'}</span>
+                    <span className="event-title">{item.event.urgency!=null && <span className="event-urgency-badge" style={urgencyColor(item.event.urgency)} aria-label={'Urgency '+item.event.urgency}>{item.event.urgency}</span>}{item.event.title || '(No title)'}</span>
                   </button>
                 )
               })}
@@ -179,7 +180,7 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
                       onClick={() => onEventClick(item.event, item.start)}
                     >
                       <span className="event-title">
-                        {item.event.urgency!=null && <span className="event-urgency-badge" aria-label={'Urgency '+item.event.urgency}>{item.event.urgency}</span>}
+                        {item.event.urgency!=null && <span className="event-urgency-badge" style={urgencyColor(item.event.urgency)} aria-label={'Urgency '+item.event.urgency}>{item.event.urgency}</span>}
                         {item.event.recurrence.frequency !== 'none' && <RepeatIcon />}
                         {item.event.title || '(No title)'}
                       </span>

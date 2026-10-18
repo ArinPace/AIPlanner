@@ -1,3 +1,4 @@
+import { urgencyColor } from '../lib/urgencyColor'
 import { useEffect, useRef, useState } from 'react'
 import type { CalendarEvent, Occurrence, Tag } from '../types'
 import { contrastText, eventColor } from '../lib/colors'
@@ -96,7 +97,7 @@ export function MonthView({ cursor, zoom, occurrences, tags, onDayClick, onDayOp
                     >
                       {item.event.recurrence.frequency !== 'none' && <RepeatIcon />}
                       {!item.event.allDay && <span className="event-time">{formatTimeCompact(item.start)}</span>}
-                      <span className="event-title">{item.event.urgency!=null && <span className="event-urgency-badge" aria-label={'Urgency '+item.event.urgency}>{item.event.urgency}</span>}{item.event.title || '(No title)'}</span>
+                      <span className="event-title">{item.event.urgency!=null && <span className="event-urgency-badge" style={urgencyColor(item.event.urgency)} aria-label={'Urgency '+item.event.urgency}>{item.event.urgency}</span>}{item.event.title || '(No title)'}</span>
                     </button>
                   )
                 })}
