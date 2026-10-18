@@ -47,7 +47,7 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
   const prevZoom = useRef(zoom)
   const bodyRef=useRef<HTMLDivElement>(null)
   // Give short activities a readable row without expanding cards past their time bounds.
-  const visibleDurations=occurrences.filter(item=>!item.event.allDay&&!item.event.reminder&&days.some(day=>clipToDay(item,day))).map(item=>(item.end.getTime()-item.start.getTime())/60000).filter(minutes=>minutes>=5)
+  const visibleDurations=occurrences.filter(item=>!item.event.allDay&&!item.event.reminder&&days.some(day=>clipToDay(item,day))).map(item=>(item.end.getTime()-item.start.getTime())/60000).filter(minutes=>minutes>=1)
   const shortest=Math.min(30,...visibleDurations)
   const hourHeight = Math.max(Math.round(BASE_HOUR_HEIGHT * zoom),Math.ceil(22*60/shortest))
 
