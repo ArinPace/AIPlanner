@@ -79,7 +79,31 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
   const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 60) * hourHeight
 
   return (
-    <div className="time-view-scroll"><div className={`time-view is-${view}`} style={view==='week'?{minWidth:weekMinWidth}:undefined}>
+    <div className={`time-view-scroll ${view === 'week' ? 'has-mobile-week' : ''}`}>
+      {view === 'week' && <div className="mobile-week">
+        {days.map(day => {
+          const items = occurrences.filter(item => clipToDay(item, day)).sort((a, b) =>
+            Number(b.event.allDay) - Number(a.event.allDay) || a.start.getTime() - b.start.getTime())
+          return <section className="mobile-week-day" key={day.toISOString()}>
+            <div className="mobile-week-heading">
+              <h3 className={isToday(day) ? 'is-today' : ''}>{day.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</h3>
+              <button type="button" className="text-btn" aria-label={'Add event on ' + day.toDateString()} onClick={() => onSlotClick(startOfDay(day), true)}>+</button>
+            </div>
+            {items.length === 0 && <p className="mobile-week-empty">No events</p>}
+            {items.map(item => <button
+              type="button" key={item.event.id + item.start.toISOString()}
+              className="event-chip mobile-week-event"
+              title={item.event.title || '(No title)'}
+              style={eventAppearance(eventColor(item.event, tags), item.event.reminder)}
+              onClick={() => onEventClick(item.event, item.start)}
+            >
+              <span className="mobile-week-time">{item.event.allDay ? (item.event.reminder ? 'Reminder' : 'All day') : formatTimeCompact(clipToDay(item, day)!.start)}</span>
+              <span className="event-title">{item.event.urgency != null && <span className="event-urgency-badge" style={urgencyColor(item.event.urgency)} aria-label={'Urgency ' + item.event.urgency}>{item.event.urgency}</span>}{item.event.title || '(No title)'}</span>
+            </button>)}
+          </section>
+        })}
+      </div>}
+      <div className={`time-view is-${view}`} style={view==='week'?{minWidth:weekMinWidth}:undefined}>
       <div className={`time-header days-${days.length}`}>
         <div className="gutter" />
         {days.map((day) => (

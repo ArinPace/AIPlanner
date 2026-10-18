@@ -1967,6 +1967,35 @@ textarea {
 
 .time-view-scroll { display: flex; flex: 1; min-height: 0; min-width: 0; overflow-x: auto; }
 
+/* Compact labels retain their full title in the event editor. */
+.month-view .event-chip, .time-view .event-chip { font-size: calc(10px * var(--zoom, 1)); }
+.timed-event { font-size: 10px; }
+.month-view .event-chip .event-title,
+.time-view .event-chip .event-title,
+.timed-event .event-title {
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  overflow-wrap: normal;
+}
+.mobile-week { display: none; }
+@media (max-width: 600px) {
+  .has-mobile-week { display: block; overflow: auto; }
+  .has-mobile-week > .is-week { display: none; }
+  .mobile-week { display: flex; flex-direction: column; width: 100%; padding: 0 12px 24px; box-sizing: border-box; }
+  .mobile-week-day { min-width: 0; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .mobile-week-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .mobile-week-heading h3 { margin: 0; font-size: 14px; }
+  .mobile-week-heading .is-today { color: var(--blue); }
+  .mobile-week-heading button { min-width: 44px; min-height: 44px; }
+  .mobile-week-empty { color: var(--muted); font-size: 12px; margin: 4px 0; }
+  .mobile-week .mobile-week-event { min-height: 36px; margin-top: 4px; font-size: 10px; }
+  .mobile-week-time { flex: 0 0 62px; }
+  .mobile-week .event-title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}
+
 
 .files-sidebar-add { flex: 0 0 auto; }
 .files-sidebar-add .files-add-menu { right: 0; min-width: 190px; max-width: calc(100vw - 32px); z-index: 80; }
