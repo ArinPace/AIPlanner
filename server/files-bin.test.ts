@@ -2,6 +2,11 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { buildTrash, restoreFiles, selection } from './files-bin.js'
 import { validateFilesState } from '../src/lib/files.js'
+test('planning notes cannot be removed directly, in bulk, or through their containing folder',()=>{
+ const state:FilesState={folders:[{id:'folder',parentId:null,name:'Plans',color:'#123456',labels:[],updatedAt:'2026-10-18T00:00:00Z'}],files:[{id:'goals',systemRole:'goals',format:'note',folderId:'folder',name:'Goals',content:'Keep me',updatedAt:'2026-10-18T00:00:00Z'},{id:'regular',folderId:null,name:'Regular',content:'Unrelated',updatedAt:'2026-10-18T00:00:00Z'}]}
+ for(const ids of [['goals'],['goals','regular'],['folder']])assert.throws(()=>buildTrash(state,ids),/permanent planning notes/)
+ assert.equal(buildTrash(state,['regular']).state.files[0].content,'Keep me')
+})
 
 test('top-level notes, links and PDFs validate and restore to Files without creating a folder',()=>{
   const root:FilesState={folders:[],files:[{id:'root-note',folderId:null,name:'Root.txt',content:'Preserve root content',updatedAt:'2026-10-17T00:00:00Z'}],documents:[{id:'82400000-0000-4000-8000-000000000002',folderId:null,name:'Root.pdf',kind:'pdf',size:123,updatedAt:'2026-10-17T00:00:00Z'},{id:'root-link',folderId:null,name:'Root link',kind:'link',url:'https://example.org/',updatedAt:'2026-10-17T00:00:00Z'}]}

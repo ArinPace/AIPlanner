@@ -9,7 +9,7 @@ import { touchVmActivity } from './vm-host.js'
 import { VM_SOURCES } from '../src/lib/vm.js'
 import { googleCalendarStatus, readGoogleCalendar, startGoogleCalendar, selectGoogleAccount, removeGoogleAccount } from './agent.js'
 import { observeAccounts, editBrowserAccount } from './browser-accounts.js'
-import { bulkManageChats,ensureMainChat } from './vm-chats.js'
+import { bulkManageChats,ensureMainChat,ensureMainWelcome } from './vm-chats.js'
 import { workerApproval, answerApproval, rememberedBrowserTools } from './vm-approvals.js'
 import {validateAttachments,attachmentSummaries} from './chat-attachments.js'
 
@@ -17,7 +17,7 @@ function checked<T>({ data, error }: { data: T; error: { code?: string } | null 
   if (error) throw new ApiError(error.code === '23505' ? 409 : 503, error.code === '23505' ? 'Another message is already waiting in this chat.' : 'Could not access your agent workspace.')
   return data as NonNullable<T>
 }
-const publicJob = 'id,chat_id,kind,status,message,reply,error,created_at,started_at,finished_at,result,attachments'
+const publicJob = 'id,chat_id,kind,status,message,reply,error,created_at,started_at,finished_at,result,attachments,is_welcome'
 const publicHost = 'id,label,heartbeat_at,capabilities,created_at'
 async function confirmBrowserConnection(username:string,source:string){
   checked(await db().from('planner_vm_jobs').update({result:{connected:true,source,connectedAt:new Date().toISOString()}}).eq('username',username).eq('kind','browser_login').eq('status','completed').in('message',[source,'open:'+source,'manage:'+source]).not('result->liveUrl','is',null))
@@ -130,7 +130,7 @@ export async function handleVmWorker(request: Request, path: string) {
 export async function handleVmRequest(request: Request, path: string, username: string) {
   const url = new URL(request.url)
   if (request.method === 'GET' && path === '/api/agent/vm') {
-    await ensureMainChat(username)
+    const mainId=await ensureMainChat(username)
     checked(await db().from('planner_vm_settings').upsert({ username }, { onConflict: 'username', ignoreDuplicates: true }))
     const [hosts, chats, settings, runs, provisioning, accounts, deletedChats, queue] = await Promise.all([
       db().from('planner_vm_hosts').select(publicHost).eq('username', username).is('revoked_at', null).order('created_at', { ascending: false }),
@@ -144,6 +144,9 @@ export async function handleVmRequest(request: Request, path: string, username: 
     ])
     const machine = checked(provisioning) || null
     const connectedHosts = checked(hosts).map(h => ({ ...h, online: hostOnline(h.heartbeat_at) }))
+    const prefs=checked(settings)
+    const readyHost=connectedHosts.find(h=>prefs.ai_provider==='openai_api'||(h.capabilities?.signedIn&&(prefs.ai_provider==='claude_code'?h.capabilities.runtime==='claude':h.capabilities.runtime!=='claude')))
+    if(readyHost)await ensureMainWelcome(username,mainId,readyHost.id)
     const wantsWake = Date.parse(machine?.wake_until || '') > Date.now() || checked(runs).some(r => ['queued','running'].includes(r.status))
     const freshPower = Date.now() - Date.parse(machine?.power_updated_at || '') < 60000
     const power = !connectedHosts.length ? 'preparing' : freshPower ? machine?.power_state === 'Running' ? 'online' : wantsWake ? 'starting' : 'offline' : connectedHosts.some(h => h.online) ? 'online' : wantsWake ? 'starting' : 'offline'

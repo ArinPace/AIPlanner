@@ -10,7 +10,7 @@ import Highlight from '@tiptap/extension-highlight'
 import {TextStyleKit} from '@tiptap/extension-text-style'
 import {NoteIcon} from './NoteIcons'
 
-export function NoteEditor({value,richText,richTextSource,onChange,onNew,onDelete,onShare,onPin,pinned,onSearch,onMore,header,noteTitle,disabled=false}:{value:string;richText?:string;richTextSource?:string;onChange:(value:string,richText:string)=>void;onNew:()=>void;onDelete:()=>void;onShare:()=>void;onPin:()=>void;pinned:boolean;onSearch:()=>void;onMore:()=>void;disabled?:boolean;header?:ReactNode;noteTitle?:string}){
+export function NoteEditor({value,richText,richTextSource,onChange,onNew,onDelete,onShare,onPin,pinned,onSearch,onMore,header,noteTitle,protectedNote=false,disabled=false}:{value:string;richText?:string;richTextSource?:string;onChange:(value:string,richText:string)=>void;onNew:()=>void;onDelete:()=>void;onShare:()=>void;onPin:()=>void;pinned:boolean;onSearch:()=>void;onMore:()=>void;disabled?:boolean;header?:ReactNode;noteTitle?:string;protectedNote?:boolean}){
  const [menu,setMenu]=useState<'format'|'media'|'table'|null>(null),[attachment,setAttachment]=useState<'link'|'image'|null>(null),[url,setUrl]=useState('')
  const toolbar=useRef<HTMLDivElement>(null)
  const lastEmitted=useRef(value)
@@ -28,7 +28,7 @@ export function NoteEditor({value,richText,richTextSource,onChange,onNew,onDelet
  function addLink(){if(!/^https?:\/\//i.test(url))return;if(attachment==='image')editor!.chain().focus().setImage({src:url,alt:'Note image'}).run();else if(editor!.state.selection.empty)editor!.chain().focus().insertContent({type:'text',text:url,marks:[{type:'link',attrs:{href:url}}]}).run();else editor!.chain().focus().setLink({href:url}).run();setAttachment(null);setUrl('')}
  return <div className="apple-editor-shell" data-body-has-title={bodyHasTitle}>
   <div ref={toolbar} onMouseDown={event=>{if((event.target as Element).closest('button'))event.preventDefault()}} className="apple-note-toolbar" role="toolbar" aria-label="Note toolbar">
-   <div className="apple-toolbar-leading"><button type="button" title="New note" aria-label="New note" onClick={onNew}><NoteIcon name="compose"/></button><button type="button" title="Move note to Bin" aria-label="Move note to Bin" onClick={onDelete}><NoteIcon name="trash"/></button></div>
+   <div className="apple-toolbar-leading"><button type="button" title="New note" aria-label="New note" onClick={onNew}><NoteIcon name="compose"/></button><button hidden={protectedNote} type="button" title="Move note to Bin" aria-label="Move note to Bin" onClick={onDelete}><NoteIcon name="trash"/></button></div>
    <div className="apple-format-tools">
     <div className="apple-toolbar-popover"><button type="button" title="Format text" aria-label="Format text" aria-expanded={menu==='format'} onClick={()=>setMenu(menu==='format'?null:'format')}><span className="apple-aa">Aa</span></button>{menu==='format'&&<div className="apple-format-menu" role="menu" aria-label="Text formatting">
      <div className="apple-style-grid">{(['Title','Heading','Subheading','Body','Monospaced'] as const).map((label,i)=><button type="button" key={label} role="menuitem" onClick={()=>action(()=>{if(i<3)editor.chain().focus().setHeading({level:(i+1) as 1|2|3}).run();else if(i===4)editor.chain().focus().toggleCodeBlock().run();else editor.chain().focus().setParagraph().run()})}>{label}</button>)}</div>

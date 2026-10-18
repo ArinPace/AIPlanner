@@ -8,6 +8,7 @@ export interface PlannerFolder {
 }
 
 export interface PlannerTextFile {
+  systemRole?: 'goals'|'todo'
   format?: 'note'
   richText?: string
   richTextSource?: string
@@ -106,6 +107,7 @@ export function validateFilesState(value: unknown): asserts value is FilesState 
   for (const file of state.files) {
     if (!file || typeof file !== 'object') throw new Error('Invalid text file.')
     if (file.format !== undefined && file.format !== 'note') throw new Error('Invalid note format.')
+    if(file.systemRole!==undefined&&(!['goals','todo'].includes(file.systemRole)||file.format!=='note'))throw new Error('Invalid permanent planning note.')
     if(file.pinned!==undefined && typeof file.pinned!=='boolean')throw new Error('Invalid pinned note.')
     if(file.tags!==undefined && (!Array.isArray(file.tags) || file.tags.length>20 || file.tags.some(t=>typeof t!=='string'||t.length>40)))throw new Error('Use up to 20 note tags, 40 characters each.')
     if(file.richText!==undefined){

@@ -164,6 +164,8 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
       return json({ ok: true, revision: rows[0].revision })
     }
     if (path === '/api/files' && method === 'GET') {
+      const ensured=await db().rpc('planner_ensure_planning_notes',{p_username:username})
+      if(ensured.error)throw new ApiError(503,'Could not prepare your planning notes.')
       await cleanupUploads(username)
       return json(await filesFor(username))
     }

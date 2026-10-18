@@ -202,6 +202,7 @@ export function FilesView({ active, username, sidebar, setSidebar, onUnsavedChan
   }
   async function deleteFile() {
     if (!fileDraft)return
+    if(fileDraft.systemRole){setError('Goals and To do are permanent notes. You can edit their contents, but cannot delete them.');return}
     if (!storedFile) { setFileDraft(null); setError(''); return }
     await binAction('trash',[fileDraft.id])
   }
@@ -223,6 +224,10 @@ export function FilesView({ active, username, sidebar, setSidebar, onUnsavedChan
   }
   async function binAction(action:'trash'|'restore'|'purge',ids:string[]){
     if(!state || busy || !ids.length || !mayLeaveEditor())return
+    if(action==='trash'){
+      const selectedFolders=new Set(ids.flatMap(id=>state.folders.some(f=>f.id===id)?[...descendantIds(state.folders,id)]:[]))
+      if(state.files.some(file=>file.systemRole&&(ids.includes(file.id)||selectedFolders.has(file.folderId||'')))){setError('Goals and To do cannot be deleted. Deselect them or move them out of the selected folder first.');return}
+    }
     if(action==='trash' && !window.confirm(`Move ${ids.length} selected item(s) to the Bin? Selected folders include everything inside them. Restore them within 30 days.`))return
     if(action==='purge' && !window.confirm('Permanently delete the selected Bin items? This cannot be undone.'))return
     saving.current=true;setBusy(true);setError('')
