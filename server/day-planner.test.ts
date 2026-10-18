@@ -44,3 +44,11 @@ test('replanning preserves past and locked blocks across DST boundaries',()=>{
  assert.deepEqual(result.events.find(e=>e.id==='locked'),locked)
  assert.ok(result.events.every(e=>Number.isFinite(new Date(e.end).getTime())))
 })
+test('custom meals replace default times, and recovery avoids physical break activities',()=>{
+ const p=profile();p.meals=[{title:'Late breakfast',time:'09:30',minutes:45}];p.recoveryUntil='2026-10-24';p.breakActivities=['Take a short walk','Listen to music']
+ const result=buildDayPlan(p,[],'2026-10-19',1,now)
+ const meal=result.events.find(e=>e.title==='Late breakfast')!
+ assert.equal(new Date(meal.start).getHours(),9);assert.equal(new Date(meal.start).getMinutes(),30)
+ assert.equal((new Date(meal.end).getTime()-new Date(meal.start).getTime())/60000,45)
+ assert.equal(result.events.some(e=>e.title==='Breakfast'||e.title==='Take a short walk'),false)
+})

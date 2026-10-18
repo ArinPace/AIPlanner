@@ -45,7 +45,7 @@ export async function changePlanning(username:string,input:{revision:number;patc
   const feedback=z.object({id:z.string().uuid(),taskId:z.string().uuid(),estimated:z.number().min(1).max(10080),actual:z.number().min(0).max(10080).nullable(),outcome:z.enum(['completed','missed']),completeTask:z.boolean().optional()}).parse(input.feedback)
   if(profile.feedback.some(f=>f.id===feedback.id))return {...row,duplicate:true}
   const task=profile.tasks.find(t=>t.id===feedback.taskId);if(!task)throw new ApiError(404,'Task not found.')
-  if(feedback.outcome==='missed'){task.urgency=Math.min(99,task.urgency+10)}else{
+  if(feedback.outcome==='missed'){task.status='todo';task.urgency=Math.min(99,task.urgency+10)}else{
    if(feedback.completeTask!==false)task.status='done'
    if(feedback.actual!==null&&feedback.actual>0){const old=profile.learning[task.category]||{samples:0,ratio:1};const ratio=Math.max(.25,Math.min(4,old.ratio*feedback.actual/feedback.estimated));profile.learning[task.category]={samples:old.samples+1,ratio:Math.round((old.ratio*.7+ratio*.3)*100)/100}}
   }
