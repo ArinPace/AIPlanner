@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import { ApiError, body, db, json } from './cloud.js'
 import { createPlannerMcp } from './mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
@@ -282,8 +282,14 @@ export async function handleVmRequest(request: Request, path: string, username: 
   }
   if (path === '/api/agent/vm/cancel') {
     if (!uuid(input.id)) throw new ApiError(400, 'Choose a run.')
-    checked(await db().from('planner_vm_jobs').update({ status: 'cancelled', finished_at: new Date().toISOString() }).eq('id', input.id).eq('username', username).in('status', ['queued', 'running']))
+    checked(await db().from('planner_vm_jobs').update({ status: 'cancelled', finished_at: new Date().toISOString() }).eq('id', input.id).eq('username', username).in('status', ['queued', 'running','paused']))
     return json({ ok: true })
+  }
+  if(path === '/api/agent/vm/pause' || path === '/api/agent/vm/resume'){
+    if(!uuid(input.id) || !uuid(input.chatId))throw new ApiError(400,'Choose a task and chat.')
+    const {data,error}=await db().rpc('planner_vm_chat_control',{p_username:username,p_chat:input.chatId,p_action:path.endsWith('/pause')?'pause':'resume',p_job:input.id})
+    if(error)throw new ApiError(error.code==='P0001'?409:503,error.code==='P0001'?'This task already finished, changed, or is unavailable. Refresh the chat.':'Could not update this task.')
+    return json(data)
   }
   if (path === '/api/agent/vm/send') {
     if (!uuid(input.chatId)) throw new ApiError(400, 'Choose a chat.')
@@ -295,10 +301,10 @@ export async function handleVmRequest(request: Request, path: string, username: 
     if (chat.archived) throw new ApiError(409,'Restore this archived chat before sending a message.')
     const host = checked(await db().from('planner_vm_hosts').select('id').eq('username', username).is('revoked_at', null).maybeSingle())
     if (!host) throw new ApiError(409, 'Pair your personal VM before sending a message.')
-    const id = randomUUID()
-    checked(await db().from('planner_vm_jobs').insert({ id, username, chat_id: chat.id, host_id: host.id, message, thread_id: chat.thread_id, kind: 'chat',attachments:attachmentSummaries(attachments),attachment_payload:attachments }))
+    const {data:sent,error:sendError}=await db().rpc('planner_vm_chat_control',{p_username:username,p_chat:chat.id,p_action:'send',p_message:message,p_attachments:attachmentSummaries(attachments),p_payload:attachments})
+    if(sendError)throw new ApiError(['P0001','23505'].includes(sendError.code)?409:503,'Could not send this message. Refresh the chat and try again.')
     checked(await db().from('planner_vm_chats').update({ updated_at: new Date().toISOString(), ...(String(input.title || '') ? { title: String(input.title).slice(0, 100) } : {}) }).eq('id', chat.id).eq('username', username))
-    return json({ id, status: 'queued' }, 202)
+    return json(sent, 202)
   }
   throw new ApiError(404, 'Unknown VM action.')
 }

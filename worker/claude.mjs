@@ -1,3 +1,4 @@
+import {continuationPrompt,monitorRun} from './run-control.mjs'
 // Native Claude Code owns authentication and token refresh. No token extraction.
 import { spawn } from 'node:child_process'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
@@ -74,9 +75,10 @@ export async function claudeChat({ dataDir, job, remote, origin, token, instruct
   // Lease headers are transient and never written into the native credential store.
   const args = ['-p', '--input-format','stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--strict-mcp-config', '--mcp-config', JSON.stringify(mcp), '--tools', '', '--allowedTools', 'mcp__planner__*', 'mcp__browser__*', '--disallowedTools', 'mcp__planner__browser_open', 'mcp__planner__browser_read', 'mcp__planner__browser_close', 'mcp__planner__google_calendar_accounts', 'mcp__planner__google_calendar_read', '--append-system-prompt', instructions, ...(existing ? ['--resume', sessionId] : ['--session-id', sessionId])]
   const child = spawn(executable, args, { env: environment(dataDir), cwd: path.join(dataDir, 'workspace'), stdio: ['pipe', 'pipe', 'ignore'] })
-  let reply = '', buffer = '', result
+  const partial=job.continuation && job.reply?job.reply+'\n\n':''
+  let reply = partial, buffer = '', result, checkpoint=Promise.resolve()
   const timer = setTimeout(() => child.kill(), 15 * 60000)
-  const heartbeat = setInterval(() => void progress(reply).catch(() => child.kill()), 20000)
+  const stopMonitor = monitorRun(()=>progress(reply),async()=>{child.kill()})
   try {
     await new Promise((resolve, reject) => {
       child.on('error', () => reject(new Error('Claude Code is unavailable on this VM.')))
@@ -87,16 +89,17 @@ export async function claudeChat({ dataDir, job, remote, origin, token, instruct
           const line = buffer.slice(0, newline); buffer = buffer.slice(newline + 1)
           try {
             const event = JSON.parse(line)
+            if(event.type==='system' && event.subtype==='init'){sessions[key]=sessionId;checkpoint=checkpoint.then(()=>writeFile(sessionPath,JSON.stringify(sessions),{mode:0o600}))}
             if (event.type === 'stream_event' && event.event?.delta?.type === 'text_delta') reply = (reply + event.event.delta.text).slice(0, 80000)
-            if (event.type === 'result') { result = event; if (typeof event.result === 'string') reply = event.result.slice(0, 80000) }
+            if (event.type === 'result') { result = event; if (typeof event.result === 'string') reply = (partial+event.result).slice(0, 80000) }
           } catch { /* Native diagnostics are not relayed to users. */ }
         }
       })
       child.on('exit', code => code === 0 && result && !result.is_error ? resolve() : reject(new Error('Claude could not complete this run. Check its connection and subscription limits.')))
-      child.stdin.end(JSON.stringify({type:'user',message:{role:'user',content:claudeAttachmentInput(`Enabled websites: ${JSON.stringify(remote.sources)}.\n\n${job.message}`,job.attachment_payload)}})+'\n')
+      child.stdin.end(JSON.stringify({type:'user',message:{role:'user',content:claudeAttachmentInput(`Enabled websites: ${JSON.stringify(remote.sources)}.\n\n${continuationPrompt(job)}`,job.attachment_payload)}})+'\n')
     })
     sessions[key] = sessionId
     await writeFile(sessionPath, JSON.stringify(sessions), { mode: 0o600 })
     return { reply, threadId: job.thread_id }
-  } finally { clearTimeout(timer); clearInterval(heartbeat); child.kill() }
+  } finally { clearTimeout(timer); stopMonitor(); child.kill(); await checkpoint }
 }

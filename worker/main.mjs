@@ -16,6 +16,7 @@ import { messagePermissionText } from './message-permission.mjs'
 import {refreshRuntimeInstructions} from './runtime-instructions.mjs'
 import {plannerGuidance} from './planner-guidance.mjs'
 import {attachmentInput} from './chat-attachments.mjs'
+import {continuationPrompt,monitorRun} from './run-control.mjs'
 
 const dataDir = process.env.PLANNER_DATA_DIR || '/var/lib/planner'
 const workerStartedAt = new Date().toISOString()
@@ -81,7 +82,7 @@ async function chat(job, auth, remote) {
   for (const [key, value] of Object.entries(overrides)) args.push('-c', `${key}=${tomlValue(value)}`)
   const env = { ...process.env, CODEX_HOME: path.join(dataDir, 'codex'), ...(auth.access_token ? { ACCESS_TOKEN: auth.access_token } : {}), PLANNER_WORKER_TOKEN: config.token, PLANNER_ORIGIN: origin.href, PLANNER_ENABLED_SOURCES: JSON.stringify(remote.sources) }
   delete env.OPENAI_API_KEY; delete env.CODEX_API_KEY
-  let rpc, reply = '', threadId = job.thread_id, resolveDone, rejectDone, completed = false
+  let rpc, reply = job.continuation && job.reply ? job.reply+'\n\n' : '', threadId = job.thread_id, turnId, resolveDone, rejectDone, completed = false
   const done = new Promise((resolve, reject) => { resolveDone = resolve; rejectDone = reject }); done.catch(() => {})
   rpc = new CodexRpc(executable, args, { env, cwd: path.join(dataDir, 'workspace') }, (method, params) => {
     if (method === 'item/agentMessage/delta') reply = (reply + (params.delta || '')).slice(0, 80000)
@@ -90,7 +91,10 @@ async function chat(job, auth, remote) {
   }, (method,params)=>relayApproval(method,params,{api,job,report:()=>report()}))
   rpc.child.on('exit', () => { if (!completed) rejectDone(new Error('The agent runtime stopped before completion.')) })
   const report = () => api('progress', { id: job.id, lease: job.lease, reply, threadId })
-  const heartbeat = setInterval(() => void report().catch(error => { rejectDone(error); rpc.close() }), 20000)
+  const stopMonitor = monitorRun(report,async error=>{
+    if(threadId && turnId)await rpc.request('turn/interrupt',{threadId,turnId},5000).catch(()=>{})
+    rejectDone(error);rpc.close()
+  })
   const timeout = setTimeout(() => { rejectDone(new Error('The run exceeded its 15-minute limit.')); rpc.close() }, 15 * 60000)
   try {
     await rpc.initialize()
@@ -99,10 +103,11 @@ async function chat(job, auth, remote) {
     threadId = thread.thread.id
     await refreshRuntimeInstructions(rpc,{threadId,instructions:params.developerInstructions+'\n\n'+plannerGuidance,dataDir,resumed:true})
     await report()
-    await rpc.request('turn/start', { threadId, input: attachmentInput(`Enabled websites: ${JSON.stringify(Object.fromEntries(remote.sources.map(source=>[source,sourceUrls[source]])))}.\n\n${job.message}`,job.attachment_payload) })
+    const started=await rpc.request('turn/start', { threadId, input: attachmentInput(`Enabled websites: ${JSON.stringify(Object.fromEntries(remote.sources.map(source=>[source,sourceUrls[source]])))}.\n\n${continuationPrompt(job)}`,job.attachment_payload) })
+    turnId=started.turn.id
     await done
     return { reply, threadId }
-  } finally { clearInterval(heartbeat); clearTimeout(timeout); rpc.close() }
+  } finally { stopMonitor(); clearTimeout(timeout); rpc.close() }
 }
 let signedIn = false, identity = null, pendingSites = {}
 const claudePending = path.join(dataDir, 'claude-login-pending')
