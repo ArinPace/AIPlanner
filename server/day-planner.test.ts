@@ -72,3 +72,13 @@ test('getting ready, wind down and sleep are daily anchors independent of intens
  const blocked=fixed('Early appointment','2026-10-19T07:00:00-04:00','2026-10-19T08:00:00-04:00')
  assert.ok(buildDayPlan(p,[blocked],'2026-10-19',1,now).warnings.some(w=>w.includes('Get ready for the day conflicts')))
 })
+
+test('incomplete onboarding can produce a continuous provisional day with known planning windows',()=>{
+ const p=profile();p.onboarded=false;p.tasks=[task('provisional work',60,45)]
+ const result=buildDayPlan(p,[],'2026-10-19',1,now)
+ const events=[...result.events].sort((a,b)=>new Date(a.start).getTime()-new Date(b.start).getTime())
+ assert.equal(events[0].start,now.toISOString())
+ assert.equal(events.at(-1)?.end,new Date('2026-10-20T00:00:00-04:00').toISOString())
+ for(let i=1;i<events.length;i++)assert.equal(events[i].start,events[i-1].end)
+ assert.ok(events.some(event=>event.planning?.taskId==='provisional work'))
+})

@@ -56,7 +56,6 @@ export async function planDays(username:string,input:{date:string;days:number;pr
  const {date,days,preview}=z.object({date:day,days:z.number().int().min(1).max(14),preview:z.boolean().optional()}).parse(input)
  const row=await readPlanning(username)
  if(row.revision!==input.revision)throw new ApiError(409,'Read the latest planning profile before replanning.')
- if(!row.profile.onboarded)throw new ApiError(409,'First confirm waking/sleeping hours, goals, routine days, break preferences and task duration estimates with the user, then mark planning setup complete.')
  if(!row.profile.wake||!row.profile.sleep)throw new ApiError(409,'First learn and confirm wake/sleep times with this user in Main Chat; no universal routine is assumed.')
  if(!preview&&!row.profile.enabled)throw new ApiError(409,'Turn on automatic planning before publishing a plan. Preview is still available.')
  if(!preview&&!row.startedAt)throw new ApiError(409,'The user must click Start planning my calendar in Main Chat before any calendar is populated.')
@@ -87,7 +86,7 @@ export async function changePlanning(username:string,input:{revision:number;patc
  }
  const saved=await save(username,row.revision,profile)
  let plan:Awaited<ReturnType<typeof planDays>>|null=null,replanError:string|null=null
- if(input.replan!==false&&row.startedAt&&profile.enabled&&profile.onboarded){
+ if(input.replan!==false&&row.startedAt&&profile.enabled){
   try{
    const today=toDateInput(new Date())
    plan=await planDays(username,{date:today,days:7,revision:saved.revision})
@@ -107,7 +106,7 @@ export async function handlePlanning(request:Request,username:string){
   await readPlanning(username)
   const schedule=await readAutomationSettings(username)
   const review=scheduledReviewMessage({...schedule,instructions:'Read planner_schedule_read and follow its complete current saved instructions and enabled sources; this manual launch uses the scheduled review workflow.'})
-  const message='I clicked the permanent Start planning my calendar button. Run the same review/update workflow as my scheduled task now: read all relevant Files, Goals, To do, Agent To Do, Want To Do, private memory and Main Chat context, review every enabled connected source, and update/add verified calendar events. Account for every actionable To do, fixed commitments, routines, planning check-ins, intensity/recovery, dependencies and the to-do/maintenance tags. Read the saved schedule instructions in full. Ask targeted questions about missing personal details without treating defaults as confirmed. Do useful source review and preparation even if onboarding is incomplete; only publish a complete guessed-free day plan once the necessary setup is confirmed. The button remains available for future reviews.\n\n'+review
+  const message='I clicked the permanent Start planning my calendar button. Run the same review/update workflow as my scheduled task now: read all relevant Files, Goals, To do, Agent To Do, Want To Do, private memory and Main Chat context, review every enabled connected source, and update/add verified calendar events. Account for every actionable To do, fixed commitments, routines, planning check-ins, intensity/recovery, dependencies and the to-do/maintenance tags. Read the saved schedule instructions in full. Ask targeted questions about missing personal details without treating defaults as confirmed. Do useful source review and preparation even if onboarding is incomplete; publish a complete provisional day plan now using reasonable clearly labeled estimates where details are missing, then refine it from answers. Do not wait for onboarding completion or every duration answer. The button remains available for future reviews.\n\n'+review
   const result=await db().rpc('planner_start_calendar',{p_username:username,p_revision:revision,p_message:message})
   if(result.error)throw new ApiError(409,result.error.message)
   return json({...result.data,...await readPlanning(username)})

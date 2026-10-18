@@ -20,7 +20,7 @@ export function buildDayPlan(profile:PlanningProfile,events:CalendarEvent[],date
  let breakIndex=0
  function add(title:string,a:number,b:number,kind:'task'|'break'|'routine'|'sleep',taskId?:string,urgency?:number){
   if(b<=a)return
-  planned.push({id:randomUUID(),title,description:taskId?'Planned work. Tell Main Chat when completed, missed, or if the estimate was wrong.':'Planned '+kind+'. Adjust your preferences in Main Chat.',start:new Date(a).toISOString(),end:new Date(b).toISOString(),allDay:false,tagIds:[],recurrence:{frequency:'none',interval:1,until:null},urgency,planning:{kind,taskId,locked:false}})
+  planned.push({id:randomUUID(),title,description:(taskId?'Planned work. Tell Main Chat when completed, missed, or if the estimate was wrong.':'Planned '+kind+'. Adjust your preferences in Main Chat.')+(!profile.onboarded?' Provisional plan: routine windows and durations may be estimates; refine them in Main Chat.':''),start:new Date(a).toISOString(),end:new Date(b).toISOString(),allDay:false,tagIds:[],recurrence:{frequency:'none',interval:1,until:null},urgency,planning:{kind,taskId,locked:false}})
  }
  for(let offset=0;offset<count;offset++){
   const day=addDays(start,offset),key=toDateInput(day),dayEnd=addDays(day,1).getTime()
