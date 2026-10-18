@@ -10,7 +10,7 @@ import { VM_SOURCES } from '../src/lib/vm.js'
 import { googleCalendarStatus, readGoogleCalendar, startGoogleCalendar, selectGoogleAccount, removeGoogleAccount } from './agent.js'
 import { observeAccounts, editBrowserAccount } from './browser-accounts.js'
 import { bulkManageChats } from './vm-chats.js'
-import { workerApproval, answerApproval } from './vm-approvals.js'
+import { workerApproval, answerApproval, rememberedBrowserTools } from './vm-approvals.js'
 
 function checked<T>({ data, error }: { data: T; error: { code?: string } | null }): NonNullable<T> {
   if (error) throw new ApiError(error.code === '23505' ? 409 : 503, error.code === '23505' ? 'Another message is already waiting in this chat.' : 'Could not access your agent workspace.')
@@ -45,7 +45,9 @@ export async function handleVmWorker(request: Request, path: string) {
   const host = await workerIdentity(request)
   if (path === '/api/agent/vm/worker/config') {
     const settings = checked(await db().from('planner_vm_settings').select('*').eq('username', host.username).single())
-    return json({ sources: settings.sources, messageReadConsent:settings.message_read_consent, whatsappReadConsentAt: settings.whatsapp_read_consent_at, aiProvider: settings.ai_provider, credential: settings.credential ? openVmCredential(settings.credential) : null, personalChatGptAllowed: personalChatGptAllowed(host.username) })
+    const approvals=checked(await db().from('planner_vm_approvals').select('questions,answers,answered_at').eq('username',host.username).eq('host_id',host.id).not('answered_at','is',null).order('answered_at',{ascending:false}).limit(1000))
+    const approvedBrowserTools=settings.sources.includes('whatsapp')?rememberedBrowserTools(approvals,settings.whatsapp_read_consent_at):[]
+    return json({ sources: settings.sources, approvedBrowserTools, messageReadConsent:settings.message_read_consent, whatsappReadConsentAt: settings.whatsapp_read_consent_at, aiProvider: settings.ai_provider, credential: settings.credential ? openVmCredential(settings.credential) : null, personalChatGptAllowed: personalChatGptAllowed(host.username) })
   }
   if (path === '/api/agent/vm/worker/mcp') {
     const jobId = request.headers.get('x-planner-job'), lease = request.headers.get('x-planner-lease')

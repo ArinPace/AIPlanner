@@ -72,6 +72,7 @@ async function chat(job, auth, remote) {
     'mcp_servers.browser.args': [path.join(root, 'browser-tools.mjs')],
     'mcp_servers.browser.env': { ...browserRuntimeEnv(dataDir), PLANNER_ENABLED_SOURCES: JSON.stringify(remote.sources) },
     'mcp_servers.browser.env_vars': ['PLANNER_WORKER_TOKEN', 'PLANNER_ORIGIN'],
+    ...(remote.approvedBrowserTools?.includes('browser_read_whatsapp_chat') && remote.whatsappReadConsentAt && remote.sources.includes('whatsapp') ? {'mcp_servers.browser.tools.browser_read_whatsapp_chat.approval_mode':'approve'} : {}),
   }
   for (const [key, value] of Object.entries(overrides)) args.push('-c', `${key}=${tomlValue(value)}`)
   const env = { ...process.env, CODEX_HOME: path.join(dataDir, 'codex'), ...(auth.access_token ? { ACCESS_TOKEN: auth.access_token } : {}), PLANNER_WORKER_TOKEN: config.token, PLANNER_ORIGIN: origin.href, PLANNER_ENABLED_SOURCES: JSON.stringify(remote.sources) }
