@@ -13,8 +13,8 @@ export function PlanningSettings({date,onClose}:{date?:string;onClose:()=>void})
  const profile=row?.profile
  const change=(patch:Partial<PlanningProfile>)=>setRow(current=>current?{...current,profile:{...current.profile,...patch}}:current)
  async function save(){if(!row||busy)return;setBusy(true);setError('');setNotice('');try{
-  const {enabled,intensity,weekdays,overrides,recoveryUntil}=row.profile
-  const patch={enabled,intensity,weekdays,overrides,recoveryUntil}
+  const {enabled,intensity,weekdays,overrides}=row.profile
+  const patch={enabled,intensity,weekdays,overrides}
   const result=await planningRequest<Row & {replanError?:string|null;plan?:{warnings:string[]}}>({revision:row.revision,patch})
   setRow(result);setNotice(result.replanError?'Preferences saved; replanning needs attention.':result.plan?'Saved and remaining week replanned.'+(result.plan.warnings.length?' Some tasks did not fit; review them in Main Chat.':''):'Saved. Continue setup in Main Chat, then press Start planning my calendar when you are ready.');if(result.replanError)setError(result.replanError);window.dispatchEvent(new Event('planner-calendar-refresh'))
  }catch(e){setError(e instanceof Error?e.message:'Could not save preferences.')}finally{setBusy(false)}}
@@ -31,8 +31,6 @@ export function PlanningSettings({date,onClose}:{date?:string;onClose:()=>void})
     <fieldset className="planning-weekdays"><legend>Weekly intensity</legend>{['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map((name,i)=><label key={name}>{name}<input aria-label={name+' intensity'} type="number" min="0" max="100" placeholder={'Default '+profile.intensity} value={profile.weekdays[i]??''} onChange={e=>change({weekdays:profile.weekdays.map((v,index)=>index===i?(e.target.value===''?null:Math.max(0,Math.min(100,Number(e.target.value)))):v)})}/></label>)}</fieldset>
    </>}
    <fieldset className="planning-date"><legend>Specific day override</legend><input aria-label="Intensity date" type="date" value={selectedDate} onChange={e=>setSelectedDate(e.target.value)}/><label className="planning-field">Intensity: {profile.overrides[selectedDate]??'Use weekly default'}<input aria-label="Day planning intensity" type="range" min="0" max="100" value={profile.overrides[selectedDate]??profile.weekdays[new Date(selectedDate+'T12:00:00').getDay()]??profile.intensity} onChange={e=>change({overrides:{...profile.overrides,[selectedDate]:Number(e.target.value)}})}/></label><button type="button" className="text-btn" onClick={()=>{const next={...profile.overrides};delete next[selectedDate];change({overrides:next})}}>Use weekly default</button></fieldset>
-   <label className="planning-field">Recovery mode through<input aria-label="Recovery through" type="date" value={profile.recoveryUntil||''} onChange={e=>change({recoveryUntil:e.target.value||null})}/></label>
-   <p className="quiet">Recovery caps intensity at 20, including day overrides. Tell Main Chat you’re sick to apply this for the remaining week.</p>
    <button type="button" className="primary-btn" disabled={busy} onClick={()=>void save()}>{busy?'Saving and replanning…':'Save preferences'}</button>
   </>}
  </dialog>

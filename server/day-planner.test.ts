@@ -30,13 +30,14 @@ test('fixed commitments survive; deadlines precede urgency; plans do not overlap
  assert.ok(result.events.some(e=>e.planning?.kind==='break'&&e.title!=='Break'))
  assert.ok(result.events.some(e=>e.planning?.kind==='sleep'))
 })
-test('weekday/date intensity and recovery reduce actual workload',()=>{
+test('weekday/date intensity reduces actual workload without a recovery cap',()=>{
  const p=profile();p.tasks=[task('work',90,2000)]
  const minutes=(intensity:number)=>buildDayPlan({...p,intensity},[],'2026-10-19',1,now).events.filter(e=>e.planning?.kind==='task').reduce((n,e)=>n+(new Date(e.end).getTime()-new Date(e.start).getTime())/60000,0)
  assert.ok(minutes(20)<minutes(80));assert.equal(minutes(0),0)
  p.weekdays[1]=75;p.overrides['2026-10-19']=40
  assert.equal(intensityFor(p,'2026-10-19',1),40)
- p.recoveryUntil='2026-10-24';assert.equal(intensityFor(p,'2026-10-19',1),20)
+ assert.equal(intensityFor({...p,recoveryUntil:'2026-10-24'} as typeof p,'2026-10-19',1),40) // Legacy recovery state has no effect.
+ p.overrides['2026-10-19']=65;assert.equal(intensityFor(p,'2026-10-19',1),65)
 })
 test('preferred days, impossible deadlines, learned estimates, idempotent replans',()=>{
  const p=profile();p.tasks=[{...task('laundry',5),preferredDays:[2]},task('study',80,30),{...task('too late',90),deadline:'2026-10-19T06:00:00-04:00'}];p.learning.study={samples:3,ratio:2}
@@ -54,8 +55,8 @@ test('replanning preserves past and locked blocks across DST boundaries',()=>{
  assert.deepEqual(result.events.find(e=>e.id==='locked'),locked)
  assert.ok(result.events.every(e=>Number.isFinite(new Date(e.end).getTime())))
 })
-test('custom meals replace default times, and recovery avoids physical break activities',()=>{
- const p=profile();p.meals=[{title:'Late breakfast',time:'09:30',minutes:45}];p.recoveryUntil='2026-10-24';p.breakActivities=['Take a short walk','Listen to music']
+test('custom meals and agent-selected rest activities are respected',()=>{
+ const p=profile();p.meals=[{title:'Late breakfast',time:'09:30',minutes:45}];p.breakActivities=['Listen to music']
  const result=buildDayPlan(p,[],'2026-10-19',1,now)
  const meal=result.events.find(e=>e.title==='Late breakfast')!
  assert.equal(new Date(meal.start).getHours(),9);assert.equal(new Date(meal.start).getMinutes(),30)

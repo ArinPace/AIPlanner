@@ -14,7 +14,7 @@ const day=z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v=>Number.isFinite(new 
 const time=z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)
 const learnedTime=z.union([time,z.literal('')])
 const score=z.number().int().min(0).max(100)
-export const profilePatch=z.object({enabled:z.boolean().optional(),onboarded:z.boolean().optional(),wake:learnedTime.optional(),sleep:learnedTime.optional(),intensity:score.optional(),weekdays:z.array(score.nullable()).length(7).optional(),overrides:z.record(day,score).refine(v=>Object.keys(v).length<=400).optional(),recoveryUntil:day.nullable().optional(),goals:z.string().max(12000).optional(),preferences:z.string().max(12000).optional(),readyMinutes:z.number().int().min(0).max(180).optional(),windDownMinutes:z.number().int().min(0).max(180).optional(),meals:z.array(z.object({title:z.string().trim().min(1).max(80),time,minutes:z.number().int().min(5).max(180)})).max(10).optional(),breakActivities:z.array(z.string().trim().min(1).max(200)).min(1).max(30).optional()}).strict()
+export const profilePatch=z.object({enabled:z.boolean().optional(),onboarded:z.boolean().optional(),wake:learnedTime.optional(),sleep:learnedTime.optional(),intensity:score.optional(),weekdays:z.array(score.nullable()).length(7).optional(),overrides:z.record(day,score).refine(v=>Object.keys(v).length<=400).optional(),goals:z.string().max(12000).optional(),preferences:z.string().max(12000).optional(),readyMinutes:z.number().int().min(0).max(180).optional(),windDownMinutes:z.number().int().min(0).max(180).optional(),meals:z.array(z.object({title:z.string().trim().min(1).max(80),time,minutes:z.number().int().min(5).max(180)})).max(10).optional(),breakActivities:z.array(z.string().trim().min(1).max(200)).min(1).max(30).optional()}).strict()
 export const taskSchema=z.object({id:z.string().uuid().optional(),title:z.string().trim().min(1).max(300),category:z.string().trim().min(1).max(80),urgency:z.number().int().min(0).max(99),minutes:z.number().int().min(5).max(10080),deadline:z.string().datetime({offset:true}).nullable(),preferredDays:z.array(z.number().int().min(0).max(6)).max(7),earliestDate:day.nullable(),status:z.enum(['todo','done']),source:z.string().max(1000),goal:z.string().max(1000)})
 export async function readPlanning(username:string){
  storage(await db().from('planner_planning').upsert({username},{onConflict:'username',ignoreDuplicates:true}))
@@ -66,7 +66,7 @@ export async function planDays(username:string,input:{date:string;days:number;pr
  if(!preview){const saved=await db().rpc('planner_commit_day_plan',{p_username:username,p_revision:row.revision,p_calendar_revision:calendar.revision,p_calendar:{...calendar.state,events:result.events}});if(saved.error)throw new ApiError(409,saved.error.message)}
  return {saved:!preview,added:result.added,warnings:result.warnings,from:result.from,through:result.through,revision:preview?calendar.revision:calendar.revision+1,events:result.events.filter(e=>e.planning&&e.start>=new Date(date+'T00:00:00').toISOString())}
 }
-export async function changePlanning(username:string,input:{revision:number;patch?:unknown;task?:unknown;feedback?:unknown;recovery?:unknown;replan?:boolean}){
+export async function changePlanning(username:string,input:{revision:number;patch?:unknown;task?:unknown;feedback?:unknown;replan?:boolean}){
  const row=await readPlanning(username)
  if(row.revision!==input.revision)throw new ApiError(409,'Planning changed. Read it before retrying.')
  const profile=row.profile
@@ -85,7 +85,6 @@ export async function changePlanning(username:string,input:{revision:number;patc
   }
   profile.feedback=[...profile.feedback,{...feedback,at:new Date().toISOString()}].slice(-200)
  }
- if(input.recovery){const recovery=z.object({through:day}).parse(input.recovery);profile.recoveryUntil=recovery.through}
  const saved=await save(username,row.revision,profile)
  let plan:Awaited<ReturnType<typeof planDays>>|null=null,replanError:string|null=null
  if(input.replan!==false&&row.startedAt&&profile.enabled&&profile.onboarded){
@@ -119,6 +118,6 @@ export async function handlePlanning(request:Request,username:string){
   const result=await db().rpc('planner_reset_main_chat',{p_username:username});if(result.error)throw new ApiError(409,result.error.message)
   return json({saved:true})
  }
- const args=z.object({revision:z.number().int().nonnegative(),patch:profilePatch.optional(),task:taskSchema.optional(),feedback:z.unknown().optional(),recovery:z.unknown().optional(),replan:z.boolean().optional()}).parse(input)
+ const args=z.object({revision:z.number().int().nonnegative(),patch:profilePatch.optional(),task:taskSchema.optional(),feedback:z.unknown().optional(),replan:z.boolean().optional()}).parse(input)
  return json(await changePlanning(username,args))
 }

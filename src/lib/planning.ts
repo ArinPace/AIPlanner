@@ -4,7 +4,7 @@ export type PlanningTask = {
 }
 export type PlanningProfile = {
  enabled: boolean; onboarded: boolean; wake: string; sleep: string; intensity: number;
- weekdays: (number|null)[]; overrides: Record<string,number>; recoveryUntil: string | null;
+ weekdays: (number|null)[]; overrides: Record<string,number>;
  goals: string; preferences: string; breakActivities: string[];
  meals: {title:string;time:string;minutes:number}[];
  readyMinutes: number; windDownMinutes: number;
@@ -12,13 +12,13 @@ export type PlanningProfile = {
  feedback: {id:string;taskId:string;estimated:number;actual:number|null;outcome:'completed'|'missed';at:string}[];
 }
 export const DEFAULT_PLANNING: PlanningProfile = {
- enabled:false,onboarded:false,wake:'',sleep:'',intensity:50,weekdays:[null,null,null,null,null,null,null],overrides:{},recoveryUntil:null,
+ enabled:false,onboarded:false,wake:'',sleep:'',intensity:50,weekdays:[null,null,null,null,null,null,null],overrides:{},
  goals:'',preferences:'',breakActivities:['Close your eyes and rest','Listen to calming music','Gentle breathing: inhale for 4 seconds, exhale for 6','Take a short walk'],tasks:[],learning:{},feedback:[],
  meals:[],
  readyMinutes:0,windDownMinutes:0,
 }
 export function intensityFor(profile:PlanningProfile,date:string,weekday:number){
  const value=profile.overrides[date] ?? profile.weekdays[weekday] ?? profile.intensity
- return profile.recoveryUntil && date<=profile.recoveryUntil ? Math.min(value,20) : value
+ return value
 }
 export function intensityDescription(value:number){return value<=30?'Gentle':value>=75?'Focused':'Balanced'}

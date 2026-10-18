@@ -31,8 +31,7 @@ export function buildDayPlan(profile:PlanningProfile,events:CalendarEvent[],date
    {title:'Wind down / get ready for bed',start:Math.max(wake,sleep-profile.windDownMinutes*minute),end:sleep},
    ...profile.meals.map(meal=>({...meal,start:clock(meal.time),end:clock(meal.time)+meal.minutes*minute})),
   ].filter(routine=>routine.end>routine.start).sort((a,b)=>a.start-b.start)
-  const recovery=profile.recoveryUntil&&key<=profile.recoveryUntil
-  const restActivities=profile.breakActivities.filter(activity=>!recovery||!/\b(walk|run|running|workout|gym|jogging)\b/i.test(activity))
+  const restActivities=profile.breakActivities
   const activities=restActivities.length?restActivities:['Lie down and close your eyes','Listen to calming music']
   const focus=Math.round(25+intensity*.5),rest=Math.round(20-intensity*.12),buffer=Math.round(10-intensity*.07)
   let workBudget=Math.round((sleep-wake)/minute*.75*intensity/100)
