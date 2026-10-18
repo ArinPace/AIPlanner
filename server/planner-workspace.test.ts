@@ -36,6 +36,7 @@ test('internal calendar and all Files: scoped partial edits, hierarchy, paginati
     assert.equal(u.hostname,'workspace.test')
     if(u.pathname.startsWith('/storage/')){downloads++;assert.ok(u.pathname.endsWith('/arin/82400000-0000-4000-8000-000000000000.pdf'));return new Response(pdfFixture(),{headers:{'Content-Type':'application/pdf'}})}
     assert.equal(u.searchParams.get('username'),'eq.arin')
+    if(u.pathname.endsWith('/planner_planning'))return Response.json({started_at:'2026-10-18T00:00:00Z'});
     if(u.pathname.endsWith('/planner_uploads'))return Response.json(u.searchParams.get('id')==='eq.missing'?null:{storage_path:'arin/82400000-0000-4000-8000-000000000000.pdf',status:'complete'})
     const isCalendar=u.pathname.endsWith('/planner_calendars')
     assert.ok(isCalendar || u.pathname.endsWith('/planner_files'))

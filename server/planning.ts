@@ -14,8 +14,8 @@ export const profilePatch=z.object({enabled:z.boolean().optional(),onboarded:z.b
 export const taskSchema=z.object({id:z.string().uuid().optional(),title:z.string().trim().min(1).max(300),category:z.string().trim().min(1).max(80),urgency:z.number().int().min(0).max(99),minutes:z.number().int().min(5).max(10080),deadline:z.string().datetime({offset:true}).nullable(),preferredDays:z.array(z.number().int().min(0).max(6)).max(7),earliestDate:day.nullable(),status:z.enum(['todo','done']),source:z.string().max(1000),goal:z.string().max(1000)})
 export async function readPlanning(username:string){
  storage(await db().from('planner_planning').upsert({username},{onConflict:'username',ignoreDuplicates:true}))
- const row=storage(await db().from('planner_planning').select('state,revision').eq('username',username).single())
- return {profile:{...structuredClone(DEFAULT_PLANNING),...row.state} as PlanningProfile,revision:Number(row.revision)}
+ const row=storage(await db().from('planner_planning').select('state,revision,started_at').eq('username',username).single())
+ return {profile:{...structuredClone(DEFAULT_PLANNING),...row.state} as PlanningProfile,revision:Number(row.revision),startedAt:row.started_at as string|null}
 }
 async function save(username:string,revision:number,profile:PlanningProfile){
  const rows=storage(await db().from('planner_planning').update({state:profile,revision:revision+1,updated_at:new Date().toISOString()}).eq('username',username).eq('revision',revision).select('revision'))
@@ -28,6 +28,7 @@ export async function planDays(username:string,input:{date:string;days:number;pr
  if(row.revision!==input.revision)throw new ApiError(409,'Read the latest planning profile before replanning.')
  if(!row.profile.onboarded)throw new ApiError(409,'First confirm waking/sleeping hours, goals, routine days, break preferences and task duration estimates with the user, then mark planning setup complete.')
  if(!preview&&!row.profile.enabled)throw new ApiError(409,'Turn on automatic planning before publishing a plan. Preview is still available.')
+ if(!preview&&!row.startedAt)throw new ApiError(409,'The user must click Start planning my calendar in Main Chat before any calendar is populated.')
  const calendar=await calendarRow(username)
  const result=buildDayPlan(row.profile,calendar.state.events,date,days)
  if(!preview){const saved=await db().rpc('planner_commit_day_plan',{p_username:username,p_revision:row.revision,p_calendar_revision:calendar.revision,p_calendar:{...calendar.state,events:result.events}});if(saved.error)throw new ApiError(409,saved.error.message)}
@@ -54,7 +55,7 @@ export async function changePlanning(username:string,input:{revision:number;patc
  if(input.recovery){const recovery=z.object({through:day}).parse(input.recovery);profile.recoveryUntil=recovery.through}
  const saved=await save(username,row.revision,profile)
  let plan:Awaited<ReturnType<typeof planDays>>|null=null,replanError:string|null=null
- if(input.replan!==false&&profile.enabled&&profile.onboarded){
+ if(input.replan!==false&&row.startedAt&&profile.enabled&&profile.onboarded){
   try{
    const today=toDateInput(new Date())
    plan=await planDays(username,{date:today,days:7,revision:saved.revision})
@@ -63,12 +64,18 @@ export async function changePlanning(username:string,input:{revision:number;patc
    for(const date of extraDates){const extra=await planDays(username,{date,days:1,revision:saved.revision});plan.warnings.push(...extra.warnings)}
   }catch(error){replanError=error instanceof Error?error.message:'Could not replan. Ask Main Chat to retry using the latest calendar.'}
  }
- return {...saved,saved:true,plan,replanError}
+ return {...saved,startedAt:row.startedAt,saved:true,plan,replanError}
 }
 export async function handlePlanning(request:Request,username:string){
  if(request.method==='GET')return json(await readPlanning(username))
  if(request.method!=='POST')throw new ApiError(405,'Use GET or POST.')
  const input=await body(request)
+ if(input.action==='start'){
+  const {revision}=z.object({revision:z.number().int().nonnegative()}).parse(input)
+  const result=await db().rpc('planner_start_calendar',{p_username:username,p_revision:revision})
+  if(result.error)throw new ApiError(409,result.error.message)
+  return json({...result.data,...await readPlanning(username)})
+ }
  if(input.action==='plan')return json(await planDays(username,z.object({revision:z.number().int().nonnegative(),date:day,days:z.number().int().min(1).max(14),preview:z.boolean().optional()}).parse(input)))
  if(input.action==='reset-main'){
   if(input.confirm!=='RESET MAIN CHAT')throw new ApiError(400,'Confirm reset first.')

@@ -230,6 +230,7 @@ export function mergeUpdates(calendarState: StoredState, filesState: FilesState,
   return {calendar,files}
 }
 export async function applyUpdates(username: string, run: any, output: ReturnType<typeof parseUpdates>) {
+  await requireCalendarStarted(username)
   for (let retry=0; retry<3; retry++) {
     const c = check(await db().from('planner_calendars').select('state,revision').eq('username',username).single())
     const f = check(await db().from('planner_files').select('state,revision').eq('username',username).single())
@@ -406,3 +407,4 @@ export async function handleAgentRequest(request: Request,path: string,username:
   }
   throw new ApiError(404,'Unknown agent action.')
 }
+import {requireCalendarStarted} from './planning-gate.js'

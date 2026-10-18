@@ -16,4 +16,9 @@
 .planning-hours { display: flex; gap: 16px; }
 .planning-hours label { display: grid; gap: 6px; flex: 1; min-width: 0; }
 .day-intensity-button { border: 1px solid var(--line); border-radius: 12px; padding: 4px 9px; background: var(--panel); color: var(--blue); font-size: 11px; }
+.planning-start-card { margin: 0 0 24px; padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); color: var(--text); }
+.planning-start-card h2 { font-size: 18px; margin-bottom: 10px; }
+.planning-start-card p { font-size: 14px; line-height: 1.6; margin-bottom: 14px; }
+.planning-start-card small { display: block; margin-top: 10px; color: var(--muted); }
+.planning-start-card button { max-width: 100%; height: auto; min-height: 40px; white-space: normal; }
 @media(max-width:600px) { .planning-dialog input:not([type=range]), .planning-dialog textarea { font-size: 16px; } }

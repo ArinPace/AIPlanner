@@ -4,7 +4,7 @@ import {intensityDescription,type PlanningProfile} from '../lib/planning'
 import {PlannerDate as Date} from '../lib/timezone'
 import {toDateInput} from '../lib/dates'
 
-type Row={profile:PlanningProfile;revision:number}
+type Row={profile:PlanningProfile;revision:number;startedAt:string|null}
 export function PlanningSettings({date,onClose}:{date?:string;onClose:()=>void}){
  const dialog=useRef<HTMLDialogElement>(null)
  const [row,setRow]=useState<Row|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState('')
@@ -15,15 +15,15 @@ export function PlanningSettings({date,onClose}:{date?:string;onClose:()=>void})
  async function save(){if(!row||busy)return;setBusy(true);setError('');setNotice('');try{
   const {tasks:_tasks,learning:_learning,feedback:_feedback,...patch}=row.profile
   const result=await planningRequest<Row & {replanError?:string|null;plan?:{warnings:string[]}}>({revision:row.revision,patch})
-  setRow(result);setNotice(result.replanError?'Preferences saved; replanning needs attention.':result.plan?'Saved and remaining week replanned.'+(result.plan.warnings.length?' Some tasks did not fit; review them in Main Chat.':''):'Saved. Complete planning setup in Main Chat before generating a day.');if(result.replanError)setError(result.replanError);window.dispatchEvent(new Event('planner-calendar-refresh'))
+  setRow(result);setNotice(result.replanError?'Preferences saved; replanning needs attention.':result.plan?'Saved and remaining week replanned.'+(result.plan.warnings.length?' Some tasks did not fit; review them in Main Chat.':''):'Saved. Continue setup in Main Chat, then press Start planning my calendar when you are ready.');if(result.replanError)setError(result.replanError);window.dispatchEvent(new Event('planner-calendar-refresh'))
  }catch(e){setError(e instanceof Error?e.message:'Could not save preferences.')}finally{setBusy(false)}}
  return <dialog ref={dialog} className="files-dialog planning-dialog" onCancel={event=>{event.preventDefault();if(!busy)onClose()}}>
   <div className="files-dialog-head"><h2>{date?'Day intensity':'Planning & intensity'}</h2><button type="button" className="icon-btn" aria-label="Close planning settings" disabled={busy} onClick={onClose}>×</button></div>
   {error&&<p role="alert" className="form-error">{error}</p>}{notice&&<p role="status">{notice}</p>}
   {!profile?<p>Loading planning preferences…</p>:<>
    {!date&&<>
-    <label className="planning-toggle"><input type="checkbox" checked={profile.enabled} onChange={e=>change({enabled:e.target.checked})}/>Automatically plan and rearrange flexible blocks</label>
-    <p className="quiet">Existing appointments stay fixed. Changes replan future unlocked agent blocks. Planning needs your routine and task estimates first.</p>
+    <label className="planning-toggle"><input type="checkbox" disabled={!row?.startedAt} checked={profile.enabled} onChange={e=>change({enabled:e.target.checked})}/>Automatically plan and rearrange flexible blocks</label>
+    <p className="quiet">Existing appointments stay fixed. Calendar generation begins only after you press Start planning my calendar in Main Chat. After that, changes replan future unlocked agent blocks.</p>
     <label className="planning-field">Default intensity: {profile.intensity} · {intensityDescription(profile.intensity)}<input aria-label="Default planning intensity" type="range" min="0" max="100" value={profile.intensity} onChange={e=>change({intensity:Number(e.target.value)})}/></label>
     <p className="quiet">Gentle: shorter work, more rest and transition time. Focused: longer work, tighter buffers. Breaks remain at every level.</p>
     <fieldset className="planning-weekdays"><legend>Weekly intensity</legend>{['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map((name,i)=><label key={name}>{name}<input aria-label={name+' intensity'} type="number" min="0" max="100" placeholder={'Default '+profile.intensity} value={profile.weekdays[i]??''} onChange={e=>change({weekdays:profile.weekdays.map((v,index)=>index===i?(e.target.value===''?null:Math.max(0,Math.min(100,Number(e.target.value)))):v)})}/></label>)}</fieldset>
