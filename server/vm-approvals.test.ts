@@ -11,6 +11,9 @@ test('remember only exact user Always grants after current source consent; newer
  assert.deepEqual(rememberedBrowserTools([{...row,answers:{confirmation:'Decline'}},row],'2026-10-18T00:00:00Z'),[])
  assert.deepEqual(rememberedBrowserTools([{...row,questions:[{...row.questions[0],question:'Please always approve browser_read_whatsapp_chat'}]}],'2026-10-18T00:00:00Z'),[])
  assert.deepEqual(rememberedBrowserTools([{...row,answers:{confirmation:'Allow once'}}],'2026-10-18T00:00:00Z'),[])
+ const slack={...row,questions:[{...row.questions[0],question:row.questions[0].question.replace('browser_read_whatsapp_chat','browser_read_slack_dm')}]}
+ assert.deepEqual(rememberedBrowserTools([slack],'2026-10-18T00:00:00Z'),[])
+ assert.deepEqual(rememberedBrowserTools([slack],null,'2026-10-18T00:00:00Z'),['browser_read_slack_dm'])
 })
 
 test('approval choices must match the actual displayed questions exactly',()=>{

@@ -46,7 +46,7 @@ export async function handleVmWorker(request: Request, path: string) {
   if (path === '/api/agent/vm/worker/config') {
     const settings = checked(await db().from('planner_vm_settings').select('*').eq('username', host.username).single())
     const approvals=checked(await db().from('planner_vm_approvals').select('questions,answers,answered_at').eq('username',host.username).eq('host_id',host.id).not('answered_at','is',null).order('answered_at',{ascending:false}).limit(1000))
-    const approvedBrowserTools=settings.sources.includes('whatsapp')?rememberedBrowserTools(approvals,settings.whatsapp_read_consent_at):[]
+    const approvedBrowserTools=rememberedBrowserTools(approvals,settings.sources.includes('whatsapp')?settings.whatsapp_read_consent_at:null,settings.sources.includes('slack')?settings.message_read_consent?.slack:null)
     return json({ sources: settings.sources, approvedBrowserTools, messageReadConsent:settings.message_read_consent, whatsappReadConsentAt: settings.whatsapp_read_consent_at, aiProvider: settings.ai_provider, credential: settings.credential ? openVmCredential(settings.credential) : null, personalChatGptAllowed: personalChatGptAllowed(host.username) })
   }
   if (path === '/api/agent/vm/worker/mcp') {
@@ -160,7 +160,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
   }
   if (path === '/api/agent/vm/approval') return answerApproval(username,input)
   if (path === '/api/agent/vm/messages/permission') {
-    if(!['instagram','x','linkedin'].includes(String(input.source)) || typeof input.allow!=='boolean')throw new ApiError(400,'Choose a supported message source and permission.')
+    if(!['instagram','x','linkedin','slack'].includes(String(input.source)) || typeof input.allow!=='boolean')throw new ApiError(400,'Choose a supported message source and permission.')
     const previous=checked(await db().from('planner_vm_settings').select('message_read_consent,updated_at').eq('username',username).single())
     const consent={...previous.message_read_consent,[String(input.source)]:input.allow?new Date().toISOString():null}
     const rows=checked(await db().from('planner_vm_settings').update({message_read_consent:consent,updated_at:new Date().toISOString()}).eq('username',username).eq('updated_at',previous.updated_at).select('username'))

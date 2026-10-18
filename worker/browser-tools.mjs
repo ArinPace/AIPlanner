@@ -17,6 +17,7 @@ import { readWhatsApp } from './whatsapp-reader.mjs'
 import { requireWhatsAppPermission } from './whatsapp-permission.mjs'
 import { messageSites, listMessageThreads, readSelectedMessages } from './selected-messages.mjs'
 import { messagePermissionAllowed } from './message-permission.mjs'
+import {listSlackDms,readSlackDm} from './slack-messages.mjs'
 
 async function connectBrowser(destination,profiles) {
   const dataDir=process.env.PLANNER_DATA_DIR || '/var/lib/planner'
@@ -83,14 +84,30 @@ server.registerTool('browser_read_whatsapp_chat', {
   finally { if (connection) await connection.close() }
 }))
 async function authorizedMessageConnection(source){
-  if(!enabled.includes(source) || !messageSites[source])throw new Error('Enable this message source in Add sites first.')
+  if(!enabled.includes(source) || (!messageSites[source] && source!=='slack'))throw new Error('Enable this message source in Add sites first.')
   const response=await fetch(new URL('/api/agent/vm/worker/config',process.env.PLANNER_ORIGIN),{method:'POST',headers:{Authorization:'Bearer '+process.env.PLANNER_WORKER_TOKEN,'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(15000)})
   if(!response.ok)throw new Error('Could not verify current message-reading permission.')
   const config=await response.json()
   if(!messagePermissionAllowed(config,source))throw new Error('Allow selected conversation reading for this source in Add sites first.')
   const saved=await siteLaunches(process.env.PLANNER_DATA_DIR || '/var/lib/planner')
-  return connectBrowser(messageSites[source].inbox,saved.browserProfiles)
+  return connectBrowser(source==='slack'?sources.slack:messageSites[source].inbox,saved.browserProfiles)
 }
+for(const action of ['list','read'])server.registerTool(action==='list'?'browser_list_slack_dms':'browser_read_slack_dm',{
+ description:action==='list'?'List existing Slack direct conversations in one named connected workspace. Returns names and DM URLs, no message bodies. Requires Slack conversation-reading permission. Collapsed or unloaded sidebar conversations may be missing.':'Read rendered messages from one exact user-selected existing Slack DM in a named workspace, using its exact listed name or DM URL. Opening may mark it read. Never send, compose, react, join, or delete. Unloaded history, attachments and unopened reply threads are not covered.',
+ inputSchema:action==='list'?{workspace:z.string().trim().min(1).max(150)}:{workspace:z.string().trim().min(1).max(150),name:z.string().trim().min(1).max(200).optional(),url:z.string().url().max(2000).optional()},
+ annotations:{readOnlyHint:action==='list',destructiveHint:false,openWorldHint:true},
+},async(args)=>queued(async()=>{
+ let connection,page
+ try{
+  connection=await authorizedMessageConnection('slack')
+  const saved=await siteLaunches(process.env.PLANNER_DATA_DIR || '/var/lib/planner')
+  page=await connection.contexts()[0].newPage()
+  await page.goto(readableUrl(selectedBrowserDestination(sources.slack,saved),enabled,sources),{waitUntil:'domcontentloaded',timeout:45000})
+  const result=action==='list'?await listSlackDms(page,args.workspace):await readSlackDm(page,args)
+  return {content:[{type:'text',text:JSON.stringify(result)}]}
+ }catch(error){return {isError:true,content:[{type:'text',text:JSON.stringify({code:'SLACK_DM_UNAVAILABLE',message:error.message})}]}}
+ finally{if(page)await page.close().catch(()=>{});if(connection)await connection.close()}
+}))
 for(const action of ['list','read'])server.registerTool(action==='list'?'browser_list_message_threads':'browser_read_messages',{
   description:action==='list'?'List visible conversation names from the signed-in Instagram, X or LinkedIn inbox. Requires saved message-reading consent. Does not open a conversation or return message previews. Use only when the user requests messages. Never unlock, reset or bypass encryption/passcodes.':'Open one existing conversation by its exact name from browser_list_message_threads or its validated conversation URL, and read rendered text. Requires explicit user-selected conversation or user-authorized inbox review. Opening may mark messages seen. No sending, reacting, composing or deleting. Media and older history are not included. Respect safety rejections; do not retry via another tool.',
   inputSchema:action==='list'?{source:z.enum(['instagram','x','linkedin'])}:{source:z.enum(['instagram','x','linkedin']),name:z.string().trim().min(1).max(150).optional(),url:z.string().url().max(2000).optional()},

@@ -4,17 +4,18 @@ import { uuid } from './vm-validation.js'
 export type ApprovalQuestion = {id:string; question:string; options:string[]}
 // These rows originate from the paired worker's runtime requests, and answers
 // are written only by the authenticated user. Never infer a grant from chat text.
-export function rememberedBrowserTools(rows: {questions:unknown;answers:unknown;answered_at:string}[], consentAt:string|null) {
+export function rememberedBrowserTools(rows: {questions:unknown;answers:unknown;answered_at:string}[], consentAt:string|null, slackConsentAt:string|null=null) {
   const seen=new Set<string>(), tools:string[]=[]
   for(const row of rows){
     if(!Array.isArray(row.questions) || row.questions.length!==1)continue
     const q=row.questions[0]
-    const match=typeof q.question==='string' && /^Allow the browser MCP server to run tool "(browser_read_whatsapp_chat)"\?$/.exec(q.question.replaceAll('\\"','"'))
+    const match=typeof q.question==='string' && /^Allow the browser MCP server to run tool "(browser_read_whatsapp_chat|browser_read_slack_dm)"\?$/.exec(q.question.replaceAll('\\"','"'))
     if(!match || q.id!=='confirmation' || !Array.isArray(q.options) || !q.options.includes('Always allow this tool'))continue
     const tool=match[1]
     if(seen.has(tool))continue
     seen.add(tool)
-    if(consentAt && Date.parse(row.answered_at)>=Date.parse(consentAt) && (row.answers as Record<string,unknown>)?.confirmation==='Always allow this tool')tools.push(tool)
+    const grantedAt=tool==='browser_read_slack_dm'?slackConsentAt:consentAt
+    if(grantedAt && Date.parse(row.answered_at)>=Date.parse(grantedAt) && (row.answers as Record<string,unknown>)?.confirmation==='Always allow this tool')tools.push(tool)
   }
   return tools
 }
