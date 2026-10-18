@@ -21,3 +21,5 @@ Waiting messages wake the VM unless held by a paused task in their chat.
 Checks cover non-interruption, FIFO, pause blocking, late thread binding,
 attachment retention, cancellation, Bin cancellation, keyboard navigation, and
 the production browser/agent workflow.
+
+Production verification passed: Tab and the Queue button accepted back-to-back drafts, a queued text attachment was retained, cancellation prevented execution, Shift+Tab/empty Tab kept normal navigation, and paused work held the queue. After Resume, the turns ran in FIFO order and the last reply retained both the original ORIG31 context and queued attachment code QONE42. The temporary test chat was archived.
