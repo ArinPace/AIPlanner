@@ -1,4 +1,5 @@
 import { PlannerDate as Date } from '../lib/timezone.js'
+import { useLayoutEffect, useRef } from 'react'
 import type { Occurrence, Tag } from '../types'
 import {yearDaySummary} from '../lib/yearCalendar'
 import {
@@ -24,14 +25,24 @@ function monthCursor(year: number, month: number): Date {
 export function YearView({ cursor, occurrences, tags, hiddenTagIds, onMonthOpen, onDayOpen }: YearViewProps) {
   const year = cursor.getFullYear()
   const months = Array.from({ length: 12 }, (_, month) => monthCursor(year, month))
+  const viewRef = useRef<HTMLDivElement>(null)
+  const currentMonthRef = useRef<HTMLElement>(null)
+  const currentMonth = new Date().getMonth()
+
+  useLayoutEffect(() => {
+    const view = viewRef.current
+    const month = currentMonthRef.current
+    if (!view || !month) return
+    view.scrollTop += month.getBoundingClientRect().top - view.getBoundingClientRect().top
+  }, [year, currentMonth])
 
   return (
-    <div className="year-view">
+    <div className="year-view" ref={viewRef}>
       {months.map((month) => {
         const days = getMonthGrid(month)
         const label = month.toLocaleDateString(undefined, { month: 'long' })
         return (
-          <section key={month.toISOString()} className="year-month">
+          <section key={month.toISOString()} className="year-month" ref={month.getMonth() === currentMonth ? currentMonthRef : undefined}>
             <button type="button" className="year-month-title" onClick={() => onMonthOpen(month)}>
               {label}
             </button>
