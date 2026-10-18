@@ -1,8 +1,8 @@
 import TaskItem from '@tiptap/extension-task-item'
 
 function urgency(value:unknown){
- const n=typeof value==='number'?value:typeof value==='string' && /^\d{1,3}$/.test(value)?Number(value):NaN
- return Number.isInteger(n) && n>=0 && n<=999?n:null
+ const n=typeof value==='number'?value:typeof value==='string' && /^\d{1,2}$/.test(value)?Number(value):NaN
+ return Number.isInteger(n) && n>=0 && n<=99?n:null
 }
 export const UrgencyTaskItem=TaskItem.extend({
  addAttributes(){return {...this.parent?.(),urgency:{default:null,keepOnSplit:false,parseHTML:element=>urgency(element.getAttribute('data-urgency')),renderHTML:attrs=>attrs.urgency==null?{}:{'data-urgency':attrs.urgency}}}},
@@ -10,7 +10,7 @@ export const UrgencyTaskItem=TaskItem.extend({
   const parsed=this.parent!(token,helpers)
   if(!parsed || Array.isArray(parsed))return parsed
   const first=parsed.content?.[0]?.content?.[0]
-  const match=first?.type==='text' && first.text?.match(/^\[urgency:(\d{1,3})\]\s*/)
+  const match=first?.type==='text' && first.text?.match(/^\[urgency:(\d{1,2})\]\s*/)
   if(match){parsed.attrs={...parsed.attrs,urgency:Number(match[1])};first.text=first.text!.slice(match[0].length);if(!first.text)parsed.content![0].content!.shift()}
   return parsed
  },
@@ -24,14 +24,14 @@ export const UrgencyTaskItem=TaskItem.extend({
   if(!create)return null
   return props=>{
    const view=create(props),input=document.createElement('input')
-   input.type='number';input.min='0';input.max='999';input.step='1';input.inputMode='numeric';input.className='task-urgency';input.placeholder='–';input.contentEditable='false'
-   input.title='Urgency: 0–999. Higher numbers mean more urgent. Leave blank to clear.'
+   input.type='number';input.min='0';input.max='99';input.step='1';input.inputMode='numeric';input.className='task-urgency';input.placeholder='–';input.contentEditable='false'
+   input.title='Urgency: 0–99. Higher numbers mean more urgent. Leave blank to clear.'
    const sync=(node:typeof props.node)=>{const n=urgency(node.attrs.urgency);if(input.value!==(n==null?'':String(n)))input.value=n==null?'':String(n);input.disabled=!props.editor.isEditable;input.setAttribute('aria-label','Urgency for '+(node.textContent.slice(0,100)||'checklist item'))}
    sync(props.node)
    view.dom.insertBefore(input,view.contentDOM || null)
    input.addEventListener('input',()=>{
     const position=props.getPos(),n=input.value===''?null:urgency(input.value)
-    if(input.value!=='' && n==null){input.setCustomValidity('Enter a whole number from 0 to 999.');return}
+    if(input.value!=='' && n==null){input.setCustomValidity('Enter a whole number from 0 to 99.');return}
     input.setCustomValidity('')
     if(typeof position!=='number' || !props.editor.isEditable)return
     const node=props.editor.state.doc.nodeAt(position)

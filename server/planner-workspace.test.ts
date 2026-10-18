@@ -4,6 +4,14 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { createPlannerMcp } from './mcp.js'
 import { saveEvent, readPdf, searchFiles } from './planner-workspace.js'
+import {eventPatch} from './planner-workspace.js'
+import {z} from 'zod'
+
+test('event urgency is optional, nullable and constrained to whole numbers 0–99',()=>{
+ const schema=z.object(eventPatch)
+ for(const urgency of [undefined,null,0,99])assert.ok(schema.safeParse({revision:0,urgency}).success)
+ for(const urgency of [-1,100,0.5,'5'])assert.equal(schema.safeParse({revision:0,urgency}).success,false)
+})
 
 // Tiny parser fixture: one page of selectable text, no external resources.
 export function pdfFixture() {

@@ -12,7 +12,7 @@ export const eventPatch = {
   title:z.string().trim().min(1).max(300).optional(),description:z.string().max(20000).optional(),
   start:datetime.optional(),end:datetime.optional(),allDay:z.boolean().optional(),
   tagIds:z.array(z.string().min(1).max(100)).max(100).optional(),recurrence:recurrence.optional(),
-  urgency:z.number().int().min(0).max(999).nullable().optional(),
+  urgency:z.number().int().min(0).max(99).nullable().optional(),
 }
 type EventPatch = z.infer<z.ZodObject<typeof eventPatch>>
 export async function calendarRow(username:string):Promise<{state:StoredState;revision:number}> {
