@@ -1,5 +1,15 @@
 import { whatsappSignedInPage } from './whatsapp-status.mjs'
 
+export async function waitForWhatsAppChat(page,chatName,timeout=15000){
+  await page.waitForFunction(name=>{
+    const normalize=value=>value.normalize('NFC').replace(/\s+/g,' ').trim()
+    const visible=nodes=>[...nodes].filter(n=>n.getClientRects().length && getComputedStyle(n).visibility!=='hidden')
+    const current=visible(document.querySelectorAll('#main header [data-testid="conversation-info-header-chat-title"]'))
+    const fallback=current.length?current:visible(document.querySelectorAll('#main header [data-testid="conversation-info-header-chat-title-name"],#main header span[title]'))
+    return fallback.length===1 && normalize(fallback[0].textContent || fallback[0].getAttribute('title') || '')===normalize(name)
+  },chatName,{timeout}).catch(()=>{throw new Error('The opened WhatsApp chat did not match the requested name. No messages were read.')})
+}
+
 export async function readWhatsApp(context, { chatName, timeout = 45000 } = {}) {
   let page = context.pages().find(p => { try { return new URL(p.url()).origin === 'https://web.whatsapp.com' } catch { return false } })
   if (!page) { page = await context.newPage(); await page.goto('https://web.whatsapp.com/', { waitUntil: 'domcontentloaded', timeout }) }
@@ -21,8 +31,7 @@ export async function readWhatsApp(context, { chatName, timeout = 45000 } = {}) 
     if (exact !== 1) throw new Error('No unique exact WhatsApp chat was found. Supply its full displayed name.')
     await match.first().click()
     await page.locator('#main header').waitFor({ timeout: 15000 })
-    const header = page.locator('#main header [title]')
-    if (!await header.evaluateAll((nodes, name) => nodes.some(n => n.getAttribute('title') === name), chatName)) throw new Error('The opened WhatsApp chat did not match the requested name.')
+    await waitForWhatsAppChat(page,chatName,Math.min(timeout,15000))
     await page.locator('#main [data-pre-plain-text]').first().waitFor({ timeout: 15000 }).catch(() => {})
     const messages = await page.locator('#main [data-pre-plain-text]').evaluateAll(nodes => nodes.slice(-50).map(n => ({ timestamp: n.getAttribute('data-pre-plain-text'), text: n.innerText.slice(0, 10000) })))
     return { title: chatName, url: page.url(), text: messages.map(m => `${m.timestamp || ''}${m.text}`).join('\n\n').slice(-50000), messages, connected: true, coverage: 'Only the requested chat and its latest rendered messages. Older history, media and attachments are not included. Opening a chat may mark it read in WhatsApp.', images: [], links: [] }
