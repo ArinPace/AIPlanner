@@ -23,11 +23,45 @@ export function checklistSortPlugin() {
    // Finish entering both digits before moving the task out from under the input.
    if (document.activeElement?.classList.contains('task-urgency')) return null
    if (editorFocused() && !transactions.some(tr => tr.getMeta(SORT_CHECKLISTS))) return null
-   const positions: number[] = []
-   state.doc.descendants((node, pos) => { if (node.type.name === 'taskList') positions.push(pos) })
    const tr = state.tr
+   // Blank paragraphs can split one visual checklist into multiple taskList nodes.
+   // Join only these adjacent sections; headings and nonempty text stay boundaries.
+   const blocks: {node: typeof state.doc; pos: number}[] = []
+   state.doc.forEach((node,pos) => blocks.push({node,pos}))
+   for (let index = blocks.length - 1; index >= 0; index--) {
+    if (blocks[index].node.type.name !== 'taskList') continue
+    let first = index
+    while (first > 0) {
+     let previous = first - 1
+     while (previous >= 0 && blocks[previous].node.type.name === 'paragraph' && blocks[previous].node.childCount === 0) previous--
+     if (previous < 0 || blocks[previous].node.type.name !== 'taskList') break
+     first = previous
+    }
+    if (first === index) continue
+    const items: {node: typeof state.doc; start: number}[] = []
+    for (let i = first; i <= index; i++) if (blocks[i].node.type.name === 'taskList') {
+     blocks[i].node.forEach((node,offset) => items.push({node,start:blocks[i].pos + 1 + offset}))
+    }
+    const from = tr.mapping.map(blocks[first].pos)
+    const to = tr.mapping.map(blocks[index].pos + blocks[index].node.nodeSize)
+    let offset = 0
+    let anchor: number | null = null, head: number | null = null
+    for (const item of items) {
+     const oldStart = tr.mapping.map(item.start)
+     if (tr.selection.anchor >= oldStart && tr.selection.anchor < oldStart + item.node.nodeSize) anchor = from + 1 + offset + tr.selection.anchor - oldStart
+     if (tr.selection.head >= oldStart && tr.selection.head < oldStart + item.node.nodeSize) head = from + 1 + offset + tr.selection.head - oldStart
+     offset += item.node.nodeSize
+    }
+    const wasText = tr.selection instanceof TextSelection
+    tr.replaceWith(from,to,blocks[first].node.copy(Fragment.fromArray(items.map(item=>item.node))))
+    if (wasText && anchor !== null && head !== null) tr.setSelection(TextSelection.create(tr.doc,anchor,head))
+    index = first
+   }
+   const positions: number[] = []
+   tr.doc.descendants((node, pos) => { if (node.type.name === 'taskList') positions.push(pos) })
+   const mappingStart = tr.mapping.maps.length
    for (const originalPos of positions.reverse()) {
-    const pos = tr.mapping.map(originalPos)
+    const pos = tr.mapping.slice(mappingStart).map(originalPos)
     const list = tr.doc.nodeAt(pos)
     if (!list) continue
     const items: { node: typeof list; offset: number }[] = []
