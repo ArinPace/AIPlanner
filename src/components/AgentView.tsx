@@ -1,3 +1,4 @@
+import { DictationButton } from './DictationButton'
 import { AgentApproval } from './AgentApproval'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { agentAction, agentRequest } from '../lib/agent'
@@ -20,6 +21,7 @@ export function AgentView({ active, sidebar, setSidebar }: { active: boolean; si
   const selectedChat = useRef<string | null>(null)
   const [jobs, setJobs] = useState<VmJob[]>([])
   const [message, setMessage] = useState('')
+  const [dictating,setDictating]=useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [loadingChat, setLoadingChat] = useState(false)
@@ -116,7 +118,7 @@ export function AgentView({ active, sidebar, setSidebar }: { active: boolean; si
     catch { setError('Could not copy. Check clipboard permission in your browser.') }
   }
   async function send() {
-    if (busy || loadingChat || archived || !message.trim() || !aiReady || !host || jobs.some(pending)) return
+    if (dictating || busy || loadingChat || archived || !message.trim() || !aiReady || !host || jobs.some(pending)) return
     setBusy(true); setError('')
     try {
       let id = selectedChat.current
@@ -157,7 +159,7 @@ export function AgentView({ active, sidebar, setSidebar }: { active: boolean; si
           {jobs.map(job => <article key={job.id} className="assistant-turn"><div className="assistant-user-message">{job.message}<MessageTime value={job.created_at} label="Message sent"/><button type="button" className="assistant-copy" aria-label="Copy your message" onClick={()=>void copyMessage(job.message,job.id+'-user')}>{copied===job.id+'-user'?'Copied':'Copy'}</button></div>{job.reply && <div className="assistant-reply">{job.reply}<MessageTime value={job.finished_at || job.started_at || job.created_at} label={pending(job)?"Reply started":"Assistant replied"}/><button type="button" className="assistant-copy" aria-label="Copy assistant message" onClick={()=>void copyMessage(job.reply,job.id+'-reply')}>{copied===job.id+'-reply'?'Copied':'Copy'}</button></div>}{pending(job) && job.approvals?.map(request=><AgentApproval key={request.id} request={request} onAnswered={refresh}/>)}{pending(job) && <div className="assistant-working"><span className="assistant-pulse"/>{vmJobStatus(job,state,now)}{job.status==='queued' && activeTask && activeTask.id!==job.id && <button type="button" onClick={()=>{if(window.confirm('Stop the other task currently using your VM? Changes it already saved will be kept.'))void agentAction('vm/cancel',{id:activeTask.id}).then(refresh).catch(e=>setError(e.message))}}>Stop current task</button>}<button type="button" onClick={() => { void agentAction('vm/cancel', { id: job.id }).then(refresh).catch(e => setError(e.message)) }}>Stop</button></div>}{job.error && <p role="alert" className="assistant-error">{job.error}</p>}</article>)}<div ref={end}/>
         </div>
       </div>
-      <div className="assistant-compose-wrap"><form className="assistant-compose" onSubmit={e => { e.preventDefault(); void send() }}><label className="sr-only" htmlFor="assistant-message">Message your assistant</label><textarea id="assistant-message" placeholder="Message your assistant…" value={message} rows={2} maxLength={12000} onChange={e => setMessage(e.target.value)} onKeyDown={e => { if (e.key==='Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send() } }}/><div><button type="button" className="assistant-compose-connect" onClick={() => setPanel(aiReady ? 'connections' : 'setup')}>{aiReady ? '+ Add sites' : 'Connect AI'}</button><button type="submit" className="assistant-send" aria-label="Send message" disabled={busy || loadingChat || archived || !message.trim() || !aiReady || !host || jobs.some(pending)}>↑</button></div></form><p className="assistant-compose-note">Your assistant can make mistakes. Check important details.</p></div>
+      <div className="assistant-compose-wrap"><form className="assistant-compose" onSubmit={e => { e.preventDefault(); void send() }}><label className="sr-only" htmlFor="assistant-message">Message your assistant</label><textarea id="assistant-message" placeholder="Message your assistant…" value={message} rows={2} maxLength={12000} onChange={e => setMessage(e.target.value)} onKeyDown={e => { if (e.key==='Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send() } }}/><div><button type="button" className="assistant-compose-connect" onClick={() => setPanel(aiReady ? 'connections' : 'setup')}>{aiReady ? '+ Add sites' : 'Connect AI'}</button><div className="assistant-compose-actions"><DictationButton key={chat || 'new'} enabled={active && !busy && !loadingChat && !archived} onBusy={setDictating} onText={text=>setMessage(previous=>(previous+(previous && !/\s$/.test(previous)?' ':'')+text).slice(0,12000))}/><button type="submit" className="assistant-send" aria-label="Send message" disabled={dictating || busy || loadingChat || archived || !message.trim() || !aiReady || !host || jobs.some(pending)}>↑</button></div></div></form><p className="assistant-compose-note">Your assistant can make mistakes. Check important details.</p></div>
     </section>
     {renameChat && <RenameDialog key={renameChat.id} initialValue={renameChat.title} kind="chat" busy={Boolean(chatAction)} error={error} onClose={()=>{setRenameChat(null);setError('')}} onSave={async name=>{if(chatAction)return;setChatAction(renameChat.id);setError('');try{await agentAction('vm/chats/rename',{id:renameChat.id,title:name});setRenameChat(null);await refresh()}catch(e){setError(e instanceof Error?e.message:'Could not rename chat.')}finally{setChatAction(null)}}}/>}
     {state && panel && <AgentSettings state={state} now={now} mode={panel} aiReady={aiReady} onClose={closePanel} refresh={refresh}/>}
