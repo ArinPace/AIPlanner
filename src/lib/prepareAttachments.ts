@@ -5,8 +5,9 @@ async function thumbnail(data:string){const image=new window.Image();image.src=d
 export async function prepareAttachment(file:File):Promise<ChatAttachment>{
  if(!file.size || file.size>ATTACHMENT_LIMIT)throw Error('Choose nonempty files up to 2 MB. Up to four attachments can share a 2 MB total limit.')
  const base={id:crypto.randomUUID(),name:file.name.slice(0,160),size:file.size}
- if(['image/png','image/jpeg','image/webp'].includes(file.type)){
-  const data=await dataUrl(file);return {...base,kind:'image',data,thumbnail:await thumbnail(data),coverage:'Attached image supplied to the agent for visual reading.'}
+ const imageType=file.type || (/\.png$/i.test(file.name)?'image/png':/\.jpe?g$/i.test(file.name)?'image/jpeg':/\.webp$/i.test(file.name)?'image/webp':'')
+ if(['image/png','image/jpeg','image/webp'].includes(imageType)){
+  const data=await dataUrl(new Blob([file],{type:imageType}));return {...base,kind:'image',data,thumbnail:await thumbnail(data),coverage:'Attached image supplied to the agent for visual reading.'}
  }
  if(file.type==='application/pdf' || /\.pdf$/i.test(file.name)){
   const buffer=await file.arrayBuffer()
@@ -24,9 +25,9 @@ export async function prepareAttachment(file:File):Promise<ChatAttachment>{
    return {...base,kind:'pdf',data:await dataUrl(new Blob([buffer],{type:'application/pdf'})),text:text.join('\n\n').slice(0,50000),images,thumbnail:images[0]?await thumbnail(images[0]):undefined,coverage:`PDF has ${pdf.numPages} pages. Text extracted from first ${Math.min(pdf.numPages,20)} pages, capped at 50,000 characters; image previews of first ${Math.min(pdf.numPages,4)} pages supplied. Other pages/attachments are not visually covered.`}
   }finally{await task.destroy()}
  }
- if(file.type.startsWith('text/') || /\.(txt|md|csv|json|log|js|ts|tsx|jsx|py|java|html|css|xml|yaml|yml)$/i.test(file.name)){
+ if(file.type.startsWith('text/') || /\.(txt|md|csv|json|log|js|ts|tsx|jsx|py|java|html|htm|css|xml|yaml|yml)$/i.test(file.name)){
   const text=await file.text();if(text.includes('\0'))throw Error('This file is not a supported text document.')
   return {...base,kind:'text',data:await dataUrl(new Blob([file],{type:'text/plain'})),text:text.slice(0,50000),coverage:text.length>50000?'First 50,000 text characters supplied; file is truncated.':'Full attached text supplied.'}
  }
- throw Error('Supported attachments: PNG, JPEG, WebP, PDF, and plain text/code/CSV/JSON files.')
+ throw Error(file.name+': supported attachments: PNG, JPEG, WebP, PDF, and plain text/code/CSV/JSON files.')
 }

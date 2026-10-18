@@ -2064,3 +2064,9 @@ html, body { touch-action: pan-x pan-y; }
 .assistant-branch-banner { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }.assistant-branch-banner .assistant-copy { margin:0; }
 
 .assistant-queue { border:1px solid #dadce0; border-radius:18px; padding:7px 11px; color:#555; background:transparent; font:inherit; font-size:13px; cursor:pointer; }.assistant-queue:disabled { opacity:.45; cursor:default; }
+
+.assistant-chat { position: relative; }
+.assistant-file-drop { position: absolute; inset: 8px; z-index: 20; pointer-events: none; display: grid; place-items: center; border: 2px dashed var(--blue, #1a73e8); border-radius: 18px; background: color-mix(in srgb, var(--bg, white) 92%, transparent); }
+.assistant-file-drop > div { display: grid; gap: 8px; text-align: center; padding: 24px; color: var(--text, #202124); }
+.assistant-file-drop strong { font-size: 22px; }
+.assistant-file-drop span { font-size: 14px; color: var(--muted, #666); }
