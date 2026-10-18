@@ -135,7 +135,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
     checked(await db().from('planner_vm_settings').upsert({ username }, { onConflict: 'username', ignoreDuplicates: true }))
     const [hosts, chats, settings, runs, provisioning, accounts, deletedChats, queue] = await Promise.all([
       db().from('planner_vm_hosts').select(publicHost).eq('username', username).is('revoked_at', null).order('created_at', { ascending: false }),
-      db().from('planner_vm_chats').select('id,title,is_main,archived,parent_chat_id,parent_job_id,created_at,updated_at').eq('username', username).is('deleted_at',null).order('is_main',{ascending:false}).order('updated_at', { ascending: false }).limit(100),
+      db().from('planner_vm_chats').select('id,title,is_main,pinned,archived,parent_chat_id,parent_job_id,created_at,updated_at').eq('username', username).is('deleted_at',null).order('is_main',{ascending:false}).order('pinned',{ascending:false}).order('updated_at', { ascending: false }).limit(100),
       db().from('planner_vm_settings').select('sources,schedule_enabled,sites,ai_provider,schedule,whatsapp_read_consent_at,message_read_consent').eq('username', username).single(),
       db().from('planner_vm_jobs').select(publicJob).eq('username', username).order('created_at', { ascending: false }).limit(20),
       db().from('planner_vm_provisioning').select('status,error,wake_until,power_state,power_updated_at').eq('username', username).maybeSingle(),
@@ -289,6 +289,15 @@ export async function handleVmRequest(request: Request, path: string, username: 
     const {data,error}=await db().rpc('planner_branch_chat',{p_username:username,p_job:input.jobId,...(edited===undefined?{}:{p_edit:edited})})
     if(error)throw new ApiError(error.code==='P0001'?409:503,error.code==='P0001'?error.message:'Could not branch this chat.')
     return json(data,201)
+  }
+  if(path === '/api/agent/vm/chats/pin'){
+    if(!uuid(input.id)||typeof input.pinned!=='boolean')throw new ApiError(400,'Choose a chat and pin state.');
+    const chat=checked(await db().from('planner_vm_chats').select('id,is_main').eq('username',username).eq('id',input.id).is('deleted_at',null).maybeSingle());
+    if(!chat)throw new ApiError(404,'Chat not found.');
+    if(chat.is_main&&!input.pinned)throw new ApiError(409,'Main Chat is permanently pinned.');
+    const saved=checked(await db().from('planner_vm_chats').update({pinned:input.pinned}).eq('username',username).eq('id',input.id).is('deleted_at',null).select('id,pinned').maybeSingle());
+    if(!saved)throw new ApiError(404,'Chat not found.');
+    return json({ok:true,chat:saved});
   }
   if (path === '/api/agent/vm/chats/rename') {
     if(!uuid(input.id) || typeof input.title!=='string' || !input.title.trim() || input.title.trim().length>100)throw new ApiError(400,'Use a chat name between 1 and 100 characters.')
