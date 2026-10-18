@@ -1,8 +1,9 @@
+import { eventAppearance } from '../lib/eventAppearance'
 import { PlannerDate as Date } from '../lib/timezone.js'
 import { urgencyColor } from '../lib/urgencyColor'
 import { useEffect, useRef, useState, useMemo } from 'react'
 import type { CalendarEvent, CalendarView, Occurrence, Tag } from '../types'
-import { contrastText, eventColor } from '../lib/colors'
+import { eventColor } from '../lib/colors'
 import {
   endOfDay,
   formatHour,
@@ -101,8 +102,8 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
                   <button
                     key={`${item.event.id}-${item.start.toISOString()}`}
                     type="button"
-                    className="event-chip"
-                    style={{ background: color, color: contrastText(color) }}
+                    className={`event-chip ${item.event.reminder?'reminder-event':''}`}
+                    style={eventAppearance(color,item.event.reminder)}
                     onClick={(event) => {
                       event.stopPropagation()
                       onEventClick(item.event, item.start)
@@ -175,8 +176,7 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
                         minHeight:height,
                         width,
                         left,
-                        background: color,
-                        color: contrastText(color),
+                        ...eventAppearance(color,item.event.reminder),
                       }}
                       onClick={() => onEventClick(item.event, item.start)}
                     >
@@ -185,7 +185,7 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
                         {item.event.recurrence.frequency !== 'none' && <RepeatIcon />}
                         {item.event.title || '(No title)'}
                       </span>
-                      <span className="event-time">{item.event.reminder?'Reminder ? '+formatTimeCompact(item.start):formatTimeCompact(item.start)+' ? '+formatTimeCompact(item.end)}</span>
+                      <span className="event-time">{item.event.reminder?'Reminder \u00b7 '+formatTimeCompact(item.start):formatTimeCompact(item.start)+' \u2013 '+formatTimeCompact(item.end)}</span>
                     </button>
                   )
                 })}

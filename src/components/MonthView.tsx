@@ -1,7 +1,8 @@
+import { eventAppearance } from '../lib/eventAppearance'
 import { urgencyColor } from '../lib/urgencyColor'
 import { useEffect, useRef, useState } from 'react'
 import type { CalendarEvent, Occurrence, Tag } from '../types'
-import { contrastText, eventColor } from '../lib/colors'
+import { eventColor } from '../lib/colors'
 import {
   endOfDay,
   formatTimeCompact,
@@ -88,8 +89,8 @@ export function MonthView({ cursor, zoom, occurrences, tags, onDayClick, onDayOp
                     <button
                       key={`${item.event.id}-${item.start.toISOString()}`}
                       type="button"
-                      className="event-chip"
-                      style={{ background: color, color: contrastText(color) }}
+                      className={`event-chip ${item.event.reminder?'reminder-event':''}`}
+                      style={eventAppearance(color,item.event.reminder)}
                       onClick={(event) => {
                         event.stopPropagation()
                         onEventClick(item.event, item.start)
@@ -97,7 +98,7 @@ export function MonthView({ cursor, zoom, occurrences, tags, onDayClick, onDayOp
                     >
                       {item.event.recurrence.frequency !== 'none' && <RepeatIcon />}
                       {!item.event.allDay && <span className="event-time">{formatTimeCompact(item.start)}</span>}
-                      <span className="event-title">{item.event.urgency!=null && <span className="event-urgency-badge" style={urgencyColor(item.event.urgency)} aria-label={'Urgency '+item.event.urgency}>{item.event.urgency}</span>}{item.event.reminder && '? '}{item.event.title || '(No title)'}</span>
+                      <span className="event-title">{item.event.urgency!=null && <span className="event-urgency-badge" style={urgencyColor(item.event.urgency)} aria-label={'Urgency '+item.event.urgency}>{item.event.urgency}</span>}{item.event.title || '(No title)'}</span>
                     </button>
                   )
                 })}
