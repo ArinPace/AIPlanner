@@ -23,6 +23,10 @@ export function buildDayPlan(profile:PlanningProfile,events:CalendarEvent[],date
   const day=addDays(start,offset),key=toDateInput(day),dayEnd=addDays(day,1).getTime()
   const clock=(time:string)=>{const [h,m]=time.split(':').map(Number);return new Date(day.getFullYear(),day.getMonth(),day.getDate(),h,m).getTime()}
   const wake=clock(profile.wake),sleep=clock(profile.sleep),intensity=intensityFor(profile,key,day.getDay())
+  const meals=profile.meals.map(meal=>({...meal,start:clock(meal.time),end:clock(meal.time)+meal.minutes*minute})).sort((a,b)=>a.start-b.start)
+  const recovery=profile.recoveryUntil&&key<=profile.recoveryUntil
+  const restActivities=profile.breakActivities.filter(activity=>!recovery||!/\b(walk|run|running|workout|gym|jogging)\b/i.test(activity))
+  const activities=restActivities.length?restActivities:['Lie down and close your eyes','Listen to calming music']
   const focus=Math.round(25+intensity*.5),rest=Math.round(20-intensity*.12),buffer=Math.round(10-intensity*.07)
   let workBudget=Math.round((sleep-wake)/minute*.75*intensity/100)
   const busy=fixed.filter(e=>e.start.getTime()<dayEnd&&e.end.getTime()>day.getTime()).map(e=>({a:Math.max(day.getTime(),e.start.getTime()-buffer*minute),b:Math.min(dayEnd,e.end.getTime()+buffer*minute)})).sort((a,b)=>a.a-b.a)
@@ -47,9 +51,9 @@ export function buildDayPlan(profile:PlanningProfile,events:CalendarEvent[],date
    while(a<slot.b){
     if(a<wake || a>=sleep){const b=Math.min(slot.b,a<wake?wake:dayEnd);add('Sleep / wind down',a,b,'sleep');a=b;continue}
     const awakeEnd=Math.min(slot.b,sleep)
-    const current=new Date(a),hour=current.getHours(),mins=current.getMinutes()
-    if([8,13,19].includes(hour)&&mins<30){const b=Math.min(awakeEnd,clock(String(hour).padStart(2,'0')+':30'));add(hour===8?'Breakfast':hour===13?'Lunch':'Dinner',a,b,'routine');a=b;continue}
-    const nextMeal=[8,13,19].map(h=>clock(String(h).padStart(2,'0')+':00')).find(t=>t>a)
+    const meal=meals.find(meal=>a>=meal.start&&a<meal.end)
+    if(meal){const b=Math.min(awakeEnd,meal.end);add(meal.title,a,b,'routine');a=b;continue}
+    const nextMeal=meals.map(meal=>meal.start).find(t=>t>a)
     const limit=Math.min(awakeEnd,nextMeal ?? awakeEnd)
     const available=(limit-a)/minute
     const eligible=profile.tasks.filter(t=>t.status==='todo'&&(remaining.get(t.id)||0)>0&&(!t.preferredDays.length||t.preferredDays.includes(day.getDay()))&&(!t.earliestDate||t.earliestDate<=key)&&(!t.deadline||new Date(t.deadline).getTime()>a))
@@ -63,11 +67,11 @@ export function buildDayPlan(profile:PlanningProfile,events:CalendarEvent[],date
      const beforeDue=task.deadline?(new Date(task.deadline).getTime()-a)/minute:Infinity
      const work=Math.min(remaining.get(task.id)!,focus,available,beforeDue,workBudget)
      if(work>=5){const b=a+work*minute;add(task.title,a,b,'task',task.id,task.urgency);remaining.set(task.id,remaining.get(task.id)!-work);workBudget-=work;lastCategory=task.category;a=b
-      const restEnd=Math.min(limit,a+rest*minute);add(profile.breakActivities[breakIndex++%profile.breakActivities.length],a,restEnd,'break');a=restEnd;continue}
+      const restEnd=Math.min(limit,a+rest*minute);add(activities[breakIndex++%activities.length],a,restEnd,'break');a=restEnd;continue}
     }
     // Unallocated time is deliberate recovery/leisure, never invented obligations.
     const b=Math.min(limit,a+30*minute)
-    add(profile.breakActivities[breakIndex++%profile.breakActivities.length],a,b,'break');a=b
+    add(activities[breakIndex++%activities.length],a,b,'break');a=b
    }
   }
  }

@@ -6,12 +6,14 @@ export type PlanningProfile = {
  enabled: boolean; onboarded: boolean; wake: string; sleep: string; intensity: number;
  weekdays: (number|null)[]; overrides: Record<string,number>; recoveryUntil: string | null;
  goals: string; preferences: string; breakActivities: string[];
+ meals: {title:string;time:string;minutes:number}[];
  tasks: PlanningTask[]; learning: Record<string,{samples:number;ratio:number}>;
  feedback: {id:string;taskId:string;estimated:number;actual:number|null;outcome:'completed'|'missed';at:string}[];
 }
 export const DEFAULT_PLANNING: PlanningProfile = {
  enabled:false,onboarded:false,wake:'07:00',sleep:'23:00',intensity:50,weekdays:[null,null,null,null,null,null,null],overrides:{},recoveryUntil:null,
  goals:'',preferences:'',breakActivities:['Close your eyes and rest','Listen to calming music','Gentle breathing: inhale for 4 seconds, exhale for 6','Take a short walk'],tasks:[],learning:{},feedback:[],
+ meals:[{title:'Breakfast',time:'08:00',minutes:30},{title:'Lunch',time:'13:00',minutes:30},{title:'Dinner',time:'19:00',minutes:30}],
 }
 export function intensityFor(profile:PlanningProfile,date:string,weekday:number){
  const value=profile.overrides[date] ?? profile.weekdays[weekday] ?? profile.intensity

@@ -271,6 +271,8 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
     if (!draft) return
     const saved = eventFromDraft(draft, editingId ?? createId())
     setEvents((current) => {
+      const previous=current.find(event=>event.id===saved.id)
+      if(previous?.planning)saved.planning={...previous.planning,locked:true}
       const without = current.filter((event) => event.id !== saved.id)
       return [...without, saved]
     })
