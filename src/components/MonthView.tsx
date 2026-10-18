@@ -14,7 +14,6 @@ import {
   startOfDay,
   WEEKDAYS,
 } from '../lib/dates'
-import { RepeatIcon } from './Icons'
 
 const TARGET_WEEK_HEIGHT = 112
 
@@ -96,7 +95,6 @@ export function MonthView({ cursor, zoom, occurrences, tags, onDayClick, onDayOp
                         onEventClick(item.event, item.start)
                       }}
                     >
-                      {item.event.recurrence.frequency !== 'none' && <RepeatIcon />}
                       {!item.event.allDay && <span className="event-time">{formatTimeCompact(item.start)}</span>}
                       <span className="event-title">{item.event.urgency!=null && <span className="event-urgency-badge" style={urgencyColor(item.event.urgency)} aria-label={'Urgency '+item.event.urgency}>{item.event.urgency}</span>}{item.event.title || '(No title)'}</span>
                     </button>

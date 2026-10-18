@@ -13,7 +13,6 @@ import {
   overlaps,
   startOfDay,
 } from '../lib/dates'
-import { RepeatIcon } from './Icons'
 import {layoutTimeCards} from '../lib/timeLayout'
 
 type TimeGridViewProps = {
@@ -131,7 +130,6 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
                       onEventClick(item.event, item.start)
                     }}
                   >
-                    {item.event.recurrence.frequency !== 'none' && <RepeatIcon />}
                     <span className="event-title">{item.event.urgency!=null && <span className="event-urgency-badge" style={urgencyColor(item.event.urgency)} aria-label={'Urgency '+item.event.urgency}>{item.event.urgency}</span>}{item.event.title || '(No title)'}</span>
                   </button>
                 )
@@ -204,7 +202,6 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
                     >
                       <span className="event-title">
                         {item.event.urgency!=null && <span className="event-urgency-badge" style={urgencyColor(item.event.urgency)} aria-label={'Urgency '+item.event.urgency}>{item.event.urgency}</span>}
-                        {item.event.recurrence.frequency !== 'none' && <RepeatIcon />}
                         {item.event.title || '(No title)'}
                       </span>
                       <span className="event-time">{item.event.reminder?'Reminder \u00b7 '+formatTimeCompact(item.start):formatTimeCompact(item.start)+' \u2013 '+formatTimeCompact(item.end)}</span>
