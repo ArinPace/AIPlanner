@@ -29,8 +29,9 @@ test('MCP exposes discovery and checks write/browser scopes before any storage o
     const tools = await client.listTools()
     assert.ok(tools.tools.find(t=>t.name==='planner_read'))
     assert.ok(tools.tools.find(t=>t.name==='browser_read'))
-    for(const name of ['planner_calendar_read','planner_files_search','planner_read_file','planner_update_item'])assert.ok(tools.tools.some(t=>t.name===name))
+    for(const name of ['planner_calendar_read','planner_files_search','planner_read_file','planner_update_item','planner_memory_read','planner_memory_write'])assert.ok(tools.tools.some(t=>t.name===name))
     for(const [name,args] of [
+      ['planner_memory_write',{revision:0,content:'No access'}],
       ['planner_save_event',{id:'event',revision:0,title:'Changed'}],
       ['planner_update_item',{id:'file',revision:0,name:'Changed'}],
       ['planner_save_note',{folderId:null,name:'No access',content:'text',revision:0}],
