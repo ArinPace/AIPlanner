@@ -44,7 +44,9 @@ export function NoteEditor({value,richText,richTextSource,onChange,onNew,onDelet
    <div className="apple-toolbar-trailing"><button type="button" title={pinned?'Unpin note':'Pin note'} aria-label={pinned?'Unpin note':'Pin note'} onClick={onPin}><NoteIcon name="pin"/></button><button type="button" title="Send a copy" aria-label="Send a copy" onClick={onShare}><NoteIcon name="share"/></button><button type="button" title="More" aria-label="More note actions" onClick={onMore}><NoteIcon name="more"/></button><button type="button" title="Search files" aria-label="Search files" onClick={onSearch}><NoteIcon name="search"/></button></div>
   </div>
   {attachment&&<div className="apple-attachment-form"><label>{attachment==='image'?'Image URL':'Link URL'}<input type="url" autoFocus value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://" onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addLink()}}}/></label><button type="button" onClick={addLink} disabled={!/^https?:\/\//i.test(url)}>Add</button><button type="button" onClick={()=>setAttachment(null)}>Cancel</button></div>}
-  {header}
-  <EditorContent editor={editor}/>
+  <div className="apple-note-scroll">
+   {header}
+   <EditorContent editor={editor}/>
+  </div>
  </div>
 }
