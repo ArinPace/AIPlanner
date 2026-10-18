@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto'
 import { openView } from './browser.mjs'
 import { whatsappPermissionText } from './whatsapp-permission.mjs'
 import { browserRuntimeEnv } from './browser-runtime-env.mjs'
+import {plannerGuidance} from './planner-guidance.mjs'
 import { messagePermissionText } from './message-permission.mjs'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
@@ -58,6 +59,7 @@ export async function connectClaude(dataDir) {
   return openView(dataDir, destination)
 }
 export async function claudeChat({ dataDir, job, remote, origin, token, instructions, progress }) {
+  instructions += '\n\n'+plannerGuidance
   instructions += '\n\n' + whatsappPermissionText(remote.whatsappReadConsentAt)
   instructions += '\n\n' + messagePermissionText(remote.messageReadConsent)
   const sessionPath = path.join(dataDir, 'claude-sessions.json')

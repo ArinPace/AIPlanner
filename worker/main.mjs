@@ -14,6 +14,7 @@ import { relayApproval } from './approval-bridge.mjs'
 import { browserRuntimeEnv } from './browser-runtime-env.mjs'
 import { messagePermissionText } from './message-permission.mjs'
 import {refreshRuntimeInstructions} from './runtime-instructions.mjs'
+import {plannerGuidance} from './planner-guidance.mjs'
 
 const dataDir = process.env.PLANNER_DATA_DIR || '/var/lib/planner'
 const workerStartedAt = new Date().toISOString()
@@ -95,7 +96,7 @@ async function chat(job, auth, remote) {
     const params = { cwd: path.join(dataDir, 'workspace'), ...(process.env.PLANNER_MODEL ? { model: process.env.PLANNER_MODEL } : auth.type === 'codex' ? {} : { model: 'gpt-6-luna' }), approvalPolicy: job.kind === 'sync' ? 'never' : 'on-request', sandbox: 'workspace-write', developerInstructions: instructions + '\n\n' + whatsappPermissionText(remote.whatsappReadConsentAt) + '\n\n' + messagePermissionText(remote.messageReadConsent) }
     const thread = await rpc.request(threadId ? 'thread/resume' : 'thread/start', { ...params, ...(threadId ? { threadId, excludeTurns: true } : {}) }, 60000)
     threadId = thread.thread.id
-    await refreshRuntimeInstructions(rpc,{threadId,instructions:params.developerInstructions,dataDir,resumed:Boolean(job.thread_id)})
+    await refreshRuntimeInstructions(rpc,{threadId,instructions:params.developerInstructions+'\n\n'+plannerGuidance,dataDir,resumed:true})
     await report()
     await rpc.request('turn/start', { threadId, input: [{ type: 'text', text: `Enabled websites: ${JSON.stringify(Object.fromEntries(remote.sources.map(source=>[source,sourceUrls[source]])))}.\n\n${job.message}` }] })
     await done
