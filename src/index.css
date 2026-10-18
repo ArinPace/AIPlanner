@@ -2072,3 +2072,7 @@ html, body { touch-action: pan-x pan-y; }
 .assistant-file-drop span { font-size: 14px; color: var(--muted, #666); }
 
 .folder-tree-row.is-drag-over, .folder-card.is-drag-over, .files-root-button.is-drag-over { outline: 2px dashed var(--blue); outline-offset: -2px; background: color-mix(in srgb, var(--blue) 12%, transparent); }
+
+.timed-event { box-sizing:border-box; }
+.timed-event.is-short { padding-top:0; padding-bottom:0; }
+.timed-event.is-short .event-time { display:none; }

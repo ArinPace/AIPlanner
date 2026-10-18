@@ -37,7 +37,7 @@ export function MonthView({ cursor, zoom, events, onMonthChange, tags, onDayClic
   const occurrences = useMemo(() => expandEvents(events, range.start, endOfDay(addDays(range.start, range.weeks * 7 - 1))), [events, range])
   const dayItems = useMemo(() => days.map(day => {
     const start = startOfDay(day).getTime(), end = endOfDay(day).getTime()
-    return occurrences.filter(item => item.start.getTime() < end && item.end.getTime() > start)
+    return occurrences.filter(item => item.start.getTime() < end && item.end.getTime() > start).sort((a,b)=>a.start.getTime()-b.start.getTime() || a.end.getTime()-b.end.getTime())
   }), [days, occurrences])
   const scrollFrame = useRef<number | null>(null)
   useEffect(() => () => { if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current) }, [])

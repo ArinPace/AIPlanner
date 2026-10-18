@@ -13,3 +13,8 @@ test('expanded short cards avoid visually covering the next event and exact boun
   assert.equal(result[2].cols,1)
   assert.deepEqual(layoutTimeCards([]),[])
 })
+
+test('a long sequence of fractional-minute adjacent blocks stays full width',()=>{
+ const blocks=Array.from({length:20},(_,i)=>({top:100+i*21.6,bottom:100+(i+1)*21.6+Number.EPSILON*1000}))
+ assert.ok(layoutTimeCards(blocks).every(item=>item.col===0&&item.cols===1))
+})

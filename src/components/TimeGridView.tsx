@@ -1,10 +1,11 @@
 import { eventAppearance } from '../lib/eventAppearance'
 import { PlannerDate as Date } from '../lib/timezone.js'
 import { urgencyColor } from '../lib/urgencyColor'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import type { CalendarEvent, CalendarView, Occurrence, Tag } from '../types'
 import { eventColor } from '../lib/colors'
 import {
+  addDays,
   endOfDay,
   formatHour,
   formatTimeCompact,
@@ -45,7 +46,6 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
   const scrollRef = useRef<HTMLDivElement>(null)
   const prevZoom = useRef(zoom)
   const bodyRef=useRef<HTMLDivElement>(null)
-  const [cardHeights,setCardHeights]=useState<Record<string,number>>({})
   const hourHeight = Math.round(BASE_HOUR_HEIGHT * zoom)
 
   useEffect(() => {
@@ -63,16 +63,6 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
     node.scrollTop = (midpoint / oldHeight) * nextHeight - node.clientHeight / 2
     prevZoom.current = zoom
   }, [zoom])
-
-  useEffect(()=>{
-    const observer=new ResizeObserver(entries=>setCardHeights(current=>{
-      let next=current
-      for(const entry of entries){const key=(entry.target as HTMLElement).dataset.layoutKey!;const height=Math.ceil(entry.target.getBoundingClientRect().height);if(Math.abs((current[key]??0)-height)>1){if(next===current)next={...current};next[key]=height}}
-      return next
-    }))
-    bodyRef.current?.querySelectorAll('.timed-event').forEach(node=>observer.observe(node))
-    return()=>observer.disconnect()
-  },[occurrences,view,cursor,hourHeight])
 
   const now = new Date()
   const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 60) * hourHeight
@@ -127,7 +117,7 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
                   <button
                     key={`${item.event.id}-${item.start.toISOString()}`}
                     type="button"
-                    className={`event-chip ${item.event.reminder?'reminder-event':''}`}
+                    className={`event-chip ${item.event.reminder?'reminder-event':''}`}  
                     style={eventAppearance(color,item.event.reminder)}
                     onClick={(event) => {
                       event.stopPropagation()
@@ -157,12 +147,12 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
             const timed = occurrences.filter((item) => !item.event.allDay && clipToDay(item, day))
             const laidOut = layoutTimeCards(timed.map(item=>{
               const clipped=clipToDay(item,day)!
-              const top=(clipped.start.getHours()*60+clipped.start.getMinutes())/60*hourHeight
-              const endMinutes=clipped.end.getHours()*60+clipped.end.getMinutes()+clipped.end.getSeconds()/60
-              const startMinutes=clipped.start.getHours()*60+clipped.start.getMinutes()
-              const height=Math.max((endMinutes-startMinutes)/60*hourHeight,18)
+              const top=(clipped.start.getHours()*60+clipped.start.getMinutes()+clipped.start.getSeconds()/60)/60*hourHeight
+              const endMinutes=clipped.end.getTime()===addDays(startOfDay(day),1).getTime()?1440:clipped.end.getHours()*60+clipped.end.getMinutes()+clipped.end.getSeconds()/60
+              const startMinutes=clipped.start.getHours()*60+clipped.start.getMinutes()+clipped.start.getSeconds()/60
+              const height=Math.max((endMinutes-startMinutes)/60*hourHeight,1)
               const key=day.toDateString()+'/'+item.event.id+'/'+item.start.toISOString()
-              return {item,key,top,height,bottom:top+Math.max(height,cardHeights[key]??0)}
+              return {item,key,top,height,bottom:top+height}
             }))
             const showNow = isToday(day)
 
@@ -192,12 +182,14 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
                     <button
                       key={`${item.event.id}-${item.start.toISOString()}`}
                       type="button"
-                      className={`timed-event ${item.event.reminder?'reminder-event':''}`}
+                      className={`timed-event ${item.event.reminder?'reminder-event':''} ${height<32?'is-short':''}`} 
                       data-layout-key={key}
                       title={`${item.event.reminder?'Reminder: ':''}${item.event.title} - ${formatTimeCompact(item.start)}${item.event.reminder?'':' - '+formatTimeCompact(item.end)}`}
                       style={{
                         top,
-                        minHeight:height,
+                        height,
+                        minHeight:0,
+                        maxHeight:height,
                         width,
                         left,
                         ...eventAppearance(color,item.event.reminder),
