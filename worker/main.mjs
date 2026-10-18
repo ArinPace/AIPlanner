@@ -57,7 +57,7 @@ const instructions = `You are this user's AI Planner assistant. Use the planner 
 async function chat(job, auth, remote) {
   if (!auth) throw new Error('Connect an AI account in Setup first.')
   if (liveBrowserNeedsSignIn()) throw new Error('Finish signing into your websites and select Verify connections before starting an agent run.')
-  if (auth.type === 'claude') return claudeChat({ dataDir, job, remote, origin, token: config.token, instructions, progress: reply => api('progress', { id: job.id, lease: job.lease, reply }) })
+  if (auth.type === 'claude') return claudeChat({ dataDir, job, remote, origin, token: config.token, instructions:instructions+'\n\n'+plannerGuidance, progress: reply => api('progress', { id: job.id, lease: job.lease, reply }) })
   const root = path.dirname(fileURLToPath(import.meta.url)), node = process.execPath
   const executable = path.join(root, 'node_modules', '.bin', 'codex')
   const args = ['app-server', '--listen', 'stdio://']
