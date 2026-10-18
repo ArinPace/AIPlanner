@@ -5,13 +5,19 @@ import { automaticImageSize } from './automatic-image-size.mjs'
  */
 export async function messageImages(page,result,selector,{limit=30,imageIndex}={}) {
  const rows=page.locator(selector).filter({visible:true})
- const count=await rows.count(), candidates=[],unavailable=[]
+ const count=await rows.count(), candidates=[],unavailable=[],seen=[]
  for(let rowIndex=Math.max(0,count-limit);rowIndex<count;rowIndex++){
   const images=rows.nth(rowIndex).locator('img:not(.c-avatar__image):not([alt="user-profile-picture"]),canvas')
   for(const image of await images.all()){
+   const handle=await image.elementHandle()
+   if(!handle)continue
+   if(await handle.evaluate((node,previous)=>previous.includes(node),seen)){await handle.dispose();continue}
+   seen.push(handle)
    const metadata=await image.evaluate(n=>{
     const r=n.getBoundingClientRect(),style=getComputedStyle(n)
     if(r.width<60 || r.height<60 || style.visibility==='hidden' || style.display==='none' || n.closest('[contenteditable="true"],button[aria-label*="avatar" i]') || /avatar|profile.picture/i.test(n.className+' '+(n.getAttribute('alt')||'')))return null
+    const thumb=n.closest('[data-testid="image-thumb"]')
+    if(thumb && [...thumb.querySelectorAll('img')].some(other=>other!==n && other.complete && other.naturalWidth>n.naturalWidth && other.getBoundingClientRect().width>=60))return null
     return {alt:(n.getAttribute('alt')||'').slice(0,300),width:n.naturalWidth||n.width,height:n.naturalHeight||n.height,loaded:!(n instanceof HTMLImageElement) || (n.complete && n.naturalWidth>0)}
    }).catch(()=>null)
    if(metadata)candidates.push({image,metadata:{...metadata,index:candidates.length,renderedRowIndex:rowIndex}})
@@ -41,5 +47,6 @@ export async function messageImages(page,result,selector,{limit=30,imageIndex}={
   }catch{unavailable.push(metadata.index)}
  }
  if(imageIndex!=null && !selected.length)unavailable.push(imageIndex)
+ await Promise.allSettled(seen.map(handle=>handle.dispose()))
  return {content:[{type:'text',text:JSON.stringify({...result,images:candidates.map(c=>c.metadata),automaticImages:{attached,unavailable,remaining:candidates.filter(c=>!attached.includes(c.metadata.index)).map(c=>c.metadata.index)},imageReading:'Inspect attached image pixels automatically. Use the same conversation reader with imageIndex for additional listed images. Only rendered image messages are covered; unopened files, videos, audio, disappearing media and unloaded history are not read.'})},...content]}
 }

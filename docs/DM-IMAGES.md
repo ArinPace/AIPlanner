@@ -29,3 +29,5 @@ worker/whatsapp-reader.test.mjs worker/slack-messages.test.mjs
 worker/selected-messages.test.mjs`. Fixtures verify all five services' message
 selectors, actual returned image pixels, image-only conversations, scoping,
 limits, unavailable images, and page lifetime.
+
+Live verification on 2026-10-18: the production agent read the selected Arnav WhatsApp chat, received two image blocks with zero unavailable images, and confirmed readable schedule text in both. The other four services were covered with browser fixtures, not live private-conversation reads in this verification. Current WhatsApp uses `data-testid="msg-container"`; text-only `data-pre-plain-text` nodes omit image messages. Lower-resolution layered previews are excluded when a sharper image is rendered in the same image thumbnail.
