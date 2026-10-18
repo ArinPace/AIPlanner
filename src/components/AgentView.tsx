@@ -159,7 +159,7 @@ export function AgentView({ active, sidebar, setSidebar }: { active: boolean; si
       if (!id) { const created = await agentAction<VmChat>('vm/chats', { title: (message || attachments[0]?.name || 'New conversation').slice(0,80) }); id = created.id; selectedChat.current = id; setChat(id); untitled = false }
       await agentAction('vm/send', { chatId: id, message, attachments, queue, ...(untitled ? { title: (message || attachments[0]?.name || 'New conversation').slice(0,80) } : {}) })
       if(epoch===attachmentEpoch.current && selectedChat.current===id){setMessage(current=>current===submittedMessage?'':current);setAttachments(current=>current.filter(a=>!submittedIds.has(a.id)))}
-      await refresh()
+      void refresh().catch(e=>setError(e.message))
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not send your message.') }
     finally { setBusy(false) }
   }
