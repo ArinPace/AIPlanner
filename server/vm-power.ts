@@ -19,9 +19,9 @@ export function scheduleSlot(now = new Date(), schedule = DEFAULT_VM_SCHEDULE, p
   if (!time) return null
   return `${p('year')}-${p('month')}-${p('day')} ${time.endsWith(':00') ? time.slice(0,2) : time}`
 }
-export function shouldRunVm(input: { wakeUntil?: string | null; jobs: { status: string; kind: string; result?: { expiresAt?: string }; schedule_slot?: string | null; finished_at?: string | null }[]; scheduled: boolean; schedule?: VmSchedule }, now = new Date()): boolean {
+export function shouldRunVm(input: { wakeUntil?: string | null; jobs: { chat_id?:string|null; status: string; kind: string; result?: { expiresAt?: string }; schedule_slot?: string | null; finished_at?: string | null }[]; scheduled: boolean; schedule?: VmSchedule }, now = new Date()): boolean {
   if (input.wakeUntil && Date.parse(input.wakeUntil) > now.getTime()) return true
-  if (input.jobs.some(j => ['queued', 'running'].includes(j.status))) return true
+  if (input.jobs.some(j => ['queued', 'running'].includes(j.status) || (j.status==='waiting' && !input.jobs.some(p=>p.status==='paused' && p.chat_id===j.chat_id)))) return true
   // Keep the computer warm between conversational turns instead of rebooting
   // after every reply. Background-only checks still shut down when finished.
   if (input.jobs.some(j => j.kind === 'chat' && ['completed', 'failed', 'cancelled'].includes(j.status) && Date.parse(j.finished_at || '') > now.getTime() - 30 * 60000)) return true

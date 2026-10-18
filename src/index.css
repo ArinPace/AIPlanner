@@ -2006,3 +2006,5 @@ textarea {
 .assistant-turn .assistant-copy { display:inline-flex; margin-right:6px; }
 
 .assistant-branch-banner { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }.assistant-branch-banner .assistant-copy { margin:0; }
+
+.assistant-queue { border:1px solid #dadce0; border-radius:18px; padding:7px 11px; color:#555; background:transparent; font:inherit; font-size:13px; cursor:pointer; }.assistant-queue:disabled { opacity:.45; cursor:default; }

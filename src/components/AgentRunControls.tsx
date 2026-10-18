@@ -12,7 +12,7 @@ export function AgentRunControls({job,onChanged,onError}:{job:VmJob;onChanged:()
   finally{setBusy(false)}
  }
  return <span className="assistant-run-controls">
-  {job.kind==='chat' && job.chat_id && <button type="button" disabled={busy} onClick={()=>void control(job.status==='paused'?'resume':'pause')}>{busy?'Updating…':job.status==='paused'?'Resume':'Pause'}</button>}
-  <button type="button" disabled={busy} onClick={()=>void control('cancel')}>Stop</button>
+  {job.kind==='chat' && job.chat_id && job.status!=='waiting' && <button type="button" disabled={busy} onClick={()=>void control(job.status==='paused'?'resume':'pause')}>{busy?'Updating…':job.status==='paused'?'Resume':'Pause'}</button>}
+  <button type="button" disabled={busy} onClick={()=>void control('cancel')}>{job.status==='waiting'?'Cancel queued message':'Stop'}</button>
  </span>
 }

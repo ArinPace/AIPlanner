@@ -133,7 +133,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
       db().from('planner_vm_provisioning').select('status,error,wake_until,power_state,power_updated_at').eq('username', username).maybeSingle(),
       db().from('planner_browser_accounts').select('id,source,identity,label,active,verified_at').eq('username',username).order('verified_at',{ascending:false}),
       db().from('planner_vm_chats').select('id,title,archived,parent_chat_id,parent_job_id,created_at,updated_at,deleted_at').eq('username',username).not('deleted_at','is',null).gt('deleted_at',new Date(Date.now()-30*86400000).toISOString()).order('deleted_at',{ascending:false}).limit(1000),
-      db().from('planner_vm_jobs').select('id,chat_id,kind,status,started_at').eq('username',username).in('status',['queued','running']).order('created_at',{ascending:true}).limit(100),
+      db().from('planner_vm_jobs').select('id,chat_id,kind,status,started_at').eq('username',username).in('status',['queued','running','waiting']).order('created_at',{ascending:true}).limit(100),
     ])
     const machine = checked(provisioning) || null
     const connectedHosts = checked(hosts).map(h => ({ ...h, online: hostOnline(h.heartbeat_at) }))
@@ -141,7 +141,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
     const freshPower = Date.now() - Date.parse(machine?.power_updated_at || '') < 60000
     const power = !connectedHosts.length ? 'preparing' : freshPower ? machine?.power_state === 'Running' ? 'online' : wantsWake ? 'starting' : 'offline' : connectedHosts.some(h => h.online) ? 'online' : wantsWake ? 'starting' : 'offline'
     const bin=checked(deletedChats),removed=new Set(bin.map(c=>c.id))
-    return json({ queue:{active:checked(queue).find(job=>job.status==='running')||null,queuedIds:checked(queue).filter(job=>job.status==='queued').map(job=>job.id)}, hosts: connectedHosts, power, accounts:checked(accounts), google:await googleCalendarStatus(username), chats: checked(chats), deletedChats:bin, settings: checked(settings), runs: checked(runs).filter(r=>!removed.has(r.chat_id)), provisioning: machine, personalChatGptAvailable: personalChatGptAllowed(username), hostedChatGptAvailable: false, recordings: false })
+    return json({ queue:{active:checked(queue).find(job=>job.status==='running')||null,queuedIds:checked(queue).filter(job=>['queued','waiting'].includes(job.status)).map(job=>job.id)}, hosts: connectedHosts, power, accounts:checked(accounts), google:await googleCalendarStatus(username), chats: checked(chats), deletedChats:bin, settings: checked(settings), runs: checked(runs).filter(r=>!removed.has(r.chat_id)), provisioning: machine, personalChatGptAvailable: personalChatGptAllowed(username), hostedChatGptAvailable: false, recordings: false })
   }
   if (request.method === 'GET' && path === '/api/agent/vm/messages') {
     const chatId = url.searchParams.get('chat')
@@ -262,7 +262,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
   if (path === '/api/agent/vm/revoke') {
     if (!uuid(input.id)) throw new ApiError(400, 'Choose a VM.')
     checked(await db().from('planner_vm_hosts').update({ revoked_at: new Date().toISOString() }).eq('id', input.id).eq('username', username))
-    checked(await db().from('planner_vm_jobs').update({ status: 'cancelled', finished_at: new Date().toISOString() }).eq('username', username).eq('host_id', input.id).in('status', ['queued', 'running']))
+    checked(await db().from('planner_vm_jobs').update({ status: 'cancelled', finished_at: new Date().toISOString() }).eq('username', username).eq('host_id', input.id).in('status', ['queued', 'running','paused','waiting']))
     return json({ ok: true })
   }
   if (path === '/api/agent/vm/chats') {
@@ -291,7 +291,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
   }
   if (path === '/api/agent/vm/cancel') {
     if (!uuid(input.id)) throw new ApiError(400, 'Choose a run.')
-    checked(await db().from('planner_vm_jobs').update({ status: 'cancelled', finished_at: new Date().toISOString() }).eq('id', input.id).eq('username', username).in('status', ['queued', 'running','paused']))
+    checked(await db().from('planner_vm_jobs').update({ status: 'cancelled', finished_at: new Date().toISOString() }).eq('id', input.id).eq('username', username).in('status', ['queued', 'running','paused','waiting']))
     return json({ ok: true })
   }
   if(path === '/api/agent/vm/pause' || path === '/api/agent/vm/resume'){
@@ -302,6 +302,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
   }
   if (path === '/api/agent/vm/send') {
     if (!uuid(input.chatId)) throw new ApiError(400, 'Choose a chat.')
+    if(input.queue!==undefined && typeof input.queue!=='boolean')throw new ApiError(400,'Choose whether to queue this message.')
     const attachments=validateAttachments(input.attachments)
     let message: string
     try { message = vmMessage(attachments.length && !String(input.message||'').trim()?'Please review the attached files.':input.message) } catch (e) { throw new ApiError(400, (e as Error).message) }
@@ -310,7 +311,11 @@ export async function handleVmRequest(request: Request, path: string, username: 
     if (chat.archived) throw new ApiError(409,'Restore this archived chat before sending a message.')
     const host = checked(await db().from('planner_vm_hosts').select('id').eq('username', username).is('revoked_at', null).maybeSingle())
     if (!host) throw new ApiError(409, 'Pair your personal VM before sending a message.')
-    const {data:sent,error:sendError}=await db().rpc('planner_vm_chat_control',{p_username:username,p_chat:chat.id,p_action:'send',p_message:message,p_attachments:attachmentSummaries(attachments),p_payload:attachments})
+    const deliveryArgs={p_username:username,p_chat:chat.id,p_action:input.queue===true?'queue':'send',p_message:message,p_attachments:attachmentSummaries(attachments),p_payload:attachments}
+    let delivery=await db().rpc('planner_vm_chat_control',deliveryArgs)
+    // A concurrent claim may win the active-slot constraint; the failed transaction rolled back.
+    if(delivery.error?.code==='23505')delivery=await db().rpc('planner_vm_chat_control',deliveryArgs)
+    const {data:sent,error:sendError}=delivery
     if(sendError)throw new ApiError(['P0001','23505'].includes(sendError.code)?409:503,'Could not send this message. Refresh the chat and try again.')
     checked(await db().from('planner_vm_chats').update({ updated_at: new Date().toISOString(), ...(String(input.title || '') ? { title: String(input.title).slice(0, 100) } : {}) }).eq('id', chat.id).eq('username', username))
     return json(sent, 202)

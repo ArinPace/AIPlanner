@@ -75,3 +75,9 @@ test('VM input and public worker status do not accept extra secrets or pretend s
   assert.equal(hostOnline(new Date(now - 100000).toISOString(), now), false)
   assert.deepEqual(safeWorkerStatus({ signedIn: true, identity: 'test', access_token: 'secret', recordings: true }), { runtime: 'codex', recordings: false, signedIn: true, identity: 'test', version: null })
 })
+test('queued messages wake the VM, but a paused task holds its own queue',()=>{
+ const waiting={kind:'chat',status:'waiting',chat_id:'chat'}
+ assert.equal(shouldRunVm({scheduled:false,jobs:[waiting]}),true)
+ assert.equal(shouldRunVm({scheduled:false,jobs:[waiting,{kind:'chat',status:'paused',chat_id:'chat'}]}),false)
+ assert.equal(shouldRunVm({scheduled:false,jobs:[waiting,{kind:'chat',status:'paused',chat_id:'other'}]}),true)
+})

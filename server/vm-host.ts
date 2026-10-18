@@ -51,7 +51,7 @@ export async function handleVmPool(request: Request, path: string) {
       }
       const [settings, jobs, host] = await Promise.all([
         db().from('planner_vm_settings').select('schedule_enabled,schedule').eq('username', computer.username).maybeSingle(),
-        db().from('planner_vm_jobs').select('kind,status,result,schedule_slot,created_at,finished_at').eq('username', computer.username).or(`created_at.gte.${new Date(Date.now() - 86400000).toISOString()},status.in.(queued,running)`),
+        db().from('planner_vm_jobs').select('chat_id,kind,status,result,schedule_slot,created_at,finished_at').eq('username', computer.username).or(`created_at.gte.${new Date(Date.now() - 86400000).toISOString()},status.in.(queued,running,waiting,paused)`),
         db().from('planner_vm_hosts').select('id').eq('username', computer.username).is('revoked_at', null).maybeSingle(),
       ])
       decisions.push({ username: computer.username, shouldRun: Boolean(checked(host)) && shouldRunVm({ wakeUntil: computer.wake_until, scheduled: checked(settings)?.schedule_enabled || false, schedule: settings.data?.schedule, jobs: checked(jobs) }) })

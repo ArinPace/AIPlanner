@@ -1,6 +1,7 @@
 import type {VmJob,VmState} from './vm.js'
 
 export function vmJobStatus(job:VmJob,state:VmState|null,now:number):string {
+  if(job.status==='waiting')return 'Queued message ? runs after earlier tasks'
   if(job.status==='paused')return 'Paused'
   const since=Date.parse(job.status==='running'?job.started_at||job.created_at:job.created_at)
   const seconds=Math.max(0,Math.floor((now-since)/1000))
