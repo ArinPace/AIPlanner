@@ -381,7 +381,8 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
             <MonthView
               cursor={cursor}
               zoom={zoom}
-              occurrences={occurrences}
+              events={events.filter(event => isEventVisible(event, hiddenSet))}
+              onMonthChange={setCursor}
               tags={tags}
               onDayClick={(date) => openCreate(date)}
               onDayOpen={(date) => {

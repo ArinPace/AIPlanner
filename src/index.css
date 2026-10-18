@@ -573,6 +573,7 @@ p {
 }
 
 .month-scroll {
+  overflow-anchor: none;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -806,6 +807,7 @@ p {
 }
 
 .month-date {
+  min-width: max-content;
   width: calc(28px * var(--zoom, 1));
   height: calc(28px * var(--zoom, 1));
   border: 0;
