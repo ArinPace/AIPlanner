@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {chromium} from 'playwright-core'
-import {slackDmUrl,listSlackDms,readSlackDm} from './slack-messages.mjs'
+import {slackDmUrl,listSlackDms,readSlackDm,findSlackDm} from './slack-messages.mjs'
 import {messagePermissionAllowed} from './message-permission.mjs'
 
 test('Slack DM URLs and source consent are constrained',()=>{
@@ -26,5 +26,11 @@ test('Slack DMs require exact person and workspace and exclude channel and compo
   const result=await readSlackDm(page,{workspace:'Stern',name:'Alex',timeout:1000})
   assert.deepEqual(result.messages,[{text:'Selected DM body',timestamp:'123.45'}])
   assert.ok(!JSON.stringify(result).includes('composer text'))
+  await page.locator('body').evaluate(n=>n.insertAdjacentHTML('beforeend','<a data-qa-channel-sidebar-channel-id="D777"><span data-qa="channel_sidebar_name">Alex</span></a>'))
+  await assert.rejects(()=>readSlackDm(page,{workspace:'Stern',name:'Alex',timeout:1000}),/No unique exact/)
+  await page.locator('body').evaluate(n=>n.insertAdjacentHTML('beforeend','<input role="searchbox" aria-label="Channel or user name" value="initial">'))
+  await page.locator('input').evaluate(n=>n.addEventListener('input',()=>{if(n.value==='New person')setTimeout(()=>document.body.insertAdjacentHTML('beforeend','<a data-qa-channel-sidebar-channel-id="D888"><span data-qa="channel_sidebar_name">New person</span></a>'),50)}))
+  assert.deepEqual(await findSlackDm(page,'New person'),[{name:'New person',url:'https://app.slack.com/client/T123/D888'}])
+  assert.equal(await page.locator('input').inputValue(),'initial')
  }finally{await browser.close()}
 })

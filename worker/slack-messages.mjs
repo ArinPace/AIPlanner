@@ -37,13 +37,26 @@ export async function listSlackDms(page,workspace,options){
  const threads=await slackDmThreads(page)
  return {workspace:selected.name,threads,coverage:'Existing direct conversations listed in this workspace sidebar, up to 100. No message bodies returned. Collapsed or unloaded conversations may be missing.'}
 }
+export async function findSlackDm(page,name){
+ const exact=async()=>(await slackDmThreads(page)).filter(t=>t.name===name)
+ let matches=await exact()
+ if(matches.length)return matches
+ const search=page.getByRole('searchbox',{name:'Channel or user name'})
+ if(!await search.isVisible())return []
+ const initial=await search.inputValue()
+ try{
+  await search.fill(name,{timeout:5000})
+  for(let i=0;i<10;i++){await page.waitForTimeout(300);matches=await exact();if(matches.length)return matches}
+  return []
+ }finally{await search.fill(initial).catch(()=>{})}
+}
 export async function readSlackDm(page,{workspace,name,url,timeout=30000}){
  if(Boolean(name)===Boolean(url))throw Error('Provide one exact conversation name or one existing DM URL.')
  if(url)slackDmUrl(url)
  const selected=await selectDmWorkspace(page,workspace,{timeout})
  let destination=url
  if(!destination){
-  const matches=(await slackDmThreads(page)).filter(t=>t.name===name)
+  const matches=await findSlackDm(page,name)
   if(matches.length!==1)throw Error('No unique exact Slack DM matched. List the existing conversations and select its full name or URL.')
   destination=matches[0].url
  }
