@@ -7,3 +7,5 @@ Agent Settings → Add sites → Slack includes the same selected-conversation p
 Generic `browser_read` continues to reject DM URLs. DM reads use their own tool and honest non-read-only annotation because of read receipts. A real user-selected runtime **Always allow this tool** decision is restored across runs for this exact tool and host, only while current Slack permission remains valid. No WhatsApp approval is reused for Slack.
 
 Tests cover source permission, URL restrictions, exact selection, workspace mismatch and excluding composer text. A live check of the saved NYU Stern session discovered 11 existing DMs without reading message bodies. A named live DM read still requires selection of the person/workspace and any runtime approval shown to the user.
+
+Production planner-agent verification `a580c4f0-ea7d-4eab-add2-ebee186ed65f` also completed successfully through `browser_list_slack_dms`: 11 existing conversations, no message bodies requested or read. Slack selected-conversation permission was enabled for the requesting account; other users control it through Add sites.
