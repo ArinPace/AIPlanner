@@ -1,4 +1,4 @@
-import { whatsappSignedInPage } from './whatsapp-status.mjs'
+import { whatsappSignedInPage, whatsappSearchSelector } from './whatsapp-status.mjs'
 
 export async function waitForWhatsAppChat(page,chatName,timeout=15000){
   await page.waitForFunction(name=>{
@@ -22,7 +22,7 @@ export async function readWhatsApp(context, { chatName, timeout = 45000 } = {}) 
     await page.waitForTimeout(500)
   }
   if (!chatName) return { title: 'WhatsApp', url: page.url(), text: 'WhatsApp is signed in. Choose an exact chat or group name to read.', connected: true, coverage: 'Connection verified only; no conversations or previews read.', images: [], links: [] }
-  const search = page.locator('#side [role="searchbox"], #side [contenteditable="true"][role="textbox"], [aria-label="Search or start a new chat"]').filter({ visible: true }).first()
+  const search = page.locator(whatsappSearchSelector).filter({ visible: true }).first()
   await search.fill(chatName)
   try {
     const match = page.locator('#pane-side [title], [data-testid="chat-list"] [title]').filter({ visible: true }).filter({ hasText: new RegExp('^' + chatName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$') })

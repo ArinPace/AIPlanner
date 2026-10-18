@@ -1,4 +1,5 @@
 // Inspect application controls only; message content is not sign-in evidence.
+export const whatsappSearchSelector='#side [role="searchbox"], #side input[role="textbox"], #side [contenteditable="true"][role="textbox"], [aria-label="Search or start a new chat"]'
 export async function whatsappSignedInPage(page) {
   let url
   try { url = new URL(page.url()) } catch { return false }
@@ -8,7 +9,7 @@ export async function whatsappSignedInPage(page) {
   const [sidebar, list, search, newChat, chats] = await Promise.all([
     visible('#side'),
     visible('#pane-side, [data-testid="chat-list"]'),
-    visible('#side [role="searchbox"], #side [contenteditable="true"][role="textbox"], [aria-label="Search or start a new chat"]'),
+    visible(whatsappSearchSelector),
     visible('[aria-label="New chat"]'),
     visible('[aria-label="Chats"]'),
   ])
