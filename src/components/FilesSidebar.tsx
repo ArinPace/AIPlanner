@@ -1,5 +1,5 @@
 import { useState, type DragEvent, type ReactNode } from 'react'
-import type { FilesState } from '../lib/files'
+import {isVisiblePlannerFile,type FilesState} from '../lib/files'
 import { navigationFolders } from '../lib/fileActions'
 import { CloseIcon, TrashIcon } from './Icons'
 import {FileTypeIcon} from './FileTypeIcon'
@@ -14,7 +14,7 @@ export function FilesSidebar({ selectedItemId,state, folderId, bin, count, busy,
 }) {
   const [overBin, setOverBin] = useState(false)
   function target(destination:string|null){return {onDragOver:(event:DragEvent)=>{if(!busy&&event.dataTransfer.types.includes(FILE_DRAG)){event.preventDefault();event.stopPropagation();event.dataTransfer.dropEffect='move';event.currentTarget.classList.add('is-drag-over')}},onDragLeave:(event:DragEvent)=>event.currentTarget.classList.remove('is-drag-over'),onDrop:(event:DragEvent)=>{event.currentTarget.classList.remove('is-drag-over');onMove(event,destination)}}}
-  const items=[...state.files,...(state.documents ?? [])].sort((a,b)=>a.name.localeCompare(b.name))
+  const items=[...state.files.filter(isVisiblePlannerFile),...(state.documents ?? [])].sort((a,b)=>a.name.localeCompare(b.name))
   function fileRow(item:typeof items[number],depth:number) {
     return <button key={item.id} type="button" className={'folder-nav sidebar-file '+(selectedItemId===item.id?'is-active':'')} aria-current={selectedItemId===item.id?'page':undefined} style={{paddingLeft:24+Math.min(depth,8)*12}} title={item.name} aria-label={'Open file '+item.name} draggable={!busy} onDragStart={e=>onDrag(e,item.id)} onClick={()=>onItem(item.id)}>{'content' in item?<FileTypeIcon note={item.format==='note'} size={18}/>:<svg width="18" height="20" viewBox="0 0 20 24" fill="none" aria-hidden="true"><path d="M4 2h8l5 5v15H4zM12 2v6h5" stroke="currentColor" strokeWidth="1.4"/></svg>}<span>{item.name}</span></button>
   }

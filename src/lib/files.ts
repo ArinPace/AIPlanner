@@ -136,3 +136,6 @@ export function validateFilesState(value: unknown): asserts value is FilesState 
     } else throw new Error('Unsupported document type.')
   }
 }
+
+// Keep the saved instruction snapshot available to agents without listing it in Files.
+export function isVisiblePlannerFile(file:{name:string}){return file.name.trim().toLowerCase()!=='system prompt.txt'}
