@@ -1774,7 +1774,8 @@ textarea {
 
 /* Folder navigation stays available at every window size. */
 .files-workspace { position: relative; }
-.files-sidebar-toggle { align-self: flex-start; margin-bottom: 12px; }
+.files-sidebar-toggle { display:inline-flex; align-items:center; justify-content:center; gap:8px; align-self:flex-start; margin-bottom:12px; }
+.files-sidebar-toggle svg { display:block; flex-shrink:0; }
 .folder-tree-row { display: flex; align-items: center; min-width: 0; }
 .folder-tree-row .folder-nav { min-width: 0; flex: 1; padding-left: 5px; }
 .folder-disclosure, .folder-disclosure-space { flex: 0 0 24px; width: 24px; }
