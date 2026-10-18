@@ -1,7 +1,7 @@
 import { eventAppearance } from '../lib/eventAppearance'
 import { PlannerDate as Date } from '../lib/timezone.js'
 import { urgencyColor } from '../lib/urgencyColor'
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CalendarEvent, CalendarView, Occurrence, Tag } from '../types'
 import { eventColor } from '../lib/colors'
 import {
@@ -73,8 +73,6 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
     return()=>observer.disconnect()
   },[occurrences,view,cursor,hourHeight])
 
-  const simultaneous=useMemo(()=>layoutTimeCards(occurrences.filter(item=>!item.event.allDay).map(item=>({top:item.start.getTime(),bottom:item.end.getTime()}))).reduce((max,item)=>Math.max(max,item.cols),1),[occurrences])
-  const weekMinWidth=64+7*(simultaneous>1?simultaneous*88:80)
   const now = new Date()
   const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 60) * hourHeight
 
@@ -103,7 +101,7 @@ export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClic
           </section>
         })}
       </div>}
-      <div className={`time-view is-${view}`} style={view==='week'?{minWidth:weekMinWidth}:undefined}>
+      <div className={`time-view is-${view}`}>
       <div className={`time-header days-${days.length}`}>
         <div className="gutter" />
         {days.map((day) => (

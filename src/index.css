@@ -1966,6 +1966,9 @@ textarea {
 .apple-note-title { field-sizing: content; resize: none; display: block; overflow: hidden; min-height: 1.3em; font-family: inherit; }
 
 .time-view-scroll { display: flex; flex: 1; min-height: 0; min-width: 0; overflow-x: auto; }
+.time-view-scroll > .time-view { width: 100%; min-width: 0; }
+.time-view .day-col, .time-view .all-day-cell { min-width: 0; }
+.timed-event .event-time { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
 /* Compact labels retain their full title in the event editor. */
 .month-view .event-chip, .time-view .event-chip { font-size: calc(10px * var(--zoom, 1)); }
