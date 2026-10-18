@@ -338,6 +338,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
       <div className="agent-tab-panel" hidden={tab !== 'agent'}><AgentView sidebar={agentSidebar} setSidebar={setAgentSidebar} active={tab === 'agent'} /></div>
       <div className="app-body" hidden={tab !== 'calendar'}>
         <Sidebar
+          events={events}
           open={sidebarOpen}
           cursor={cursor}
           onCursorChange={setCursor}

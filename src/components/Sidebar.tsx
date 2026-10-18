@@ -1,5 +1,6 @@
+import { TagChart } from './TagChart'
 import { useState, type FormEvent } from 'react'
-import type { Tag } from '../types'
+import type { CalendarEvent, Tag } from '../types'
 import { nextTagColor, TAG_COLORS } from '../lib/colors'
 import { PlusIcon, TrashIcon } from './Icons'
 import { MiniCalendar } from './MiniCalendar'
@@ -9,6 +10,7 @@ type SidebarProps = {
   cursor: Date
   onCursorChange: (date: Date) => void
   onCreate: () => void
+  events: CalendarEvent[]
   tags: Tag[]
   hiddenTagIds: Set<string>
   onToggleTag: (id: string) => void
@@ -21,12 +23,14 @@ export function Sidebar({
   cursor,
   onCursorChange,
   onCreate,
+  events,
   tags,
   hiddenTagIds,
   onToggleTag,
   onAddTag,
   onDeleteTag,
 }: SidebarProps) {
+  const [chart, setChart] = useState(false)
   const [adding, setAdding] = useState(false)
   const [name, setName] = useState('')
   const [color, setColor] = useState(nextTagColor(tags))
@@ -57,9 +61,10 @@ export function Sidebar({
       <section className="tag-section">
         <div className="tag-section-head">
           <h2>Tags</h2>
+          <div className="tag-heading-actions"><button type="button" className="icon-btn" aria-label="Show tag statistics" title="Tag statistics" onClick={()=>setChart(true)}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M11 3a9 9 0 1 0 10 10H11V3Z" stroke="currentColor" strokeWidth="1.7"/><path d="M14 2v8h8a9 9 0 0 0-8-8Z" stroke="currentColor" strokeWidth="1.7"/></svg></button>
           <button type="button" className="icon-btn" aria-label="Add tag" onClick={() => setAdding((value) => !value)}>
             <PlusIcon size={16} />
-          </button>
+          </button></div>
         </div>
 
         {adding && (
@@ -118,6 +123,7 @@ export function Sidebar({
           })}
         </ul>
       </section>
+      {chart && <TagChart events={events} tags={tags} cursor={cursor} onClose={()=>setChart(false)} />}
     </aside>
   )
 }
