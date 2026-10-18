@@ -15,6 +15,7 @@ import { browserRuntimeEnv } from './browser-runtime-env.mjs'
 import { messagePermissionText } from './message-permission.mjs'
 import {refreshRuntimeInstructions} from './runtime-instructions.mjs'
 import {plannerGuidance} from './planner-guidance.mjs'
+import {attachmentInput} from './chat-attachments.mjs'
 
 const dataDir = process.env.PLANNER_DATA_DIR || '/var/lib/planner'
 const workerStartedAt = new Date().toISOString()
@@ -98,7 +99,7 @@ async function chat(job, auth, remote) {
     threadId = thread.thread.id
     await refreshRuntimeInstructions(rpc,{threadId,instructions:params.developerInstructions+'\n\n'+plannerGuidance,dataDir,resumed:true})
     await report()
-    await rpc.request('turn/start', { threadId, input: [{ type: 'text', text: `Enabled websites: ${JSON.stringify(Object.fromEntries(remote.sources.map(source=>[source,sourceUrls[source]])))}.\n\n${job.message}` }] })
+    await rpc.request('turn/start', { threadId, input: attachmentInput(`Enabled websites: ${JSON.stringify(Object.fromEntries(remote.sources.map(source=>[source,sourceUrls[source]])))}.\n\n${job.message}`,job.attachment_payload) })
     await done
     return { reply, threadId }
   } finally { clearInterval(heartbeat); clearTimeout(timeout); rpc.close() }

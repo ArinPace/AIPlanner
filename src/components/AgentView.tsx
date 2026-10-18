@@ -1,3 +1,5 @@
+import {AttachButton,ChatAttachments} from './ChatAttachments'
+import {ATTACHMENT_LIMIT,type ChatAttachment} from '../lib/chatAttachments'
 import { DictationButton } from './DictationButton'
 import { AgentApproval } from './AgentApproval'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -22,6 +24,9 @@ export function AgentView({ active, sidebar, setSidebar }: { active: boolean; si
   const [jobs, setJobs] = useState<VmJob[]>([])
   const [message, setMessage] = useState('')
   const [dictating,setDictating]=useState(false)
+  const [attachments,setAttachments]=useState<ChatAttachment[]>([])
+  const [preparingAttachments,setPreparingAttachments]=useState(false)
+  const attachmentEpoch=useRef(0)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [loadingChat, setLoadingChat] = useState(false)
@@ -59,7 +64,7 @@ export function AgentView({ active, sidebar, setSidebar }: { active: boolean; si
     if (!active) return
     selectedChat.current=null
     const initial = window.setTimeout(() => {
-      setChat(null);setJobs([]);setMessage('');setError('');setLoadingChat(false);setPanel(null);setShowArchived(false);setShowBin(false);setSelecting(false);setSelectedIds([])
+      attachmentEpoch.current++;setAttachments([]);setChat(null);setJobs([]);setMessage('');setError('');setLoadingChat(false);setPanel(null);setShowArchived(false);setShowBin(false);setSelecting(false);setSelectedIds([])
       void refresh().catch(e => setError(e.message))
     }, 0)
     const timer = window.setInterval(() => void refresh().catch(e => setError(e.message)), 4000)
@@ -75,7 +80,7 @@ export function AgentView({ active, sidebar, setSidebar }: { active: boolean; si
   const lastReply = jobs.at(-1)?.reply
   useEffect(() => { end.current?.scrollIntoView({ block: 'nearest' }) }, [chat, jobs.length, lastReply])
   async function chooseChat(id: string) {
-    selectedChat.current = id; setChat(id); setJobs([]); setMessage(''); setError(''); setLoadingChat(true)
+    attachmentEpoch.current++;setAttachments([]);selectedChat.current = id; setChat(id); setJobs([]); setMessage(''); setError(''); setLoadingChat(true)
     if (window.innerWidth <= 700) setSidebar(false)
     try { const result = await agentRequest<{ jobs: VmJob[] }>('vm/messages?chat=' + encodeURIComponent(id)); if (selectedChat.current === id) setJobs(result.jobs) }
     catch (e) { setError(e instanceof Error ? e.message : 'Could not open this chat.') }
@@ -84,7 +89,7 @@ export function AgentView({ active, sidebar, setSidebar }: { active: boolean; si
   function newChat() {
     setShowArchived(false);setShowBin(false)
     setSelecting(false);setSelectedIds([])
-    selectedChat.current = null; setChat(null); setJobs([]); setMessage(''); setError(''); setLoadingChat(false)
+    attachmentEpoch.current++;setAttachments([]);selectedChat.current = null; setChat(null); setJobs([]); setMessage(''); setError(''); setLoadingChat(false)
     if (window.innerWidth <= 700) setSidebar(false)
   }
   async function manageSelected(action:'archive'|'restore'|'delete'|'untrash'|'purge') {
@@ -117,15 +122,28 @@ export function AgentView({ active, sidebar, setSidebar }: { active: boolean; si
     try { await navigator.clipboard.writeText(text); setCopied(key) }
     catch { setError('Could not copy. Check clipboard permission in your browser.') }
   }
+  async function addAttachments(files:File[]){
+    if(!files.length || preparingAttachments)return
+    if(attachments.length+files.length>4){setError('Attach up to four files.');return}
+    const epoch=attachmentEpoch.current;setPreparingAttachments(true);setError('')
+    try{
+      const {prepareAttachment}=await import('../lib/prepareAttachments')
+      const next=[...attachments,...await Promise.all(files.map(prepareAttachment))]
+      const bytes=next.reduce((sum,a)=>sum+a.size+(a.images||[]).reduce((n,image)=>n+atob(image.slice(image.indexOf(',')+1)).length,0),0)
+      if(bytes>ATTACHMENT_LIMIT)throw Error('Attachments and PDF previews must total no more than 2 MB. Try fewer or smaller files.')
+      if(epoch===attachmentEpoch.current)setAttachments(next)
+    }catch(e){if(epoch===attachmentEpoch.current)setError(e instanceof Error?e.message:'Could not prepare attachments.')}
+    finally{setPreparingAttachments(false)}
+  }
   async function send() {
-    if (dictating || busy || loadingChat || archived || !message.trim() || !aiReady || !host || jobs.some(pending)) return
+    if (preparingAttachments || dictating || busy || loadingChat || archived || (!message.trim() && !attachments.length) || !aiReady || !host || jobs.some(pending)) return
     setBusy(true); setError('')
     try {
       let id = selectedChat.current
       let untitled = !id || state?.chats.find(c => c.id === id)?.title === 'New conversation'
-      if (!id) { const created = await agentAction<VmChat>('vm/chats', { title: message.slice(0,80) }); id = created.id; selectedChat.current = id; setChat(id); untitled = false }
-      await agentAction('vm/send', { chatId: id, message, ...(untitled ? { title: message.slice(0,80) } : {}) })
-      setMessage(''); await refresh()
+      if (!id) { const created = await agentAction<VmChat>('vm/chats', { title: (message || attachments[0]?.name || 'New conversation').slice(0,80) }); id = created.id; selectedChat.current = id; setChat(id); untitled = false }
+      await agentAction('vm/send', { chatId: id, message, attachments, ...(untitled ? { title: (message || attachments[0]?.name || 'New conversation').slice(0,80) } : {}) })
+      setMessage('');setAttachments([]); await refresh()
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not send your message.') }
     finally { setBusy(false) }
   }
@@ -156,10 +174,10 @@ export function AgentView({ active, sidebar, setSidebar }: { active: boolean; si
       <div className="assistant-thread" aria-live="polite">
         <div className="assistant-thread-content">
           {!jobs.length && <div className="assistant-welcome"><span className="assistant-spark">✦</span><h1>{loadingChat ? 'Opening your chat…' : 'What can I help with?'}</h1><p>{aiReady ? 'Plan your day, organize your files, or check your connected sites.' : 'Connect your AI account once. Then keep the conversation here.'}</p>{state && !aiReady && <button type="button" className="assistant-primary" onClick={() => setPanel('setup')}>Connect AI</button>}</div>}
-          {jobs.map(job => <article key={job.id} className="assistant-turn"><div className="assistant-user-message">{job.message}<MessageTime value={job.created_at} label="Message sent"/><button type="button" className="assistant-copy" aria-label="Copy your message" onClick={()=>void copyMessage(job.message,job.id+'-user')}>{copied===job.id+'-user'?'Copied':'Copy'}</button></div>{job.reply && <div className="assistant-reply">{job.reply}<MessageTime value={job.finished_at || job.started_at || job.created_at} label={pending(job)?"Reply started":"Assistant replied"}/><button type="button" className="assistant-copy" aria-label="Copy assistant message" onClick={()=>void copyMessage(job.reply,job.id+'-reply')}>{copied===job.id+'-reply'?'Copied':'Copy'}</button></div>}{pending(job) && job.approvals?.map(request=><AgentApproval key={request.id} request={request} onAnswered={refresh}/>)}{pending(job) && <div className="assistant-working"><span className="assistant-pulse"/>{vmJobStatus(job,state,now)}{job.status==='queued' && activeTask && activeTask.id!==job.id && <button type="button" onClick={()=>{if(window.confirm('Stop the other task currently using your VM? Changes it already saved will be kept.'))void agentAction('vm/cancel',{id:activeTask.id}).then(refresh).catch(e=>setError(e.message))}}>Stop current task</button>}<button type="button" onClick={() => { void agentAction('vm/cancel', { id: job.id }).then(refresh).catch(e => setError(e.message)) }}>Stop</button></div>}{job.error && <p role="alert" className="assistant-error">{job.error}</p>}</article>)}<div ref={end}/>
+          {jobs.map(job => <article key={job.id} className="assistant-turn"><div className="assistant-user-message">{job.message}{Boolean(job.attachments?.length) && <ChatAttachments items={job.attachments!} jobId={job.id} onError={setError}/>}<MessageTime value={job.created_at} label="Message sent"/><button type="button" className="assistant-copy" aria-label="Copy your message" onClick={()=>void copyMessage(job.message,job.id+'-user')}>{copied===job.id+'-user'?'Copied':'Copy'}</button></div>{job.reply && <div className="assistant-reply">{job.reply}<MessageTime value={job.finished_at || job.started_at || job.created_at} label={pending(job)?"Reply started":"Assistant replied"}/><button type="button" className="assistant-copy" aria-label="Copy assistant message" onClick={()=>void copyMessage(job.reply,job.id+'-reply')}>{copied===job.id+'-reply'?'Copied':'Copy'}</button></div>}{pending(job) && job.approvals?.map(request=><AgentApproval key={request.id} request={request} onAnswered={refresh}/>)}{pending(job) && <div className="assistant-working"><span className="assistant-pulse"/>{vmJobStatus(job,state,now)}{job.status==='queued' && activeTask && activeTask.id!==job.id && <button type="button" onClick={()=>{if(window.confirm('Stop the other task currently using your VM? Changes it already saved will be kept.'))void agentAction('vm/cancel',{id:activeTask.id}).then(refresh).catch(e=>setError(e.message))}}>Stop current task</button>}<button type="button" onClick={() => { void agentAction('vm/cancel', { id: job.id }).then(refresh).catch(e => setError(e.message)) }}>Stop</button></div>}{job.error && <p role="alert" className="assistant-error">{job.error}</p>}</article>)}<div ref={end}/>
         </div>
       </div>
-      <div className="assistant-compose-wrap"><form className="assistant-compose" onSubmit={e => { e.preventDefault(); void send() }}><label className="sr-only" htmlFor="assistant-message">Message your assistant</label><textarea id="assistant-message" placeholder="Message your assistant…" value={message} rows={2} maxLength={12000} onChange={e => setMessage(e.target.value)} onKeyDown={e => { if (e.key==='Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send() } }}/><div><button type="button" className="assistant-compose-connect" onClick={() => setPanel(aiReady ? 'connections' : 'setup')}>{aiReady ? '+ Add sites' : 'Connect AI'}</button><div className="assistant-compose-actions"><DictationButton key={chat || 'new'} enabled={active && !busy && !loadingChat && !archived} onBusy={setDictating} onText={text=>setMessage(previous=>(previous+(previous && !/\s$/.test(previous)?' ':'')+text).slice(0,12000))}/><button type="submit" className="assistant-send" aria-label="Send message" disabled={dictating || busy || loadingChat || archived || !message.trim() || !aiReady || !host || jobs.some(pending)}>↑</button></div></div></form><p className="assistant-compose-note">Your assistant can make mistakes. Check important details.</p></div>
+      <div className="assistant-compose-wrap"><form className="assistant-compose" onDragOver={e=>{if(e.dataTransfer.types.includes('Files'))e.preventDefault()}} onDrop={e=>{if(e.dataTransfer.files.length){e.preventDefault();void addAttachments(Array.from(e.dataTransfer.files))}}} onSubmit={e => { e.preventDefault(); void send() }}><label className="sr-only" htmlFor="assistant-message">Message your assistant</label>{attachments.length>0 && <ChatAttachments items={attachments} onRemove={id=>setAttachments(items=>items.filter(a=>a.id!==id))}/>} {preparingAttachments && <p role="status" className="attachment-preparing">Preparing attachments…</p>}<textarea onPaste={e=>{if(e.clipboardData.files.length){e.preventDefault();void addAttachments(Array.from(e.clipboardData.files))}}} id="assistant-message" placeholder="Message your assistant…" value={message} rows={2} maxLength={12000} onChange={e => setMessage(e.target.value)} onKeyDown={e => { if (e.key==='Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send() } }}/><div><div className="compose-left-actions"><AttachButton disabled={busy || preparingAttachments || archived || loadingChat} onFiles={files=>void addAttachments(files)}/><button type="button" className="assistant-compose-connect" onClick={() => setPanel(aiReady ? 'connections' : 'setup')}>{aiReady ? '+ Add sites' : 'Connect AI'}</button></div><div className="assistant-compose-actions"><DictationButton key={chat || 'new'} enabled={active && !busy && !loadingChat && !archived} onBusy={setDictating} onText={text=>setMessage(previous=>(previous+(previous && !/\s$/.test(previous)?' ':'')+text).slice(0,12000))}/><button type="submit" className="assistant-send" aria-label="Send message" disabled={preparingAttachments || dictating || busy || loadingChat || archived || (!message.trim() && !attachments.length) || !aiReady || !host || jobs.some(pending)}>↑</button></div></div></form><p className="assistant-compose-note">Your assistant can make mistakes. Check important details.</p></div>
     </section>
     {renameChat && <RenameDialog key={renameChat.id} initialValue={renameChat.title} kind="chat" busy={Boolean(chatAction)} error={error} onClose={()=>{setRenameChat(null);setError('')}} onSave={async name=>{if(chatAction)return;setChatAction(renameChat.id);setError('');try{await agentAction('vm/chats/rename',{id:renameChat.id,title:name});setRenameChat(null);await refresh()}catch(e){setError(e instanceof Error?e.message:'Could not rename chat.')}finally{setChatAction(null)}}}/>}
     {state && panel && <AgentSettings state={state} now={now} mode={panel} aiReady={aiReady} onClose={closePanel} refresh={refresh}/>}

@@ -1667,6 +1667,18 @@ textarea {
 .assistant-compose-note { text-align: center; color: #888; font-size: 10px; margin-top: 8px; }
 .assistant-compose > div { display:grid; grid-template-columns:1fr auto auto auto; }
 .assistant-compose-actions, .dictation-control { display:contents; }
+.compose-left-actions { grid-column:1; grid-row:1; display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
+.assistant-attach { display:flex; align-items:center; gap:5px; padding:7px 3px; border:0; background:transparent; color:#555; font-size:12px; cursor:pointer; }
+.assistant-attach:disabled { opacity:.45; cursor:default; }
+.chat-attachment-list, .assistant-compose > .chat-attachment-list { display:flex; flex-wrap:wrap; gap:8px; margin:0 0 10px; }
+.chat-attachment { display:flex; align-items:center; gap:8px; max-width:100%; min-width:0; border:1px solid #ddd; border-radius:12px; padding:7px; background:#fff; color:#333; }
+.chat-attachment img { width:48px; height:48px; object-fit:cover; border-radius:6px; }
+.chat-attachment-icon { font-size:27px; color:#888; padding:0 6px; }
+.chat-attachment-name { max-width:190px; min-width:0; border:0; padding:2px; background:transparent; color:inherit; text-align:left; overflow-wrap:anywhere; font-size:12px; cursor:pointer; }
+.chat-attachment-name:disabled { opacity:1; cursor:default; }
+.chat-attachment-name small { display:block; margin-top:4px; color:#888; font-size:10px; }
+.chat-attachment-remove { flex-shrink:0; border:0; border-radius:50%; background:#eee; color:#555; width:23px; height:23px; cursor:pointer; }
+.attachment-preparing { color:#777; font-size:12px; margin:3px 0 8px; }
 .assistant-compose-connect { grid-column:1; grid-row:1; justify-self:start; }
 .assistant-send { grid-column:4; grid-row:1; }
 .dictation-button { grid-column:2; grid-row:1; display:flex; align-items:center; justify-content:center; gap:5px; min-width:38px; min-height:38px; border:0; border-radius:20px; background:transparent; color:#555; cursor:pointer; }

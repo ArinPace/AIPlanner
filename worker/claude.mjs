@@ -8,6 +8,7 @@ import { openView } from './browser.mjs'
 import { whatsappPermissionText } from './whatsapp-permission.mjs'
 import { browserRuntimeEnv } from './browser-runtime-env.mjs'
 import {plannerGuidance} from './planner-guidance.mjs'
+import {claudeAttachmentInput} from './chat-attachments.mjs'
 import { messagePermissionText } from './message-permission.mjs'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
@@ -71,7 +72,7 @@ export async function claudeChat({ dataDir, job, remote, origin, token, instruct
     browser: { command: process.execPath, args: [path.join(root, 'browser-tools.mjs')], env: { ...browserRuntimeEnv(dataDir), PLANNER_ENABLED_SOURCES: JSON.stringify(remote.sources), PLANNER_ORIGIN: origin.href, PLANNER_WORKER_TOKEN: token } },
   } }
   // Lease headers are transient and never written into the native credential store.
-  const args = ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--strict-mcp-config', '--mcp-config', JSON.stringify(mcp), '--tools', '', '--allowedTools', 'mcp__planner__*', 'mcp__browser__*', '--disallowedTools', 'mcp__planner__browser_open', 'mcp__planner__browser_read', 'mcp__planner__browser_close', 'mcp__planner__google_calendar_accounts', 'mcp__planner__google_calendar_read', '--append-system-prompt', instructions, ...(existing ? ['--resume', sessionId] : ['--session-id', sessionId])]
+  const args = ['-p', '--input-format','stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--strict-mcp-config', '--mcp-config', JSON.stringify(mcp), '--tools', '', '--allowedTools', 'mcp__planner__*', 'mcp__browser__*', '--disallowedTools', 'mcp__planner__browser_open', 'mcp__planner__browser_read', 'mcp__planner__browser_close', 'mcp__planner__google_calendar_accounts', 'mcp__planner__google_calendar_read', '--append-system-prompt', instructions, ...(existing ? ['--resume', sessionId] : ['--session-id', sessionId])]
   const child = spawn(executable, args, { env: environment(dataDir), cwd: path.join(dataDir, 'workspace'), stdio: ['pipe', 'pipe', 'ignore'] })
   let reply = '', buffer = '', result
   const timer = setTimeout(() => child.kill(), 15 * 60000)
@@ -92,7 +93,7 @@ export async function claudeChat({ dataDir, job, remote, origin, token, instruct
         }
       })
       child.on('exit', code => code === 0 && result && !result.is_error ? resolve() : reject(new Error('Claude could not complete this run. Check its connection and subscription limits.')))
-      child.stdin.end(`Enabled websites: ${JSON.stringify(remote.sources)}.\n\n${job.message}`)
+      child.stdin.end(JSON.stringify({type:'user',message:{role:'user',content:claudeAttachmentInput(`Enabled websites: ${JSON.stringify(remote.sources)}.\n\n${job.message}`,job.attachment_payload)}})+'\n')
     })
     sessions[key] = sessionId
     await writeFile(sessionPath, JSON.stringify(sessions), { mode: 0o600 })

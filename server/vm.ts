@@ -11,12 +11,13 @@ import { googleCalendarStatus, readGoogleCalendar, startGoogleCalendar, selectGo
 import { observeAccounts, editBrowserAccount } from './browser-accounts.js'
 import { bulkManageChats } from './vm-chats.js'
 import { workerApproval, answerApproval, rememberedBrowserTools } from './vm-approvals.js'
+import {validateAttachments,attachmentSummaries} from './chat-attachments.js'
 
 function checked<T>({ data, error }: { data: T; error: { code?: string } | null }): NonNullable<T> {
   if (error) throw new ApiError(error.code === '23505' ? 409 : 503, error.code === '23505' ? 'Another message is already waiting in this chat.' : 'Could not access your agent workspace.')
   return data as NonNullable<T>
 }
-const publicJob = 'id,chat_id,kind,status,message,reply,error,created_at,started_at,finished_at,result'
+const publicJob = 'id,chat_id,kind,status,message,reply,error,created_at,started_at,finished_at,result,attachments'
 const publicHost = 'id,label,heartbeat_at,capabilities,created_at'
 async function confirmBrowserConnection(username:string,source:string){
   checked(await db().from('planner_vm_jobs').update({result:{connected:true,source,connectedAt:new Date().toISOString()}}).eq('username',username).eq('kind','browser_login').eq('status','completed').in('message',[source,'open:'+source,'manage:'+source]).not('result->liveUrl','is',null))
@@ -151,6 +152,15 @@ export async function handleVmRequest(request: Request, path: string, username: 
     const approvals=ids.length?checked(await db().from('planner_vm_approvals').select('id,job_id,questions,expires_at').eq('username',username).in('job_id',ids).is('answers',null).gt('expires_at',new Date().toISOString())):[]
     return json({ jobs:jobs.map(j=>({...j,approvals:approvals.filter(a=>a.job_id===j.id)})) })
   }
+  if(request.method==='GET' && path==='/api/agent/vm/attachment'){
+    const jobId=url.searchParams.get('job'),id=url.searchParams.get('id')
+    if(!uuid(jobId)||!uuid(id))throw new ApiError(400,'Choose an attachment.')
+    const row=checked(await db().from('planner_vm_jobs').select('attachment_payload').eq('username',username).eq('id',jobId).maybeSingle())
+    const attachment=row?.attachment_payload?.find((a:{id:string})=>a.id===id)
+    if(!attachment)throw new ApiError(404,'Attachment not found.')
+    const comma=attachment.data.indexOf(',');const bytes=Buffer.from(attachment.data.slice(comma+1),'base64')
+    return new Response(new Uint8Array(bytes),{headers:{'Content-Type':attachment.data.slice(5,attachment.data.indexOf(';')),'Content-Disposition':"attachment; filename*=UTF-8''"+encodeURIComponent(attachment.name),'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}})
+  }
   if (request.method !== 'POST') throw new ApiError(405, 'Use POST.')
   const input = await body(request)
   if (path === '/api/agent/vm/whatsapp/permission') {
@@ -277,15 +287,16 @@ export async function handleVmRequest(request: Request, path: string, username: 
   }
   if (path === '/api/agent/vm/send') {
     if (!uuid(input.chatId)) throw new ApiError(400, 'Choose a chat.')
+    const attachments=validateAttachments(input.attachments)
     let message: string
-    try { message = vmMessage(input.message) } catch (e) { throw new ApiError(400, (e as Error).message) }
+    try { message = vmMessage(attachments.length && !String(input.message||'').trim()?'Please review the attached files.':input.message) } catch (e) { throw new ApiError(400, (e as Error).message) }
     const chat = checked(await db().from('planner_vm_chats').select('id,thread_id,archived').eq('id', input.chatId).eq('username', username).is('deleted_at',null).maybeSingle())
     if (!chat) throw new ApiError(404, 'Chat not found.')
     if (chat.archived) throw new ApiError(409,'Restore this archived chat before sending a message.')
     const host = checked(await db().from('planner_vm_hosts').select('id').eq('username', username).is('revoked_at', null).maybeSingle())
     if (!host) throw new ApiError(409, 'Pair your personal VM before sending a message.')
     const id = randomUUID()
-    checked(await db().from('planner_vm_jobs').insert({ id, username, chat_id: chat.id, host_id: host.id, message, thread_id: chat.thread_id, kind: 'chat' }))
+    checked(await db().from('planner_vm_jobs').insert({ id, username, chat_id: chat.id, host_id: host.id, message, thread_id: chat.thread_id, kind: 'chat',attachments:attachmentSummaries(attachments),attachment_payload:attachments }))
     checked(await db().from('planner_vm_chats').update({ updated_at: new Date().toISOString(), ...(String(input.title || '') ? { title: String(input.title).slice(0, 100) } : {}) }).eq('id', chat.id).eq('username', username))
     return json({ id, status: 'queued' }, 202)
   }
