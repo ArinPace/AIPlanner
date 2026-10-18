@@ -1,3 +1,5 @@
+import {prepareAttachment} from '../lib/prepareAttachments'
+import {outdatedAttachmentModule,saveAttachmentRecovery,takeAttachmentRecovery,RECOVERY_TAB} from '../lib/attachmentRecovery'
 import {isFileDrop,droppedFiles} from '../lib/fileDrop'
 import {ChatMarkdown} from './ChatMarkdown'
 import {EditChatMessage} from './EditChatMessage'
@@ -7,7 +9,7 @@ import {AttachButton,ChatAttachments} from './ChatAttachments'
 import {ATTACHMENT_LIMIT,type ChatAttachment} from '../lib/chatAttachments'
 import { DictationButton } from './DictationButton'
 import { AgentApproval } from './AgentApproval'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { agentAction, agentRequest } from '../lib/agent'
 import { VM_SOURCES, type VmChat, type VmJob, type VmState } from '../lib/vm'
 import { AgentSettings } from './AgentSettings'
@@ -24,7 +26,7 @@ function MessageTime({value,label}:{value:string|null|undefined;label:string}) {
   return <time className="assistant-message-time" dateTime={value} title={date.toLocaleString(undefined,{timeZoneName:'short'})} aria-label={label+': '+date.toLocaleString()}>{date.toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'})}</time>
 }
 const pending = (job: VmJob) => ['queued', 'running','waiting'].includes(job.status)
-export function AgentView({ active, sidebar, setSidebar }: { active: boolean; sidebar:boolean; setSidebar:(open:boolean)=>void }) {
+export function AgentView({ active, sidebar, setSidebar, username }: { active: boolean; sidebar:boolean; setSidebar:(open:boolean)=>void;username:string }) {
   const [state, setState] = useState<VmState | null>(null)
   const [editingJob,setEditingJob]=useState<VmJob|null>(null)
   const [branching,setBranching]=useState(false)
@@ -37,6 +39,7 @@ export function AgentView({ active, sidebar, setSidebar }: { active: boolean; si
   const [attachments,setAttachments]=useState<ChatAttachment[]>([])
   const [preparingAttachments,setPreparingAttachments]=useState(false)
   const [draggingFiles,setDraggingFiles]=useState(false)
+  const [retryAttachmentFiles,setRetryAttachmentFiles]=useState<File[]|null>(null)
   const fileDragDepth=useRef(0)
   const attachmentEpoch=useRef(0)
   const [error, setError] = useState('')
@@ -76,17 +79,29 @@ export function AgentView({ active, sidebar, setSidebar }: { active: boolean; si
       if (selectedChat.current === id) setJobs(result.jobs)
     }
   }, [])
+  const restoreAttachmentDraft=useEffectEvent(async()=>{
+        if(sessionStorage.getItem(RECOVERY_TAB)!==username)return
+        sessionStorage.removeItem(RECOVERY_TAB)
+        const saved=await takeAttachmentRecovery(username)
+        if(!saved)return
+        if(saved.chatId)await chooseChat(saved.chatId);else newChat()
+        setMessage(saved.message);setAttachments(saved.attachments)
+        await addAttachments(saved.files,saved.attachments)
+  })
   useEffect(() => {
     if (!active) return
     selectedChat.current=null
     openMainOnLoad.current=true
     const initial = window.setTimeout(() => {
-      attachmentEpoch.current++;setAttachments([]);setChat(null);setJobs([]);setMessage('');setError('');setLoadingChat(false);setPanel(null);setShowArchived(false);setShowBin(false);setSelecting(false);setSelectedIds([])
-      void refresh().catch(e => setError(e.message))
+      attachmentEpoch.current++;setAttachments([]);setRetryAttachmentFiles(null);setChat(null);setJobs([]);setMessage('');setError('');setLoadingChat(false);setPanel(null);setShowArchived(false);setShowBin(false);setSelecting(false);setSelectedIds([])
+      void (async()=>{
+        await refresh()
+        await restoreAttachmentDraft()
+      })().catch(e=>setError(e.message))
     }, 0)
     const timer = window.setInterval(() => void refresh().catch(e => setError(e.message)), 4000)
     return () => { window.clearTimeout(initial); window.clearInterval(timer) }
-  }, [active, refresh])
+  }, [active, refresh, username])
   useEffect(()=>{
     if(!active)return
     const resume=()=>{if(document.visibilityState==='visible')void refresh().catch(e=>setError(e.message))}
@@ -155,18 +170,25 @@ export function AgentView({ active, sidebar, setSidebar }: { active: boolean; si
     try { await navigator.clipboard.writeText(text); setCopied(key) }
     catch { setError('Could not copy. Check clipboard permission in your browser.') }
   }
-  async function addAttachments(files:File[]){
+  async function addAttachments(files:File[],existing=attachments){
     if(!files.length || preparingAttachments)return
-    if(attachments.length+files.length>4){setError('Attach up to four files.');return}
-    const epoch=attachmentEpoch.current;setPreparingAttachments(true);setError('')
+    if(existing.length+files.length>4){setError('Attach up to four files.');return}
+    const epoch=attachmentEpoch.current;setPreparingAttachments(true);setError('');setRetryAttachmentFiles(null)
     try{
-      const {prepareAttachment}=await import('../lib/prepareAttachments')
-      const next=[...attachments,...await Promise.all(files.map(prepareAttachment))]
+      const next=[...existing,...await Promise.all(files.map(prepareAttachment))]
       const bytes=next.reduce((sum,a)=>sum+a.size+(a.images||[]).reduce((n,image)=>n+atob(image.slice(image.indexOf(',')+1)).length,0),0)
       if(bytes>ATTACHMENT_LIMIT)throw Error('Attachments and PDF previews must total no more than 2 MB. Try fewer or smaller files.')
       if(epoch===attachmentEpoch.current)setAttachments(next)
-    }catch(e){if(epoch===attachmentEpoch.current)setError(e instanceof Error?e.message:'Could not prepare attachments.')}
+    }catch(e){if(epoch===attachmentEpoch.current){if(outdatedAttachmentModule(e)){setRetryAttachmentFiles(files);setError('The app updated while this tab was open. Reload and retry to restore your draft and selected files automatically.')}else setError(e instanceof Error?e.message:'Could not prepare attachments.')}}
     finally{setPreparingAttachments(false)}
+  }
+  async function reloadAttachmentCode(){
+    if(!retryAttachmentFiles)return
+    try{
+      await saveAttachmentRecovery(username,{chatId:selectedChat.current,message,attachments,files:retryAttachmentFiles,savedAt:Date.now()})
+      sessionStorage.setItem(RECOVERY_TAB,username)
+      window.location.reload()
+    }catch{setError('Could not preserve this draft locally. Copy your message before refreshing, then attach the files again.')}
   }
   function dropFiles(event:React.DragEvent){
     if(!isFileDrop(event.dataTransfer))return;
@@ -221,7 +243,7 @@ export function AgentView({ active, sidebar, setSidebar }: { active: boolean; si
       {draggingFiles && <div className="assistant-file-drop" role="status"><div><strong>Drop files to attach</strong><span>Images, PDFs and text documents</span></div></div>}
       <header className="assistant-chat-header"><div>{!sidebar && <button type="button" className="icon-btn" aria-label="Show chat sidebar" onClick={() => setSidebar(true)}><MenuIcon/></button>}<button type="button" className="icon-btn" aria-label="New chat" onClick={newChat}><PlusIcon/></button><div className="assistant-chat-title"><strong>{title}</strong><span>{state ? aiReady ? `${provider} connected` : 'Connect your AI to get started' : 'Loading…'}</span>{state && <span className={'assistant-power ' + power} role="status" aria-label="Virtual machine status"><i aria-hidden="true"/>VM {powerLabel}</span>}</div></div><div><button type="button" className="assistant-sites-button" onClick={() => setPanel('connections')}>Add sites</button><button type="button" className="icon-btn" aria-label="Agent settings" onClick={() => setPanel('settings')}><SettingsIcon/></button></div></header>
       {state?.chats.find(c=>c.id===chat)?.parent_chat_id && <p className="agent-banner assistant-branch-banner">Branched conversation <button type="button" className="assistant-copy" onClick={()=>{const parent=state.chats.find(c=>c.id===state.chats.find(c=>c.id===chat)?.parent_chat_id);if(parent)void chooseChat(parent.id)}} disabled={!state.chats.some(c=>c.id===state.chats.find(c=>c.id===chat)?.parent_chat_id)}>Open original</button></p>}
-      {error && <p role="alert" className="assistant-error">{error}</p>}
+      {error && <p role="alert" className="assistant-error">{error}{retryAttachmentFiles && <button type="button" onClick={()=>void reloadAttachmentCode()}>Reload and retry</button>}</p>}
       {confirmedConnection?.result.source && <p role="status" className="agent-banner">{VM_SOURCES[confirmedConnection.result.source].name} connected. Your sign-in is saved on your private computer. <button aria-label="Dismiss connection confirmation" onClick={()=>setDismissedConnections(current=>[...current,confirmedConnection.id])}>Dismiss</button></p>}
       {archived && <p className="agent-banner">This chat is archived. <button disabled={Boolean(chatAction)} onClick={()=>{const item=state?.chats.find(c=>c.id===chat);if(item)void manageChat(item,'archive')}}>Restore chat</button></p>}
       {state?.provisioning?.error && <p role="alert" className="assistant-error">{state.provisioning.error}</p>}

@@ -1,3 +1,4 @@
+import {RECOVERY_TAB} from './lib/attachmentRecovery'
 import { PlannerDate as Date } from './lib/timezone.js'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { FilesView } from './components/FilesView'
@@ -132,7 +133,7 @@ export default function App() {
 
 function CalendarApp({ username, onLogout }: { username: string; onLogout: () => void }) {
   useVmActivity(username)
-  const [tab, setTab] = useState<'calendar' | 'files' | 'agent'>('calendar')
+  const [tab, setTab] = useState<'calendar' | 'files' | 'agent'>(()=>sessionStorage.getItem(RECOVERY_TAB)===username?'agent':'calendar')
   const [filesUnsaved, setFilesUnsaved] = useState(false)
   const [cursor, setCursor] = useState(() => new Date())
   const [view, setView] = useState<CalendarView>('month')
@@ -342,7 +343,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
       />
 
       <div className="files-tab-panel" hidden={tab !== 'files'}><FilesView sidebar={filesSidebar} setSidebar={setFilesSidebar} username={username} active={tab === 'files'} onUnsavedChange={setFilesUnsaved} /></div>
-      <div className="agent-tab-panel" hidden={tab !== 'agent'}><AgentView sidebar={agentSidebar} setSidebar={setAgentSidebar} active={tab === 'agent'} /></div>
+      <div className="agent-tab-panel" hidden={tab !== 'agent'}><AgentView username={username} sidebar={agentSidebar} setSidebar={setAgentSidebar} active={tab === 'agent'} /></div>
       <div className="app-body" hidden={tab !== 'calendar'}>
         <Sidebar
           events={events}
