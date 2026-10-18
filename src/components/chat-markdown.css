@@ -1,0 +1,25 @@
+.chat-markdown { white-space: normal; min-width: 0; max-width: 100%; overflow-wrap: anywhere; line-height: 1.65; }
+.chat-markdown > :first-child { margin-top: 0; }
+.chat-markdown > :last-child { margin-bottom: 0; }
+.chat-markdown p, .chat-markdown ul, .chat-markdown ol, .chat-markdown blockquote, .chat-markdown pre { margin: .7em 0; }
+.chat-markdown :is(h1,h2,h3,h4,h5,h6) { line-height: 1.35; margin: 1em 0 .45em; font-weight: 650; }
+.chat-markdown h1 { font-size: 1.5em; }
+.chat-markdown h2 { font-size: 1.3em; }
+.chat-markdown h3 { font-size: 1.15em; }
+.chat-markdown ul, .chat-markdown ol { padding-left: 1.5em; }
+.chat-markdown li { margin: .25em 0; }
+.chat-markdown li > p { margin: .3em 0; }
+.chat-markdown a { color: var(--blue, #1a73e8); text-decoration: underline; text-underline-offset: 2px; }
+.chat-markdown blockquote { border-left: 3px solid var(--line, #ddd); padding-left: 1em; color: var(--muted, #666); }
+.chat-markdown code { font-family: ui-monospace, monospace; font-size: .9em; background: var(--panel, #f3f4f6); border-radius: 4px; padding: .15em .3em; }
+.chat-markdown pre { max-width: 100%; overflow-x: auto; padding: 12px; border: 1px solid var(--line, #ddd); border-radius: 8px; background: var(--panel, #f3f4f6); white-space: pre; overflow-wrap: normal; }
+.chat-markdown pre code { padding: 0; background: transparent; }
+.chat-table-scroll { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; margin: .8em 0; border: 1px solid var(--line, #ddd); border-radius: 8px; }
+.chat-markdown table { width: 100%; border-collapse: collapse; font-size: .95em; }
+.chat-markdown th, .chat-markdown td { min-width: 110px; padding: 10px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line, #ddd); border-right: 1px solid var(--line, #ddd); }
+.chat-markdown th { font-weight: 650; background: var(--panel, #f3f4f6); }
+.chat-markdown tr:last-child td { border-bottom: 0; }
+.chat-markdown :is(th,td):last-child { border-right: 0; }
+.chat-markdown .contains-task-list { list-style: none; padding-left: .25em; }
+.chat-markdown .task-list-item input { width: 15px; height: 15px; margin-right: 8px; }
+.assistant-reply { min-width: 0; max-width: 100%; }
