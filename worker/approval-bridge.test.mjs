@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { runtimeQuestions, relayApproval } from './approval-bridge.mjs'
+import { runtimeQuestions, relayApproval, approvalPersistence } from './approval-bridge.mjs'
 
 test('runtime approval bridge relays the user decision and never grants unsupported permissions', async()=>{
   const params={questions:[{id:'q',question:'Open selected chat?',options:[{label:'Accept'},{label:'Decline'}]}]}
@@ -16,6 +16,16 @@ test('runtime approval bridge relays the user decision and never grants unsuppor
   assert.equal(calls[0].jobId,'job');assert.equal(calls[1].lease,'lease')
   assert.deepEqual(runtimeQuestions('mcpServer/elicitation/request',{mode:'form',message:'Confirm selected read',requestedSchema:{type:'object',properties:{approve:{type:'boolean'}}}}),[{id:'approve',question:'Confirm selected read',options:['Allow','Decline']}])
   assert.throws(()=>runtimeQuestions('mcpServer/elicitation/request',{mode:'url'}))
+})
+
+test('remembered approvals are offered and returned only when the runtime advertises that scope',async()=>{
+ const params={mode:'form',message:'Allow selected message reader?',requestedSchema:{type:'object',properties:{}},_meta:{codex_approval_kind:'mcp_tool_call',persist:['session','always']}}
+ assert.deepEqual(runtimeQuestions('mcpServer/elicitation/request',params)[0].options,['Allow once','Allow for this session','Always allow this tool','Decline'])
+ assert.deepEqual(approvalPersistence({...params,_meta:{persist:'always'}}),[])
+ const result=await relayApproval('mcpServer/elicitation/request',params,{job:{id:'job',lease:'lease'},report:async()=>{},api:async(_action,input)=>input.action==='create'?{id:'request',expires_at:new Date(Date.now()+10000).toISOString()}:{answers:{confirmation:'Always allow this tool'}}})
+ assert.deepEqual(result,{action:'accept',content:{},_meta:{persist:'always'}})
+ const denied=await relayApproval('mcpServer/elicitation/request',{...params,_meta:null},{job:{id:'job',lease:'lease'},report:async()=>{},api:async(_action,input)=>input.action==='create'?{id:'request',expires_at:new Date(Date.now()+10000).toISOString()}:{answers:{confirmation:'Always allow this tool'}}})
+ assert.deepEqual(denied,{action:'decline',content:null})
 })
 
 test('empty MCP approval forms require a real user decision and preserve accept/decline semantics',async()=>{
