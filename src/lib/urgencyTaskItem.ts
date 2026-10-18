@@ -1,11 +1,14 @@
 import TaskItem from '@tiptap/extension-task-item'
+import { TextSelection } from '@tiptap/pm/state'
 import { urgencyColor } from './urgencyColor'
+import { checklistSortPlugin, SORT_CHECKLISTS } from './checklistSort'
 
 function urgency(value:unknown){
  const n=typeof value==='number'?value:typeof value==='string' && /^\d{1,2}$/.test(value)?Number(value):NaN
  return Number.isInteger(n) && n>=0 && n<=99?n:null
 }
 export const UrgencyTaskItem=TaskItem.extend({
+ addProseMirrorPlugins(){return [...(this.parent?.() ?? []),checklistSortPlugin()]},
  addKeyboardShortcuts(){
   return {...this.parent?.(),Enter:()=>{
    if(!this.editor.commands.splitListItem(this.name))return false
@@ -54,12 +57,15 @@ export const UrgencyTaskItem=TaskItem.extend({
     const node=props.editor.state.doc.nodeAt(position)
     if(node)props.editor.view.dispatch(props.editor.state.tr.setNodeMarkup(position,undefined,{...node.attrs,urgency:n}))
    })
-   input.addEventListener('blur',()=>{input.setCustomValidity('');const pos=props.getPos();if(typeof pos==='number'){const node=props.editor.state.doc.nodeAt(pos);if(node)sync(node)}})
+   input.addEventListener('blur',()=>{input.setCustomValidity('');const pos=props.getPos();if(typeof pos==='number'){const node=props.editor.state.doc.nodeAt(pos);if(node)sync(node);if(!node?.textContent.trim())return};queueMicrotask(()=>{if(!props.editor.isDestroyed)props.editor.view.dispatch(props.editor.state.tr.setMeta(SORT_CHECKLISTS,true))})})
    input.addEventListener('keydown',event=>{if(event.key==='Enter'){
     event.preventDefault();event.stopPropagation()
     if(!input.checkValidity()){input.reportValidity();return}
     const position=props.getPos()
-    if(typeof position==='number')props.editor.commands.focus(position+2)
+    if(typeof position==='number'){
+     props.editor.view.dispatch(props.editor.state.tr.setSelection(TextSelection.create(props.editor.state.doc,position+2)))
+     props.editor.view.focus()
+    }
    }})
    const update=view.update,stop=view.stopEvent,ignore=view.ignoreMutation
    view.update=(node,...rest)=>{const accepted=update?.(node,...rest)??false;if(accepted)sync(node);return accepted}
