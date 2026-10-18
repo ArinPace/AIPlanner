@@ -52,3 +52,12 @@ test('custom meals replace default times, and recovery avoids physical break act
  assert.equal((new Date(meal.end).getTime()-new Date(meal.start).getTime())/60000,45)
  assert.equal(result.events.some(e=>e.title==='Breakfast'||e.title==='Take a short walk'),false)
 })
+test('getting ready, wind down and sleep are daily anchors independent of intensity',()=>{
+ const p=profile();p.tasks=[task('Flexible work',99,900)]
+ const anchors=(intensity:number)=>buildDayPlan({...p,intensity},[],'2026-10-19',2,now).events.filter(e=>e.planning?.kind==='sleep'||e.title==='Get ready for the day'||e.title==='Wind down / get ready for bed').map(e=>({title:e.title,start:e.start,end:e.end}))
+ assert.deepEqual(anchors(20),anchors(90))
+ assert.equal(anchors(20).filter(e=>e.title==='Get ready for the day').length,2)
+ assert.equal(anchors(20).filter(e=>e.title==='Wind down / get ready for bed').length,2)
+ const blocked=fixed('Early appointment','2026-10-19T07:00:00-04:00','2026-10-19T08:00:00-04:00')
+ assert.ok(buildDayPlan(p,[blocked],'2026-10-19',1,now).warnings.some(w=>w.includes('Get ready for the day conflicts')))
+})

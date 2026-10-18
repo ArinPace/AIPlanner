@@ -23,7 +23,11 @@ export function buildDayPlan(profile:PlanningProfile,events:CalendarEvent[],date
   const day=addDays(start,offset),key=toDateInput(day),dayEnd=addDays(day,1).getTime()
   const clock=(time:string)=>{const [h,m]=time.split(':').map(Number);return new Date(day.getFullYear(),day.getMonth(),day.getDate(),h,m).getTime()}
   const wake=clock(profile.wake),sleep=clock(profile.sleep),intensity=intensityFor(profile,key,day.getDay())
-  const meals=profile.meals.map(meal=>({...meal,start:clock(meal.time),end:clock(meal.time)+meal.minutes*minute})).sort((a,b)=>a.start-b.start)
+  const routines=[
+   {title:'Get ready for the day',start:wake,end:Math.min(sleep,wake+profile.readyMinutes*minute)},
+   {title:'Wind down / get ready for bed',start:Math.max(wake,sleep-profile.windDownMinutes*minute),end:sleep},
+   ...profile.meals.map(meal=>({...meal,start:clock(meal.time),end:clock(meal.time)+meal.minutes*minute})),
+  ].filter(routine=>routine.end>routine.start).sort((a,b)=>a.start-b.start)
   const recovery=profile.recoveryUntil&&key<=profile.recoveryUntil
   const restActivities=profile.breakActivities.filter(activity=>!recovery||!/\b(walk|run|running|workout|gym|jogging)\b/i.test(activity))
   const activities=restActivities.length?restActivities:['Lie down and close your eyes','Listen to calming music']
@@ -49,12 +53,12 @@ export function buildDayPlan(profile:PlanningProfile,events:CalendarEvent[],date
   for(const slot of free){
    let a=slot.a
    while(a<slot.b){
-    if(a<wake || a>=sleep){const b=Math.min(slot.b,a<wake?wake:dayEnd);add('Sleep / wind down',a,b,'sleep');a=b;continue}
+    if(a<wake || a>=sleep){const b=Math.min(slot.b,a<wake?wake:dayEnd);add('Sleep',a,b,'sleep');a=b;continue}
     const awakeEnd=Math.min(slot.b,sleep)
-    const meal=meals.find(meal=>a>=meal.start&&a<meal.end)
-    if(meal){const b=Math.min(awakeEnd,meal.end);add(meal.title,a,b,'routine');a=b;continue}
-    const nextMeal=meals.map(meal=>meal.start).find(t=>t>a)
-    const limit=Math.min(awakeEnd,nextMeal ?? awakeEnd)
+    const routine=routines.find(routine=>a>=routine.start&&a<routine.end)
+    if(routine){const b=Math.min(awakeEnd,routine.end);add(routine.title,a,b,'routine');a=b;continue}
+    const nextRoutine=routines.map(routine=>routine.start).find(t=>t>a)
+    const limit=Math.min(awakeEnd,nextRoutine ?? awakeEnd)
     const available=(limit-a)/minute
     const eligible=profile.tasks.filter(t=>t.status==='todo'&&(remaining.get(t.id)||0)>0&&(!t.preferredDays.length||t.preferredDays.includes(day.getDay()))&&(!t.earliestDate||t.earliestDate<=key)&&(!t.deadline||new Date(t.deadline).getTime()>a))
     eligible.sort((x,y)=>{
@@ -73,6 +77,12 @@ export function buildDayPlan(profile:PlanningProfile,events:CalendarEvent[],date
     const b=Math.min(limit,a+30*minute)
     add(activities[breakIndex++%activities.length],a,b,'break');a=b
    }
+  }
+  for(const routine of routines){
+   const from=Math.max(routine.start,wake,now.getTime()),to=Math.min(routine.end,sleep)
+   if(to<=from)continue
+   const allocated=planned.filter(event=>event.title===routine.title&&event.planning?.kind==='routine').reduce((sum,event)=>sum+Math.max(0,Math.min(to,new Date(event.end).getTime())-Math.max(from,new Date(event.start).getTime())),0)
+   if(allocated<to-from-1000)warnings.push(key+': '+routine.title+' conflicts with another fixed activity; confirm a suitable time instead of skipping it.')
   }
  }
  for(const task of profile.tasks){if(task.status==='todo'&&(remaining.get(task.id)||0)>0)warnings.push(task.title+': '+remaining.get(task.id)+' minutes not allocated'+(task.deadline?' before its deadline':''))}
