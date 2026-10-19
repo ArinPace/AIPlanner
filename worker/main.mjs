@@ -74,7 +74,7 @@ async function chat(job, auth, remote) {
     'mcp_servers.browser.command': node,
     'mcp_servers.browser.tool_timeout_sec': 300,
     'mcp_servers.browser.args': [path.join(root, 'browser-tools.mjs')],
-    'mcp_servers.browser.env': { ...browserRuntimeEnv(dataDir), PLANNER_ENABLED_SOURCES: JSON.stringify(remote.sources) },
+    'mcp_servers.browser.env': { ...browserRuntimeEnv(dataDir), PLANNER_JOB_ID:job.id, PLANNER_JOB_LEASE:job.lease, PLANNER_ENABLED_SOURCES: JSON.stringify(remote.sources) },
     'mcp_servers.browser.env_vars': ['PLANNER_WORKER_TOKEN', 'PLANNER_ORIGIN'],
     ...(remote.approvedBrowserTools?.includes('browser_read_whatsapp_chat') && remote.whatsappReadConsentAt && remote.sources.includes('whatsapp') ? {'mcp_servers.browser.tools.browser_read_whatsapp_chat.approval_mode':'approve'} : {}),
     ...(remote.approvedBrowserTools?.includes('browser_read_slack_dm') && remote.messageReadConsent?.slack && remote.sources.includes('slack') ? {'mcp_servers.browser.tools.browser_read_slack_dm.approval_mode':'approve'} : {}),

@@ -193,40 +193,7 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
       try{await (await import('./planning.js')).syncTodoCompletion(username)}catch{planningSyncError='Note saved; calendar completion sync is pending. Open Agent to retry.'}
       return json({ ok: true, revision: saved.revision, planningSyncError })
     }
-    if (path === '/api/files/upload/start' && method === 'POST') {
-      const input = await body(request)
-      const state = await filesFor(username)
-      const id = randomUUID()
-      const document: PlannerDocument = { id, folderId: input.folderId === null ? null : String(input.folderId ?? ''), name: String(input.name ?? '').trim(), kind: 'pdf', size: Number(input.size), updatedAt: new Date().toISOString() }
-      if (!document.name.toLowerCase().endsWith('.pdf')) throw new ApiError(400, 'Choose a PDF file.')
-      validateFilesState({ ...state, documents: [...(state.documents ?? []), document] })
-      const storagePath = `${username}/${id}.pdf`
-      const signed = dataResult(await db().storage.from(BUCKET).createSignedUploadUrl(storagePath, { upsert: false }))
-      result(await db().from('planner_uploads').insert({ id, username, folder_id: document.folderId, name: document.name, size: document.size, storage_path: storagePath }))
-      return json({ mode: 'signed', id, uploadUrl: signed.signedUrl })
-    }
-    if (path === '/api/files/upload/finish' && method === 'POST') {
-      const input = await body(request)
-      const upload = await ownedUpload(username, String(input.id ?? ''))
-      const state = await filesFor(username)
-      if (upload.status === 'complete' && state.documents?.some((document) => document.id === upload.id)) return json(state)
-      if (upload.status !== 'pending' || Date.parse(upload.expires_at) < Date.now()) throw new ApiError(410, 'Upload expired. Upload your PDF again.')
-      const info = dataResult(await db().storage.from(BUCKET).info(upload.storage_path))
-      if (info.size !== upload.size) throw new ApiError(400, 'Uploaded PDF size does not match. Please upload again.')
-      const signed = dataResult(await db().storage.from(BUCKET).createSignedUrl(upload.storage_path, 60))
-      const response = await fetch(signed.signedUrl, { headers: { Range: 'bytes=0-1023' } })
-      if (!response.ok) throw new ApiError(503, 'Could not verify the uploaded PDF.')
-      const reader = response.body?.getReader()
-      const first = await reader?.read()
-      await reader?.cancel()
-      if (!first?.value || !Buffer.from(first.value).subarray(0, 1024).includes(Buffer.from('%PDF-'))) throw new ApiError(400, 'Uploaded file is not a valid PDF.')
-      const document: PlannerDocument = { id: upload.id, folderId: upload.folder_id, name: upload.name, size: upload.size, kind: 'pdf', updatedAt: new Date().toISOString() }
-      const next = { ...state, documents: [...(state.documents ?? []).filter((item) => item.id !== upload.id), document] }
-      validateFilesState(next)
-      result(await db().from('planner_uploads').update({ status: 'complete' }).eq('username', username).eq('id', upload.id))
-      try { return json(await setFiles(username, next, state)) }
-      catch (error) { await db().from('planner_uploads').update({ status: 'pending' }).eq('username', username).eq('id', upload.id); throw error }
-    }
+    if (['/api/files/upload/start','/api/files/upload/finish'].includes(path) && method==='POST')return handlePdfUpload(request,path,username)
     if (path === '/api/files/upload/cancel' && method === 'POST') {
       const input = await body(request)
       const upload = await ownedUpload(username, String(input.id ?? ''))
@@ -254,4 +221,42 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
     console.error('Planner API failed', { path, method, type: error instanceof Error ? error.name : 'unknown' })
     return json({ error: 'Could not complete this request. Please try again.' }, 500)
   }
+}
+
+export async function handlePdfUpload(request:Request,path:string,username:string){
+    if (path === '/api/files/upload/start') {
+      const input = await body(request)
+      const state = await filesFor(username)
+      const id = randomUUID()
+      const document: PlannerDocument = { id, folderId: input.folderId === null ? null : String(input.folderId ?? ''), name: String(input.name ?? '').trim(), kind: 'pdf', size: Number(input.size), updatedAt: new Date().toISOString() }
+      if (!document.name.toLowerCase().endsWith('.pdf')) throw new ApiError(400, 'Choose a PDF file.')
+      validateFilesState({ ...state, documents: [...(state.documents ?? []), document] })
+      const storagePath = `${username}/${id}.pdf`
+      const signed = dataResult(await db().storage.from(BUCKET).createSignedUploadUrl(storagePath, { upsert: false }))
+      result(await db().from('planner_uploads').insert({ id, username, folder_id: document.folderId, name: document.name, size: document.size, storage_path: storagePath }))
+      return json({ mode: 'signed', id, uploadUrl: signed.signedUrl })
+    }
+    if (path === '/api/files/upload/finish') {
+      const input = await body(request)
+      const upload = await ownedUpload(username, String(input.id ?? ''))
+      const state = await filesFor(username)
+      if (upload.status === 'complete' && state.documents?.some((document) => document.id === upload.id)) return json(state)
+      if (upload.status !== 'pending' || Date.parse(upload.expires_at) < Date.now()) throw new ApiError(410, 'Upload expired. Upload your PDF again.')
+      const info = dataResult(await db().storage.from(BUCKET).info(upload.storage_path))
+      if (info.size !== upload.size) throw new ApiError(400, 'Uploaded PDF size does not match. Please upload again.')
+      const signed = dataResult(await db().storage.from(BUCKET).createSignedUrl(upload.storage_path, 60))
+      const response = await fetch(signed.signedUrl, { headers: { Range: 'bytes=0-1023' } })
+      if (!response.ok) throw new ApiError(503, 'Could not verify the uploaded PDF.')
+      const reader = response.body?.getReader()
+      const first = await reader?.read()
+      await reader?.cancel()
+      if (!first?.value || !Buffer.from(first.value).subarray(0, 1024).includes(Buffer.from('%PDF-'))) throw new ApiError(400, 'Uploaded file is not a valid PDF.')
+      const document: PlannerDocument = { id: upload.id, folderId: upload.folder_id, name: upload.name, size: upload.size, kind: 'pdf', updatedAt: new Date().toISOString() }
+      const next = { ...state, documents: [...(state.documents ?? []).filter((item) => item.id !== upload.id), document] }
+      validateFilesState(next)
+      result(await db().from('planner_uploads').update({ status: 'complete' }).eq('username', username).eq('id', upload.id))
+      try { return json(await setFiles(username, next, state)) }
+      catch (error) { await db().from('planner_uploads').update({ status: 'pending' }).eq('username', username).eq('id', upload.id); throw error }
+    }
+ throw new ApiError(404,'Unknown PDF upload action.')
 }

@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { ApiError, body, db, json } from './cloud.js'
+import { ApiError, body, db, json, handlePdfUpload } from './cloud.js'
 import { createPlannerMcp } from './mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { hostOnline, safeWorkerStatus, safeDeviceAuthorization, uuid, vmHash, vmMessage } from './vm-validation.js'
@@ -50,6 +50,13 @@ export async function handleVmWorker(request: Request, path: string) {
     const approvals=checked(await db().from('planner_vm_approvals').select('questions,answers,answered_at').eq('username',host.username).eq('host_id',host.id).not('answered_at','is',null).order('answered_at',{ascending:false}).limit(1000))
     const approvedBrowserTools=rememberedBrowserTools(approvals,settings.sources.includes('whatsapp')?settings.whatsapp_read_consent_at:null,settings.sources.includes('slack')?settings.message_read_consent?.slack:null)
     return json({ sources: settings.sources, approvedBrowserTools, messageReadConsent:settings.message_read_consent, whatsappReadConsentAt: settings.whatsapp_read_consent_at, aiProvider: settings.ai_provider, credential: settings.credential ? openVmCredential(settings.credential) : null, personalChatGptAllowed: personalChatGptAllowed(host.username) })
+  }
+  if(path.startsWith('/api/agent/vm/worker/pdf-upload/')){
+    const jobId=request.headers.get('x-planner-job'),lease=request.headers.get('x-planner-lease')
+    if(!uuid(jobId)||!uuid(lease))throw new ApiError(401,'An active job lease is required.')
+    const job=checked(await db().from('planner_vm_jobs').select('id').eq('id',jobId).eq('host_id',host.id).eq('username',host.username).eq('lease',lease).eq('status','running').gt('lease_until',new Date().toISOString()).maybeSingle())
+    if(!job)throw new ApiError(409,'The run was cancelled or expired.')
+    return handlePdfUpload(request,path.replace('/api/agent/vm/worker/pdf-upload/','/api/files/upload/'),host.username)
   }
   if (path === '/api/agent/vm/worker/mcp') {
     const jobId = request.headers.get('x-planner-job'), lease = request.headers.get('x-planner-lease')

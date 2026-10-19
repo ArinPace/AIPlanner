@@ -1,4 +1,5 @@
 import { messageImages } from './message-images.mjs'
+import {importPdf} from './pdf-import.mjs'
 import { browserQueue } from './browser-queue.mjs'
 const queued=browserQueue()
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
@@ -149,5 +150,24 @@ server.registerTool('browser_view_image', {
     return await readBrowserPage(context, destination, { validate: value => readableUrl(value, enabled, sources), inspect: (page,result,slack) => readPageImage(context,page,result,slack,imageIndex) })
   } catch { return { isError: true, content: [{ type:'text', text:'This image could not be read. Read the page again to check available image indices and sign-in. Do not invent image contents.' }] } }
   finally { if (connection) await connection.close() }
+}))
+server.registerTool('browser_import_pdf',{
+ description:'Download actual PDF bytes using the signed-in browser for an enabled source and save them as a PDF in internal Planner Files. Accepts a direct PDF URL, Brightspace topic URL or Google Docs/Slides/Sheets/Drive file URL. This writes only to the user Files, not the source website. Read the Files tree first; reuse the correct subject/assessment subfolder under Agent for proactive imports and avoid duplicates. Requires an accessible original download, not a partial preview. After saving read all required pages via planner_read_file pagination. No cookies, tokens or PDF bytes are returned to the model.',
+ inputSchema:{url:z.string().url().max(4000),folderId:z.string().uuid().nullable(),name:z.string().trim().min(5).max(200).regex(/\.pdf$/i)},annotations:{readOnlyHint:false,destructiveHint:false,openWorldHint:true},
+},async args=>queued(async()=>{
+ let connection
+ try{
+  const saved=await siteLaunches(process.env.PLANNER_DATA_DIR||'/var/lib/planner')
+  const destination=readableUrl(args.url,enabled,sources)
+  connection=await connectBrowser(destination,saved.browserProfiles)
+  const workerCall=async(action,input)=>{
+   const response=await fetch(new URL('/api/agent/vm/worker/pdf-upload/'+action,process.env.PLANNER_ORIGIN),{method:'POST',headers:{Authorization:'Bearer '+process.env.PLANNER_WORKER_TOKEN,'Content-Type':'application/json','X-Planner-Job':process.env.PLANNER_JOB_ID||'','X-Planner-Lease':process.env.PLANNER_JOB_LEASE||''},body:JSON.stringify(input),signal:AbortSignal.timeout(30000)})
+   if(!response.ok)throw Error('PDF save failed ('+response.status()+'). Check the active run and Files state; do not claim a saved PDF.')
+   return response.json()
+  }
+  const result=await importPdf(connection.contexts()[0],args,{enabled,sources,workerCall})
+  return {content:[{type:'text',text:JSON.stringify(result)}]}
+ }catch(error){return {isError:true,content:[{type:'text',text:error.message||'PDF import failed.'}]}}
+ finally{if(connection)await connection.close()}
 }))
 await server.connect(new StdioServerTransport())

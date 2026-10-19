@@ -70,7 +70,7 @@ export async function claudeChat({ dataDir, job, remote, origin, token, instruct
   const sessionId = existing || randomUUID()
   const mcp = { mcpServers: {
     planner: { type: 'http', url: new URL('/api/agent/vm/worker/mcp', origin).href, headers: { Authorization: 'Bearer ' + token, 'X-Planner-Job': job.id, 'X-Planner-Lease': job.lease } },
-    browser: { command: process.execPath, args: [path.join(root, 'browser-tools.mjs')], env: { ...browserRuntimeEnv(dataDir), PLANNER_ENABLED_SOURCES: JSON.stringify(remote.sources), PLANNER_ORIGIN: origin.href, PLANNER_WORKER_TOKEN: token } },
+    browser: { command: process.execPath, args: [path.join(root, 'browser-tools.mjs')], env: { ...browserRuntimeEnv(dataDir), PLANNER_JOB_ID:job.id, PLANNER_JOB_LEASE:job.lease, PLANNER_ENABLED_SOURCES: JSON.stringify(remote.sources), PLANNER_ORIGIN: origin.href, PLANNER_WORKER_TOKEN: token } },
   } }
   // Lease headers are transient and never written into the native credential store.
   const args = ['-p', '--input-format','stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--strict-mcp-config', '--mcp-config', JSON.stringify(mcp), '--tools', '', '--allowedTools', 'mcp__planner__*', 'mcp__browser__*', '--disallowedTools', 'mcp__planner__browser_open', 'mcp__planner__browser_read', 'mcp__planner__browser_close', 'mcp__planner__google_calendar_accounts', 'mcp__planner__google_calendar_read', '--append-system-prompt', instructions, ...(existing ? ['--resume', sessionId] : ['--session-id', sessionId])]
