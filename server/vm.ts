@@ -86,7 +86,7 @@ export async function handleVmWorker(request: Request, path: string) {
       await observeAccounts(host.username, observed, settings.sources)
       const verified = Object.fromEntries(Object.keys(VM_SOURCES).filter(k => settings.sources.includes(k) && observed[k]?.ready === true).map(k => [k, { ready: true, verifiedAt: new Date().toISOString() }]))
       if (Object.keys(verified).length) {
-        checked(await db().from('planner_vm_settings').update({ sites: { ...settings.sites, ...verified } }).eq('username', host.username))
+        checked(await db().rpc('planner_merge_browser_sites', { p_username: host.username, p_sites: verified }))
         // Expired connection views must not continue holding the VM awake.
         for (const source of Object.keys(verified)) if(observed[source].completedConnection===true)await confirmBrowserConnection(host.username,source)
       }
