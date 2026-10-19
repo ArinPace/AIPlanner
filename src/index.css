@@ -2008,7 +2008,7 @@ textarea {
   .mobile-week { display: flex; flex-direction: column; width: 100%; padding: 0 12px 24px; box-sizing: border-box; }
   .mobile-week-day { min-width: 0; padding: 12px 0; border-bottom: 1px solid var(--line); }
   .mobile-week-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .mobile-week-heading h3 { margin: 0; font-size: 14px; }
+  .mobile-week-heading h3 { margin: 0 auto 0 0; font-size: 14px; }
   .mobile-week-heading .is-today { color: var(--blue); }
   .mobile-week-heading button { min-width: 44px; min-height: 44px; }
   .mobile-week-empty { color: var(--muted); font-size: 12px; margin: 4px 0; }
