@@ -90,10 +90,12 @@ export function Sidebar({
                   className={`color-dot ${color === swatch ? 'is-selected' : ''}`}
                   style={{ background: swatch }}
                   aria-label={`Use color ${swatch}`}
+                  aria-pressed={color===swatch}
                   onClick={() => setColor(swatch)}
                 />
               ))}
             </div>
+            <label className="tag-custom-color">Custom color<input type="color" aria-label="Custom tag color" value={color} onChange={event=>setColor(event.target.value)}/><span>{color}</span></label>
             <div className="tag-form-actions">
               <button type="button" className="text-btn" onClick={() => setAdding(false)}>
                 Cancel
