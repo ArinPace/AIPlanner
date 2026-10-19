@@ -107,8 +107,9 @@ export async function handleVmWorker(request: Request, path: string) {
   if (path === '/api/agent/vm/worker/progress' || path === '/api/agent/vm/worker/finish') {
     if (!uuid(input.id) || !uuid(input.lease)) throw new ApiError(400, 'Invalid job lease.')
     const finished = path.endsWith('/finish')
-    const reply = typeof input.reply === 'string' ? input.reply.slice(0, 80000) : ''
+    let reply = typeof input.reply === 'string' ? input.reply.slice(0, 80000) : ''
     const error = typeof input.error === 'string' ? input.error.slice(0, 1000) : null
+    if(finished&&error&&!reply){const previous=checked(await db().from('planner_vm_jobs').select('reply').eq('id',input.id).eq('username',host.username).eq('host_id',host.id).eq('lease',input.lease).maybeSingle());reply=previous?.reply||''}
     const threadId = uuid(input.threadId) ? input.threadId : null
     const output: Record<string, unknown> = {}
     if (input.result && typeof input.result === 'object') {

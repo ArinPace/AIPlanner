@@ -1,3 +1,4 @@
+import {agentNetworkRequest} from './agentNetwork.js'
 import { getToken } from './api'
 
 export type AgentSource = 'brightspace' | 'gradescope' | 'gmail' | 'calendar' | 'drive' | 'slack' | 'instagram' | 'x' | 'albert' | 'whatsapp'
@@ -14,10 +15,5 @@ export interface AgentState {
   settings: { schedule_enabled: boolean; sources: AgentSource[]; context_focus: string; profile_id: string | null; login_url: string | null; login_browser_id: string | null }
   runs: AgentRun[]; messages: AgentMessage[]
 }
-export async function agentRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(`/api/agent/${path}`, { ...options, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken() ?? ''}`, ...options.headers } })
-  const data = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(data.error || 'Could not reach the agent. Please try again.')
-  return data as T
-}
+export function agentRequest<T>(path:string,options:RequestInit={}):Promise<T>{return agentNetworkRequest<T>(path,options,getToken())}
 export function agentAction<T>(path: string, value: unknown = {}) { return agentRequest<T>(path, { method: 'POST', body: JSON.stringify(value) }) }

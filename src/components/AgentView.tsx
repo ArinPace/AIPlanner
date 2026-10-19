@@ -68,7 +68,10 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
   const visibleChats = showBin ? state?.deletedChats || [] : state?.chats.filter(c=>Boolean(c.archived)===showArchived) || []
   const confirmedConnection=state?.runs.find(r=>r.result.connected && r.result.source && !dismissedConnections.includes(r.id) && now-Date.parse(r.result.connectedAt || '')<300000)
   const closePanel = useCallback(() => setPanel(null), [])
-  const refresh = useCallback(async () => {
+  const refreshing=useRef<Promise<void>|null>(null)
+  const refresh = useCallback(() => {
+    if(refreshing.current)return refreshing.current
+    const pending=(async()=>{
     const next = await agentRequest<VmState>('vm'); setState(next); setNow(Date.now())
     let id = selectedChat.current
     if (!id && openMainOnLoad.current) {
@@ -79,6 +82,10 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
       const result = await agentRequest<{ jobs: VmJob[] }>('vm/messages?chat=' + encodeURIComponent(id))
       if (selectedChat.current === id) setJobs(result.jobs)
     }
+    setError(current=>current.startsWith('Could not reach the agent')?'':current)
+    })().finally(()=>{if(refreshing.current===pending)refreshing.current=null})
+    refreshing.current=pending
+    return pending
   }, [])
   const restoreAttachmentDraft=useEffectEvent(async()=>{
         if(sessionStorage.getItem(RECOVERY_TAB)!==username)return

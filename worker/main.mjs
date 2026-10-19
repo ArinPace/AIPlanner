@@ -17,6 +17,7 @@ import {refreshRuntimeInstructions} from './runtime-instructions.mjs'
 import {plannerGuidance} from './planner-guidance.mjs'
 import {continuationPrompt,monitorRun} from './run-control.mjs'
 import {branchInput} from './branch-input.mjs'
+import {workerRequest,transientConnectionError} from './worker-request.mjs'
 
 const dataDir = process.env.PLANNER_DATA_DIR || '/var/lib/planner'
 const workerStartedAt = new Date().toISOString()
@@ -27,9 +28,7 @@ if (origin.protocol !== 'https:' || origin.username || origin.password || origin
 await mkdir(path.join(dataDir, 'workspace'), { recursive: true, mode: 0o700 })
 await mkdir(path.join(dataDir, 'codex'), { recursive: true, mode: 0o700 })
 async function api(action, value = {}) {
-  const response = await fetch(new URL('/api/agent/vm/worker/' + action, origin), { method: 'POST', headers: { Authorization: 'Bearer ' + config.token, 'Content-Type': 'application/json' }, body: JSON.stringify(value), signal: AbortSignal.timeout(25000) })
-  if (!response.ok) { const error = new Error(response.status === 409 ? 'The run was cancelled or its lease expired.' : 'The planner connection is unavailable.'); error.status = response.status; throw error }
-  return response.json()
+  return workerRequest(origin,config.token,action,value)
 }
 let hostId
 try { hostId = (await readFile(path.join(dataDir, 'host-id'), 'utf8')).trim() } catch { hostId = 'urn:uuid:' + randomUUID(); await writeFile(path.join(dataDir, 'host-id'), hostId, { mode: 0o600, flag: 'wx' }) }
@@ -102,10 +101,10 @@ async function chat(job, auth, remote) {
     const thread = await rpc.request(fork?'thread/fork':threadId ? 'thread/resume' : 'thread/start', { ...params, ...(fork?{threadId:job.fork_thread_id,lastTurnId:job.fork_turn_id,excludeTurns:true}:threadId ? { threadId, excludeTurns: true } : {}) }, 60000)
     threadId = thread.thread.id
     await refreshRuntimeInstructions(rpc,{threadId,instructions:params.developerInstructions+'\n\n'+plannerGuidance,dataDir,resumed:true})
-    await report()
+    await report().catch(error=>{if(!transientConnectionError(error))throw error})
     const started=await rpc.request('turn/start', { threadId, input: branchInput(job,`Enabled websites: ${JSON.stringify(Object.fromEntries(remote.sources.map(source=>[source,sourceUrls[source]])))}.\n\n${continuationPrompt(job)}`,{nativeHistory:Boolean(fork || job.native_turn_id)}) })
     turnId=started.turn.id
-    await report()
+    await report().catch(error=>{if(!transientConnectionError(error))throw error})
     await done
     return { reply, threadId }
   } finally { stopMonitor(); rpc.close() }

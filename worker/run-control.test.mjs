@@ -19,3 +19,16 @@ test('control monitor serializes checkpoints and stops once after a retired leas
  await done;await new Promise(r=>setTimeout(r,30));stop()
  assert.equal(max,1);assert.equal(calls,2);assert.equal(stopped,1)
 })
+
+test('one lost checkpoint does not kill a run; recovered connection still honors cancellation',async()=>{
+ let calls=0,stopped=0,finish
+ const done=new Promise(resolve=>{finish=resolve})
+ const stop=monitorRun(async()=>{calls++;if(calls===1)throw Object.assign(new Error('timeout'),{name:'TimeoutError'});if(calls===3)throw Object.assign(new Error('cancelled'),{status:409})},async error=>{assert.equal(error.status,409);stopped++;finish()},2)
+ await done;stop();assert.equal(calls,3);assert.equal(stopped,1)
+})
+test('prolonged connection loss stops before running indefinitely without a lease',async()=>{
+ let elapsed=0,finish
+ const done=new Promise(resolve=>{finish=resolve})
+ const stop=monitorRun(async()=>{elapsed+=30000;throw new TypeError('fetch failed')},async error=>{assert.match(error.message,/Saved progress is kept/);finish()},2,{graceMs:60000,now:()=>elapsed})
+ await done;stop();assert.equal(elapsed,60000)
+})
