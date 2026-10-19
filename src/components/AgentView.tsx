@@ -185,9 +185,11 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
     if(existing.length+files.length>4){setError('Attach up to four files.');return}
     const epoch=attachmentEpoch.current;setPreparingAttachments(true);setError('');setRetryAttachmentFiles(null)
     try{
-      const next=[...existing,...await Promise.all(files.map(prepareAttachment))]
+      const next=[...existing]
+      // Decode phone photos sequentially to avoid several full-resolution buffers at once.
+      for(const file of files)next.push(await prepareAttachment(file))
       const bytes=next.reduce((sum,a)=>sum+a.size+(a.images||[]).reduce((n,image)=>n+atob(image.slice(image.indexOf(',')+1)).length,0),0)
-      if(bytes>ATTACHMENT_LIMIT)throw Error('Attachments and PDF previews must total no more than 2 MB. Try fewer or smaller files.')
+      if(bytes>ATTACHMENT_LIMIT)throw Error('Prepared attachments and PDF previews exceed the message limit. Send fewer files in this message; photos are resized automatically.')
       if(epoch===attachmentEpoch.current)setAttachments(next)
     }catch(e){if(epoch===attachmentEpoch.current){if(outdatedAttachmentModule(e)){setRetryAttachmentFiles(files);setError('The app updated while this tab was open. Reload and retry to restore your draft and selected files automatically.')}else setError(e instanceof Error?e.message:'Could not prepare attachments.')}}
     finally{setPreparingAttachments(false)}

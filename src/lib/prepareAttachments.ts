@@ -1,14 +1,17 @@
 import {ATTACHMENT_LIMIT,type ChatAttachment} from './chatAttachments'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import {preparePhoto} from './preparePhoto'
 const dataUrl=(blob:Blob)=>new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>reject(Error('Could not read this file.'));reader.readAsDataURL(blob)})
 async function thumbnail(data:string){const image=new window.Image();image.src=data;await image.decode();const canvas=document.createElement('canvas'),scale=Math.min(1,96/image.width,96/image.height);canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));canvas.getContext('2d')!.drawImage(image,0,0,canvas.width,canvas.height);return canvas.toDataURL('image/jpeg',.6)}
 export async function prepareAttachment(file:File):Promise<ChatAttachment>{
- if(!file.size || file.size>ATTACHMENT_LIMIT)throw Error('Choose nonempty files up to 2 MB. Up to four attachments can share a 2 MB total limit.')
  const base={id:crypto.randomUUID(),name:file.name.slice(0,160),size:file.size}
- const imageType=file.type || (/\.png$/i.test(file.name)?'image/png':/\.jpe?g$/i.test(file.name)?'image/jpeg':/\.webp$/i.test(file.name)?'image/webp':'')
- if(['image/png','image/jpeg','image/webp'].includes(imageType)){
-  const data=await dataUrl(new Blob([file],{type:imageType}));return {...base,kind:'image',data,thumbnail:await thumbnail(data),coverage:'Attached image supplied to the agent for visual reading.'}
+ const imageType=file.type || (/\.png$/i.test(file.name)?'image/png':/\.jpe?g$/i.test(file.name)?'image/jpeg':/\.webp$/i.test(file.name)?'image/webp':/\.heic$/i.test(file.name)?'image/heic':/\.heif$/i.test(file.name)?'image/heif':'')
+ if(['image/png','image/jpeg','image/webp','image/heic','image/heif'].includes(imageType)){
+  const photo=await preparePhoto(file,imageType)
+  const data=await dataUrl(photo.blob)
+  return {...base,name:photo.resized?base.name.replace(/\.[^.]+$/,'').slice(0,155)+'.jpg':base.name,size:photo.blob.size,kind:'image',data,thumbnail:await thumbnail(data),coverage:photo.resized?`Photo automatically resized/compressed on your device to ${photo.width} x ${photo.height} for visual reading. Original file was not sent; fine details may be reduced. Transparent areas are rendered on white.`:'Attached image supplied to the agent for visual reading.'}
  }
+ if(!file.size || file.size>ATTACHMENT_LIMIT)throw Error('Choose nonempty documents up to 2 MB. Photos can be up to 25 MB and are automatically resized before sending.')
  if(file.type==='application/pdf' || /\.pdf$/i.test(file.name)){
   const buffer=await file.arrayBuffer()
   if(!new TextDecoder().decode(buffer.slice(0,1024)).includes('%PDF-'))throw Error('This file is not a valid PDF.')
