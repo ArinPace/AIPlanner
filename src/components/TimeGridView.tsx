@@ -1,7 +1,7 @@
 import { eventAppearance } from '../lib/eventAppearance'
 import { PlannerDate as Date } from '../lib/timezone.js'
 import { urgencyColor } from '../lib/urgencyColor'
-import { useLayoutEffect, useRef } from 'react'
+import { Fragment,useEffect,useLayoutEffect, useRef,useState } from 'react'
 import type { CalendarEvent, CalendarView, Occurrence, Tag } from '../types'
 import { eventColor } from '../lib/colors'
 import {
@@ -45,6 +45,20 @@ function clipToDay(item: Occurrence, day: Date): { start: Date; end: Date } | nu
 export function TimeGridView({ active=true,cursor, view, zoom, occurrences, tags, onSlotClick, onEventClick }: TimeGridViewProps) {
   const days = view === 'day' ? [startOfDay(cursor)] : getWeekDays(cursor)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const weekScrollRef=useRef<HTMLDivElement>(null)
+  const mobileNowRef=useRef<HTMLDivElement>(null)
+  const [mobile,setMobile]=useState(()=>window.matchMedia('(max-width: 600px)').matches)
+  const [,setClockTick]=useState(0)
+  useEffect(()=>{
+    const media=window.matchMedia('(max-width: 600px)'),resize=()=>setMobile(media.matches)
+    media.addEventListener('change',resize)
+    return()=>media.removeEventListener('change',resize)
+  },[])
+  useEffect(()=>{
+    if(!active)return
+    const timer=window.setInterval(()=>setClockTick(tick=>tick+1),30000)
+    return()=>window.clearInterval(timer)
+  },[active])
   const previousLayout = useRef<{key:string;hourHeight:number}|null>(null)
   const bodyRef=useRef<HTMLDivElement>(null)
   // Give short activities a readable row without expanding cards past their time bounds.
@@ -52,32 +66,39 @@ export function TimeGridView({ active=true,cursor, view, zoom, occurrences, tags
   const shortest=Math.min(30,...visibleDurations)
   const hourHeight = Math.max(Math.round(BASE_HOUR_HEIGHT * zoom),Math.ceil(22*60/shortest))
 
-  const dayKey=toDateInput(cursor)
+  const now=new Date(),dayKey=toDateInput(cursor)
+  const todayKey=toDateInput(now),mobileWeek=mobile&&view==='week'
   useLayoutEffect(() => {
     if(!active){previousLayout.current=null;return}
-    const node = scrollRef.current
+    const node = mobileWeek?weekScrollRef.current:scrollRef.current
     if (!node) return
-    const key=view+'/'+dayKey,previous=previousLayout.current
+    const key=view+'/'+dayKey+'/'+todayKey+'/'+(mobileWeek?'mobile':'grid'),previous=previousLayout.current
     if(previous?.key!==key){
-      const now=new Date(),showNow=view==='day'&&toDateInput(now)===dayKey
-      const target=showNow?(now.getHours()+now.getMinutes()/60)*hourHeight:8*hourHeight
-      node.scrollTop=Math.max(0,target-(showNow?node.clientHeight*.25:16))
-    }else if(previous.hourHeight!==hourHeight){
+      if(mobileWeek){
+        const marker=mobileNowRef.current
+        node.scrollTop=marker?Math.max(0,node.scrollTop+marker.getBoundingClientRect().top-node.getBoundingClientRect().top-node.clientHeight*.25):0
+      }else{
+        const current=new Date(),showNow=view==='day'&&toDateInput(current)===dayKey
+        const target=showNow?(current.getHours()+current.getMinutes()/60)*hourHeight:8*hourHeight
+        node.scrollTop=Math.max(0,target-(showNow?node.clientHeight*.25:16))
+      }
+    }else if(!mobileWeek&&previous.hourHeight!==hourHeight){
       const midpoint=node.scrollTop+node.clientHeight/2
       node.scrollTop=midpoint/previous.hourHeight*hourHeight-node.clientHeight/2
     }
     previousLayout.current={key,hourHeight}
-  }, [active,view,dayKey,hourHeight])
+  }, [active,view,dayKey,todayKey,mobileWeek,hourHeight])
 
-  const now = new Date()
   const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 60) * hourHeight
 
   return (
-    <div className={`time-view-scroll ${view === 'week' ? 'has-mobile-week' : ''}`}>
+    <div ref={weekScrollRef} data-layout={mobileWeek?'agenda':'grid'} className={`time-view-scroll ${view === 'week' ? 'has-mobile-week' : ''}`}>
       {view === 'week' && <div className="mobile-week">
         {days.map(day => {
           const items = occurrences.filter(item => clipToDay(item, day)).sort((a, b) =>
             Number(b.event.allDay) - Number(a.event.allDay) || a.start.getTime() - b.start.getTime())
+          const today=isToday(day),nextItem=items.findIndex(item=>!item.event.allDay&&item.end.getTime()>now.getTime())
+          const marker=<div ref={mobileNowRef} className="mobile-week-now" role="img" aria-label={'Current time '+formatTimeCompact(now)}><span>Now · {formatTimeCompact(now)}</span></div>
           return <section className="mobile-week-day" key={day.toISOString()}>
             <div className="mobile-week-heading">
               <h3 className={isToday(day) ? 'is-today' : ''}>{day.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</h3>
@@ -85,8 +106,9 @@ export function TimeGridView({ active=true,cursor, view, zoom, occurrences, tags
               <button type="button" className="text-btn" aria-label={'Add event on ' + day.toDateString()} onClick={() => onSlotClick(startOfDay(day), true)}>+</button>
             </div>
             {items.length === 0 && <p className="mobile-week-empty">No events</p>}
-            {items.map(item => <button
-              type="button" key={item.event.id + item.start.toISOString()}
+            {items.map((item,index) => <Fragment key={item.event.id + item.start.toISOString()}>
+            {today&&index===nextItem&&marker}<button
+              type="button"
               className="event-chip mobile-week-event"
               title={item.event.title || '(No title)'}
               style={eventAppearance(eventColor(item.event, tags), item.event.reminder)}
@@ -94,7 +116,8 @@ export function TimeGridView({ active=true,cursor, view, zoom, occurrences, tags
             >
               <span className="mobile-week-time">{item.event.allDay ? (item.event.reminder ? 'Reminder' : 'All day') : formatTimeCompact(clipToDay(item, day)!.start)}</span>
               <span className="event-title">{item.event.urgency != null && <span className="event-urgency-badge" style={urgencyColor(item.event.urgency)} aria-label={'Urgency ' + item.event.urgency}>{item.event.urgency}</span>}{item.event.title || '(No title)'}</span>
-            </button>)}
+            </button></Fragment>)}
+            {today&&nextItem===-1&&marker}
           </section>
         })}
       </div>}

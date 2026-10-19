@@ -1999,6 +1999,9 @@ textarea {
   overflow-wrap: normal;
 }
 .mobile-week { display: none; }
+.mobile-week-now { display: flex; align-items: center; gap: 7px; margin: 10px 0; color: #ea4335; font-size: 11px; line-height: 16px; }
+.mobile-week-now::before { content: ''; width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: #ea4335; }
+.mobile-week-now::after { content: ''; flex: 1; height: 2px; background: #ea4335; }
 @media (max-width: 600px) {
   .has-mobile-week { display: block; overflow: auto; }
   .has-mobile-week > .is-week { display: none; }
