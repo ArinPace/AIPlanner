@@ -64,7 +64,7 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
   const provider = claude ? 'Claude' : state?.settings.ai_provider === 'openai_api' ? 'OpenAI API' : 'ChatGPT'
   const power = state?.power || (host?.online ? 'online' : 'offline')
   const powerLabel = { online: 'Online', offline: 'Offline', starting: 'Starting', preparing: 'Preparing' }[power]
-  const title = state?.chats.find(c => c.id === chat)?.title || 'New chat'
+  const title = state?.chats.find(c => c.id === chat)?.title || (openMainOnLoad.current ? 'Main Chat' : 'New chat')
   const archived = state?.chats.find(c=>c.id===chat)?.archived || false
   const visibleChats = showBin ? state?.deletedChats || [] : state?.chats.filter(c=>Boolean(c.archived)===showArchived) || []
   const confirmedConnection=state?.runs.find(r=>r.result.connected && r.result.source && !dismissedConnections.includes(r.id) && now-Date.parse(r.result.connectedAt || '')<300000)
@@ -98,17 +98,26 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
         setMessage(saved.message);setAttachments(saved.attachments)
         await addAttachments(saved.files,saved.attachments)
   })
+  const openMainChat=useEffectEvent(async()=>{
+    const main=state?.chats.find(item=>item.is_main)
+    selectedChat.current=main?.id || null
+    openMainOnLoad.current=!main
+    attachmentEpoch.current++;setAttachments([]);setRetryAttachmentFiles(null);setChat(main?.id || null);setJobs([]);selectDraft(main?.id || null);setError('');setLoadingChat(true);setPanel(null);setShowArchived(false);setShowBin(false);setSelecting(false);setSelectedIds([])
+    try{
+      const earlierPoll=Boolean(refreshing.current)
+      await refresh()
+      // A poll started before this tab opened may already have chosen its chat.
+      // Finish that request, then load Main Chat if it has not been selected yet.
+      if(earlierPoll || openMainOnLoad.current)await refresh()
+      await restoreAttachmentDraft()
+    }finally{setLoadingChat(false)}
+  })
   useEffect(() => {
     if (!active) return
-    selectedChat.current=null
     initialized.current=false
     openMainOnLoad.current=true
     const initial = window.setTimeout(() => {
-      attachmentEpoch.current++;setAttachments([]);setRetryAttachmentFiles(null);setChat(null);setJobs([]);selectDraft(null);setError('');setLoadingChat(false);setPanel(null);setShowArchived(false);setShowBin(false);setSelecting(false);setSelectedIds([])
-      void (async()=>{
-        await refresh()
-        await restoreAttachmentDraft()
-      })().catch(e=>setError(e.message))
+      void openMainChat().catch(e=>setError(e.message))
     }, 0)
     const timer = window.setInterval(() => void refresh().catch(e => setError(e.message)), 4000)
     return () => { window.clearTimeout(initial); window.clearInterval(timer) }
