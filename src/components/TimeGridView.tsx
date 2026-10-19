@@ -1,7 +1,7 @@
 import { eventAppearance } from '../lib/eventAppearance'
 import { PlannerDate as Date } from '../lib/timezone.js'
 import { urgencyColor } from '../lib/urgencyColor'
-import { useEffect, useRef } from 'react'
+import { useLayoutEffect, useRef } from 'react'
 import type { CalendarEvent, CalendarView, Occurrence, Tag } from '../types'
 import { eventColor } from '../lib/colors'
 import {
@@ -19,6 +19,7 @@ import {PlanningButton} from './PlanningSettings'
 import {toDateInput} from '../lib/dates'
 
 type TimeGridViewProps = {
+  active?:boolean
   cursor: Date
   view: Extract<CalendarView, 'week' | 'day'>
   zoom: number
@@ -41,31 +42,32 @@ function clipToDay(item: Occurrence, day: Date): { start: Date; end: Date } | nu
   }
 }
 
-export function TimeGridView({ cursor, view, zoom, occurrences, tags, onSlotClick, onEventClick }: TimeGridViewProps) {
+export function TimeGridView({ active=true,cursor, view, zoom, occurrences, tags, onSlotClick, onEventClick }: TimeGridViewProps) {
   const days = view === 'day' ? [startOfDay(cursor)] : getWeekDays(cursor)
   const scrollRef = useRef<HTMLDivElement>(null)
-  const prevZoom = useRef(zoom)
+  const previousLayout = useRef<{key:string;hourHeight:number}|null>(null)
   const bodyRef=useRef<HTMLDivElement>(null)
   // Give short activities a readable row without expanding cards past their time bounds.
   const visibleDurations=occurrences.filter(item=>!item.event.allDay&&!item.event.reminder&&days.some(day=>clipToDay(item,day))).map(item=>(item.end.getTime()-item.start.getTime())/60000).filter(minutes=>minutes>=1)
   const shortest=Math.min(30,...visibleDurations)
   const hourHeight = Math.max(Math.round(BASE_HOUR_HEIGHT * zoom),Math.ceil(22*60/shortest))
 
-  useEffect(() => {
+  const dayKey=toDateInput(cursor)
+  useLayoutEffect(() => {
+    if(!active){previousLayout.current=null;return}
     const node = scrollRef.current
     if (!node) return
-    node.scrollTop = 8 * hourHeight - 16
-  }, [view, cursor])
-
-  useEffect(() => {
-    const node = scrollRef.current
-    if (!node || prevZoom.current === zoom) return
-    const oldHeight = BASE_HOUR_HEIGHT * prevZoom.current
-    const nextHeight = BASE_HOUR_HEIGHT * zoom
-    const midpoint = node.scrollTop + node.clientHeight / 2
-    node.scrollTop = (midpoint / oldHeight) * nextHeight - node.clientHeight / 2
-    prevZoom.current = zoom
-  }, [zoom])
+    const key=view+'/'+dayKey,previous=previousLayout.current
+    if(previous?.key!==key){
+      const now=new Date(),showNow=view==='day'&&toDateInput(now)===dayKey
+      const target=showNow?(now.getHours()+now.getMinutes()/60)*hourHeight:8*hourHeight
+      node.scrollTop=Math.max(0,target-(showNow?node.clientHeight*.25:16))
+    }else if(previous.hourHeight!==hourHeight){
+      const midpoint=node.scrollTop+node.clientHeight/2
+      node.scrollTop=midpoint/previous.hourHeight*hourHeight-node.clientHeight/2
+    }
+    previousLayout.current={key,hourHeight}
+  }, [active,view,dayKey,hourHeight])
 
   const now = new Date()
   const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 60) * hourHeight

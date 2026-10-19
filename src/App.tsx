@@ -399,6 +399,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
             />
           ) : (
             <TimeGridView
+              active={tab==='calendar'}
               cursor={cursor}
               view={view}
               zoom={zoom}
