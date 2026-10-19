@@ -1,6 +1,12 @@
 import {createHash} from 'node:crypto'
 import {readableUrl} from './browser-access.mjs'
 const MAX=25*1024*1024
+export async function pdfWorkerCall(origin,credentials,action,input,request=fetch){
+ const response=await request(new URL('/api/agent/vm/worker/pdf-upload/'+action,origin),{method:'POST',headers:{Authorization:'Bearer '+credentials.token,'Content-Type':'application/json','X-Planner-Job':credentials.jobId||'','X-Planner-Lease':credentials.lease||''},body:JSON.stringify(input),signal:AbortSignal.timeout(30000)})
+ // This is a Fetch Response, not a Playwright APIResponse.
+ if(!response.ok)throw Error('PDF save failed ('+response.status+'). Check the active run and Files state; do not claim a saved PDF.')
+ return response.json()
+}
 export function pdfDestination(value,enabled,sources){
  const u=new URL(value)
  if(enabled.includes('drive')&&u.protocol==='https:'&&!u.port&&!u.username&&!u.password&&(u.hostname==='drive.usercontent.google.com'||u.hostname.endsWith('.googleusercontent.com')))return u.href

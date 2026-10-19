@@ -1,10 +1,20 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {downloadPdf,importPdf} from './pdf-import.mjs'
+import {downloadPdf,importPdf,pdfWorkerCall} from './pdf-import.mjs'
 const sources={brightspace:'https://brightspace.nyu.edu',drive:'https://drive.google.com'}
 const enabled=['brightspace','drive']
 const pdf=Buffer.from('%PDF-1.7\nreal bytes fixture')
 function response(bytes=pdf,status=200,headers={}){return {ok:()=>status>=200&&status<300,status:()=>status,headers:()=>headers,body:async()=>bytes,json:async()=>JSON.parse(bytes),dispose:async()=>{}}}
+
+test('worker save failures report real Fetch HTTP status without masking it as a TypeError',async()=>{
+ for(const status of [400,401,409,413,500])await assert.rejects(()=>pdfWorkerCall('https://planner.test',{token:'worker',jobId:'job',lease:'lease'},'start',{name:'x.pdf'},async(url,init)=>{
+  assert.equal(url.pathname,'/api/agent/vm/worker/pdf-upload/start')
+  assert.equal(init.headers['X-Planner-Job'],'job')
+  assert.equal(init.headers['X-Planner-Lease'],'lease')
+  return new Response('Rejected',{status})
+ }),new RegExp('PDF save failed \\('+status+'\\)'))
+ assert.deepEqual(await pdfWorkerCall('https://planner.test',{},'finish',{id:'doc'},async()=>Response.json({documents:[{id:'doc'}]})),{documents:[{id:'doc'}]})
+})
 
 test('Brightspace topic resolves its original file; upload transfers exact PDF bytes without model output',async()=>{
  const urls=[],calls=[]

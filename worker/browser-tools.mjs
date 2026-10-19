@@ -1,5 +1,5 @@
 import { messageImages } from './message-images.mjs'
-import {importPdf} from './pdf-import.mjs'
+import {importPdf,pdfWorkerCall} from './pdf-import.mjs'
 import { browserQueue } from './browser-queue.mjs'
 const queued=browserQueue()
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
@@ -160,11 +160,7 @@ server.registerTool('browser_import_pdf',{
   const saved=await siteLaunches(process.env.PLANNER_DATA_DIR||'/var/lib/planner')
   const destination=readableUrl(args.url,enabled,sources)
   connection=await connectBrowser(destination,saved.browserProfiles)
-  const workerCall=async(action,input)=>{
-   const response=await fetch(new URL('/api/agent/vm/worker/pdf-upload/'+action,process.env.PLANNER_ORIGIN),{method:'POST',headers:{Authorization:'Bearer '+process.env.PLANNER_WORKER_TOKEN,'Content-Type':'application/json','X-Planner-Job':process.env.PLANNER_JOB_ID||'','X-Planner-Lease':process.env.PLANNER_JOB_LEASE||''},body:JSON.stringify(input),signal:AbortSignal.timeout(30000)})
-   if(!response.ok)throw Error('PDF save failed ('+response.status()+'). Check the active run and Files state; do not claim a saved PDF.')
-   return response.json()
-  }
+  const workerCall=(action,input)=>pdfWorkerCall(process.env.PLANNER_ORIGIN,{token:process.env.PLANNER_WORKER_TOKEN,jobId:process.env.PLANNER_JOB_ID,lease:process.env.PLANNER_JOB_LEASE},action,input)
   const result=await importPdf(connection.contexts()[0],args,{enabled,sources,workerCall})
   return {content:[{type:'text',text:JSON.stringify(result)}]}
  }catch(error){return {isError:true,content:[{type:'text',text:error.message||'PDF import failed.'}]}}
