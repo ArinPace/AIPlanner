@@ -12,7 +12,7 @@ import { observeAccounts, editBrowserAccount } from './browser-accounts.js'
 import { bulkManageChats,ensureMainChat,ensureMainWelcome } from './vm-chats.js'
 import { workerApproval, answerApproval, rememberedBrowserTools } from './vm-approvals.js'
 import {validateAttachments,attachmentSummaries} from './chat-attachments.js'
-import {readPlanning} from './planning.js'
+import {readAgentInstructions} from './agent-instructions.js'
 
 function checked<T>({ data, error }: { data: T; error: { code?: string } | null }): NonNullable<T> {
   if (error) throw new ApiError(error.code === '23505' ? 409 : 503, error.code === '23505' ? 'Another message is already waiting in this chat.' : 'Could not access your agent workspace.')
@@ -49,7 +49,7 @@ export async function handleVmWorker(request: Request, path: string) {
     const settings = checked(await db().from('planner_vm_settings').select('*').eq('username', host.username).single())
     const approvals=checked(await db().from('planner_vm_approvals').select('questions,answers,answered_at').eq('username',host.username).eq('host_id',host.id).not('answered_at','is',null).order('answered_at',{ascending:false}).limit(1000))
     const approvedBrowserTools=rememberedBrowserTools(approvals,settings.sources.includes('whatsapp')?settings.whatsapp_read_consent_at:null,settings.sources.includes('slack')?settings.message_read_consent?.slack:null)
-    return json({ sources: settings.sources, approvedBrowserTools, messageReadConsent:settings.message_read_consent, whatsappReadConsentAt: settings.whatsapp_read_consent_at, aiProvider: settings.ai_provider, credential: settings.credential ? openVmCredential(settings.credential) : null, personalChatGptAllowed: personalChatGptAllowed(host.username) })
+    return json({ agentInstructions:await readAgentInstructions(host.username), sources: settings.sources, approvedBrowserTools, messageReadConsent:settings.message_read_consent, whatsappReadConsentAt: settings.whatsapp_read_consent_at, aiProvider: settings.ai_provider, credential: settings.credential ? openVmCredential(settings.credential) : null, personalChatGptAllowed: personalChatGptAllowed(host.username) })
   }
   if(path.startsWith('/api/agent/vm/worker/pdf-upload/')){
     const jobId=request.headers.get('x-planner-job'),lease=request.headers.get('x-planner-lease')
@@ -139,13 +139,14 @@ export async function handleVmWorker(request: Request, path: string) {
 export async function handleVmRequest(request: Request, path: string, username: string) {
   const url = new URL(request.url)
   if (request.method === 'GET' && path === '/api/agent/vm') {
-    const mainId=await ensureMainChat(username)
-    checked(await db().from('planner_vm_settings').upsert({ username }, { onConflict: 'username', ignoreDuplicates: true }))
+    const polling=url.searchParams.get('poll')==='1'
+    const mainId=polling?null:await ensureMainChat(username)
+    if(!polling)checked(await db().from('planner_vm_settings').upsert({ username }, { onConflict: 'username', ignoreDuplicates: true }))
     const [hosts, chats, settings, runs, provisioning, accounts, deletedChats, queue] = await Promise.all([
       db().from('planner_vm_hosts').select(publicHost).eq('username', username).is('revoked_at', null).order('created_at', { ascending: false }),
       db().from('planner_vm_chats').select('id,title,is_main,pinned,archived,parent_chat_id,parent_job_id,created_at,updated_at').eq('username', username).is('deleted_at',null).order('is_main',{ascending:false}).order('pinned',{ascending:false}).order('updated_at', { ascending: false }).limit(100),
       db().from('planner_vm_settings').select('sources,schedule_enabled,sites,ai_provider,schedule,whatsapp_read_consent_at,message_read_consent').eq('username', username).single(),
-      db().from('planner_vm_jobs').select(publicJob).eq('username', username).order('created_at', { ascending: false }).limit(20),
+      db().from('planner_vm_jobs').select('id,chat_id,kind,status,error,created_at,started_at,finished_at,result').eq('username', username).order('created_at', { ascending: false }).limit(20),
       db().from('planner_vm_provisioning').select('status,error,wake_until,power_state,power_updated_at').eq('username', username).maybeSingle(),
       db().from('planner_browser_accounts').select('id,source,identity,label,active,verified_at').eq('username',username).order('verified_at',{ascending:false}),
       db().from('planner_vm_chats').select('id,title,archived,parent_chat_id,parent_job_id,created_at,updated_at,deleted_at').eq('username',username).not('deleted_at','is',null).gt('deleted_at',new Date(Date.now()-30*86400000).toISOString()).order('deleted_at',{ascending:false}).limit(1000),
@@ -155,14 +156,14 @@ export async function handleVmRequest(request: Request, path: string, username: 
     const connectedHosts = checked(hosts).map(h => ({ ...h, online: hostOnline(h.heartbeat_at) }))
     const prefs=checked(settings)
     const readyHost=connectedHosts.find(h=>prefs.ai_provider==='openai_api'||(h.capabilities?.signedIn&&(prefs.ai_provider==='claude_code'?h.capabilities.runtime==='claude':h.capabilities.runtime!=='claude')))
-    if(readyHost)await ensureMainWelcome(username,mainId,readyHost.id)
+    if(readyHost&&mainId)await ensureMainWelcome(username,mainId,readyHost.id)
     const wantsWake = Date.parse(machine?.wake_until || '') > Date.now() || checked(runs).some(r => ['queued','running'].includes(r.status))
     const freshPower = Date.now() - Date.parse(machine?.power_updated_at || '') < 60000
     const power = !connectedHosts.length ? 'preparing' : freshPower ? machine?.power_state === 'Running' ? 'online' : wantsWake ? 'starting' : 'offline' : connectedHosts.some(h => h.online) ? 'online' : wantsWake ? 'starting' : 'offline'
     const bin=checked(deletedChats),removed=new Set(bin.map(c=>c.id))
-    await (await import('./planning.js')).syncTodoCompletion(username)
-    const planning=await readPlanning(username)
-    return json({ planning:{startedAt:planning.startedAt,ready:planning.profile.onboarded,revision:planning.revision},queue:{active:checked(queue).find(job=>job.status==='running')||null,queuedIds:checked(queue).filter(job=>['queued','waiting'].includes(job.status)).map(job=>job.id)}, hosts: connectedHosts, power, accounts:checked(accounts), google:await googleCalendarStatus(username), chats: checked(chats), deletedChats:bin, settings: checked(settings), runs: checked(runs).filter(r=>!removed.has(r.chat_id)), provisioning: machine, personalChatGptAvailable: personalChatGptAllowed(username), hostedChatGptAvailable: false, recordings: false })
+    if(!polling)await (await import('./planning.js')).syncTodoCompletion(username)
+    const planning=checked(await db().from('planner_planning').select('started_at,revision,onboarded:state->onboarded').eq('username',username).maybeSingle())
+    return json({ planning:{startedAt:planning?.started_at||null,ready:planning?.onboarded===true,revision:Number(planning?.revision||0)},queue:{active:checked(queue).find(job=>job.status==='running')||null,queuedIds:checked(queue).filter(job=>['queued','waiting'].includes(job.status)).map(job=>job.id)}, hosts: connectedHosts, power, accounts:checked(accounts), google:await googleCalendarStatus(username), chats: checked(chats), deletedChats:bin, settings: checked(settings), runs: checked(runs).filter(r=>!removed.has(r.chat_id)).map(r=>({...r,message:'',reply:''})), provisioning: machine, personalChatGptAvailable: personalChatGptAllowed(username), hostedChatGptAvailable: false, recordings: false })
   }
   if (request.method === 'GET' && path === '/api/agent/vm/messages') {
     const chatId = url.searchParams.get('chat')

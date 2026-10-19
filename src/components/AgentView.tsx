@@ -69,10 +69,11 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
   const confirmedConnection=state?.runs.find(r=>r.result.connected && r.result.source && !dismissedConnections.includes(r.id) && now-Date.parse(r.result.connectedAt || '')<300000)
   const closePanel = useCallback(() => setPanel(null), [])
   const refreshing=useRef<Promise<void>|null>(null)
+  const initialized=useRef(false)
   const refresh = useCallback(() => {
     if(refreshing.current)return refreshing.current
     const pending=(async()=>{
-    const next = await agentRequest<VmState>('vm'); setState(next); setNow(Date.now())
+    const next = await agentRequest<VmState>(initialized.current?'vm?poll=1':'vm'); initialized.current=true; setState(next); setNow(Date.now())
     let id = selectedChat.current
     if (!id && openMainOnLoad.current) {
       id = next.chats.find(item=>item.is_main)?.id || null
@@ -82,7 +83,7 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
       const result = await agentRequest<{ jobs: VmJob[] }>('vm/messages?chat=' + encodeURIComponent(id))
       if (selectedChat.current === id) setJobs(result.jobs)
     }
-    setError(current=>current.startsWith('Could not reach the agent')?'':current)
+    setError(current=>current.startsWith('Could not reach the agent')||/^(?:signal timed out|The operation was aborted due to timeout)$/.test(current)?'':current)
     })().finally(()=>{if(refreshing.current===pending)refreshing.current=null})
     refreshing.current=pending
     return pending
@@ -99,6 +100,7 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
   useEffect(() => {
     if (!active) return
     selectedChat.current=null
+    initialized.current=false
     openMainOnLoad.current=true
     const initial = window.setTimeout(() => {
       attachmentEpoch.current++;setAttachments([]);setRetryAttachmentFiles(null);setChat(null);setJobs([]);setMessage('');setError('');setLoadingChat(false);setPanel(null);setShowArchived(false);setShowBin(false);setSelecting(false);setSelectedIds([])

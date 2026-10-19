@@ -15,6 +15,7 @@ import { browserRuntimeEnv } from './browser-runtime-env.mjs'
 import { messagePermissionText } from './message-permission.mjs'
 import {refreshRuntimeInstructions} from './runtime-instructions.mjs'
 import {plannerGuidance} from './planner-guidance.mjs'
+import {effectiveInstructions} from './live-instructions.mjs'
 import {continuationPrompt,monitorRun} from './run-control.mjs'
 import {branchInput} from './branch-input.mjs'
 import {workerRequest,transientConnectionError} from './worker-request.mjs'
@@ -56,7 +57,7 @@ const instructions = `You are this user's AI Planner assistant. Use the planner 
 async function chat(job, auth, remote) {
   if (!auth) throw new Error('Connect an AI account in Setup first.')
   if (liveBrowserNeedsSignIn()) throw new Error('Finish signing into your websites and select Verify connections before starting an agent run.')
-  if (auth.type === 'claude') return claudeChat({ dataDir, job, remote, origin, token: config.token, instructions:instructions+'\n\n'+plannerGuidance, progress: reply => api('progress', { id: job.id, lease: job.lease, reply }) })
+  if (auth.type === 'claude') return claudeChat({ dataDir, job, remote, origin, token: config.token, instructions, progress: reply => api('progress', { id: job.id, lease: job.lease, reply }) })
   const root = path.dirname(fileURLToPath(import.meta.url)), node = process.execPath
   const executable = path.join(root, 'node_modules', '.bin', 'codex')
   const args = ['app-server', '--listen', 'stdio://']
@@ -96,11 +97,11 @@ async function chat(job, auth, remote) {
   })
   try {
     await rpc.initialize()
-    const params = { cwd: path.join(dataDir, 'workspace'), ...(process.env.PLANNER_MODEL ? { model: process.env.PLANNER_MODEL } : auth.type === 'codex' ? {} : { model: 'gpt-6-luna' }), approvalPolicy: job.kind === 'sync' ? 'never' : 'on-request', sandbox: 'workspace-write', developerInstructions: instructions + '\n\n' + whatsappPermissionText(remote.whatsappReadConsentAt) + '\n\n' + messagePermissionText(remote.messageReadConsent) }
+    const params = { cwd: path.join(dataDir, 'workspace'), ...(process.env.PLANNER_MODEL ? { model: process.env.PLANNER_MODEL } : auth.type === 'codex' ? {} : { model: 'gpt-6-luna' }), approvalPolicy: job.kind === 'sync' ? 'never' : 'on-request', sandbox: 'workspace-write', developerInstructions: effectiveInstructions(instructions+'\n\n'+plannerGuidance+'\n\n'+whatsappPermissionText(remote.whatsappReadConsentAt)+'\n\n'+messagePermissionText(remote.messageReadConsent),remote.agentInstructions) }
     const fork=!threadId && job.fork_thread_id && job.fork_turn_id
     const thread = await rpc.request(fork?'thread/fork':threadId ? 'thread/resume' : 'thread/start', { ...params, ...(fork?{threadId:job.fork_thread_id,lastTurnId:job.fork_turn_id,excludeTurns:true}:threadId ? { threadId, excludeTurns: true } : {}) }, 60000)
     threadId = thread.thread.id
-    await refreshRuntimeInstructions(rpc,{threadId,instructions:params.developerInstructions+'\n\n'+plannerGuidance,dataDir,resumed:true})
+    await refreshRuntimeInstructions(rpc,{threadId,instructions:params.developerInstructions,dataDir,resumed:true})
     await report().catch(error=>{if(!transientConnectionError(error))throw error})
     const started=await rpc.request('turn/start', { threadId, input: branchInput(job,`Enabled websites: ${JSON.stringify(Object.fromEntries(remote.sources.map(source=>[source,sourceUrls[source]])))}.\n\n${continuationPrompt(job)}`,{nativeHistory:Boolean(fork || job.native_turn_id)}) })
     turnId=started.turn.id

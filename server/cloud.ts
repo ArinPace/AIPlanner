@@ -8,6 +8,7 @@ import { handleMcpRequest } from './mcp.js'
 import { handleChatLinks } from './chat-links.js'
 import { handleVmRequest, handleVmWorker } from './vm.js'
 import {handlePlanning} from './planning.js'
+import {readAgentInstructions,saveAgentInstructions} from './agent-instructions.js'
 import {readNoteHistory} from './note-history.js'
 import { handleVmPool, queuePersonalVm, registerVmHost, touchVmActivity } from './vm-host.js'
 import { handleFilesBin, preserveRemovedFiles } from './files-bin.js'
@@ -146,6 +147,11 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
     const username = await sessionUser(request)
     if (!username) throw new ApiError(401, 'Please sign in.')
     if (path === '/api/planning') return await handlePlanning(request,username)
+    if(path==='/api/agent/instructions'){
+      if(method==='GET')return json(await readAgentInstructions(username))
+      if(method==='POST')return json(await saveAgentInstructions(username,await body(request)))
+      throw new ApiError(405,'Use GET or POST.')
+    }
     if(path==='/api/files/history'&&method==='GET'){
       const params=new URL(request.url).searchParams,noteId=params.get('noteId')||''
       if(!noteId||noteId.length>200)throw new ApiError(400,'Choose a note.')

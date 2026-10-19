@@ -10,6 +10,7 @@ import { openView } from './browser.mjs'
 import { whatsappPermissionText } from './whatsapp-permission.mjs'
 import { browserRuntimeEnv } from './browser-runtime-env.mjs'
 import {plannerGuidance} from './planner-guidance.mjs'
+import {effectiveInstructions} from './live-instructions.mjs'
 import { messagePermissionText } from './message-permission.mjs'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
@@ -64,6 +65,7 @@ export async function claudeChat({ dataDir, job, remote, origin, token, instruct
   instructions += '\n\n'+plannerGuidance
   instructions += '\n\n' + whatsappPermissionText(remote.whatsappReadConsentAt)
   instructions += '\n\n' + messagePermissionText(remote.messageReadConsent)
+  instructions=effectiveInstructions(instructions,remote.agentInstructions)
   const sessionPath = path.join(dataDir, 'claude-sessions.json')
   let sessions = {}; try { sessions = JSON.parse(await readFile(sessionPath, 'utf8')) } catch {}
   const key = job.chat_id || job.id, existing = sessions[key]
