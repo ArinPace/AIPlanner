@@ -355,6 +355,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
           hiddenTagIds={hiddenSet}
           onToggleTag={toggleTag}
           onAddTag={addTag}
+          onUpdateTag={tag=>setTags(current=>current.map(item=>item.id===tag.id?{...item,...tag}:item))}
           onDeleteTag={deleteTag}
         />
 
