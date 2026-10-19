@@ -68,6 +68,7 @@ export function TimeGridView({ active=true,cursor, view, zoom, occurrences, tags
 
   const now=new Date(),dayKey=toDateInput(cursor)
   const todayKey=toDateInput(now),mobileWeek=mobile&&view==='week'
+  const containsToday=days.some(day=>toDateInput(day)===todayKey)
   useLayoutEffect(() => {
     if(!active){previousLayout.current=null;return}
     const node = mobileWeek?weekScrollRef.current:scrollRef.current
@@ -78,7 +79,7 @@ export function TimeGridView({ active=true,cursor, view, zoom, occurrences, tags
         const marker=mobileNowRef.current
         node.scrollTop=marker?Math.max(0,node.scrollTop+marker.getBoundingClientRect().top-node.getBoundingClientRect().top-node.clientHeight*.25):0
       }else{
-        const current=new Date(),showNow=view==='day'&&toDateInput(current)===dayKey
+        const current=new Date(),showNow=containsToday
         const target=showNow?(current.getHours()+current.getMinutes()/60)*hourHeight:8*hourHeight
         node.scrollTop=Math.max(0,target-(showNow?node.clientHeight*.25:16))
       }
@@ -87,7 +88,7 @@ export function TimeGridView({ active=true,cursor, view, zoom, occurrences, tags
       node.scrollTop=midpoint/previous.hourHeight*hourHeight-node.clientHeight/2
     }
     previousLayout.current={key,hourHeight}
-  }, [active,view,dayKey,todayKey,mobileWeek,hourHeight])
+  }, [active,view,dayKey,todayKey,mobileWeek,hourHeight,containsToday])
 
   const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 60) * hourHeight
 
@@ -128,7 +129,7 @@ export function TimeGridView({ active=true,cursor, view, zoom, occurrences, tags
           <div key={day.toISOString()} className={`time-day-head ${isToday(day) ? 'is-today' : ''}`}>
             <span className="dow">{day.toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase()}</span>
             <span className="num">{day.getDate()}</span>
-            {view==='day'&&<PlanningButton date={toDateInput(day)}/>}
+            <PlanningButton date={toDateInput(day)}/>
           </div>
         ))}
       </div>

@@ -924,6 +924,7 @@ p {
   gap: 4px;
   padding: 8px 0;
 }
+.time-view.is-week .time-day-head .day-intensity-button { max-width: 100%; padding: 3px 6px; min-height: 28px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; }
 
 .time-day-head .dow {
   font-size: 11px;
