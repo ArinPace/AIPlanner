@@ -839,6 +839,16 @@ p {
   min-height: 0;
   overflow: hidden;
 }
+.month-now-line { height: 2px; min-height: 2px; background: #ea4335; position: relative; margin: 3px 0; pointer-events: none; }
+.month-now-line::before { content: ''; position: absolute; width: 6px; height: 6px; border-radius: 50%; background: #ea4335; top: -2px; left: 0; }
+.calendar-history-dialog { width: min(660px,calc(100vw - 24px)); max-height: calc(100dvh - 32px); overflow: auto; border: 1px solid var(--line); border-radius: 14px; padding: 20px; background: var(--panel); color: var(--text); }
+.calendar-history-dialog::backdrop { background: #0006; }
+.calendar-history-dialog header { display: flex; justify-content: space-between; align-items: center; position: static; }
+.calendar-history-dialog ul { list-style: none; padding: 0; }
+.calendar-history-dialog li button { width: 100%; text-align: left; margin: 4px 0; }
+.calendar-history-dialog button { border: 1px solid var(--line); border-radius: 7px; padding: 8px; background: transparent; color: inherit; cursor: pointer; }
+.calendar-history-dialog small { display: block; color: var(--muted,#777); }
+.calendar-history-dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 280px; overflow: auto; font-size: 12px; }
 
 .event-chip,
 .timed-event,

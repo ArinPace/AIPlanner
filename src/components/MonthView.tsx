@@ -1,6 +1,7 @@
 import { eventAppearance } from '../lib/eventAppearance'
+import {PlannerDate as Date} from '../lib/timezone'
 import { urgencyColor } from '../lib/urgencyColor'
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment,useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CalendarEvent, Tag } from '../types'
 import { expandEvents } from '../lib/recurrence'
 import { eventColor } from '../lib/colors'
@@ -29,6 +30,8 @@ type MonthViewProps = {
 }
 
 export function MonthView({ cursor, zoom, events, onMonthChange, tags, onDayClick, onDayOpen, onEventClick }: MonthViewProps) {
+  const [now,setNow]=useState(()=>new Date())
+  useEffect(()=>{const timer=window.setInterval(()=>setNow(new Date()),60000);return()=>window.clearInterval(timer)},[])
   const scrollRef = useRef<HTMLDivElement>(null)
   const monthKey = cursor.getFullYear() + '-' + cursor.getMonth()
   const [range, setRange] = useState(() => ({ start: startOfWeek(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1)), weeks: 18 }))
@@ -122,6 +125,8 @@ export function MonthView({ cursor, zoom, events, onMonthChange, tags, onDayClic
         {days.map((day, index) => {
           const dayEvents = dayItems[index]
           const outside = !isSameMonth(day, cursor)
+          const today=isToday(day),nextEvent=dayEvents.findIndex(item=>!item.event.allDay&&item.start.getTime()>now.getTime())
+          const timeLine=<div className="month-now-line" role="img" aria-label={'Current time '+formatTimeCompact(now)} title={'Now · '+formatTimeCompact(now)}/>
 
           return (
             <div
@@ -141,11 +146,12 @@ export function MonthView({ cursor, zoom, events, onMonthChange, tags, onDayClic
                 {day.getDate() === 1 ? day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : day.getDate()}
               </button>
               <div className="month-events">
-                {dayEvents.map((item) => {
+                {dayEvents.map((item,eventIndex) => {
                   const color = eventColor(item.event, tags)
                   return (
+                    <Fragment key={`${item.event.id}-${item.start.toISOString()}`}>
+                    {today&&eventIndex===nextEvent&&timeLine}
                     <button
-                      key={`${item.event.id}-${item.start.toISOString()}`}
                       type="button"
                       className={`event-chip ${item.event.reminder?'reminder-event':''}`}
                       style={eventAppearance(color,item.event.reminder)}
@@ -157,8 +163,10 @@ export function MonthView({ cursor, zoom, events, onMonthChange, tags, onDayClic
                       {!item.event.allDay && <span className="event-time">{formatTimeCompact(item.start)}</span>}
                       <span className="event-title">{item.event.urgency!=null && <span className="event-urgency-badge" style={urgencyColor(item.event.urgency)} aria-label={'Urgency '+item.event.urgency}>{item.event.urgency}</span>}{item.event.title || '(No title)'}</span>
                     </button>
+                    </Fragment>
                   )
                 })}
+                {today&&nextEvent===-1&&timeLine}
               </div>
             </div>
           )

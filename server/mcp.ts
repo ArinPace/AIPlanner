@@ -1,5 +1,6 @@
 import {registerAgentMemory} from './agent-memory.js'
 import {registerAgentInstructions} from './agent-instructions.js'
+import {googleEventPatch,saveGoogleEvent,readGoogleEvent} from './google-calendar-write.js'
 import {readNoteHistory} from './note-history.js'
 import {SUBJECT_ORGANIZATION} from './subject-folders.js'
 import { randomUUID, createHash } from 'node:crypto'
@@ -43,7 +44,7 @@ export function createPlannerMcp(username: string, scopes: string[]) {
   function add(name: string, description: string, schema: z.ZodRawShape, scope: string, readOnly: boolean, execute: (args: any)=>Promise<unknown>) {
     server.registerTool(name,{description,inputSchema:schema,annotations:{readOnlyHint:readOnly,destructiveHint:false,idempotentHint:readOnly,openWorldHint:name.startsWith('browser_')},_meta:{securitySchemes:[{type:'oauth2',scopes:[scope]}]}},async args=>{
       if (!scopes.includes(scope)) return {isError:true,content:[{type:'text',text:`Reconnect the planner with ${scope} permission.`}],_meta:{'mcp/www_authenticate':[`Bearer resource_metadata="${MCP_ORIGIN}/.well-known/oauth-protected-resource", scope="${scope}"`]}}
-      try { if(['planner_save_event','planner_delete_events','planner_save_tag','planner_delete_tags','planner_apply_updates'].includes(name))await requireCalendarStarted(username);const result = await execute(args); return {content:[{type:'text',text:JSON.stringify(result)}],structuredContent:{result}} }
+      try { if(['planner_save_event','planner_restore_event','planner_delete_events','planner_save_tag','planner_delete_tags','planner_apply_updates','google_calendar_save_event'].includes(name))await requireCalendarStarted(username);const result = await execute(args); return {content:[{type:'text',text:JSON.stringify(result)}],structuredContent:{result}} }
       catch (error) { console.error('Planner MCP tool failed',{tool:name,type:error instanceof Error?error.name:'unknown'}); return {isError:true,content:[{type:'text',text:error instanceof ApiError ? error.message : 'Could not complete this planner action. No success is confirmed; read the planner before retrying.'}]} }
     })
   }
@@ -100,6 +101,8 @@ export function createPlannerMcp(username: string, scopes: string[]) {
     return {...await saveFiles(username,row.state,row.revision),item}
   })
   add('google_calendar_accounts','List this planner user’s authorized Google Calendar accounts and active account, without tokens.',{},'planner:read',true,()=>googleCalendarStatus(username))
+  add('google_calendar_event_read','Read one exact Google primary-calendar event by ID, including its current etag and recurrence. Use before editing or reconciling an uncertain create/update. Read-only and scoped to the selected authorized account.',{accountId:z.string().uuid().optional(),eventId:z.string().min(1).max(1024)},'planner:read',true,args=>readGoogleEvent(username,args))
+  add('google_calendar_save_event','Create or edit an event on the selected OAuth Google account PRIMARY calendar. Requires Google event-edit consent; browser sign-in alone is insufficient. Read the account and event first. Updates require the current etag and preserve omitted fields, guests and recurrence. A series edit requires scope series; an occurrence ID edits only that occurrence. New events require a stable UUID requestId reused on retries. Never delete/cancel a commitment to reschedule it: update start/end. No guest/invitation, calendar-sharing or deletion fields are exposed. Writes are versioned with a pre-edit backup and verified by readback; use planner_calendar_history with calendarKey google:<accountId>:primary to inspect/recover prior times. No automatic mirroring of the internal calendar.',googleEventPatch,'planner:write',false,args=>saveGoogleEvent(username,args))
   add('google_calendar_read','Read events from a Google account linked through OAuth in Add sites. Prefer this over the VM browser, which may use a different account. Defaults to the selected account; use accountId from google_calendar_accounts for another authorized account. Returns up to 250 events and hasMore if truncated.',{timeMin:iso.optional(),timeMax:iso.optional(),accountId:z.string().uuid().optional()},'planner:read',true,async args=>{
     const vm = storage(await db().from('planner_vm_settings').select('sources').eq('username',username).maybeSingle())
     const enabled = vm ? vm.sources : (await settings(username)).sources
@@ -140,7 +143,7 @@ export function createPlannerMcp(username: string, scopes: string[]) {
     if (old) Object.assign(old,link); else row.state.documents.push(link)
     return {...await saveFiles(username,row.state,row.revision),documentId}
   })
-  add('planner_save_event','Create or partially edit an INTERNAL AI Planner calendar event, not Google Calendar. For updates pass the existing id and only changed fields. Omitted fields, tags and recurrence are preserved. For creation omit id and supply title/start/end. Explicit timezone dates and latest calendar revision required. Recurrence edits affect the whole series.',eventPatch,'planner:write',false,args=>saveEvent(username,args))
+  add('planner_save_event','Create or partially edit an INTERNAL AI Planner calendar event, not Google Calendar. For updates pass the existing id and only changed fields. Omitted fields, tags and recurrence are preserved. For creation omit id and supply title/start/end. Explicit timezone dates and latest calendar revision required. Recurrence edits affect the whole series. Optional activityType break/buffer marks a new flexible block; buffers may reference an existing main activity with bufferForEventId. Do not reclassify commitments as disposable breaks.',eventPatch,'planner:write',false,args=>saveEvent(username,args))
   add('planner_bin_read','List this user’s recoverable Files Bin entries, retained for 30 days. Entry IDs differ from original file IDs. Use planner_restore_items to restore an entry.',{},'planner:read',true,async()=>{const response=await handleFilesBin(new Request(MCP_ORIGIN+'/api/files/bin'),'/api/files/bin',username);return response.json()})
   for(const [name,action,description] of [['planner_trash_items','trash','Move user-selected file/folder IDs into the 30-day Bin, including nested folder contents. Only when the user requests removal.'],['planner_restore_items','restore','Restore user-selected Bin ENTRY IDs, preserving contents and recovering missing parent folders.']] as const){
     add(name,description+' Read latest Files revision first.',{ids:z.array(id).min(1).max(100),revision:z.number().int().nonnegative()},'planner:write',false,async args=>{

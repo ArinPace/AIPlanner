@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { CalendarView } from '../types'
 import { formatRangeLabel } from '../lib/dates'
 import { SettingsPanel } from './SettingsPanel'
+import {CalendarHistory} from './CalendarHistory'
 import { CalendarMark, ChevronIcon, MenuIcon, PlusIcon, SettingsIcon } from './Icons'
 
 type HeaderProps = {
@@ -38,6 +39,7 @@ export function Header({
   onLogout,
 }: HeaderProps) {
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [historyOpen,setHistoryOpen]=useState(false)
   const settingsRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -74,6 +76,7 @@ export function Header({
         <button type="button" className="today-btn" onClick={onToday}>
           Today
         </button>
+        <button type="button" className="icon-btn" aria-label="Calendar history" title="Calendar history" onClick={()=>setHistoryOpen(true)}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M3 11a9 9 0 1 1 2 7M3 4v7h7M12 7v5l3 2"/></svg></button>
         <div className="nav-group">
           <button type="button" className="icon-btn" aria-label="Previous" onClick={() => onNavigate(-1)}>
             <ChevronIcon />
@@ -126,6 +129,7 @@ export function Header({
           </button>
         </div>
       </div>
+    {historyOpen&&<CalendarHistory onClose={()=>setHistoryOpen(false)}/>}
     </header>
   )
 }

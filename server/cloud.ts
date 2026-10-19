@@ -10,6 +10,8 @@ import { handleVmRequest, handleVmWorker } from './vm.js'
 import {handlePlanning} from './planning.js'
 import {readAgentInstructions,saveAgentInstructions} from './agent-instructions.js'
 import {readNoteHistory} from './note-history.js'
+import {calendarHistory,restoreCalendarEvent} from './calendar-history.js'
+import {z} from 'zod'
 import { handleVmPool, queuePersonalVm, registerVmHost, touchVmActivity } from './vm-host.js'
 import { handleFilesBin, preserveRemovedFiles } from './files-bin.js'
 
@@ -163,6 +165,12 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
     if (path === '/api/agent/vm' || path.startsWith('/api/agent/vm/')) return await handleVmRequest(request, path, username)
     if (path === '/api/agent/chats' || path === '/api/agent/chats/remove' || path === '/api/agent/mcp/disconnect') return await handleChatLinks(request, path, username)
     if (path.startsWith('/api/agent/')) return await handleAgentRequest(request, path, username)
+    if(path==='/api/calendar/history'&&method==='GET'){
+      const query=new URL(request.url).searchParams
+      const args=z.object({before:z.coerce.number().int().positive().optional(),versionId:z.coerce.number().int().positive().optional(),eventId:z.string().max(200).optional(),calendarKey:z.string().max(300).optional()}).parse(Object.fromEntries(query))
+      return json(await calendarHistory(username,args))
+    }
+    if(path==='/api/calendar/restore'&&method==='POST')return json(await restoreCalendarEvent(username,z.object({versionId:z.number().int().positive(),revision:z.number().int().nonnegative(),side:z.enum(['before','after']),overwrite:z.boolean().optional()}).parse(await body(request))))
     if (path === '/api/calendar' && method === 'GET') {
       const row = dataResult(await db().from('planner_calendars').select('state,revision').eq('username', username).single())
       return json({ ...row.state, revision: row.revision })

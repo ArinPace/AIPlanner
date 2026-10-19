@@ -18,6 +18,12 @@ test('routines are learned rather than universal presets; a lunch-only user gets
  for(const title of ['Breakfast','Dinner','Get ready for the day','Wind down / get ready for bed'])assert.equal(result.events.some(event=>event.title===title),false)
 })
 function fixed(id:string,start:string,end:string):CalendarEvent{return {id,title:id,start,end,allDay:false,description:'',tagIds:[],recurrence:{frequency:'none',interval:1,until:null}}}
+
+test('replanning retains an existing work allocation whose task record is missing',()=>{
+ const event={...fixed('preserved-work','2026-10-19T10:00:00-04:00','2026-10-19T11:00:00-04:00'),planning:{kind:'task' as const,taskId:'missing-after-reset',locked:false}}
+ const result=buildDayPlan(profile(),[event],'2026-10-19',1,now)
+ assert.deepEqual(result.events.find(item=>item.id===event.id),event)
+})
 test('fixed commitments survive; deadlines precede urgency; plans do not overlap',()=>{
  const p=profile();p.tasks=[task('urgent',99),{...task('deadline',10),deadline:'2026-10-19T12:00:00-04:00'}]
  const appointment=fixed('class','2026-10-19T09:00:00-04:00','2026-10-19T10:00:00-04:00')

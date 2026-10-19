@@ -20,6 +20,7 @@ import {vmJobStatus} from '../lib/vmJobStatus'
 import {planningRequest} from '../lib/api'
 import {StartPlanning} from './StartPlanning'
 import {planningChatLabel,isPlanningLaunch} from '../lib/planningChatLabel'
+import {useChatDraft} from '../lib/chatDraft'
 
 function MessageTime({value,label}:{value:string|null|undefined;label:string}) {
   if(!value || !Number.isFinite(Date.parse(value)))return null
@@ -35,7 +36,7 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
   const selectedChat = useRef<string | null>(null)
   const openMainOnLoad = useRef(true)
   const [jobs, setJobs] = useState<VmJob[]>([])
-  const [message, setMessage] = useState('')
+  const {message,setMessage,selectDraft}=useChatDraft(username)
   const [dictating,setDictating]=useState(false)
   const [attachments,setAttachments]=useState<ChatAttachment[]>([])
   const [preparingAttachments,setPreparingAttachments]=useState(false)
@@ -77,7 +78,7 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
     let id = selectedChat.current
     if (!id && openMainOnLoad.current) {
       id = next.chats.find(item=>item.is_main)?.id || null
-      if (id) {openMainOnLoad.current=false;selectedChat.current=id;setChat(id)}
+      if (id) {openMainOnLoad.current=false;selectedChat.current=id;setChat(id);selectDraft(id)}
     }
     if (id) {
       const result = await agentRequest<{ jobs: VmJob[] }>('vm/messages?chat=' + encodeURIComponent(id))
@@ -87,7 +88,7 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
     })().finally(()=>{if(refreshing.current===pending)refreshing.current=null})
     refreshing.current=pending
     return pending
-  }, [])
+  }, [selectDraft])
   const restoreAttachmentDraft=useEffectEvent(async()=>{
         if(sessionStorage.getItem(RECOVERY_TAB)!==username)return
         sessionStorage.removeItem(RECOVERY_TAB)
@@ -103,7 +104,7 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
     initialized.current=false
     openMainOnLoad.current=true
     const initial = window.setTimeout(() => {
-      attachmentEpoch.current++;setAttachments([]);setRetryAttachmentFiles(null);setChat(null);setJobs([]);setMessage('');setError('');setLoadingChat(false);setPanel(null);setShowArchived(false);setShowBin(false);setSelecting(false);setSelectedIds([])
+      attachmentEpoch.current++;setAttachments([]);setRetryAttachmentFiles(null);setChat(null);setJobs([]);selectDraft(null);setError('');setLoadingChat(false);setPanel(null);setShowArchived(false);setShowBin(false);setSelecting(false);setSelectedIds([])
       void (async()=>{
         await refresh()
         await restoreAttachmentDraft()
@@ -111,7 +112,7 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
     }, 0)
     const timer = window.setInterval(() => void refresh().catch(e => setError(e.message)), 4000)
     return () => { window.clearTimeout(initial); window.clearInterval(timer) }
-  }, [active, refresh, username])
+  }, [active, refresh, username,selectDraft])
   useEffect(()=>{
     if(!active)return
     const resume=()=>{if(document.visibilityState==='visible')void refresh().catch(e=>setError(e.message))}
@@ -123,7 +124,7 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
   useEffect(() => { end.current?.scrollIntoView({ block: 'nearest' }) }, [chat, jobs.length, lastReply])
   async function chooseChat(id: string) {
     openMainOnLoad.current=false
-    attachmentEpoch.current++;setAttachments([]);selectedChat.current = id; setChat(id); setJobs([]); setMessage(''); setError(''); setLoadingChat(true)
+    attachmentEpoch.current++;setAttachments([]);selectedChat.current = id; setChat(id); setJobs([]); selectDraft(id); setError(''); setLoadingChat(true)
     if (window.innerWidth <= 700) setSidebar(false)
     try { const result = await agentRequest<{ jobs: VmJob[] }>('vm/messages?chat=' + encodeURIComponent(id)); if (selectedChat.current === id) setJobs(result.jobs) }
     catch (e) { setError(e instanceof Error ? e.message : 'Could not open this chat.') }
@@ -133,7 +134,7 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
     openMainOnLoad.current=false
     setShowArchived(false);setShowBin(false)
     setSelecting(false);setSelectedIds([])
-    attachmentEpoch.current++;setAttachments([]);selectedChat.current = null; setChat(null); setJobs([]); setMessage(''); setError(''); setLoadingChat(false)
+    attachmentEpoch.current++;setAttachments([]);selectedChat.current = null; setChat(null); setJobs([]); selectDraft(null); setError(''); setLoadingChat(false)
     if (window.innerWidth <= 700) setSidebar(false)
   }
   async function resetMain(){
@@ -152,7 +153,7 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
     setChatAction('bulk');setError('')
     try {
       const result=await agentAction<{ids:string[]}>('vm/chats/bulk',{ids,action})
-      if(selectedChat.current && result.ids.includes(selectedChat.current)) {selectedChat.current=null;setChat(null);setJobs([]);setMessage('');setLoadingChat(false)}
+      if(selectedChat.current && result.ids.includes(selectedChat.current)) {selectedChat.current=null;setChat(null);setJobs([]);selectDraft(null);setLoadingChat(false)}
       setSelectedIds([]);setSelecting(false)
       await refresh()
     }catch(e){setError(e instanceof Error?e.message:'Could not update selected chats.')}
@@ -171,7 +172,7 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
     setChatAction(item.id); setError('')
     try {
       await agentAction('vm/chats/'+action,{ id:item.id, ...(action==='archive'?{archived:!item.archived}:{}) })
-      if (selectedChat.current === item.id) { selectedChat.current=null;setChat(null);setJobs([]);setMessage('');setLoadingChat(false) }
+      if (selectedChat.current === item.id) { selectedChat.current=null;setChat(null);setJobs([]);selectDraft(null);setLoadingChat(false) }
       await refresh()
     } catch(e) { setError(e instanceof Error?e.message:'Could not update this chat.') }
     finally { setChatAction(null) }
@@ -226,7 +227,7 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
     try {
       let id = selectedChat.current
       let untitled = !id || state?.chats.find(c => c.id === id)?.title === 'New conversation'
-      if (!id) { const created = await agentAction<VmChat>('vm/chats', { title: (message || attachments[0]?.name || 'New conversation').slice(0,80) }); id = created.id; selectedChat.current = id; setChat(id); untitled = false }
+      if (!id) { const created = await agentAction<VmChat>('vm/chats', { title: (message || attachments[0]?.name || 'New conversation').slice(0,80) }); id = created.id; selectedChat.current = id; setChat(id);selectDraft(id,true); untitled = false }
       await agentAction('vm/send', { chatId: id, message, attachments, queue, ...(untitled ? { title: (message || attachments[0]?.name || 'New conversation').slice(0,80) } : {}) })
       if(epoch===attachmentEpoch.current && selectedChat.current===id){setMessage(current=>current===submittedMessage?'':current);setAttachments(current=>current.filter(a=>!submittedIds.has(a.id)))}
       void refresh().catch(e=>setError(e.message))

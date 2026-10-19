@@ -61,6 +61,16 @@ export async function planDays(username:string,input:{date:string;days:number;pr
  if(!preview&&!row.startedAt)throw new ApiError(409,'The user must click Start planning my calendar in Main Chat before any calendar is populated.')
  const calendar=await calendarRow(username)
  const result=buildDayPlan(row.profile,calendar.state.events,date,days)
+ // An incomplete rebuild must not silently erase the last execution slot
+ // for unfinished work. Keep the previous calendar until a feasible move
+ // (possibly into a longer planning horizon) has been made.
+ const now=Date.now(),done=new Set(row.profile.tasks.filter(task=>task.status==='done').map(task=>task.id))
+ const lost=calendar.state.events.filter(event=>event.planning?.kind==='task'&&event.planning.taskId&&!done.has(event.planning.taskId)&&Date.parse(event.start)>=now&&!result.events.some(next=>next.planning?.taskId===event.planning!.taskId&&Date.parse(next.end)>now))
+ if(lost.length){
+  const warning='Rebuild would drop the last future allocation for unfinished work: '+[...new Set(lost.map(event=>event.title))].slice(0,10).join('; ')+'. Move or add back execution slots, extend the horizon, or obtain explicit user removal permission before rebuilding.'
+  if(!preview)throw new ApiError(409,warning)
+  result.warnings.push(warning)
+ }
  for(const item of row.todoChecklist.filter(item=>!item.checked))if(!row.profile.tasks.some(task=>task.source===item.source&&task.status==='todo'))result.warnings.push(item.title+': unfinished To do item needs a linked task and duration estimate before it can be scheduled. Do not omit it from the plan review.')
  if(!preview){const saved=await db().rpc('planner_commit_day_plan',{p_username:username,p_revision:row.revision,p_calendar_revision:calendar.revision,p_calendar:{...calendar.state,events:result.events}});if(saved.error)throw new ApiError(409,saved.error.message)}
  return {saved:!preview,added:result.added,warnings:result.warnings,from:result.from,through:result.through,revision:preview?calendar.revision:calendar.revision+1,events:result.events.filter(e=>e.planning&&e.start>=new Date(date+'T00:00:00').toISOString())}

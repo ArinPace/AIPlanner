@@ -11,7 +11,9 @@ export function buildDayPlan(profile:PlanningProfile,events:CalendarEvent[],date
  if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(profile.wake)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(profile.sleep)||profile.sleep<=profile.wake)throw new Error('Confirm this user\'s wake/sleep routine in Main Chat before building their day.')
  const start=new Date(date+'T00:00:00'),end=addDays(start,count)
  const completed=new Set(profile.tasks.filter(task=>task.status==='done').map(task=>task.id))
- const retained=removeCompletedTodoBlocks(events,completed,now.getTime()).filter(event=>!event.planning || event.planning.locked || new Date(event.start)<now || new Date(event.start)<start || new Date(event.start)>=end)
+ // A missing task record (for example after a chat reset) is not permission
+ // to discard its calendar allocation. Keep it fixed until reconciled.
+ const retained=removeCompletedTodoBlocks(events,completed,now.getTime()).filter(event=>!event.planning || event.planning.locked || (event.planning.kind==='task'&&!profile.tasks.some(task=>task.id===event.planning?.taskId)) || new Date(event.start)<now || new Date(event.start)<start || new Date(event.start)>=end)
  const fixed=expandEvents(retained.filter(e=>!e.reminder),start,end)
  const remaining=new Map(profile.tasks.filter(t=>t.status==='todo').map(t=>[t.id,Math.max(5,Math.round(t.minutes*(profile.learning[t.category]?.ratio ?? 1)))]))
  // Preserve work already allocated outside the range being rebuilt.

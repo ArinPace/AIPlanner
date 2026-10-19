@@ -54,7 +54,8 @@ const oauthConfig = (provider: string) => provider === 'google' ? {
   jwks: 'https://auth.openai.com/.well-known/jwks.json', issuer: ['https://auth.openai.com'], scopes: 'openid profile email',
 }
 export const GOOGLE_CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly'
-export function startGoogleCalendar(username: string) { return oauthStart(username,'google',`openid email ${GOOGLE_CALENDAR_SCOPE}`) }
+export const GOOGLE_CALENDAR_WRITE_SCOPE = 'https://www.googleapis.com/auth/calendar.events'
+export function startGoogleCalendar(username: string) { return oauthStart(username,'google',`openid email ${GOOGLE_CALENDAR_SCOPE} ${GOOGLE_CALENDAR_WRITE_SCOPE}`) }
 async function oauthStart(username: string, provider: string, requestedScopes?: string) {
   const config = oauthConfig(provider)
   if (!config.clientId || (provider === 'google' && !config.secret)) throw new ApiError(503, provider === 'google' ? 'Google OAuth needs a registered Google Cloud client. Your Google connections in this chat do not authorize the hosted planner.' : 'Hosted Continue with ChatGPT requires an approved OpenAI client ID. Chat remains available through the planner’s AI connection.')
@@ -88,12 +89,13 @@ async function oauthCallback(request: Request, provider: string) {
   if (payload.nonce !== attempt.nonce || !payload.sub) throw new ApiError(400, 'The provider identity could not be verified.')
   if (provider === 'google') {
     const granted = String(tokens.scope || attempt.requested_scopes || '').split(' ')
-    if (attempt.requested_scopes?.includes(GOOGLE_CALENDAR_SCOPE) && !granted.includes(GOOGLE_CALENDAR_SCOPE)) throw new ApiError(400,'Calendar permission was not granted. Start again and allow read-only Calendar access.')
+    if (attempt.requested_scopes?.includes(GOOGLE_CALENDAR_SCOPE) && !granted.includes(GOOGLE_CALENDAR_SCOPE)) throw new ApiError(400,'Calendar permission was not granted. Start again and allow Calendar access.')
+    if (attempt.requested_scopes?.includes(GOOGLE_CALENDAR_WRITE_SCOPE) && !granted.includes(GOOGLE_CALENDAR_WRITE_SCOPE)) throw new ApiError(400,'Calendar editing permission was not granted. Reconnect and allow event editing.')
     if (!tokens.refresh_token) throw new ApiError(400,'Google did not grant offline access. Reconnect and approve the requested access.')
   }
   const identity=typeof payload.email === 'string' ? payload.email : payload.sub
   const credentials=encrypt({ ...tokens, scope:tokens.scope || attempt.requested_scopes || config.scopes, expires_at: Date.now() + tokens.expires_in * 1000 })
-  if (provider==='google' && attempt.requested_scopes===`openid email ${GOOGLE_CALENDAR_SCOPE}`) {
+  if (provider==='google' && [`openid email ${GOOGLE_CALENDAR_SCOPE}`,`openid email ${GOOGLE_CALENDAR_SCOPE} ${GOOGLE_CALENDAR_WRITE_SCOPE}`].includes(attempt.requested_scopes)) {
     const account=check(await db().from('planner_google_accounts').upsert({username:attempt.username,google_sub:payload.sub,identity,credentials,updated_at:new Date().toISOString()},{onConflict:'username,google_sub'}).select('id').single())
     check(await db().from('planner_vm_settings').upsert({username:attempt.username,google_account_id:account.id},{onConflict:'username'}))
   } else check(await db().from('planner_connections').upsert({ username: attempt.username, provider, identity, credentials, updated_at: new Date().toISOString() }))
@@ -114,9 +116,9 @@ async function googleTokens(username: string) {
 }
 export async function googleCalendarStatus(username: string) {
   const [rows,selected]=await Promise.all([db().from('planner_google_accounts').select('id,identity,credentials,updated_at').eq('username',username).order('updated_at',{ascending:false}),db().from('planner_vm_settings').select('google_account_id').eq('username',username).maybeSingle()])
-  const accounts=check(rows).map(row=>({id:row.id,identity:row.identity,updatedAt:row.updated_at,connected:String(decrypt(row.credentials).scope || '').split(' ').includes(GOOGLE_CALENDAR_SCOPE)}))
+  const accounts=check(rows).map(row=>({id:row.id,identity:row.identity,updatedAt:row.updated_at,connected:String(decrypt(row.credentials).scope || '').split(' ').some(scope=>[GOOGLE_CALENDAR_SCOPE,GOOGLE_CALENDAR_WRITE_SCOPE,'https://www.googleapis.com/auth/calendar'].includes(scope)),canEdit:String(decrypt(row.credentials).scope || '').split(' ').some(scope=>[GOOGLE_CALENDAR_WRITE_SCOPE,'https://www.googleapis.com/auth/calendar'].includes(scope))}))
   const active=accounts.find(a=>a.id===check(selected)?.google_account_id) || accounts[0]
-  return { configured:Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET), connected:active?.connected || false, identity:active?.identity || null, updatedAt:active?.updatedAt || null, activeAccountId:active?.id || null, accounts }
+  return { configured:Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET), connected:active?.connected || false, canEdit:active?.canEdit || false, identity:active?.identity || null, updatedAt:active?.updatedAt || null, activeAccountId:active?.id || null, accounts }
 }
 export async function selectGoogleAccount(username:string,id:string) {
   const account=check(await db().from('planner_google_accounts').select('id').eq('id',id).eq('username',username).maybeSingle())
@@ -139,6 +141,18 @@ export async function readGoogleCalendar(username: string, timeMin?: string, tim
   if (!Number.isFinite(Date.parse(start))) throw new ApiError(400,'Choose a valid Calendar start date.')
   const end = timeMax || new Date(Date.parse(start)+30*86400000).toISOString()
   if (!Number.isFinite(Date.parse(start)) || !Number.isFinite(Date.parse(end)) || Date.parse(end)<=Date.parse(start) || Date.parse(end)-Date.parse(start)>366*86400000) throw new ApiError(400,'Choose a valid Calendar range of up to one year.')
+  const {tokens,identity}=await googleCalendarSession(username,selected.id)
+  const url = new URL('https://www.googleapis.com/calendar/v3/calendars/primary/events')
+  url.search = new URLSearchParams({singleEvents:'true',orderBy:'startTime',maxResults:'250',timeMin:new Date(start).toISOString(),timeMax:new Date(end).toISOString()}).toString()
+  const response = await fetch(url,{headers:{Authorization:`Bearer ${tokens.access_token}`},signal:AbortSignal.timeout(15000)})
+  if (!response.ok) throw new ApiError(response.status===401?401:502,'Google Calendar could not be read. Reconnect the Google account and try again.')
+  const data = await response.json() as Record<string,any>
+  return {identity,accountId:selected.id,timeMin:start,timeMax:end,timeZone:data.timeZone,events:(data.items || []).map((e:any)=>({id:e.id,title:e.summary,description:e.description,start:e.start,end:e.end,location:e.location,url:e.htmlLink,status:e.status,etag:e.etag,recurringEventId:e.recurringEventId,originalStartTime:e.originalStartTime})),hasMore:Boolean(data.nextPageToken)}
+}
+export async function googleCalendarSession(username:string,accountId?:string,write=false){
+ const status=await googleCalendarStatus(username),selected=status.accounts.find(a=>a.id===(accountId||status.activeAccountId))
+ if(!selected?.connected)throw new ApiError(409,'Connect Google Calendar through Add sites first.')
+ if(write&&!selected.canEdit)throw new ApiError(403,'Reconnect Google Calendar in Add sites and approve event editing; the current grant is read-only.')
   const account=check(await db().from('planner_google_accounts').select('identity,credentials').eq('username',username).eq('id',selected.id).single())
   let tokens=decrypt(account.credentials)
   if(tokens.expires_at<Date.now()+60000){
@@ -148,12 +162,7 @@ export async function readGoogleCalendar(username: string, timeMin?: string, tim
     const fresh=await refreshed.json() as Record<string,any>;tokens={...tokens,...fresh,expires_at:Date.now()+fresh.expires_in*1000}
     check(await db().from('planner_google_accounts').update({credentials:encrypt(tokens)}).eq('username',username).eq('id',selected.id))
   }
-  const url = new URL('https://www.googleapis.com/calendar/v3/calendars/primary/events')
-  url.search = new URLSearchParams({singleEvents:'true',orderBy:'startTime',maxResults:'250',timeMin:new Date(start).toISOString(),timeMax:new Date(end).toISOString()}).toString()
-  const response = await fetch(url,{headers:{Authorization:`Bearer ${tokens.access_token}`},signal:AbortSignal.timeout(15000)})
-  if (!response.ok) throw new ApiError(response.status===401?401:502,'Google Calendar could not be read. Reconnect the Google account and try again.')
-  const data = await response.json() as Record<string,any>
-  return {identity:account.identity,accountId:selected.id,timeMin:start,timeMax:end,timeZone:data.timeZone,events:(data.items || []).map((e:any)=>({id:e.id,title:e.summary,description:e.description,start:e.start,end:e.end,location:e.location,url:e.htmlLink,status:e.status})),hasMore:Boolean(data.nextPageToken)}
+ return {tokens,accountId:selected.id,identity:account.identity}
 }
 async function googleSnapshot(username: string, sources: string[]) {
   const connection = check(await db().from('planner_connections').select('identity').eq('username',username).eq('provider','google').maybeSingle())
