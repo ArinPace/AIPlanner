@@ -20,3 +20,10 @@ test('agent browser allows only enabled read-only public HTTPS destinations', ()
   assert.throws(() => readableUrl(assignment, ['gmail'], sources))
   for (const url of ['http://127.0.0.1', 'file:///etc/passwd', 'https://mail.google.com/', 'https://brightspace.nyu.edu.evil.test/', 'https://secret:password@brightspace.nyu.edu/', 'https://brightspace.nyu.edu/logout']) assert.throws(() => readableUrl(url, ['brightspace'], sources))
 })
+test('authenticated Albert portal is readable only when Albert is enabled',()=>{
+ const sources={albert:'https://albert.nyu.edu/'}
+ const url='https://sis.portal.nyu.edu/psp/ihprod/EMPLOYEE/EMPL/h/'
+ assert.equal(readableUrl(url,['albert'],sources),url)
+ for(const href of [url,'https://sis.portal.nyu.edu.evil.test/'])assert.throws(()=>readableUrl(href,[],sources))
+ assert.throws(()=>readableUrl('https://sis.portal.nyu.edu.evil.test/',['albert'],sources))
+})

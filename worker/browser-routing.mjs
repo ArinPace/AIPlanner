@@ -1,4 +1,4 @@
-import { sources } from './browser-sources.mjs'
+import { sources,albertHosts } from './browser-sources.mjs'
 export const googleSources = new Set(['gmail','calendar','drive'])
 export const googleCdp = 'http://127.0.0.1:9223'
 export function stableProfile(source, profiles={}) {
@@ -11,7 +11,7 @@ export function loginUsesStableProfile(source,intent,profiles={}) {
 }
 export function browserEndpoint(url,profiles={},registry=sources) {
   const host=new URL(url).hostname.replace(/^www\./,'')
-  const source=Object.keys(registry).find(key=>new URL(registry[key]).hostname.replace(/^www\./,'')===host) || (host==='twitter.com'?'x':host==='sis.nyu.edu'?'albert':['docs.google.com','forms.google.com','forms.gle'].includes(host)?'drive':null)
+  const source=Object.keys(registry).find(key=>new URL(registry[key]).hostname.replace(/^www\./,'')===host) || (host==='twitter.com'?'x':albertHosts.has(host)?'albert':['docs.google.com','forms.google.com','forms.gle'].includes(host)?'drive':null)
   if(!source)throw new Error('Unknown browser source.')
   return stableProfile(source,profiles) ? googleCdp : 'http://127.0.0.1:9222'
 }

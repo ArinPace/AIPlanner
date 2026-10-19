@@ -21,7 +21,7 @@ test('identical source URLs and titles in different courses never overwrite each
 })
 
 test('Albert and WhatsApp updates require their actual source hosts',()=>{
-  for(const [source,url] of [['albert','https://sis.nyu.edu/student'],['whatsapp','https://web.whatsapp.com/']]){
+  for(const [source,url] of [['albert','https://sis.nyu.edu/student'],['albert','https://sis.portal.nyu.edu/psp/ihprod/EMPLOYEE/EMPL/h/'],['whatsapp','https://web.whatsapp.com/']]){
     assert.equal(parseUpdates({summary:'Checked',needsLogin:false,updates:[{...update,source,url}]}).updates[0].source,source)
     assert.throws(()=>parseUpdates({summary:'Checked',needsLogin:false,updates:[{...update,source,url:'https://unrelated.test/'}]}),/unexpected source URL/)
   }

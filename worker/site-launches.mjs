@@ -1,7 +1,7 @@
 import { readFile, writeFile, rename, stat } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
-import { brightspaceCourse } from './site-status.mjs'
+import { brightspaceCourse,albertLanding } from './site-status.mjs'
 import { sources } from './browser-sources.mjs'
 const googleSites={gmail:['mail.google.com','/mail'],calendar:['calendar.google.com','/calendar'],drive:['drive.google.com','/drive']}
 export function googleAccountLanding(source,href) {
@@ -14,6 +14,7 @@ export function googleAccountLanding(source,href) {
 }
 export function selectedBrowserDestination(href,saved,documentAccount='drive') {
   const u=new URL(href)
+  if(u.origin==='https://albert.nyu.edu'&&u.pathname==='/'&&albertLanding(saved.albert))return albertLanding(saved.albert)
   if(u.hostname==='app.slack.com' && saved.slack)try{
     const channel=new URL(saved.slack),match=channel.pathname.match(/^\/client\/([A-Z0-9]+)\/[CG][A-Z0-9]+\/?$/)
     if(channel.origin===u.origin && match && (u.pathname==='/' || u.pathname.replace(/\/$/,'')==='/client/'+match[1]))return channel.href
@@ -57,7 +58,7 @@ export async function rememberBrowserProfile(dataDir,source) {
 }
 export async function rememberLanding(dataDir, source, href) {
   const u = new URL(href)
-  const url = source === 'slack' && u.origin === 'https://app.slack.com' && /^\/client\/[A-Z0-9]+\/[CDG][A-Z0-9]+\/?$/.test(u.pathname) ? u.origin+u.pathname : source === 'gradescope' ? brightspaceCourse(href) : googleAccountLanding(source,href)
+  const url = source === 'slack' && u.origin === 'https://app.slack.com' && /^\/client\/[A-Z0-9]+\/[CDG][A-Z0-9]+\/?$/.test(u.pathname) ? u.origin+u.pathname : source === 'gradescope' ? brightspaceCourse(href) : source==='albert'?albertLanding(href):googleAccountLanding(source,href)
   if (!url) return
   const saved = await siteLaunches(dataDir)
   if (saved[source] === url) return

@@ -1,3 +1,4 @@
+import {albertHosts} from './browser-sources.mjs'
 export function allowedLivePath(url, token) {
   try { return new URL(url, 'http://127.0.0.1').pathname.startsWith('/' + token + '/') } catch { return false }
 }
@@ -9,7 +10,7 @@ export function readableSlackImageUrl(value) {
 export function readableUrl(value, enabled, sources) {
   const url = new URL(value)
   const hosts = enabled.filter(s => sources[s]).map(s => new URL(sources[s]).hostname.replace(/^www\./, ''))
-  if (enabled.includes('albert') && sources.albert) hosts.push('sis.nyu.edu')
+  if (enabled.includes('albert') && sources.albert) hosts.push(...albertHosts)
   if (enabled.includes('drive') && sources.drive) hosts.push('docs.google.com','forms.google.com','forms.gle')
   // Brightspace uses this GET view for assignment instructions as well as the
   // upload form. Navigation exposes text only; this tool cannot fill or submit it.

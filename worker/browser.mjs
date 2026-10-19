@@ -5,14 +5,14 @@ import { randomBytes } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { allowedLivePath } from './browser-access.mjs'
-import { signedInPage, brightspaceCourse } from './site-status.mjs'
+import { signedInPage, brightspaceCourse,albertLanding } from './site-status.mjs'
 import { whatsappSignedInPage } from './whatsapp-status.mjs'
 import { siteLaunches, rememberLanding, googleAccountLanding, rememberBrowserProfile } from './site-launches.mjs'
 import { browserAccountIdentity } from './account-identity.mjs'
 import { googleBrowser, closeGoogleBrowser } from './google-browser.mjs'
 import { connectionMode, shouldConfirm } from './connection-mode.mjs'
 import { stableProfile, loginUsesStableProfile } from './browser-routing.mjs'
-import { sources } from './browser-sources.mjs'
+import { sources,albertHosts } from './browser-sources.mjs'
 import { resumeGradescope } from './gradescope-launch.mjs'
 export { sources } from './browser-sources.mjs'
 export { googleBrowser, googleSources } from './google-browser.mjs'
@@ -24,7 +24,7 @@ async function signedInBrowserPage(source, page) {
     return url.origin==='https://www.linkedin.com' && !/^\/(?:login|checkpoint|challenge|authwall)/.test(url.pathname) && await page.locator('a[href*="/messaging/"]:visible').count()>0 && await page.locator('a[href*="/mynetwork/"]:visible').count()>0
   }
   for (const frame of page.frames()) {
-    if (!(source==='albert' && new URL(frame.url()).hostname==='sis.nyu.edu') && new URL(frame.url()).hostname.replace(/^www\./,'') !== new URL(sources[source]).hostname.replace(/^www\./,'')) continue
+    if (!(source==='albert' && albertHosts.has(new URL(frame.url()).hostname)) && new URL(frame.url()).hostname.replace(/^www\./,'') !== new URL(sources[source]).hostname.replace(/^www\./,'')) continue
     const text = await frame.locator('body').innerText({ timeout: 1500 }).catch(() => '')
     if (signedInPage(source, frame.url(), text, await frame.locator('input[type=password]:visible').count().catch(() => 0) > 0)) return true
   }
@@ -58,7 +58,7 @@ export async function openLogin(dataDir, source, intent = 'connect') {
   if (!(source in sources)) throw new Error('Choose a supported website.')
   let destination = sources[source]
   const preferred=await siteLaunches(dataDir)
-  destination=googleAccountLanding(source,preferred[source]) || destination
+  destination=(source==='albert'?albertLanding(preferred.albert):googleAccountLanding(source,preferred[source])) || destination
   if (source === 'slack') { const saved=await siteLaunches(dataDir); if (saved.slack?.startsWith('https://app.slack.com/client/')) destination=saved.slack }
   if (source === 'gradescope') {
     const saved = await siteLaunches(dataDir)
@@ -103,7 +103,7 @@ export async function observeSignIn(dataDir) {
       }
     }
     if (source === 'slack') await rememberLanding(dataDir,'slack',page.url())
-    if (['gmail','calendar','drive'].includes(source)) await rememberLanding(dataDir,source,page.url())
+    if (['gmail','calendar','drive','albert'].includes(source)) await rememberLanding(dataDir,source,page.url())
     const identity = await browserAccountIdentity(source,page)
     if(!shouldConfirm(live.mode,live.initialIdentity,identity))continue
     if (live.reported && live.identity === identity) return {}
@@ -193,11 +193,11 @@ export async function checkSites(dataDir, enabled) {
       if (googleAccountLanding(source,preferred[source]) && googleAccountLanding(source,current.url())!==googleAccountLanding(source,preferred[source])) continue
       if (await signedInBrowserPage(source, current)) { existing = current; break }
     }
-    if (existing) { sites[source] = { ready: true, identity: await browserAccountIdentity(source,existing) }; continue }
+    if (existing) { sites[source] = { ready: true, identity: await browserAccountIdentity(source,existing) };if(source==='albert')await rememberLanding(dataDir,source,existing.url()); continue }
     const page = await ctx.newPage()
     try {
       const saved = source === 'slack' ? await siteLaunches(dataDir) : {}
-      await page.goto(googleAccountLanding(source,preferred[source]) || (source === 'slack' && saved.slack?.startsWith('https://app.slack.com/client/') ? saved.slack : sources[source]), { waitUntil: 'domcontentloaded', timeout: 40000 })
+      await page.goto((source==='albert'?albertLanding(preferred.albert):googleAccountLanding(source,preferred[source])) || (source === 'slack' && saved.slack?.startsWith('https://app.slack.com/client/') ? saved.slack : sources[source]), { waitUntil: 'domcontentloaded', timeout: 40000 })
       if (source === 'slack') await page.locator('[data-qa="message_container"]').first().waitFor({timeout:30000}).catch(()=>{})
       await page.waitForTimeout(2000)
       if(source==='gradescope' && enabled.includes('brightspace') && !await signedInBrowserPage(source,page) && await resumeGradescope(ctx,preferred.gradescope))await page.goto(sources.gradescope,{waitUntil:'domcontentloaded',timeout:30000})

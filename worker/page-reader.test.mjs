@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { chromium } from 'playwright-core'
 import { readBrowserPage } from './page-reader.mjs'
+import {readableUrl} from './browser-access.mjs'
 
 test('Albert reads allowed SIS frames while excluding sign-in and unrelated frames',async()=>{
   const browser=await chromium.launch({channel:'msedge',headless:true})
@@ -17,6 +18,17 @@ test('Albert reads allowed SIS frames while excluding sign-in and unrelated fram
     assert.equal(result.frames.length,1)
     assert.doesNotMatch(result.text,/Private login|Unrelated frame/)
   }finally{await browser.close()}
+})
+test('Albert portal can be read after verifying the enabled source',async()=>{
+ const browser=await chromium.launch({channel:'msedge',headless:true})
+ try{
+  const context=await browser.newContext()
+  context.request.get=async()=>({ok:()=>false,headers:()=>({}),dispose:async()=>{}})
+  const portal='https://sis.portal.nyu.edu/psp/ihprod/EMPLOYEE/EMPL/h/'
+  await context.route(portal,route=>route.fulfill({contentType:'text/html',body:'<h1>Albert</h1><p>Academics Enrolled Courses Test Course Sign Out</p>'}))
+  const result=await readBrowserPage(context,portal,{validate:url=>readableUrl(url,['albert'],{albert:'https://albert.nyu.edu/'})})
+  assert.match(result.text,/Enrolled Courses Test Course/)
+ }finally{await browser.close()}
 })
 
 test('Slack reader waits beyond the app shell, returns messages and keeps existing tabs', async () => {

@@ -1,5 +1,6 @@
 // Shared by connection setup, profile selection, and agent reads. New entries
 // inherit regular Chrome automatically; browser policy is not a site allowlist.
+export const albertHosts=new Set(['albert.nyu.edu','sis.nyu.edu','sis.portal.nyu.edu'])
 export const sources = {
   brightspace: 'https://brightspace.nyu.edu/', gradescope: 'https://www.gradescope.com/account',
   gmail: 'https://mail.google.com/mail/u/0/', calendar: 'https://calendar.google.com/calendar/u/0/r',

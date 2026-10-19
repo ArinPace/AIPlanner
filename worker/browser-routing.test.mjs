@@ -20,6 +20,7 @@ test('every current connection and a future registered source use regular Chrome
   assert.equal(loginUsesStableProfile('forum','connect'),true)
   assert.equal(browserEndpoint('https://forum.example.org/threads/1',{},future),'http://127.0.0.1:9223')
   assert.throws(()=>browserEndpoint('https://x.com.evil.example/'))
+  assert.equal(browserEndpoint('https://sis.portal.nyu.edu/psp/ihprod/EMPLOYEE/EMPL/h/'),'http://127.0.0.1:9223')
   assert.throws(()=>readableUrl('https://calendar.google.com/calendar/u/1/r',['slack'],sources))
 })
 

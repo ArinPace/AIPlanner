@@ -154,7 +154,7 @@ for (;;) {
           result = { reply: 'Authorize ChatGPT on OpenAIâ€™s page in your private browser, then return to Setup.', result: await connectPersonalChatGpt(dataDir, hostId) }
         }
         else if (job.kind === 'browser_login') result = { reply: 'Your private browser is ready. Sign-in is detected automatically.', result: await openLogin(dataDir, job.message.replace(/^(open|manage):/,''), job.message.startsWith('manage:') ? 'manage' : job.message.startsWith('open:') ? 'open' : 'connect') }
-        else if (job.kind === 'browser_check') result = { reply: 'Website checks finished. Sites that still need login are shown in Setup.', result: await checkSites(dataDir, remote.sources) }
+        else if (job.kind === 'browser_check') result = { reply: 'Website checks finished. Sites that still need login are shown in Setup.', result: await checkSites(dataDir, job.message?remote.sources.filter(source=>source===job.message):remote.sources) }
         else { clearInterval(timer); result = await chat(job, auth, remote) }
         await api('finish', { id: job.id, lease: job.lease, ...result })
       } catch (error) {
