@@ -35,7 +35,7 @@ export function PlanningSettings({date,onClose}:{date?:string;onClose:()=>void})
   </>}
  </dialog>
 }
-export function PlanningButton({date}:{date:string}){
+export function PlanningButton({date,dayNumber}:{date:string;dayNumber?:number}){
  const [open,setOpen]=useState(false)
- return <><button type="button" className="day-intensity-button" title={'Adjust intensity for '+date} aria-label={'Adjust intensity for '+date} onClick={e=>{e.stopPropagation();setOpen(true)}}>Intensity</button>{open&&<PlanningSettings date={date} onClose={()=>setOpen(false)}/>}</>
+ return <><button type="button" className={dayNumber===undefined?'day-intensity-button':'num day-intensity-date'} title={'Adjust intensity for '+date} aria-label={'Adjust intensity for '+date} onClick={e=>{e.stopPropagation();setOpen(true)}}>{dayNumber??'Intensity'}</button>{open&&<PlanningSettings date={date} onClose={()=>setOpen(false)}/>}</>
 }

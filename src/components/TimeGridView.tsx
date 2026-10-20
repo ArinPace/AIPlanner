@@ -61,10 +61,20 @@ export function TimeGridView({ active=true,cursor, view, zoom, occurrences, tags
   },[active])
   const previousLayout = useRef<{key:string;hourHeight:number}|null>(null)
   const bodyRef=useRef<HTMLDivElement>(null)
+  const fitWeek=view==='week'&&!mobile
+  const [availableHeight,setAvailableHeight]=useState(0)
+  useLayoutEffect(()=>{
+    const node=scrollRef.current
+    if(!node || !fitWeek || !active)return
+    const measure=()=>setAvailableHeight(node.clientHeight)
+    measure()
+    const observer=new ResizeObserver(measure);observer.observe(node)
+    return()=>observer.disconnect()
+  },[fitWeek,active])
   // Give short activities a readable row without expanding cards past their time bounds.
   const visibleDurations=occurrences.filter(item=>!item.event.allDay&&!item.event.reminder&&days.some(day=>clipToDay(item,day))).map(item=>(item.end.getTime()-item.start.getTime())/60000).filter(minutes=>minutes>=1)
   const shortest=Math.min(30,...visibleDurations)
-  const hourHeight = Math.max(Math.round(BASE_HOUR_HEIGHT * zoom),Math.ceil(22*60/shortest))
+  const hourHeight = fitWeek&&availableHeight>0?Math.max(1,(availableHeight-1)/24):Math.max(Math.round(BASE_HOUR_HEIGHT * zoom),Math.ceil(22*60/shortest))
 
   const now=new Date(),dayKey=toDateInput(cursor)
   const todayKey=toDateInput(now),mobileWeek=mobile&&view==='week'
@@ -74,7 +84,8 @@ export function TimeGridView({ active=true,cursor, view, zoom, occurrences, tags
     const node = mobileWeek?weekScrollRef.current:scrollRef.current
     if (!node) return
     const key=view+'/'+dayKey+'/'+todayKey+'/'+(mobileWeek?'mobile':'grid'),previous=previousLayout.current
-    if(previous?.key!==key){
+    if(fitWeek){node.scrollTop=0}
+    else if(previous?.key!==key){
       if(mobileWeek){
         const marker=mobileNowRef.current
         node.scrollTop=marker?Math.max(0,node.scrollTop+marker.getBoundingClientRect().top-node.getBoundingClientRect().top-node.clientHeight*.25):0
@@ -88,7 +99,7 @@ export function TimeGridView({ active=true,cursor, view, zoom, occurrences, tags
       node.scrollTop=midpoint/previous.hourHeight*hourHeight-node.clientHeight/2
     }
     previousLayout.current={key,hourHeight}
-  }, [active,view,dayKey,todayKey,mobileWeek,hourHeight,containsToday])
+  }, [active,view,dayKey,todayKey,mobileWeek,hourHeight,containsToday,fitWeek])
 
   const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 60) * hourHeight
 
@@ -128,8 +139,7 @@ export function TimeGridView({ active=true,cursor, view, zoom, occurrences, tags
         {days.map((day) => (
           <div key={day.toISOString()} className={`time-day-head ${isToday(day) ? 'is-today' : ''}`}>
             <span className="dow">{day.toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase()}</span>
-            <span className="num">{day.getDate()}</span>
-            <PlanningButton date={toDateInput(day)}/>
+            {view==='week'?<PlanningButton date={toDateInput(day)} dayNumber={day.getDate()}/>:<><span className="num">{day.getDate()}</span><PlanningButton date={toDateInput(day)}/></>}
           </div>
         ))}
       </div>
@@ -163,7 +173,7 @@ export function TimeGridView({ active=true,cursor, view, zoom, occurrences, tags
       </div>
 
       <div className="time-scroll" ref={scrollRef}>
-        <div ref={bodyRef} className={`time-body days-${days.length}`} style={{ height: 24 * hourHeight, marginBottom: 90 }}>
+        <div ref={bodyRef} className={`time-body days-${days.length}`} style={{ height: 24 * hourHeight, marginBottom: fitWeek?0:90 }}>
           <div className="hours">
             {HOURS.map((hour) => (
               <div key={hour} className="hour-label" style={{ height: hourHeight }}>
