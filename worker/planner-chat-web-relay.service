@@ -1,0 +1,15 @@
+[Unit]
+Description=AI Planner isolated Chat web relay experiment
+After=network-online.target
+
+[Service]
+Type=simple
+User=planner
+Group=planner
+WorkingDirectory=/opt/planner
+Environment=PLANNER_DATA_DIR=/var/lib/planner
+ExecStart=/usr/bin/node /opt/planner/chat-web-relay.mjs
+Restart=on-failure
+RestartSec=10
+UMask=0077
+NoNewPrivileges=true

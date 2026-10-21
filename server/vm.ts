@@ -13,6 +13,7 @@ import { bulkManageChats,ensureMainChat,ensureMainWelcome } from './vm-chats.js'
 import { workerApproval, answerApproval, rememberedBrowserTools } from './vm-approvals.js'
 import {validateAttachments,attachmentSummaries} from './chat-attachments.js'
 import {readAgentInstructions} from './agent-instructions.js'
+import {chatWebRelay,chatWebRelayWorker} from './chat-web-relay.js'
 
 function checked<T>({ data, error }: { data: T; error: { code?: string } | null }): NonNullable<T> {
   if (error) throw new ApiError(error.code === '23505' ? 409 : 503, error.code === '23505' ? 'Another message is already waiting in this chat.' : 'Could not access your agent workspace.')
@@ -45,6 +46,7 @@ export async function handleVmWorker(request: Request, path: string) {
     return json({ ...result, token }, 201)
   }
   const host = await workerIdentity(request)
+  if(path.startsWith('/api/agent/vm/worker/chat-web/'))return chatWebRelayWorker(request,host.username,path.split('/').at(-1)!)
   if (path === '/api/agent/vm/worker/config') {
     const settings = checked(await db().from('planner_vm_settings').select('*').eq('username', host.username).single())
     const approvals=checked(await db().from('planner_vm_approvals').select('questions,answers,answered_at').eq('username',host.username).eq('host_id',host.id).not('answered_at','is',null).order('answered_at',{ascending:false}).limit(1000))
@@ -137,6 +139,7 @@ export async function handleVmWorker(request: Request, path: string) {
 }
 
 export async function handleVmRequest(request: Request, path: string, username: string) {
+  if(path==='/api/agent/vm/chat-web')return chatWebRelay(request,username)
   const url = new URL(request.url)
   if (request.method === 'GET' && path === '/api/agent/vm') {
     const polling=url.searchParams.get('poll')==='1'
