@@ -11,9 +11,9 @@
  }
  window.addEventListener('message',event=>{
   if(event.source!==window||event.origin!==origin||event.data?.source!=='planner-chat-tab')return
-  const {type,id,message}=event.data
-  if(!['hello','connect','status','send'].includes(type))return
+  const {type,id,message,tabId}=event.data
+  if(!['hello','connect','status','send','list-tabs','select-tab','new-chat'].includes(type))return
   if(type==='send'&&(typeof id!=='string'||typeof message!=='string'||!message.trim()||message.length>12000))return
-  try{connect().postMessage({type,id,message})}catch{port=null;window.postMessage({source:'planner-device-relay',type:'disconnected'},origin)}
+  try{connect().postMessage({type,id,message,tabId})}catch{port=null;window.postMessage({source:'planner-device-relay',type:'disconnected'},origin)}
  })
 })()

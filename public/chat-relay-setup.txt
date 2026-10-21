@@ -7,7 +7,15 @@ AI Planner — VM-free Chat extension (Chrome / Edge desktop)
 5. Sign into ChatGPT in the new tab. Select Work, then return to Planner.
 6. Wait for “ChatGPT Work connected on this device,” then send a test message.
 
-The extension controls only the separate ChatGPT tab it creates. It does not use a VM,
+Version 0.2: New chat in Ai Planner creates/reuses the ChatGPT project Ai Planner.
+Use existing tab lists ChatGPT tabs in this browser. Choosing a conversation also
+moves it into Ai Planner. Unrelated chats are left alone. Finish any running reply
+and send or clear unsent ChatGPT drafts before switching conversations.
+
+To upgrade: replace the extracted files, click Reload on the extension at
+chrome://extensions or edge://extensions, then reload Planner and ChatGPT.
+
+The extension controls only the ChatGPT tab you create or explicitly select. It does not use a VM,
 read account cookies/tokens, or modify Planner’s existing Agent setup.
 Keep Planner and the ChatGPT tab open while relaying messages. This prototype does not
 provide unattended forwarding after the browser exits or the device sleeps.
