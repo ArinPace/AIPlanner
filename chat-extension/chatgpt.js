@@ -1,6 +1,6 @@
 (()=>{
- if(globalThis.__plannerChatRelayLoaded==='0.3.3')return
- globalThis.__plannerChatRelayLoaded='0.3.3'
+ if(globalThis.__plannerChatRelayLoaded==='0.3.4')return
+ globalThis.__plannerChatRelayLoaded='0.3.4'
  const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms))
  const visible=node=>Boolean(node.getClientRects().length)
  const composer=()=>[...document.querySelectorAll('[role="textbox"][contenteditable="true"]')].find(n=>visible(n)&&(n.getAttribute('aria-label')==='Work with ChatGPT'||(n.getAttribute('aria-label')==='New chat in Ai Planner'&&[...document.querySelectorAll('button[aria-pressed="true"]')].some(b=>b.innerText.trim()==='Work'))))
@@ -44,7 +44,15 @@
  const buttons=()=>[...document.querySelectorAll('button,[role="menuitem"],[role="option"],a')].filter(visible)
  const label=n=>(n.getAttribute('aria-label')||n.innerText).trim()
  const nativeControl=action=>buttons().find(n=>!n.disabled&&(action==='pause'?/^(Pause|Pause task)$/i:action==='resume'?/^(Resume|Resume task|Continue task)$/i:/^(Stop|Stop generating|Stop task)$/i).test(label(n)))
- const attention=()=>buttons().some(n=>/^(Sign in|Sign in on web page|Approve|Approve once|Allow once|Allow access|I.m done)$/i.test(label(n)))?'ChatGPT needs website approval or secure sign-in. Open its tab to continue.':''
+ const attention=()=>{
+  const controls=buttons().map(label)
+  // Detect the form without ever reading credential field values.
+  if([...document.querySelectorAll('input[type="password"]')].some(visible))return 'Secure sign-in is waiting in ChatGPT. Enter credentials there; this Planner task will continue afterward.'
+  if(controls.some(text=>/^(Sign in|Sign in on web page|Take over to sign in)$/i.test(text)))return 'Website sign-in needed. Open ChatGPT and use its secure form or take over its cloud browser.'
+  if(controls.some(text=>/^I.m done$/i.test(text)))return 'Finish signing in in ChatGPT’s cloud browser, then choose I’m done. This Planner task will continue.'
+  if(controls.some(text=>/^(Approve|Approve once|Allow once|Allow access)$/i.test(text)))return 'ChatGPT needs your website approval. Open ChatGPT to continue.'
+  return ''
+ }
  const status=()=>({connected:Boolean(composer()),working:active||running(),hasDraft:[...document.querySelectorAll('[role="textbox"][contenteditable="true"]')].some(n=>visible(n)&&n.innerText.trim()),canPause:Boolean(nativeControl('pause')),canResume:Boolean(nativeControl('resume')),canStop:Boolean(nativeControl('stop')),attention:attention()})
  async function insert(message){
   const box=composer()
@@ -126,33 +134,33 @@
   throw Error('Ai Planner was not found in the project menu. Create it with New chat in Ai Planner first.')
  }
  chrome.runtime.onMessage.addListener((input,_sender,respond)=>{
-  if(input?.type==='planner-relay-v033-control'){
+  if(input?.type==='planner-relay-v034-control'){
    if(!['pause','resume','stop'].includes(input.action)){respond({error:'Unknown task control.'});return}
    const button=nativeControl(input.action)
    if(!button){respond({error:'ChatGPT does not currently expose '+input.action+'. Open its tab to control this task.'});return}
    if(input.action==='stop')stopped=true
    button.click();respond({ok:true,...status()});return
   }
-  if(input?.type==='planner-relay-v033-steer'){
+  if(input?.type==='planner-relay-v034-steer'){
    if(!active&&!running()){respond({error:'No active ChatGPT task. Send this as a new message.'});return}
    if(typeof input.message!=='string'||!input.message.trim()||input.message.length>12000){respond({error:'Enter a follow-up of up to 12,000 characters.'});return}
    steering=true
    void(async()=>{try{await insert(input.message);(await sendButton()).click();lastInteraction=Date.now();respond({ok:true})}catch(error){respond({error:error.message})}finally{steering=false}})();return true
   }
-  if(input?.type==='planner-relay-v033-move-chat'){
+  if(input?.type==='planner-relay-v034-move-chat'){
    if(active||running()){respond({error:'Wait for ChatGPT to finish before moving this chat.'});return}
    void moveToProject().then(()=>respond({connected:Boolean(composer()),project:'Ai Planner'})).catch(error=>respond({error:error.message}))
    return true
   }
-  if(input?.type==='planner-relay-v033-new-chat'){
+  if(input?.type==='planner-relay-v034-new-chat'){
    if(active||running()){respond({error:'Wait for ChatGPT to finish before creating a chat.'});return}
    if([...document.querySelectorAll('[role="textbox"][contenteditable="true"]')].some(n=>visible(n)&&n.innerText.trim())){respond({error:'The ChatGPT tab has an unsent draft. Send or clear it first.'});return}
    void(async()=>{try{if(!document.querySelector('[role="textbox"][aria-label="New chat in Ai Planner"]'))await findButton(/^(Choose project|New chat in Ai Planner|Ai Planner|Change project: Ai Planner|Add new project)$/i,160);await project();const fresh=buttons().find(n=>label(n)==='New chat in Ai Planner');if(fresh)fresh.click();await wait(1000);const work=buttons().find(n=>label(n)==='Work');if(work&&work.getAttribute('aria-pressed')!=='true')work.click();for(let i=0;i<30&&!composer();i++)await wait(200);if(!composer())throw Error('ChatGPT Work composer is unavailable.');respond({connected:true,project:'Ai Planner'})}catch(error){respond({error:error.message})}})()
    return true
   }
-  if(input?.type==='planner-relay-v033-status'){respond(status());return}
-  if(input?.type!=='planner-relay-v033-send')return
-  if(active||running()){respond({accepted:false});void emit({type:'planner-relay-v033-finish',id:input.id,error:'ChatGPT is already working. Check the separate conversation before resending.'});return}
+  if(input?.type==='planner-relay-v034-status'){respond(status());return}
+  if(input?.type!=='planner-relay-v034-send')return
+  if(active||running()){respond({accepted:false});void emit({type:'planner-relay-v034-finish',id:input.id,error:'ChatGPT is already working. Check the separate conversation before resending.'});return}
   if(typeof input.message!=='string'||!input.message.trim()||input.message.length>180000)return
   active=true;stopped=false;lastInteraction=Date.now();respond({accepted:true})
   void(async()=>{
@@ -169,13 +177,13 @@
     while(true){
      const nodes=responses().filter(node=>!baseline.has(responseKey(node))),next=nodes.length?responseText(nodes.at(-1)):''
      if(next!==reply){reply=next;changedAt=Date.now()}
-     if(Date.now()-lastUpdate>1500){await emit({type:'planner-relay-v033-progress',id:input.id,reply,attention:attention()});lastUpdate=Date.now()}
+     if(Date.now()-lastUpdate>1500){await emit({type:'planner-relay-v034-progress',id:input.id,reply,attention:attention()});lastUpdate=Date.now()}
      if(stopped)throw Error('Stopped by the user. Changes already saved are preserved.')
      if(reply&&Date.now()-changedAt>4500&&Date.now()-lastInteraction>4500&&!steering&&!running()&&!nativeControl('resume')&&!attention())break
      await wait(1000)
     }
-    await emit({type:'planner-relay-v033-finish',id:input.id,reply})
-   }catch(error){await emit({type:'planner-relay-v033-finish',id:input.id,reply,error:String(error.message||'Relay failed.')})}
+    await emit({type:'planner-relay-v034-finish',id:input.id,reply})
+   }catch(error){await emit({type:'planner-relay-v034-finish',id:input.id,reply,error:String(error.message||'Relay failed.')})}
    finally{active=false}
   })()
  })
