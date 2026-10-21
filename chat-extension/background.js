@@ -3,11 +3,11 @@ const validChat=url=>{try{return new URL(url).origin==='https://chatgpt.com'}cat
 const chatLocation=url=>{const u=new URL(url);return u.origin+u.pathname}
 const chatIdentity=url=>{const path=new URL(url).pathname;return path.match(/\/c\/([a-z0-9-]+)/i)?.[1]||path.replace(/(\/g\/g-p-[a-f0-9]{32})[^/]+/i,'$1')}
 async function pageStatus(tab){
- try{return await chrome.tabs.sendMessage(tab.id,{type:'planner-relay-v035-status'})}
+ try{return await chrome.tabs.sendMessage(tab.id,{type:'planner-relay-v036-status'})}
  catch{
   // Existing tabs may predate installation. Inject only into the selected ChatGPT tab.
   await chrome.scripting.executeScript({target:{tabId:tab.id},files:['chatgpt.js']})
-  return chrome.tabs.sendMessage(tab.id,{type:'planner-relay-v035-status'})
+  return chrome.tabs.sendMessage(tab.id,{type:'planner-relay-v036-status'})
  }
 }
 async function target(plannerTab){
@@ -17,6 +17,21 @@ async function target(plannerTab){
 }
 const ports=new Map()
 const opening=new Set()
+chrome.runtime.onMessage.addListener((message,sender,respond)=>{
+ if(message?.type!=='planner-relay-v036-return-planner'||!validChat(sender.url)||!sender.tab)return
+ void(async()=>{
+  const key='signInOwner:'+sender.tab.id,owner=(await chrome.storage.session.get(key))[key]
+  if(typeof owner!=='number')throw Error('The Planner window is no longer connected.')
+  const mapped=await target(owner)
+  if(mapped?.id!==sender.tab.id)throw Error('This window no longer belongs to that Planner chat.')
+  const planner=await chrome.tabs.get(owner)
+  await chrome.windows.update(planner.windowId,{state:'normal',focused:true})
+  await chrome.tabs.update(owner,{active:true})
+  if(planner.windowId!==sender.tab.windowId)await chrome.windows.update(sender.tab.windowId,{state:'minimized'})
+  respond({ok:true})
+ })().catch(error=>respond({error:error.message||'Return to Planner manually.'}))
+ return true
+})
 async function projectStart(){
  const tabs=await chrome.tabs.query({url:'https://chatgpt.com/*'})
  for(const tab of tabs){const match=new URL(tab.url).pathname.match(/^\/g\/(g-p-[a-f0-9]{32}-ai-planner)\/(?:project|c\/)/i);if(match){const url='https://chatgpt.com/g/'+match[1]+'/project';await chrome.storage.local.set({plannerProjectUrl:url});return url}}
@@ -25,14 +40,14 @@ async function projectStart(){
  return 'https://chatgpt.com/'
 }
 chrome.runtime.onMessage.addListener((message,sender,respond)=>{
- if(!['planner-relay-v035-progress','planner-relay-v035-finish'].includes(message?.type)||!validChat(sender.url)||!sender.tab)return
+ if(!['planner-relay-v036-progress','planner-relay-v036-finish'].includes(message?.type)||!validChat(sender.url)||!sender.tab)return
  void(async()=>{
   const saved=await chrome.storage.session.get(null),tab=await chrome.tabs.get(sender.tab.id)
   for(const [key,id] of Object.entries(saved)){
    if(!key.startsWith('chatTab:')||id!==sender.tab.id)continue
    const plannerTab=Number(key.slice(8)),url=chatLocation(tab.url)
    if(/^\/(?:g\/[^/]+\/)?c\/[a-z0-9-]+$/i.test(new URL(url).pathname))await chrome.storage.session.set({['chatUrl:'+plannerTab]:url})
-   const output={type:message.type==='planner-relay-v035-finish'?'finish':'progress',id:message.id,reply:message.reply,error:message.error,url,attention:message.attention}
+   const output={type:message.type==='planner-relay-v036-finish'?'finish':'progress',id:message.id,reply:message.reply,error:message.error,url,attention:message.attention}
    if(output.type==='finish')await chrome.storage.session.set({['outcome:'+plannerTab]:output})
    for(const port of ports.get(plannerTab)||[])try{port.postMessage(output)}catch{}
   }
@@ -68,7 +83,7 @@ chrome.runtime.onConnect.addListener(port=>{
     for(let attempt=0;attempt<30;attempt++){
      try{await pageStatus(await chrome.tabs.get(tab.id));break}catch(error){if(attempt===29)throw error;await new Promise(resolve=>setTimeout(resolve,300))}
     }
-    const result=await chrome.tabs.sendMessage(tab.id,{type:'planner-relay-v035-new-chat'})
+    const result=await chrome.tabs.sendMessage(tab.id,{type:'planner-relay-v036-new-chat'})
     if(result.error)throw Error(result.error)
     tab=await chrome.tabs.get(tab.id)
     await chrome.storage.session.set({['chatUrl:'+plannerTab]:chatLocation(tab.url)})
@@ -92,7 +107,7 @@ chrome.runtime.onConnect.addListener(port=>{
     await chrome.storage.session.remove('outcome:'+plannerTab)
     const status=await pageStatus(selected)
     if(/\/(?:g\/[^/]+\/)?c\//.test(new URL(selected.url).pathname)){
-     const moved=await chrome.tabs.sendMessage(selected.id,{type:'planner-relay-v035-move-chat'})
+     const moved=await chrome.tabs.sendMessage(selected.id,{type:'planner-relay-v036-move-chat'})
      if(moved.error)throw Error(moved.error)
      const updated=await chrome.tabs.get(selected.id)
      await chrome.storage.session.set({['chatUrl:'+plannerTab]:chatLocation(updated.url)})
@@ -107,10 +122,27 @@ chrome.runtime.onConnect.addListener(port=>{
     reply({type:'ready',installed:true,connected:false,reason:'A separate ChatGPT tab is open. Sign in and select Work there, then return to Planner.'});return
    }
    let tab=await target(plannerTab)
+   if(message.type==='sign-in-window'){
+    if(!tab)throw Error('Connect a ChatGPT tab first.')
+    await pageStatus(tab)
+    const owner=await chrome.tabs.get(plannerTab),host=await chrome.windows.get(owner.windowId)
+    if(owner.windowId===tab.windowId)await chrome.tabs.update(plannerTab,{active:true})
+    await chrome.tabs.update(tab.id,{autoDiscardable:false})
+    const current=await chrome.windows.get(tab.windowId,{populate:true})
+    const width=Math.min(760,Math.max(480,Math.round((host.width||1200)*0.6))),height=Math.max(600,Math.min(900,host.height||800))
+    // Let Chrome choose an on-screen position, including after monitor changes
+    // or when the source window's stored bounds belong to a minimized window.
+    const bounds={width,height}
+    if(current.type==='popup'&&current.tabs?.length===1)await chrome.windows.update(current.id,{state:'normal',focused:true,...bounds})
+    else await chrome.windows.create({tabId:tab.id,type:'popup',focused:true,...bounds})
+    await chrome.storage.session.set({['signInOwner:'+tab.id]:plannerTab})
+    await chrome.tabs.sendMessage(tab.id,{type:'planner-relay-v036-sign-in-window'})
+    reply({type:'controlled',action:'sign-in-window'});return
+   }
    if(message.type==='download'){
     if(!tab||typeof message.fileId!=='string'||message.fileId.length>700)throw Error('Choose a file in the connected ChatGPT conversation.')
     await pageStatus(tab)
-    const result=await chrome.tabs.sendMessage(tab.id,{type:'planner-relay-v035-download',fileId:message.fileId})
+    const result=await chrome.tabs.sendMessage(tab.id,{type:'planner-relay-v036-download',fileId:message.fileId})
     if(result.error)throw Error(result.error)
     reply({type:'controlled',action:'download'});return
    }
@@ -125,7 +157,7 @@ chrome.runtime.onConnect.addListener(port=>{
    if(['control','steer'].includes(message.type)){
     if(!tab)throw Error('Connect the ChatGPT tab first.')
     await pageStatus(tab)
-    const result=await chrome.tabs.sendMessage(tab.id,{type:message.type==='control'?'planner-relay-v035-control':'planner-relay-v035-steer',action:message.action,id:message.id,message:message.message})
+    const result=await chrome.tabs.sendMessage(tab.id,{type:message.type==='control'?'planner-relay-v036-control':'planner-relay-v036-steer',action:message.action,id:message.id,message:message.message})
     if(result.error)throw Error(result.error)
     reply({type:'controlled',id:message.id,action:message.type==='steer'?'steer':message.action,...result});return
    }
@@ -140,7 +172,7 @@ chrome.runtime.onConnect.addListener(port=>{
     if(typeof message.id!=='string'||typeof message.message!=='string'||message.message.length>180000)throw Error('Invalid message.')
     await pageStatus(tab)
     if(!/^\/g\/g-p-[^/]+\/(?:project|c\/)/.test(new URL(tab.url).pathname)){
-     const preparation=await chrome.tabs.sendMessage(tab.id,{type:/\/c\//.test(new URL(tab.url).pathname)?'planner-relay-v035-move-chat':'planner-relay-v035-new-chat'})
+     const preparation=await chrome.tabs.sendMessage(tab.id,{type:/\/c\//.test(new URL(tab.url).pathname)?'planner-relay-v036-move-chat':'planner-relay-v036-new-chat'})
      if(preparation.error)throw Error(preparation.error)
      tab=await chrome.tabs.get(tab.id)
      await chrome.storage.session.set({['chatUrl:'+plannerTab]:chatLocation(tab.url)})
@@ -148,7 +180,7 @@ chrome.runtime.onConnect.addListener(port=>{
     const sentKey='sent:'+plannerTab+':'+message.id
     if((await chrome.storage.session.get(sentKey))[sentKey])throw Error('This message may already have been sent. Check ChatGPT before resending.')
     await chrome.storage.session.set({[sentKey]:true})
-    await chrome.tabs.sendMessage(tab.id,{type:'planner-relay-v035-send',id:message.id,message:message.message,attachments:message.attachments})
+    await chrome.tabs.sendMessage(tab.id,{type:'planner-relay-v036-send',id:message.id,message:message.message,attachments:message.attachments})
     return
    }
    if(['hello','status'].includes(message.type)){

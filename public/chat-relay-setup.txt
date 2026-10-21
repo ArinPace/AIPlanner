@@ -7,7 +7,7 @@ AI Planner — VM-free Chat extension (Chrome / Edge desktop)
 5. Sign into ChatGPT in the new tab. Select Work, then return to Planner.
 6. Wait for “ChatGPT Work connected on this device,” then send a test message.
 
-Version 0.3.5: Chat has a protected Main Chat, saved conversations, pin/archive/bin,
+Version 0.3.6: Chat has a protected Main Chat, saved conversations, pin/archive/bin,
 text branching/editing, incremental history, saved drafts, queued text (Tab),
 dictation, paste/drop attachments, Begin Planning (/plan), and live Planner tools
 for calendar, Files, shared memory and personal instructions. Internal prompts
@@ -42,7 +42,12 @@ Uploads are sent only after ChatGPT displays every prepared attachment. If an
 upload fails, the draft stays in ChatGPT for review rather than sending without it.
 
 When ChatGPT pauses for website sign-in, Planner keeps tracking the task. Use
-Open ChatGPT to continue, sign in through its secure form or cloud-browser
-handoff, and select I'm done there. Passwords are never forwarded through Planner.
+Secure sign-in opens only the connected ChatGPT tab in a dedicated window,
+keeping the Planner tab selected in its original window. Sign in through the
+genuine ChatGPT form or cloud-browser handoff, select I'm done there if offered,
+then use Return to AI Planner. The task window is minimized, not closed.
+This is a separate native window, not an iframe inside the Planner website;
+ChatGPT's framing restrictions remain intact. Passwords are never forwarded
+through Planner. This desktop feature does not implement iPhone sign-in.
 File cards in the connected conversation appear as Download buttons in Planner.
 These invoke ChatGPT's own download control; private session URLs are not copied.

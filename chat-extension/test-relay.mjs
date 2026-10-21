@@ -22,7 +22,7 @@ try{
  const planner=await context.newPage();await planner.goto('https://aiplanner-ten.vercel.app/')
  const post=value=>planner.evaluate(value=>send(value),value)
  const event=async(type,id)=>{await planner.waitForFunction(({type,id})=>events.some(e=>e.type===type&&(!id||e.id===id)),{type,id});return planner.evaluate(({type,id})=>events.findLast(e=>e.type===type&&(!id||e.id===id)),{type,id})}
- await post({type:'hello'});assert.equal((await event('ready')).extensionVersion,'0.3.5')
+ await post({type:'hello'});assert.equal((await event('ready')).extensionVersion,'0.3.6')
  // Pre-existing tabs are a required user path and avoid Edge's headless-only
  // pause of newly-created inactive extension tabs under request interception.
  const native=await context.newPage();await native.goto('https://chatgpt.com/')
@@ -68,6 +68,22 @@ try{
  await native.getByRole('button',{name:"I'm done",exact:true}).click()
  assert.equal((await event('finish','sign-in')).reply,'SIGN_IN_RESUMED')
  console.log('PASS manual sign-in handoff stays pending and resumes after user completion')
+ await post({type:'sign-in-window'})
+ await planner.waitForFunction(()=>events.some(e=>e.type==='controlled'&&e.action==='sign-in-window'),null,{polling:100}).catch(async error=>{console.log('Sign-in window errors',await planner.evaluate(()=>events.filter(e=>e.type==='error')));throw error})
+ assert.equal(await native.locator('#planner-return-control').count(),1)
+ const signInState=await worker.evaluate(async()=>{
+  const state=await chrome.storage.session.get(null),pair=Object.entries(state).find(([key])=>key.startsWith('signInOwner:'))
+  const native=await chrome.tabs.get(Number(pair[0].slice('signInOwner:'.length))),planner=await chrome.tabs.get(pair[1])
+  return {separate:native.windowId!==planner.windowId,plannerActive:planner.active,type:(await chrome.windows.get(native.windowId)).type}
+ })
+ assert.deepEqual(signInState,{separate:true,plannerActive:true,type:'popup'})
+ // Dispatch the real runtime command from the mapped content-script context.
+ const returned=await worker.evaluate(async()=>{
+  const state=await chrome.storage.session.get(null),pair=Object.entries(state).find(([key])=>key.startsWith('signInOwner:'))
+  return (await chrome.scripting.executeScript({target:{tabId:Number(pair[0].slice('signInOwner:'.length))},func:()=>chrome.runtime.sendMessage({type:'planner-relay-v036-return-planner'})}))[0].result
+ })
+ assert.equal(returned.ok,true)
+ console.log('PASS secure window keeps Planner selected and mapped return action restores Planner')
  await post({type:'send',id:'file-card',chatId:'fixture-chat',message:'TEST_FILE_CARD'})
  await event('finish','file-card')
  await post({type:'status'})
