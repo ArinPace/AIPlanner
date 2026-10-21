@@ -4,9 +4,9 @@
  const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms))
  const visible=node=>Boolean(node.getClientRects().length)
  const composer=()=>[...document.querySelectorAll('[role="textbox"][contenteditable="true"]')].find(n=>visible(n)&&(n.getAttribute('aria-label')==='Work with ChatGPT'||(n.getAttribute('aria-label')==='New chat in Ai Planner'&&[...document.querySelectorAll('button[aria-pressed="true"]')].some(b=>b.innerText.trim()==='Work'))))
- const running=()=>[...document.querySelectorAll('button')].some(n=>visible(n)&&/^(Stop|Stop generating|Pause|Stop task)$/i.test(n.getAttribute('aria-label')||n.innerText.trim()))
+ const running=()=>[...document.querySelectorAll('button')].some(n=>visible(n)&&/^(Stop|Stop generating|Pause|Pause task|Stop task)$/i.test(n.getAttribute('aria-label')||n.innerText.trim()))
  const responses=()=>[...document.querySelectorAll('[data-markdown-text-style="assistant-message"], [data-message-author-role="assistant"]')].filter(visible)
- let active=false,stopped=false
+ let active=false,stopped=false,steering=false,lastInteraction=0
  const emit=value=>chrome.runtime.sendMessage(value).catch(()=>{})
  const buttons=()=>[...document.querySelectorAll('button,[role="menuitem"],a')].filter(visible)
  const label=n=>(n.getAttribute('aria-label')||n.innerText).trim()
@@ -83,7 +83,8 @@
   if(input?.type==='planner-relay-steer'){
    if(!active&&!running()){respond({error:'No active ChatGPT task. Send this as a new message.'});return}
    if(typeof input.message!=='string'||!input.message.trim()||input.message.length>12000){respond({error:'Enter a follow-up of up to 12,000 characters.'});return}
-   void(async()=>{try{await insert(input.message);(await sendButton()).click();respond({ok:true})}catch(error){respond({error:error.message})}})();return true
+   steering=true
+   void(async()=>{try{await insert(input.message);(await sendButton()).click();lastInteraction=Date.now();respond({ok:true})}catch(error){respond({error:error.message})}finally{steering=false}})();return true
   }
   if(input?.type==='planner-relay-move-chat'){
    if(active||running()){respond({error:'Wait for ChatGPT to finish before moving this chat.'});return}
@@ -100,7 +101,7 @@
   if(input?.type!=='planner-relay-send')return
   if(active||running()){respond({accepted:false});void emit({type:'planner-relay-finish',id:input.id,error:'ChatGPT is already working. Check the separate conversation before resending.'});return}
   if(typeof input.message!=='string'||!input.message.trim()||input.message.length>180000)return
-  active=true;stopped=false;respond({accepted:true})
+  active=true;stopped=false;lastInteraction=Date.now();respond({accepted:true})
   void(async()=>{
    let reply=''
    try{
@@ -117,7 +118,7 @@
      if(next!==reply){reply=next;changedAt=Date.now()}
      if(Date.now()-lastUpdate>1500){await emit({type:'planner-relay-progress',id:input.id,reply,attention:attention()});lastUpdate=Date.now()}
      if(stopped)throw Error('Stopped by the user. Changes already saved are preserved.')
-     if(reply&&Date.now()-changedAt>4500&&!running()&&!nativeControl('resume')&&!attention())break
+     if(reply&&Date.now()-changedAt>4500&&Date.now()-lastInteraction>4500&&!steering&&!running()&&!nativeControl('resume')&&!attention())break
      await wait(1000)
     }
     await emit({type:'planner-relay-finish',id:input.id,reply})
