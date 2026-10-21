@@ -17,7 +17,7 @@ try{
  const box=document.querySelector('[role=textbox]');
  document.querySelector('#choose').onclick=()=>{const choice=document.createElement('div');choice.setAttribute('role','option');choice.textContent='Ai Planner';choice.onclick=()=>{box.setAttribute('aria-label','New chat in Ai Planner');choice.remove();document.querySelector('#choose').textContent='Ai Planner';document.querySelector('#choose').setAttribute('aria-label','Ai Planner')};document.body.append(choice)};
  document.querySelector('input').onchange=event=>{for(const file of event.target.files){const chip=document.createElement('span');chip.title=file.name;chip.textContent=file.name;document.body.append(chip)}};
- document.querySelector('[aria-label=Send]').onclick=()=>{document.body.dataset.sent=box.innerText;box.textContent='';history.replaceState(null,'','/g/g-p-test/c/test');setTimeout(()=>{const reply=document.createElement('div');reply.dataset.markdownTextStyle='assistant-message';reply.textContent='RELAY_CONFIRMED';document.body.append(reply)},300)};
+ document.querySelector('[aria-label=Send]').onclick=()=>{const tools=box.innerText.includes('TEST_RENDERED_TOOLS');document.body.dataset.sent=box.innerText;box.textContent='';history.replaceState(null,'','/g/g-p-test/c/test');setTimeout(()=>{const reply=document.createElement('div');reply.dataset.markdownTextStyle='assistant-message';if(tools){reply.innerHTML='<table><tr><th>Check</th><th>Status</th></tr><tr><td>Relay</td><td>Ready</td></tr></table><pre><code></code></pre>';reply.querySelector('code').textContent=JSON.stringify({turn:'fixture-nonce',calls:[{id:'read',name:'planner_calendar_read',arguments:{}}]})}else reply.textContent='RELAY_CONFIRMED';document.body.append(reply)},300)};
  </script>`}))
  const planner=await context.newPage();await planner.goto('https://aiplanner-ten.vercel.app/')
  const post=value=>planner.evaluate(value=>send(value),value)
@@ -47,6 +47,12 @@ try{
  // A page reload disconnects the UI port. The background must retain completion.
  await planner.reload();await post({type:'status'});assert.equal((await event('finish','file-check')).reply,'RELAY_CONFIRMED')
  console.log('PASS reply recovered after Planner page reload')
+ await post({type:'send',id:'rendered-tools',chatId:'fixture-chat',message:'TEST_RENDERED_TOOLS'})
+ const rendered=await event('finish','rendered-tools')
+ assert.equal(rendered.error,undefined);assert.match(rendered.reply,/\| Check \| Status \|/)
+ assert.match(rendered.reply,/```planner-tools\n/)
+ const calls=JSON.parse(rendered.reply.match(/```planner-tools\n([\s\S]*?)\n```/)[1]);assert.equal(calls.turn,'fixture-nonce')
+ console.log('PASS rendered ChatGPT code blocks preserve tool protocol and Markdown tables')
  await post({type:'connect'});await planner.waitForFunction(()=>events.some(e=>e.reason?.startsWith('A separate ChatGPT tab')),null,{polling:100})
  assert.equal((await worker.evaluate(async()=>{const s=await chrome.storage.session.get(null),id=Object.entries(s).find(([k])=>k.startsWith('chatTab:'))[1];return chrome.windows.get((await chrome.tabs.get(id)).windowId)})).state,'normal')
  console.log('PASS Open ChatGPT restores minimized window')

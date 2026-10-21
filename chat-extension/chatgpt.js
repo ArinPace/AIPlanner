@@ -6,6 +6,39 @@
  const composer=()=>[...document.querySelectorAll('[role="textbox"][contenteditable="true"]')].find(n=>visible(n)&&(n.getAttribute('aria-label')==='Work with ChatGPT'||(n.getAttribute('aria-label')==='New chat in Ai Planner'&&[...document.querySelectorAll('button[aria-pressed="true"]')].some(b=>b.innerText.trim()==='Work'))))
  const running=()=>[...document.querySelectorAll('button')].some(n=>visible(n)&&/^(Stop|Stop generating|Pause|Pause task|Stop task)$/i.test(n.getAttribute('aria-label')||n.innerText.trim()))
  const responses=()=>[...document.querySelectorAll('[data-markdown-text-style="assistant-message"], [data-message-author-role="assistant"]')].filter(visible)
+ // Rendered innerText drops code fences and table structure. Planner's tool
+ // protocol needs the fence, and user replies need their Markdown formatting.
+ const responseText=root=>{
+  const walk=node=>{
+   if(node.nodeType===Node.TEXT_NODE)return node.textContent
+   if(node.nodeType!==Node.ELEMENT_NODE)return ''
+   const tag=node.tagName.toLowerCase()
+   if(['button','svg','style','script'].includes(tag)||node.getAttribute('aria-hidden')==='true')return ''
+   if(tag==='pre'){
+    const code=node.querySelector('code')||node,raw=code.textContent.trim()
+    let language=code.className?.match?.(/language-([\w-]+)/)?.[1]||node.getAttribute('data-language')||''
+    try{const data=JSON.parse(raw);if(typeof data.turn==='string'&&Array.isArray(data.calls))language='planner-tools'}catch{}
+    return '\n\n```'+language+'\n'+raw+'\n```\n\n'
+   }
+   if(tag==='table'){
+    const rows=[...node.querySelectorAll('tr')].map(row=>[...row.querySelectorAll('th,td')].map(cell=>walk(cell).trim().replaceAll('|','\\|').replace(/\n+/g,' ')))
+    if(!rows.length)return ''
+    const line=row=>'| '+row.join(' | ')+' |'
+    return '\n\n'+[line(rows[0]),line(rows[0].map(()=>'---')),...rows.slice(1).map(line)].join('\n')+'\n\n'
+   }
+   const text=[...node.childNodes].map(walk).join('')
+   if(tag==='br')return '\n'
+   if(tag==='strong'||tag==='b')return '**'+text+'**'
+   if(tag==='em'||tag==='i')return '*'+text+'*'
+   if(tag==='code')return '`'+text+'`'
+   if(tag==='a'){const href=node.getAttribute('href');return href&&/^https?:/.test(href)?'['+text+']('+href+')':text}
+   if(/^h[1-6]$/.test(tag))return '\n\n'+'#'.repeat(Number(tag[1]))+' '+text+'\n\n'
+   if(tag==='li')return '\n'+(node.parentElement?.tagName==='OL'?Array.from(node.parentElement.children).indexOf(node)+1+'. ':'- ')+text.trim()+'\n'
+   if(['p','div','section','ul','ol','blockquote'].includes(tag))return '\n'+text+'\n'
+   return text
+  }
+  return walk(root).replace(/\n{3,}/g,'\n\n').trim()||root.innerText
+ }
  let active=false,stopped=false,steering=false,lastInteraction=0
  const emit=value=>chrome.runtime.sendMessage(value).catch(()=>{})
  const buttons=()=>[...document.querySelectorAll('button,[role="menuitem"],[role="option"],a')].filter(visible)
@@ -131,7 +164,7 @@
     send.click()
     let changedAt=Date.now(),lastUpdate=0
     while(true){
-     const nodes=responses().filter(node=>!baseline.has(responseKey(node))),next=nodes.length?nodes.at(-1).innerText:''
+     const nodes=responses().filter(node=>!baseline.has(responseKey(node))),next=nodes.length?responseText(nodes.at(-1)):''
      if(next!==reply){reply=next;changedAt=Date.now()}
      if(Date.now()-lastUpdate>1500){await emit({type:'planner-relay-progress',id:input.id,reply,attention:attention()});lastUpdate=Date.now()}
      if(stopped)throw Error('Stopped by the user. Changes already saved are preserved.')
