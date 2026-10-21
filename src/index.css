@@ -1304,6 +1304,16 @@ textarea {
 .workspace-tabs { display: flex; gap: 4px; padding: 3px; background: #f1f3f4; border-radius: 8px; flex-shrink: 0; }
 .workspace-tabs button { border: 0; border-radius: 6px; background: transparent; color: var(--muted); padding: 8px 14px; font-weight: 500; }
 .workspace-tabs button.is-active { background: #fff; color: var(--blue); box-shadow: 0 1px 3px #20212415; }
+.grok-experiment { flex:1; min-height:0; overflow-y:auto; padding:24px; color:var(--text); }
+.grok-experiment h1 { font-size:24px; }
+.grok-experiment h1 small { font-size:12px; font-weight:400; color:var(--muted); }
+.grok-experiment p { margin:12px 0; line-height:1.6; }
+.grok-experiment-card { max-width:900px; padding:20px; margin:20px 0; border:1px solid var(--line); border-radius:12px; background:var(--panel); }
+.grok-experiment-card h2 { font-size:18px; }
+.grok-experiment-card a { display:inline-block; margin:8px 12px 8px 0; color:var(--blue); }
+.grok-experiment-card a.primary-btn { color:white; text-decoration:none; }
+.grok-experiment iframe { display:block; width:100%; height:55dvh; min-height:240px; border:1px solid var(--line); border-radius:8px; }
+@media(max-width:600px){ .grok-experiment { padding:12px; } .grok-experiment-card { padding:14px; } }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .files-tab-panel { flex: 1; min-height: 0; display: flex; }
 .agent-tab-panel { flex: 1; min-height: 0; min-width: 0; overflow-y: auto; }
