@@ -7,9 +7,20 @@ interface RelayJob{id:string;message:string;reply:string;status:string;error:str
 export function ChatExperiment({active=true,username}:{active?:boolean;username:string}){
  const [jobs,setJobs]=useState<RelayJob[]>([]),[error,setError]=useState(''),[busy,setBusy]=useState(false)
  const [installed,setInstalled]=useState(false),[connected,setConnected]=useState(false)
+ const [checking,setChecking]=useState(false),[connectionNotice,setConnectionNotice]=useState('')
+ const checkTimer=useRef<number|null>(null)
  const {message:draft,setMessage:setDraft,selectDraft}=useChatDraft(username)
  const end=useRef<HTMLDivElement>(null),pending=useRef(new Set<string>())
  const post=useCallback((value:object)=>window.postMessage({source:'planner-chat-tab',...value},window.location.origin),[])
+ const checkConnection=useCallback((type:'status'|'connect'='status')=>{
+  if(checkTimer.current)window.clearTimeout(checkTimer.current)
+  setChecking(true);setConnectionNotice(type==='connect'?'Opening the separate ChatGPT tab…':'Checking the browser extension…')
+  post({type})
+  checkTimer.current=window.setTimeout(()=>{
+   setChecking(false);setInstalled(false);setConnected(false)
+   setConnectionNotice('No response from the extension. Reload this Planner tab after installing it. If it still does not respond, check that the extension is enabled and allowed on aiplanner-ten.vercel.app in your browser’s Extensions settings.')
+  },4000)
+ },[post])
  const refresh=useCallback(async()=>{
   const state=await agentRequest<{jobs:RelayJob[]}>('vm/chat-web')
   state.jobs.filter(job=>job.status==='running').forEach(job=>pending.current.add(job.id))
@@ -26,16 +37,21 @@ export function ChatExperiment({active=true,username}:{active?:boolean;username:
   const receive=(event:MessageEvent)=>{
    if(event.source!==window||event.origin!==window.location.origin||event.data?.source!=='planner-device-relay')return
    const data=event.data
-   if(data.type==='ready'){setInstalled(true);setConnected(data.connected===true);return}
-   if(data.type==='disconnected'){setInstalled(false);setConnected(false);setError('The extension disconnected. Check ChatGPT before resending.');return}
-   if(data.type==='error'){setError(String(data.error||'Browser relay unavailable.'));if(pending.current.has(data.id))void finish(data.id,'',String(data.error));return}
+   if(data.type==='ready'){
+    if(checkTimer.current)window.clearTimeout(checkTimer.current)
+    setChecking(false);setInstalled(true);setConnected(data.connected===true)
+    setConnectionNotice(data.connected?'ChatGPT Work connected on this device.':typeof data.reason==='string'?data.reason:'Extension detected. Click Connect ChatGPT tab to open the separate tab, sign in and select Work, then return here and check again.')
+    return
+   }
+   if(data.type==='disconnected'){if(checkTimer.current)window.clearTimeout(checkTimer.current);setChecking(false);setInstalled(false);setConnected(false);setConnectionNotice('The extension disconnected. Reload this Planner tab. Check ChatGPT before resending any message.');return}
+   if(data.type==='error'){if(checkTimer.current)window.clearTimeout(checkTimer.current);setChecking(false);setError(String(data.error||'Browser relay unavailable.'));if(pending.current.has(data.id))void finish(data.id,'',String(data.error));return}
    if(!pending.current.has(data.id))return
    const reply=typeof data.reply==='string'?data.reply.slice(0,80000):''
    if(data.type==='progress')setJobs(current=>current.map(job=>job.id===data.id?{...job,reply}:job))
    if(data.type==='finish')void finish(data.id,reply,typeof data.error==='string'?data.error:undefined)
   }
   window.addEventListener('message',receive)
-  return()=>window.removeEventListener('message',receive)
+  return()=>{window.removeEventListener('message',receive);if(checkTimer.current)window.clearTimeout(checkTimer.current)}
  },[finish])
  useEffect(()=>{
   if(!active)return
@@ -59,8 +75,8 @@ export function ChatExperiment({active=true,username}:{active?:boolean;username:
  }
  return <section className="chat-experiment" aria-label="Experimental Chat">
   <header><h1>Chat <small>VM-free device relay</small></h1><p>Main Chat, the Agent queue and scheduled task are separate. No VM is used by this tab.</p>
-   <p role="status">{!installed?'Install the laptop browser extension to connect.':connected?'ChatGPT Work connected on this device.':'Sign into ChatGPT and select Work in the separate tab, then return here.'}</p>
-   <div><a href="/chat-relay-extension.zip" download>Download Chrome/Edge extension</a>{' ? '}<a href="/chat-relay-setup.txt" target="_blank" rel="noopener noreferrer">Install instructions</a>{' ? '}<button type="button" className="text-btn" disabled={!installed} onClick={()=>post({type:'connect'})}>Connect ChatGPT tab</button>{' ? '}<button type="button" className="text-btn" onClick={()=>post({type:'status'})}>Check connection</button></div>
+   <p role="status" aria-live="polite">{connectionNotice||(!installed?'Install the laptop browser extension, then reload this Planner tab.':connected?'ChatGPT Work connected on this device.':'Sign into ChatGPT and select Work in the separate tab, then return here.')}</p>
+   <div><a href="/chat-relay-extension.zip" download>Download Chrome/Edge extension</a>{' · '}<a href="/chat-relay-setup.txt" target="_blank" rel="noopener noreferrer">Install instructions</a>{' · '}<button type="button" className="text-btn" disabled={checking} onClick={()=>checkConnection('connect')}>Connect ChatGPT tab</button>{' · '}<button type="button" className="text-btn" disabled={checking} onClick={()=>checkConnection()}>{checking?'Checking…':'Check connection'}</button></div>
    <p>Keep Planner and the separate ChatGPT tab open. Laptop Chrome/Edge only for now. Calendar, Files and cloud-browser access are not yet verified in this conversation.</p>
   </header>
   {error&&<p role="alert" className="assistant-error">{error}</p>}
