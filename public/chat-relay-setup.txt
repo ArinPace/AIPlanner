@@ -22,7 +22,7 @@ To upgrade: replace the extracted files, click Reload on the extension at
 chrome://extensions or edge://extensions, then reload Planner and ChatGPT.
 
 The extension controls only the ChatGPT tab you create or explicitly select. It does not use a VM,
-read account cookies/tokens, or modify Planner’s existing Agent setup.
+read account cookies/tokens, or start the original Agent VM transport.
 Keep Planner and the ChatGPT tab open while relaying messages. This prototype does not
 provide unattended forwarding after the browser exits or the device sleeps.
 Planner tools use your authenticated Planner account; no API key is sent to ChatGPT.

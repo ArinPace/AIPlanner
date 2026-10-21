@@ -6,7 +6,7 @@ import {deviceChatContext,deviceToolCalls} from './device-chat-tools.js'
 import {readPlanning} from './planning.js'
 
 const fields='id,chat_id,message,reply,status,error,created_at,finished_at'
-// Separate experiment: never enqueue agent jobs or change agent settings.
+// Separate device transport: app tools are shared, but no Agent job is enqueued.
 export async function chatWebRelay(request:Request,username:string){
  if(username!=='arin')throw new ApiError(403,'This experiment is only enabled for its owner.')
  if(request.method==='GET'){

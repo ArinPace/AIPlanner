@@ -45,6 +45,7 @@ test('device tools use the actual MCP catalog, argument validation and owner-sco
    const tools=(await client.listTools()).tools
    assert(tools.some(t=>t.name==='planner_save_event'))
    assert(tools.some(t=>t.name==='planner_memory_read'))
+   assert(tools.some(t=>t.name==='planner_capabilities'))
    assert.equal((await client.callTool({name:'planner_save_event',arguments:{}})).isError,true)
   })
   const calls=[{id:'tag1',name:'planner_save_tag',arguments:{revision:1,name:'Relay test',color:'#abcdef'}}]
