@@ -347,7 +347,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
       <div className="files-tab-panel" hidden={tab !== 'files'}><FilesView sidebar={filesSidebar} setSidebar={setFilesSidebar} username={username} active={tab === 'files'} onUnsavedChange={setFilesUnsaved} /></div>
       <div className="agent-tab-panel" hidden={tab !== 'agent'}><AgentView username={username} sidebar={agentSidebar} setSidebar={setAgentSidebar} active={tab === 'agent'} /></div>
       {tab==='grok' && <GrokExperiment/>}
-      {tab==='chat' && <ChatExperiment/>}
+      {username==='arin' && <div className="chat-tab-panel" hidden={tab!=='chat'}><ChatExperiment active={tab==='chat'} username={username}/></div>}
       <div className="app-body" hidden={tab !== 'calendar'}>
         <Sidebar
           events={events}

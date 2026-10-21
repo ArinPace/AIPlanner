@@ -1,0 +1,15 @@
+AI Planner — VM-free Chat extension (Chrome / Edge desktop)
+
+1. Download chat-relay-extension.zip from the Chat tab and extract it.
+2. Open chrome://extensions (Chrome) or edge://extensions (Edge).
+3. Enable Developer mode, choose Load unpacked, and select the extracted folder containing manifest.json.
+4. Reload AI Planner and open Chat. Click Connect ChatGPT tab.
+5. Sign into ChatGPT in the new tab. Select Work, then return to Planner.
+6. Wait for “ChatGPT Work connected on this device,” then send a test message.
+
+The extension controls only the separate ChatGPT tab it creates. It does not use a VM,
+read account cookies/tokens, or modify Planner’s existing Agent setup.
+Keep Planner and the ChatGPT tab open while relaying messages. This prototype does not
+provide unattended forwarding after the browser exits or the device sleeps.
+Calendar/Files tools and ChatGPT’s cloud browsing must be configured/verified separately.
+Only laptop Chrome/Edge is packaged here. Phone installation has not been implemented.
