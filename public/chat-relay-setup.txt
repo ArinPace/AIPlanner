@@ -3,11 +3,17 @@ AI Planner — VM-free Chat extension (Chrome / Edge desktop)
 1. Download chat-relay-extension.zip from the Chat tab and extract it.
 2. Open chrome://extensions (Chrome) or edge://extensions (Edge).
 3. Enable Developer mode, choose Load unpacked, and select the extracted folder containing manifest.json.
-4. Reload AI Planner and open Chat. Click Connect ChatGPT tab.
+4. Reload AI Planner and open Chat. Click Open ChatGPT.
 5. Sign into ChatGPT in the new tab. Select Work, then return to Planner.
 6. Wait for “ChatGPT Work connected on this device,” then send a test message.
 
-Version 0.2: New chat in Ai Planner creates/reuses the ChatGPT project Ai Planner.
+Version 0.3: Chat has a protected Main Chat, saved conversations, pin/archive/bin,
+text branching/editing, incremental history, saved drafts, queued text (Tab),
+dictation, paste/drop attachments, Begin Planning (/plan), and live Planner tools
+for calendar, Files, shared memory and personal instructions. Internal prompts
+and tool traffic are hidden in Planner Chat. Native Pause/Resume/Stop controls
+appear only when ChatGPT exposes them. Enter while working forwards a follow-up.
+New chat creates/reuses the ChatGPT project Ai Planner.
 Use existing tab lists ChatGPT tabs in this browser. Choosing a conversation also
 moves it into Ai Planner. Unrelated chats are left alone. Finish any running reply
 and send or clear unsent ChatGPT drafts before switching conversations.
@@ -19,5 +25,12 @@ The extension controls only the ChatGPT tab you create or explicitly select. It 
 read account cookies/tokens, or modify Planner’s existing Agent setup.
 Keep Planner and the ChatGPT tab open while relaying messages. This prototype does not
 provide unattended forwarding after the browser exits or the device sleeps.
-Calendar/Files tools and ChatGPT’s cloud browsing must be configured/verified separately.
+Planner tools use your authenticated Planner account; no API key is sent to ChatGPT.
+Use Cloud browser / Add site for websites. Enter passwords only in ChatGPT's secure
+sign-in form, never in chat. Approvals, MFA and CAPTCHAs may need your attention.
+Cloud browser sessions can stay signed in. The original Agent schedule is separate;
+no unattended device schedule is enabled. Archive/bin/reset affect this Planner Chat
+workspace, not original conversations on chatgpt.com. Branches copy up to 100 text
+turns; reattach original files. Queued text is saved for this browser session; files
+cannot be queued. Previously saved changes are preserved when stopping a task.
 Only laptop Chrome/Edge is packaged here. Phone installation has not been implemented.
