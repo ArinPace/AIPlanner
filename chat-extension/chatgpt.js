@@ -52,7 +52,7 @@
   }
   if(input?.type==='planner-relay-new-chat'){
    if(active||running()){respond({error:'Wait for ChatGPT to finish before creating a chat.'});return}
-   if(composer()?.innerText.trim()){respond({error:'The ChatGPT tab has an unsent draft. Send or clear it first.'});return}
+   if([...document.querySelectorAll('[role="textbox"][contenteditable="true"]')].some(n=>visible(n)&&n.innerText.trim())){respond({error:'The ChatGPT tab has an unsent draft. Send or clear it first.'});return}
    void(async()=>{try{await project();(await findButton(/^New chat in Ai Planner$/i)).click();await wait(1000);const work=buttons().find(n=>label(n)==='Work');if(work)work.click();for(let i=0;i<30&&!composer();i++)await wait(200);respond({connected:Boolean(composer()),project:'Ai Planner'})}catch(error){respond({error:error.message})}})()
    return true
   }
