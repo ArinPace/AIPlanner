@@ -13,8 +13,8 @@
    if(node.nodeType===Node.TEXT_NODE)return node.textContent
    if(node.nodeType!==Node.ELEMENT_NODE)return ''
    const tag=node.tagName.toLowerCase()
-   if(['button','svg','style','script'].includes(tag)||node.getAttribute('aria-hidden')==='true')return ''
-   if(tag==='pre'){
+   if(['button','svg','style','script'].includes(tag)||node.getAttribute('aria-hidden')==='true'||node.getAttribute('data-markdown-copy')==='exclude')return ''
+   if(tag==='pre'||node.getAttribute('data-code-block')==='true'){
     const code=node.querySelector('code')||node,raw=code.textContent.trim()
     let language=code.className?.match?.(/language-([\w-]+)/)?.[1]||node.getAttribute('data-language')||''
     try{const data=JSON.parse(raw);if(typeof data.turn==='string'&&Array.isArray(data.calls))language='planner-tools'}catch{}
@@ -51,7 +51,10 @@
   if(!box)throw Error('Sign into ChatGPT and select Work in the separate tab.')
   if(box.innerText.trim())throw Error('The ChatGPT tab contains an unsent draft. Send or clear it there first.')
   box.focus();document.execCommand('insertText',false,message)
-  if(box.innerText.trim()!==message.trim())throw Error('Could not enter the complete message. Check the ChatGPT draft before retrying.')
+  // ProseMirror renders paragraph boundaries as extra blank lines in innerText.
+  // Compare normalized line breaks, retaining all words and indentation.
+  const normalize=text=>text.replace(/\r\n?/g,'\n').replace(/\u00a0/g,' ').replace(/\n+/g,'\n').trim()
+  if(normalize(box.innerText)!==normalize(message))throw Error('Could not enter the complete message. Check the ChatGPT draft before retrying.')
  }
  async function sendButton(){
   for(let i=0;i<160;i++){const button=buttons().find(n=>/^(Send|Send message|Send follow-up)$/i.test(label(n))&&!n.disabled&&n.getAttribute('aria-disabled')!=='true');if(button)return button;await wait(250)}
@@ -79,15 +82,15 @@
   }
   throw Error('ChatGPT did not confirm every attachment. The message was not sent. Open ChatGPT to review the upload before retrying.')
  }
- async function findButton(pattern){
-  for(let i=0;i<40;i++){const node=buttons().find(n=>pattern.test(label(n)));if(node)return node;await wait(250)}
+ async function findButton(pattern,attempts=40){
+  for(let i=0;i<attempts;i++){const node=buttons().find(n=>pattern.test(label(n)));if(node)return node;await wait(250)}
   throw Error('ChatGPT interface changed. Open its tab and complete the project selection there.')
  }
  async function project(){
   const choose=buttons().find(n=>label(n)==='Choose project')
   if(choose){
    choose.click()
-   const option=await findButton(/^Ai Planner$/i)
+   const option=await findButton(/^Ai Planner$/i,120)
    option.click()
    for(let i=0;i<40;i++){if(document.querySelector('[role="textbox"][aria-label="New chat in Ai Planner"]'))return;await wait(250)}
    throw Error('Could not verify Ai Planner project selection.')
@@ -111,7 +114,7 @@
   await wait(800)
  }
  async function moveToProject(){
-  if(/^\/g\/g-p-[^/]+\/c\//.test(location.pathname)&&buttons().some(n=>label(n)==='Ai Planner'))return
+  if(/^\/g\/g-p-[^/]+-ai-planner\/c\//i.test(location.pathname)||(/^\/g\/g-p-[^/]+\/c\//.test(location.pathname)&&buttons().some(n=>label(n)==='Ai Planner'||n.innerText.trim()==='Ai Planner')))return
   const current=document.querySelector('a[aria-current="page"][href*="/c/"]')
   if(!current)throw Error('Open the conversation sidebar in ChatGPT, then choose this tab again.')
   const row=current.closest('[role="group"]'),menu=row?.querySelector('button[aria-label="Chat actions"]')
@@ -144,7 +147,7 @@
   if(input?.type==='planner-relay-new-chat'){
    if(active||running()){respond({error:'Wait for ChatGPT to finish before creating a chat.'});return}
    if([...document.querySelectorAll('[role="textbox"][contenteditable="true"]')].some(n=>visible(n)&&n.innerText.trim())){respond({error:'The ChatGPT tab has an unsent draft. Send or clear it first.'});return}
-   void(async()=>{try{await findButton(/^(Choose project|New chat in Ai Planner|Ai Planner|Add new project)$/i);await project();const fresh=buttons().find(n=>label(n)==='New chat in Ai Planner');if(fresh)fresh.click();await wait(1000);const work=buttons().find(n=>label(n)==='Work');if(work)work.click();for(let i=0;i<30&&!composer();i++)await wait(200);if(!composer())throw Error('ChatGPT Work composer is unavailable.');respond({connected:true,project:'Ai Planner'})}catch(error){respond({error:error.message})}})()
+   void(async()=>{try{if(!document.querySelector('[role="textbox"][aria-label="New chat in Ai Planner"]'))await findButton(/^(Choose project|New chat in Ai Planner|Ai Planner|Change project: Ai Planner|Add new project)$/i,160);await project();const fresh=buttons().find(n=>label(n)==='New chat in Ai Planner');if(fresh)fresh.click();await wait(1000);const work=buttons().find(n=>label(n)==='Work');if(work&&work.getAttribute('aria-pressed')!=='true')work.click();for(let i=0;i<30&&!composer();i++)await wait(200);if(!composer())throw Error('ChatGPT Work composer is unavailable.');respond({connected:true,project:'Ai Planner'})}catch(error){respond({error:error.message})}})()
    return true
   }
   if(input?.type==='planner-relay-status'){respond(status());return}

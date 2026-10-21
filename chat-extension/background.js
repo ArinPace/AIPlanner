@@ -99,7 +99,7 @@ chrome.runtime.onConnect.addListener(port=>{
     await chrome.tabs.update(tab.id,{autoDiscardable:false})
     const window=await chrome.windows.get(tab.windowId,{populate:true})
     if(window.type==='popup'&&window.tabs?.length===1)await chrome.windows.update(window.id,{state:'minimized'})
-    else await chrome.windows.create({tabId:tab.id,type:'popup',state:'minimized',focused:false})
+    else {const parked=await chrome.windows.create({tabId:tab.id,type:'popup',focused:false});await chrome.windows.update(parked.id,{state:'minimized'})}
     reply({type:'controlled',action:'hide-chat'});return
    }
    if(['control','steer'].includes(message.type)){
