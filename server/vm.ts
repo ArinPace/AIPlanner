@@ -170,10 +170,19 @@ export async function handleVmRequest(request: Request, path: string, username: 
     if (!uuid(chatId)) throw new ApiError(400, 'Choose a chat.')
     const owned=checked(await db().from('planner_vm_chats').select('id').eq('username',username).eq('id',chatId).is('deleted_at',null).maybeSingle())
     if(!owned)throw new ApiError(404,'Chat not found. Restore deleted chats from the Bin first.')
-    const jobs=checked(await db().from('planner_vm_jobs').select(publicJob).eq('username', username).eq('chat_id', chatId).order('created_at', { ascending: false }).limit(100)).reverse()
+    const before=url.searchParams.get('before')
+    let query=db().from('planner_vm_jobs').select(publicJob).eq('username',username).eq('chat_id',chatId)
+    if(before){
+      if(!uuid(before))throw new ApiError(400,'Choose a valid message cursor.')
+      const cursor=checked(await db().from('planner_vm_jobs').select('id,created_at').eq('username',username).eq('chat_id',chatId).eq('id',before).maybeSingle())
+      if(!cursor)throw new ApiError(404,'Message cursor not found.')
+      query=query.or(`created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`)
+    }
+    const page=checked(await query.order('created_at',{ascending:false}).order('id',{ascending:false}).limit(21))
+    const hasMore=page.length>20,jobs=page.slice(0,20).reverse()
     const ids=jobs.filter(j=>j.status==='running').map(j=>j.id)
     const approvals=ids.length?checked(await db().from('planner_vm_approvals').select('id,job_id,questions,expires_at').eq('username',username).in('job_id',ids).is('answers',null).gt('expires_at',new Date().toISOString())):[]
-    return json({ jobs:jobs.map(j=>({...j,approvals:approvals.filter(a=>a.job_id===j.id)})) })
+    return json({ hasMore, jobs:jobs.map(j=>({...j,message:j.kind==='sync'?'Scheduled calendar review':j.message,approvals:approvals.filter(a=>a.job_id===j.id)})) })
   }
   if(request.method==='GET' && path==='/api/agent/vm/attachment'){
     const jobId=url.searchParams.get('job'),id=url.searchParams.get('id')

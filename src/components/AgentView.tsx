@@ -36,6 +36,8 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
   const selectedChat = useRef<string | null>(null)
   const openMainOnLoad = useRef(true)
   const [jobs, setJobs] = useState<VmJob[]>([])
+  const [hasOlder,setHasOlder]=useState(false)
+  const [loadingOlder,setLoadingOlder]=useState(false)
   const {message,setMessage,selectDraft}=useChatDraft(username)
   const [dictating,setDictating]=useState(false)
   const [attachments,setAttachments]=useState<ChatAttachment[]>([])
@@ -81,14 +83,33 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
       if (id) {openMainOnLoad.current=false;selectedChat.current=id;setChat(id);selectDraft(id)}
     }
     if (id) {
-      const result = await agentRequest<{ jobs: VmJob[] }>('vm/messages?chat=' + encodeURIComponent(id))
-      if (selectedChat.current === id) setJobs(result.jobs)
+      const result = await agentRequest<{ jobs: VmJob[];hasMore:boolean }>('vm/messages?chat=' + encodeURIComponent(id))
+      if (selectedChat.current === id) {
+        setJobs(previous=>{const latest=new Set(result.jobs.map(job=>job.id));return [...previous.filter(job=>!latest.has(job.id)&&job.created_at<(result.jobs[0]?.created_at||'')),...result.jobs]})
+        setHasOlder(previous=>jobsLoadedOlder.current?previous:result.hasMore)
+      }
     }
     setError(current=>current.startsWith('Could not reach the agent')||/^(?:signal timed out|The operation was aborted due to timeout)$/.test(current)?'':current)
     })().finally(()=>{if(refreshing.current===pending)refreshing.current=null})
     refreshing.current=pending
     return pending
   }, [selectDraft])
+  const jobsLoadedOlder=useRef(false)
+  const prependingHistory=useRef(false)
+  async function loadOlder(){
+    const id=selectedChat.current,before=jobs[0]?.id
+    if(!id||!before||loadingOlder)return
+    const thread=end.current?.closest('.assistant-thread'),height=thread?.scrollHeight||0,top=thread?.scrollTop||0
+    setLoadingOlder(true)
+    try{
+      const result=await agentRequest<{jobs:VmJob[];hasMore:boolean}>('vm/messages?chat='+encodeURIComponent(id)+'&before='+encodeURIComponent(before))
+      if(selectedChat.current!==id)return
+      prependingHistory.current=true;jobsLoadedOlder.current=true;setHasOlder(result.hasMore)
+      setJobs(current=>{const ids=new Set(current.map(job=>job.id));return [...result.jobs.filter(job=>!ids.has(job.id)),...current]})
+      requestAnimationFrame(()=>{if(thread)thread.scrollTop=top+thread.scrollHeight-height})
+    }catch(e){setError(e instanceof Error?e.message:'Could not load older messages.')}
+    finally{setLoadingOlder(false)}
+  }
   const restoreAttachmentDraft=useEffectEvent(async()=>{
         if(sessionStorage.getItem(RECOVERY_TAB)!==username)return
         sessionStorage.removeItem(RECOVERY_TAB)
@@ -100,6 +121,8 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
   })
   const openMainChat=useEffectEvent(async()=>{
     const main=state?.chats.find(item=>item.is_main)
+    if(main?.id && selectedChat.current===main.id){await refresh();return}
+    jobsLoadedOlder.current=false;setHasOlder(false)
     selectedChat.current=main?.id || null
     openMainOnLoad.current=!main
     attachmentEpoch.current++;setAttachments([]);setRetryAttachmentFiles(null);setChat(main?.id || null);setJobs([]);selectDraft(main?.id || null);setError('');setLoadingChat(true);setPanel(null);setShowArchived(false);setShowBin(false);setSelecting(false);setSelectedIds([])
@@ -114,7 +137,6 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
   })
   useEffect(() => {
     if (!active) return
-    initialized.current=false
     openMainOnLoad.current=true
     const initial = window.setTimeout(() => {
       void openMainChat().catch(e=>setError(e.message))
@@ -130,16 +152,18 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
   },[active,refresh])
   const activeTask=state?.queue?.active || state?.runs.find(run=>run.status==='running')
   const lastReply = jobs.at(-1)?.reply
-  useEffect(() => { end.current?.scrollIntoView({ block: 'nearest' }) }, [chat, jobs.length, lastReply])
+  useEffect(() => { if(prependingHistory.current){prependingHistory.current=false;return}end.current?.scrollIntoView({ block: 'nearest' }) }, [chat, jobs.length, lastReply])
   async function chooseChat(id: string) {
+    jobsLoadedOlder.current=false;setHasOlder(false)
     openMainOnLoad.current=false
     attachmentEpoch.current++;setAttachments([]);selectedChat.current = id; setChat(id); setJobs([]); selectDraft(id); setError(''); setLoadingChat(true)
     if (window.innerWidth <= 700) setSidebar(false)
-    try { const result = await agentRequest<{ jobs: VmJob[] }>('vm/messages?chat=' + encodeURIComponent(id)); if (selectedChat.current === id) setJobs(result.jobs) }
+    try { const result = await agentRequest<{ jobs: VmJob[];hasMore:boolean }>('vm/messages?chat=' + encodeURIComponent(id)); if (selectedChat.current === id) {setJobs(result.jobs);setHasOlder(result.hasMore)} }
     catch (e) { setError(e instanceof Error ? e.message : 'Could not open this chat.') }
     finally { if (selectedChat.current === id) setLoadingChat(false) }
   }
   function newChat() {
+    jobsLoadedOlder.current=false;setHasOlder(false)
     openMainOnLoad.current=false
     setShowArchived(false);setShowBin(false)
     setSelecting(false);setSelectedIds([])
@@ -271,8 +295,9 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
       {state?.provisioning?.error && <p role="alert" className="assistant-error">{state.provisioning.error}</p>}
       <div className="assistant-thread" aria-live="polite">
         <div className="assistant-thread-content">
+          {hasOlder && <button type="button" className="assistant-copy" disabled={loadingOlder} onClick={()=>void loadOlder()}>{loadingOlder?'Loading earlier messages?':'Load earlier messages'}</button>}
           {!jobs.length && <div className="assistant-welcome"><span className="assistant-spark">✦</span><h1>{loadingChat ? 'Opening your chat…' : 'What can I help with?'}</h1><p>{aiReady ? 'Tell me your goals, wake/sleep times, fixed commitments and to-dos. How long do tasks usually take, which days suit routines, and what helps you recover? I will use your feedback to improve each plan.' : 'Connect your AI account once. Then keep the conversation here.'}</p>{state && !aiReady && <button type="button" className="assistant-primary" onClick={() => setPanel('setup')}>Connect AI</button>}</div>}
-          {jobs.map(job => <article key={job.id} className="assistant-turn">{!job.is_welcome && <div className="assistant-user-message">{planningChatLabel(job.message)}{Boolean(job.attachments?.length) && <ChatAttachments items={job.attachments!} jobId={job.id} onError={setError}/>}<MessageTime value={job.created_at} label="Message sent"/><button type="button" className="assistant-copy" aria-label="Copy your message" onClick={()=>void copyMessage(planningChatLabel(job.message),job.id+'-user')}>{copied===job.id+'-user'?'Copied':'Copy'}</button>{!isPlanningLaunch(job.message)&&<button type="button" className="assistant-copy" disabled={branching} onClick={()=>setEditingJob(job)}>Edit</button>}</div>}{job.reply && <div className="assistant-reply"><ChatMarkdown text={job.reply}/><MessageTime value={job.finished_at || job.started_at || job.created_at} label={pending(job)?"Reply started":"Assistant replied"}/><button type="button" className="assistant-copy" aria-label="Copy assistant message" onClick={()=>void copyMessage(job.reply,job.id+'-reply')}>{copied===job.id+'-reply'?'Copied':'Copy'}</button>{job.status==='completed' && <button type="button" className="assistant-copy" disabled={branching} onClick={()=>void branch(job).catch(e=>setError(e.message))}>{branching?'Branching?':'Branch chat'}</button>}</div>}{pending(job) && job.approvals?.map(request=><AgentApproval key={request.id} request={request} onAnswered={refresh}/>)}{(pending(job) || job.status==='paused') && <div className="assistant-working">{job.status!=='paused' && <span className="assistant-pulse"/>}{vmJobStatus(job,state,now)}{job.status==='queued' && activeTask && activeTask.id!==job.id && <button type="button" onClick={()=>{if(window.confirm('Stop the other task currently using your VM? Changes it already saved will be kept.'))void agentAction('vm/cancel',{id:activeTask.id}).then(refresh).catch(e=>setError(e.message))}}>Stop current task</button>}<AgentRunControls job={job} onChanged={refresh} onError={setError}/></div>}{job.result.steered && <p className="assistant-steered">Continued with your follow-up below.</p>}{job.error && <p role="alert" className="assistant-error">{job.error}</p>}</article>)}<div ref={end}/>
+          {jobs.map(job => <article key={job.id} className="assistant-turn">{!job.is_welcome && <div className="assistant-user-message">{planningChatLabel(job.message)}{Boolean(job.attachments?.length) && <ChatAttachments items={job.attachments!} jobId={job.id} onError={setError}/>}<MessageTime value={job.created_at} label="Message sent"/><button type="button" className="assistant-copy" aria-label="Copy your message" onClick={()=>void copyMessage(planningChatLabel(job.message),job.id+'-user')}>{copied===job.id+'-user'?'Copied':'Copy'}</button>{job.kind!=='sync'&&!isPlanningLaunch(job.message)&&<button type="button" className="assistant-copy" disabled={branching} onClick={()=>setEditingJob(job)}>Edit</button>}</div>}{job.reply && <div className="assistant-reply"><ChatMarkdown text={job.reply}/><MessageTime value={job.finished_at || job.started_at || job.created_at} label={pending(job)?"Reply started":"Assistant replied"}/><button type="button" className="assistant-copy" aria-label="Copy assistant message" onClick={()=>void copyMessage(job.reply,job.id+'-reply')}>{copied===job.id+'-reply'?'Copied':'Copy'}</button>{job.status==='completed' && <button type="button" className="assistant-copy" disabled={branching} onClick={()=>void branch(job).catch(e=>setError(e.message))}>{branching?'Branching?':'Branch chat'}</button>}</div>}{pending(job) && job.approvals?.map(request=><AgentApproval key={request.id} request={request} onAnswered={refresh}/>)}{(pending(job) || job.status==='paused') && <div className="assistant-working">{job.status!=='paused' && <span className="assistant-pulse"/>}{vmJobStatus(job,state,now)}{job.status==='queued' && activeTask && activeTask.id!==job.id && <button type="button" onClick={()=>{if(window.confirm('Stop the other task currently using your VM? Changes it already saved will be kept.'))void agentAction('vm/cancel',{id:activeTask.id}).then(refresh).catch(e=>setError(e.message))}}>Stop current task</button>}<AgentRunControls job={job} onChanged={refresh} onError={setError}/></div>}{job.result.steered && <p className="assistant-steered">Continued with your follow-up below.</p>}{job.error && <p role="alert" className="assistant-error">{job.error}</p>}</article>)}<div ref={end}/>
         </div>
       </div>
       <div className="assistant-compose-wrap"><form className="assistant-compose" onSubmit={e => { e.preventDefault(); void send() }}><label className="sr-only" htmlFor="assistant-message">Message your assistant</label>{attachments.length>0 && <ChatAttachments items={attachments} onRemove={id=>setAttachments(items=>items.filter(a=>a.id!==id))}/>} {preparingAttachments && <p role="status" className="attachment-preparing">Preparing attachments…</p>}<textarea onPaste={e=>{if(e.clipboardData.files.length){e.preventDefault();void addAttachments(Array.from(e.clipboardData.files))}}} id="assistant-message" placeholder="Message your assistant…" value={message} rows={2} maxLength={12000} onChange={e => setMessage(e.target.value)} onKeyDown={e => { if(e.key==='Tab' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && !e.nativeEvent.isComposing && jobs.some(job=>pending(job)||job.status==='paused') && (message.trim() || attachments.length) && !busy && !preparingAttachments && !dictating && !loadingChat && !archived && aiReady && host){e.preventDefault();void send(true);return} if (e.key==='Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send() } }}/><div className="assistant-compose-toolbar"><div className="compose-left-actions"><AttachButton disabled={busy || preparingAttachments || archived || loadingChat} onFiles={files=>void addAttachments(files)}/><button type="button" className="assistant-compose-connect" onClick={() => setPanel(aiReady ? 'connections' : 'setup')}>{aiReady ? '+ Add sites' : 'Connect AI'}</button></div><div className="assistant-compose-actions">{state?.planning && <StartPlanning revision={state.planning.revision} disabled={!aiReady||!host||loadingChat||archived} onStarted={refresh}/>}<DictationButton key={chat || 'new'} enabled={active && !busy && !loadingChat && !archived} onBusy={setDictating} onText={text=>setMessage(previous=>(previous+(previous && !/\s$/.test(previous)?' ':'')+text).slice(0,12000))}/>{jobs.some(job=>pending(job)||job.status==='paused') && <button type="button" className="assistant-queue" aria-label="Queue message" aria-keyshortcuts="Tab" title="Queue after the current task (Tab)" disabled={preparingAttachments || dictating || busy || loadingChat || archived || (!message.trim() && !attachments.length) || !aiReady || !host} onClick={()=>void send(true)}>Queue</button>}<button type="submit" className="assistant-send" aria-label={jobs.some(job=>pending(job)||job.status==='paused')?'Steer agent':'Send message'} title={jobs.some(job=>pending(job)||job.status==='paused')?'Send a follow-up to redirect the current task':'Send message'} disabled={preparingAttachments || dictating || busy || loadingChat || archived || (!message.trim() && !attachments.length) || !aiReady || !host}>↑</button></div></div></form><p className="assistant-compose-note">{jobs.some(job=>pending(job)||job.status==='paused')?'Enter to steer | Tab to queue | Shift+Enter for a new line.':'Your assistant can make mistakes. Check important details.'}</p></div>
