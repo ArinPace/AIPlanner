@@ -22,11 +22,13 @@ try{
  const planner=await context.newPage();await planner.goto('https://aiplanner-ten.vercel.app/')
  const post=value=>planner.evaluate(value=>send(value),value)
  const event=async(type,id)=>{await planner.waitForFunction(({type,id})=>events.some(e=>e.type===type&&(!id||e.id===id)),{type,id});return planner.evaluate(({type,id})=>events.findLast(e=>e.type===type&&(!id||e.id===id)),{type,id})}
- await post({type:'hello'});assert.equal((await event('ready')).extensionVersion,'0.3.2')
+ await post({type:'hello'});assert.equal((await event('ready')).extensionVersion,'0.3.3')
  // Pre-existing tabs are a required user path and avoid Edge's headless-only
  // pause of newly-created inactive extension tabs under request interception.
  const native=await context.newPage();await native.goto('https://chatgpt.com/')
  await native.evaluate(()=>document.title='Relay fixture')
+ const worker=context.serviceWorkers()[0]
+ await worker.evaluate(async()=>{const tabs=await chrome.tabs.query({url:'https://chatgpt.com/*'});await chrome.scripting.executeScript({target:{tabId:tabs[0].id},func:()=>chrome.runtime.onMessage.addListener((message,_sender,respond)=>{if(message.type==='planner-relay-new-chat')respond({error:'Obsolete relay intercepted the request'})})})})
  await post({type:'list-tabs'});const listing=await event('tabs')
  await post({type:'select-tab',tabId:listing.tabs.find(tab=>tab.title==='Relay fixture').id,chatId:'fixture-chat'})
  await planner.waitForFunction(()=>events.some(e=>e.selectedTitle==='Relay fixture'),null,{polling:100})
@@ -34,9 +36,8 @@ try{
  await planner.waitForFunction(()=>events.some(e=>e.reason==='New chat ready in Ai Planner.'||e.type==='error')).catch(async error=>{console.log('Relay events',await planner.evaluate(()=>events));console.log('Pages',context.pages().map(p=>p.url()));console.log('Native tabs',await context.serviceWorkers()[0].evaluate(()=>chrome.tabs.query({url:'https://chatgpt.com/*'})));for(const page of context.pages())if(page.url().startsWith('https://chatgpt.com'))console.log('Native fixture',await page.locator('body').innerText());throw error})
  assert.equal(await planner.evaluate(()=>events.findLast(e=>e.type==='error')?.error),undefined)
  assert.equal(await native.locator('[role=textbox]').getAttribute('aria-label'),'New chat in Ai Planner')
- console.log('PASS current Choose project picker and new project chat')
+ console.log('PASS current Choose project picker and new project chat; obsolete listener cannot intercept versioned commands')
  await post({type:'hide-chat'});assert.equal((await event('controlled')).action,'hide-chat')
- const worker=context.serviceWorkers()[0]
  const parked=await worker.evaluate(async()=>{const s=await chrome.storage.session.get(null),id=Object.entries(s).find(([k])=>k.startsWith('chatTab:'))[1];const tab=await chrome.tabs.get(id);return {discardable:tab.autoDiscardable,window:await chrome.windows.get(tab.windowId)}})
  assert.equal(parked.discardable,false);assert.equal(parked.window.type,'popup')
  console.log('PASS relay parked in dedicated popup with automatic discard disabled (headless ignores minimize state)')
