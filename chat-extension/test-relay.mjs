@@ -17,12 +17,12 @@ try{
  const box=document.querySelector('[role=textbox]');
  document.querySelector('#choose').onclick=()=>{const choice=document.createElement('div');choice.setAttribute('role','option');choice.textContent='Ai Planner';choice.onclick=()=>{box.setAttribute('aria-label','New chat in Ai Planner');choice.remove();document.querySelector('#choose').textContent='Ai Planner';document.querySelector('#choose').setAttribute('aria-label','Ai Planner')};document.body.append(choice)};
  document.querySelector('input').onchange=event=>{for(const file of event.target.files){const chip=document.createElement('span');chip.title=file.name;chip.textContent=file.name;document.body.append(chip)}};
- document.querySelector('[aria-label=Send]').onclick=()=>{const tools=box.innerText.includes('TEST_RENDERED_TOOLS'),login=box.innerText.includes('TEST_SIGN_IN');document.body.dataset.sent=box.innerText;box.textContent='';history.replaceState(null,'','/g/g-p-test/c/test');setTimeout(()=>{const reply=document.createElement('div');reply.dataset.markdownTextStyle='assistant-message';if(login){reply.textContent='Sign in required';const handoff=document.createElement('button');handoff.textContent='Take over to sign in';handoff.onclick=()=>{const password=document.createElement('input');password.type='password';document.body.append(password);handoff.textContent=String.fromCharCode(73,39,109,32,100,111,110,101);handoff.onclick=()=>{password.remove();handoff.remove();reply.textContent='SIGN_IN_RESUMED'}};document.body.append(handoff)}else if(tools){reply.innerHTML='<table><tr><th>Check</th><th>Status</th></tr><tr><td>Relay</td><td>Ready</td></tr></table><div data-code-block="true"><div data-markdown-copy="exclude">planner-tools</div><div data-code-block-source="true"><code></code></div></div>';reply.querySelector('code').textContent=JSON.stringify({turn:'fixture-nonce',calls:[{id:'read',name:'planner_calendar_read',arguments:{}}]})}else reply.textContent='RELAY_CONFIRMED';document.body.append(reply)},300)};
+ document.querySelector('[aria-label=Send]').onclick=()=>{const file=box.innerText.includes('TEST_FILE_CARD'),tools=box.innerText.includes('TEST_RENDERED_TOOLS'),login=box.innerText.includes('TEST_SIGN_IN');document.body.dataset.sent=box.innerText;box.textContent='';history.replaceState(null,'','/g/g-p-test/c/test');setTimeout(()=>{const reply=document.createElement('div');reply.dataset.markdownTextStyle='assistant-message';if(file){reply.dataset.chatgptSelectionMessageId='fixture-file-message';reply.innerHTML='<span class="group/resource-row"><span>syllabus.pdf</span><button aria-label="Open preview of syllabus.pdf"></button><button aria-label="Download file"></button></span>';reply.querySelector('[aria-label="Download file"]').onclick=()=>document.body.dataset.downloaded='syllabus.pdf'}else if(login){reply.textContent='Sign in required';const handoff=document.createElement('button');handoff.textContent='Take over to sign in';handoff.onclick=()=>{const password=document.createElement('input');password.type='password';document.body.append(password);handoff.textContent=String.fromCharCode(73,39,109,32,100,111,110,101);handoff.onclick=()=>{password.remove();handoff.remove();reply.textContent='SIGN_IN_RESUMED'}};document.body.append(handoff)}else if(tools){reply.innerHTML='<table><tr><th>Check</th><th>Status</th></tr><tr><td>Relay</td><td>Ready</td></tr></table><div data-code-block="true"><div data-markdown-copy="exclude">planner-tools</div><div data-code-block-source="true"><code></code></div></div>';reply.querySelector('code').textContent=JSON.stringify({turn:'fixture-nonce',calls:[{id:'read',name:'planner_calendar_read',arguments:{}}]})}else reply.textContent='RELAY_CONFIRMED';document.body.append(reply)},300)};
  </script>`}))
  const planner=await context.newPage();await planner.goto('https://aiplanner-ten.vercel.app/')
  const post=value=>planner.evaluate(value=>send(value),value)
  const event=async(type,id)=>{await planner.waitForFunction(({type,id})=>events.some(e=>e.type===type&&(!id||e.id===id)),{type,id});return planner.evaluate(({type,id})=>events.findLast(e=>e.type===type&&(!id||e.id===id)),{type,id})}
- await post({type:'hello'});assert.equal((await event('ready')).extensionVersion,'0.3.4')
+ await post({type:'hello'});assert.equal((await event('ready')).extensionVersion,'0.3.5')
  // Pre-existing tabs are a required user path and avoid Edge's headless-only
  // pause of newly-created inactive extension tabs under request interception.
  const native=await context.newPage();await native.goto('https://chatgpt.com/')
@@ -33,8 +33,12 @@ try{
  await post({type:'select-tab',tabId:listing.tabs.find(tab=>tab.title==='Relay fixture').id,chatId:'fixture-chat'})
  await planner.waitForFunction(()=>events.some(e=>e.selectedTitle==='Relay fixture'),null,{polling:100})
  await post({type:'new-chat',chatId:'fixture-chat'})
- await planner.waitForFunction(()=>events.some(e=>e.reason==='New chat ready in Ai Planner.'||e.type==='error')).catch(async error=>{console.log('Relay events',await planner.evaluate(()=>events));console.log('Pages',context.pages().map(p=>p.url()));console.log('Native tabs',await context.serviceWorkers()[0].evaluate(()=>chrome.tabs.query({url:'https://chatgpt.com/*'})));for(const page of context.pages())if(page.url().startsWith('https://chatgpt.com'))console.log('Native fixture',await page.locator('body').innerText());throw error})
- assert.equal(await planner.evaluate(()=>events.findLast(e=>e.type==='error')?.error),undefined)
+ await post({type:'status'})
+ await planner.waitForFunction(()=>events.some(e=>e.reason?.startsWith('Opening ChatGPT in Ai Planner')),null,{polling:100})
+ await post({type:'send',id:'too-early',chatId:'fixture-chat',message:'Must not reach the composer'})
+ assert.match((await event('error','too-early')).error,/still opening/)
+ await planner.waitForFunction(()=>events.some(e=>e.reason==='New chat ready in Ai Planner.'||(e.type==='error'&&e.id!=='too-early'))).catch(async error=>{console.log('Relay events',await planner.evaluate(()=>events));console.log('Pages',context.pages().map(p=>p.url()));console.log('Native tabs',await context.serviceWorkers()[0].evaluate(()=>chrome.tabs.query({url:'https://chatgpt.com/*'})));for(const page of context.pages())if(page.url().startsWith('https://chatgpt.com'))console.log('Native fixture',await page.locator('body').innerText());throw error})
+ assert.equal(await planner.evaluate(()=>events.findLast(e=>e.type==='error'&&e.id!=='too-early')?.error),undefined)
  assert.equal(await native.locator('[role=textbox]').getAttribute('aria-label'),'New chat in Ai Planner')
  console.log('PASS current Choose project picker and new project chat; obsolete listener cannot intercept versioned commands')
  await post({type:'hide-chat'});assert.equal((await event('controlled')).action,'hide-chat')
@@ -64,6 +68,15 @@ try{
  await native.getByRole('button',{name:"I'm done",exact:true}).click()
  assert.equal((await event('finish','sign-in')).reply,'SIGN_IN_RESUMED')
  console.log('PASS manual sign-in handoff stays pending and resumes after user completion')
+ await post({type:'send',id:'file-card',chatId:'fixture-chat',message:'TEST_FILE_CARD'})
+ await event('finish','file-card')
+ await post({type:'status'})
+ await planner.waitForFunction(()=>events.some(e=>e.type==='ready'&&e.downloads?.some(f=>f.name==='syllabus.pdf')),null,{polling:100})
+ const file=await planner.evaluate(()=>events.findLast(e=>e.type==='ready'&&e.downloads?.length).downloads[0])
+ await post({type:'download',fileId:file.id})
+ await planner.waitForFunction(()=>events.some(e=>e.type==='controlled'&&e.action==='download'),null,{polling:100})
+ assert.equal(await native.evaluate(()=>document.body.dataset.downloaded),'syllabus.pdf')
+ console.log('PASS native file cards expose opaque download actions without session URLs')
  await post({type:'connect'});await planner.waitForFunction(()=>events.some(e=>e.reason?.startsWith('A separate ChatGPT tab')),null,{polling:100})
  assert.equal((await worker.evaluate(async()=>{const s=await chrome.storage.session.get(null),id=Object.entries(s).find(([k])=>k.startsWith('chatTab:'))[1];return chrome.windows.get((await chrome.tabs.get(id)).windowId)})).state,'normal')
  console.log('PASS Open ChatGPT restores minimized window')
