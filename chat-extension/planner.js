@@ -12,7 +12,7 @@
  window.addEventListener('message',event=>{
   if(event.source!==window||event.origin!==origin||event.data?.source!=='planner-chat-tab')return
   const {type,id,message,tabId,url,action,attachments,chatId}=event.data
-  if(!['hello','connect','status','send','list-tabs','select-tab','new-chat','open-chat','control','steer'].includes(type))return
+  if(!['hello','connect','status','send','list-tabs','select-tab','new-chat','open-chat','control','steer','hide-chat'].includes(type))return
   if(['send','steer'].includes(type)&&(typeof id!=='string'||typeof message!=='string'||!message.trim()||message.length>180000))return
   try{connect().postMessage({type,id,message,tabId,url,action,attachments,chatId})}catch{port=null;window.postMessage({source:'planner-device-relay',type:'disconnected'},origin)}
  })

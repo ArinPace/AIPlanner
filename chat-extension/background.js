@@ -15,9 +15,28 @@ async function target(plannerTab){
  if(typeof id!=='number')return null
  try{const tab=await chrome.tabs.get(id);return validChat(tab.url)&&(!entry[urlKey]||chatIdentity(entry[urlKey])===chatIdentity(tab.url))?tab:null}catch{return null}
 }
+const ports=new Map()
+chrome.runtime.onMessage.addListener((message,sender,respond)=>{
+ if(!['planner-relay-progress','planner-relay-finish'].includes(message?.type)||!validChat(sender.url)||!sender.tab)return
+ void(async()=>{
+  const saved=await chrome.storage.session.get(null),tab=await chrome.tabs.get(sender.tab.id)
+  for(const [key,id] of Object.entries(saved)){
+   if(!key.startsWith('chatTab:')||id!==sender.tab.id)continue
+   const plannerTab=Number(key.slice(8)),url=chatLocation(tab.url)
+   if(/^\/(?:g\/[^/]+\/)?c\/[a-z0-9-]+$/i.test(new URL(url).pathname))await chrome.storage.session.set({['chatUrl:'+plannerTab]:url})
+   const output={type:message.type==='planner-relay-finish'?'finish':'progress',id:message.id,reply:message.reply,error:message.error,url,attention:message.attention}
+   if(output.type==='finish')await chrome.storage.session.set({['outcome:'+plannerTab]:output})
+   for(const port of ports.get(plannerTab)||[])try{port.postMessage(output)}catch{}
+  }
+  respond({ok:true})
+ })().catch(()=>respond({ok:false}))
+ return true
+})
 chrome.runtime.onConnect.addListener(port=>{
  if(port.name!=='planner-chat-relay'||!port.sender?.tab||new URL(port.sender.url).origin!==plannerOrigin){port.disconnect();return}
  const plannerTab=port.sender.tab.id
+ if(!ports.has(plannerTab))ports.set(plannerTab,new Set())
+ ports.get(plannerTab).add(port)
  const reply=value=>{try{port.postMessage(value)}catch{/* Planner was closed; never resend the request. */}}
  port.onMessage.addListener(async message=>{
   try{
@@ -32,7 +51,8 @@ chrome.runtime.onConnect.addListener(port=>{
    }
    if(message.type==='new-chat'){
     let tab=await target(plannerTab)
-    if(!tab){tab=await chrome.tabs.create({url:'https://chatgpt.com/',active:true});await chrome.storage.session.set({['chatTab:'+plannerTab]:tab.id});await chrome.storage.session.remove('chatUrl:'+plannerTab)}
+    if(tab){const status=await pageStatus(tab);if(status.working)throw Error('Wait for the current ChatGPT task to finish.');if(status.hasDraft)throw Error('Send or clear the ChatGPT draft before creating a chat.');if(new URL(tab.url).pathname!=='/'){await chrome.storage.session.remove('chatUrl:'+plannerTab);tab=await chrome.tabs.update(tab.id,{url:'https://chatgpt.com/'});await new Promise(resolve=>setTimeout(resolve,1000))}}
+    if(!tab){tab=await chrome.tabs.create({url:'https://chatgpt.com/',active:false});await chrome.storage.session.set({['chatTab:'+plannerTab]:tab.id});await chrome.storage.session.remove('chatUrl:'+plannerTab)}
     for(let attempt=0;attempt<30;attempt++){
      try{await pageStatus(await chrome.tabs.get(tab.id));break}catch(error){if(attempt===29)throw error;await new Promise(resolve=>setTimeout(resolve,300))}
     }
@@ -70,10 +90,18 @@ chrome.runtime.onConnect.addListener(port=>{
    if(message.type==='connect'){
     let tab=await target(plannerTab)
     if(!tab){tab=await chrome.tabs.create({url:'https://chatgpt.com/',active:true});await chrome.storage.session.set({['chatTab:'+plannerTab]:tab.id});await chrome.storage.session.remove('chatUrl:'+plannerTab)}
-    else await chrome.tabs.update(tab.id,{active:true})
+    else {await chrome.windows.update(tab.windowId,{state:'normal',focused:true});await chrome.tabs.update(tab.id,{active:true})}
     reply({type:'ready',installed:true,connected:false,reason:'A separate ChatGPT tab is open. Sign in and select Work there, then return to Planner.'});return
    }
    let tab=await target(plannerTab)
+   if(message.type==='hide-chat'){
+    if(!tab)throw Error('Connect a ChatGPT tab first.')
+    await chrome.tabs.update(tab.id,{autoDiscardable:false})
+    const window=await chrome.windows.get(tab.windowId,{populate:true})
+    if(window.type==='popup'&&window.tabs?.length===1)await chrome.windows.update(window.id,{state:'minimized'})
+    else await chrome.windows.create({tabId:tab.id,type:'popup',state:'minimized',focused:false})
+    reply({type:'controlled',action:'hide-chat'});return
+   }
    if(['control','steer'].includes(message.type)){
     if(!tab)throw Error('Connect the ChatGPT tab first.')
     await pageStatus(tab)
@@ -113,17 +141,5 @@ chrome.runtime.onConnect.addListener(port=>{
    }
   }catch(error){reply({type:'error',id:message.id,error:String(error.message||'Browser relay unavailable.')})}
  })
- const listener=(message,sender)=>{
-  if(!['planner-relay-progress','planner-relay-finish'].includes(message?.type)||!validChat(sender.url))return
-  void chrome.storage.session.get('chatTab:'+plannerTab).then(async entry=>{
-   if(sender.tab?.id!==entry['chatTab:'+plannerTab])return
-   const tab=await chrome.tabs.get(sender.tab.id)
-   if(/^\/(?:g\/[^/]+\/)?c\/[a-z0-9-]+$/i.test(new URL(tab.url).pathname))void chrome.storage.session.set({['chatUrl:'+plannerTab]:chatLocation(tab.url)})
-   const output={type:message.type==='planner-relay-finish'?'finish':'progress',id:message.id,reply:message.reply,error:message.error,url:chatLocation(tab.url),attention:message.attention}
-   if(output.type==='finish')void chrome.storage.session.set({['outcome:'+plannerTab]:output})
-   reply(output)
-  })
- }
- chrome.runtime.onMessage.addListener(listener)
- port.onDisconnect.addListener(()=>chrome.runtime.onMessage.removeListener(listener))
+ port.onDisconnect.addListener(()=>{const set=ports.get(plannerTab);set?.delete(port);if(!set?.size)ports.delete(plannerTab)})
 })

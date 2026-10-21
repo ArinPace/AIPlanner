@@ -1,7 +1,7 @@
 {
  "manifest_version":3,
  "name":"AI Planner Chat relay experiment",
- "version":"0.3.0",
+ "version":"0.3.1",
  "description":"Relay the isolated Planner Chat tab to a separate ChatGPT Work tab on this computer.",
  "permissions":["storage","scripting"],
  "host_permissions":["https://chatgpt.com/*"],

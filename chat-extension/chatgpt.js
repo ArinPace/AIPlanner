@@ -8,7 +8,7 @@
  const responses=()=>[...document.querySelectorAll('[data-markdown-text-style="assistant-message"], [data-message-author-role="assistant"]')].filter(visible)
  let active=false,stopped=false,steering=false,lastInteraction=0
  const emit=value=>chrome.runtime.sendMessage(value).catch(()=>{})
- const buttons=()=>[...document.querySelectorAll('button,[role="menuitem"],a')].filter(visible)
+ const buttons=()=>[...document.querySelectorAll('button,[role="menuitem"],[role="option"],a')].filter(visible)
  const label=n=>(n.getAttribute('aria-label')||n.innerText).trim()
  const nativeControl=action=>buttons().find(n=>!n.disabled&&(action==='pause'?/^(Pause|Pause task)$/i:action==='resume'?/^(Resume|Resume task|Continue task)$/i:/^(Stop|Stop generating|Stop task)$/i).test(label(n)))
  const attention=()=>buttons().some(n=>/^(Sign in|Sign in on web page|Approve|Approve once|Allow once|Allow access|I.m done)$/i.test(label(n)))?'ChatGPT needs website approval or secure sign-in. Open its tab to continue.':''
@@ -36,13 +36,30 @@
    if(total>8*1024*1024)throw Error('Prepared attachments exceed 8 MB.')
    transfer.items.add(new File([bytes],item.name,{type:item.data.slice(5,item.data.indexOf(';'))}))
   }
-  input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));await wait(1000)
+  input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}))
+  // Setting input.files proves only that the browser received the bytes, not
+  // that ChatGPT accepted the upload. Require a rendered attachment for each.
+  const attached=name=>[...document.querySelectorAll('[title],[aria-label],span,div,p')].some(n=>visible(n)&&!n.closest('[contenteditable="true"],[data-markdown-text-style="assistant-message"],[data-message-author-role]')&&(n.getAttribute('title')===name||n.getAttribute('aria-label')===name||(!n.children.length&&n.textContent.trim()===name)))
+  for(let attempt=0;attempt<240;attempt++){
+   if(items.every(item=>attached(item.name)))return
+   await wait(250)
+  }
+  throw Error('ChatGPT did not confirm every attachment. The message was not sent. Open ChatGPT to review the upload before retrying.')
  }
  async function findButton(pattern){
   for(let i=0;i<40;i++){const node=buttons().find(n=>pattern.test(label(n)));if(node)return node;await wait(250)}
   throw Error('ChatGPT interface changed. Open its tab and complete the project selection there.')
  }
  async function project(){
+  const choose=buttons().find(n=>label(n)==='Choose project')
+  if(choose){
+   choose.click()
+   const option=await findButton(/^Ai Planner$/i)
+   option.click()
+   for(let i=0;i<40;i++){if(document.querySelector('[role="textbox"][aria-label="New chat in Ai Planner"]'))return;await wait(250)}
+   throw Error('Could not verify Ai Planner project selection.')
+  }
+  if(document.querySelector('[role="textbox"][aria-label="New chat in Ai Planner"]'))return
   const expand=buttons().find(n=>label(n)==='Expand Ai Planner')
   if(expand){expand.click();await wait(400)}
   const existing=buttons().find(n=>label(n)==='New chat in Ai Planner')
@@ -94,7 +111,7 @@
   if(input?.type==='planner-relay-new-chat'){
    if(active||running()){respond({error:'Wait for ChatGPT to finish before creating a chat.'});return}
    if([...document.querySelectorAll('[role="textbox"][contenteditable="true"]')].some(n=>visible(n)&&n.innerText.trim())){respond({error:'The ChatGPT tab has an unsent draft. Send or clear it first.'});return}
-   void(async()=>{try{await project();(await findButton(/^New chat in Ai Planner$/i)).click();await wait(1000);const work=buttons().find(n=>label(n)==='Work');if(work)work.click();for(let i=0;i<30&&!composer();i++)await wait(200);respond({connected:Boolean(composer()),project:'Ai Planner'})}catch(error){respond({error:error.message})}})()
+   void(async()=>{try{await findButton(/^(Choose project|New chat in Ai Planner|Ai Planner|Add new project)$/i);await project();const fresh=buttons().find(n=>label(n)==='New chat in Ai Planner');if(fresh)fresh.click();await wait(1000);const work=buttons().find(n=>label(n)==='Work');if(work)work.click();for(let i=0;i<30&&!composer();i++)await wait(200);if(!composer())throw Error('ChatGPT Work composer is unavailable.');respond({connected:true,project:'Ai Planner'})}catch(error){respond({error:error.message})}})()
    return true
   }
   if(input?.type==='planner-relay-status'){respond(status());return}
