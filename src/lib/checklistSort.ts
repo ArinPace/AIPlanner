@@ -66,7 +66,7 @@ export function checklistSortPlugin() {
     if (!list) continue
     const items: { node: typeof list; offset: number }[] = []
     list.forEach((node, offset) => items.push({node, offset}))
-    const sorted = [...items].sort((a,b) => (b.node.attrs.urgency ?? -1) - (a.node.attrs.urgency ?? -1))
+    const sorted = [...items].sort((a,b) => Number(Boolean(a.node.attrs.checked))-Number(Boolean(b.node.attrs.checked)) || (b.node.attrs.urgency ?? -1) - (a.node.attrs.urgency ?? -1))
     if (sorted.every((item, index) => item === items[index])) continue
     // Leave a newly inserted blank task in place until its text has been entered.
     if (items.some(item => !item.node.textContent.trim() && tr.selection.from > pos + item.offset && tr.selection.from < pos + item.offset + item.node.nodeSize + 1)) continue
