@@ -23,7 +23,7 @@ test('queued Google export excludes planned work, deduplicates originals, retrie
  process.env.SUPABASE_URL='https://fixed-sync.test';process.env.SUPABASE_SERVICE_ROLE_KEY='service';delete process.env.SUPABASE_SECRET_KEY;process.env.CONNECTION_ENCRYPTION_KEY='ab'.repeat(32)
  const accountId='ee34ba25-54bc-44df-8515-f7e6784dfed1',mappings:any[]=[],audits:any[]=[],remote=new Map<string,any>()
  let events=[event('class'),event('homework',{scheduleType:'planned'}),event('existing')],writes=0,deletes=0,canEdit=true,uncertain=false,lastQueue:any
- remote.set('original',{id:'original',etag:'v1',...fixedEventPayload(event('existing')),attendees:[{email:'friend@example.com'}]})
+ remote.set('original',{id:'original',etag:'v1',...fixedEventPayload(event('existing')),recurringEventId:'original-series',attendees:[{email:'friend@example.com'}]})
  const reply=(value:unknown)=>Response.json(value)
  globalThis.fetch=async(input,init)=>{
   const request=new Request(input,init),url=new URL(request.url),method=request.method
@@ -48,7 +48,7 @@ test('queued Google export excludes planned work, deduplicates originals, retrie
    assert.equal(url.searchParams.get('sendUpdates'),'none');assert(audits.length>0)
    if(method==='DELETE'){deletes++;remote.delete(id!);return new Response(null,{status:204})}
    const payload=await request.json() as any;writes++
-   if(method==='PATCH'){assert.equal(request.headers.get('if-match'),remote.get(id!)?.etag);assert.equal(payload.attendees,undefined);remote.set(id!,{...remote.get(id!),...payload,etag:'v2'})}
+   if(method==='PATCH'){assert.equal(request.headers.get('if-match'),remote.get(id!)?.etag);assert.equal(payload.attendees,undefined);if(id==='original')assert.equal(payload.recurrence,undefined);remote.set(id!,{...remote.get(id!),...payload,etag:'v2'})}
    else {assert.equal(payload.id,fixedGoogleId('owner','class'));remote.set(payload.id,{...payload,etag:'v1'});if(uncertain){uncertain=false;throw Error('Simulated lost response after Google saved the event')}}
    return reply(remote.get(id||payload.id))
   }

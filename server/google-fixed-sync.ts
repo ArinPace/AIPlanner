@@ -51,6 +51,10 @@ export async function processFixedSync(onlyUsername?:string){
    if(mapping&&!before){managed=true;/* Recreate under the stable app-owned ID, never another account's event ID. */}
    const remoteId=before?.id||fixedGoogleId(username,event.id)
    const body={...payload,...(!before?{id:remoteId,extendedProperties:{private:{aipLocalId:event.id}}}:{})}
+   if(before?.recurringEventId){
+    if(payload.recurrence.length)throw Error('This Google event is one occurrence of a series. Review series scope before turning it into a new recurring event.')
+    delete body.recurrence // Google occurrence edits must preserve the parent series.
+   }
    const audit=await backup(remoteId,before,body,'google-sync-pending')
    const response=await call(base+(before?'/'+encodeURIComponent(remoteId):'')+'?sendUpdates=none',{method:before?'PATCH':'POST',headers:before?{'If-Match':before.etag}:{},body:JSON.stringify(body)})
    if(!response.ok)throw Error('Google event is no longer available; sync will retry.')
