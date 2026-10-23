@@ -50,7 +50,7 @@ export async function processFixedSync(onlyUsername?:string){
    if(before&&managed&&before.extendedProperties?.private?.aipLocalId!==event.id)throw Error('Google event ownership could not be verified; no event was overwritten.')
    if(mapping&&!before){managed=true;/* Recreate under the stable app-owned ID, never another account's event ID. */}
    const remoteId=before?.id||fixedGoogleId(username,event.id)
-   const body={...payload,...(!before?{id:remoteId,extendedProperties:{private:{aipLocalId:event.id}}}:{})}
+   const body:Record<string,any>={...payload,...(!before?{id:remoteId,extendedProperties:{private:{aipLocalId:event.id}}}:{})}
    if(before?.recurringEventId){
     if(payload.recurrence.length)throw Error('This Google event is one occurrence of a series. Review series scope before turning it into a new recurring event.')
     delete body.recurrence // Google occurrence edits must preserve the parent series.
