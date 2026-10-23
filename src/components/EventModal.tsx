@@ -216,6 +216,7 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
           />
         </label>
 
+        <label className="field"><span>Scheduling type</span><select aria-label="Scheduling type" value={draft.scheduleType||'fixed'} onChange={event=>update('scheduleType',event.target.value as 'fixed'|'planned')}><option value="fixed">Fixed event · sync to Google Calendar</option><option value="planned">Agent-planned event</option></select></label>
         <div className="field">
           <span>Tags</span>
           <div className="tag-picker">

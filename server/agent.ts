@@ -98,6 +98,7 @@ async function oauthCallback(request: Request, provider: string) {
   if (provider==='google' && [`openid email ${GOOGLE_CALENDAR_SCOPE}`,`openid email ${GOOGLE_CALENDAR_SCOPE} ${GOOGLE_CALENDAR_WRITE_SCOPE}`].includes(attempt.requested_scopes)) {
     const account=check(await db().from('planner_google_accounts').upsert({username:attempt.username,google_sub:payload.sub,identity,credentials,updated_at:new Date().toISOString()},{onConflict:'username,google_sub'}).select('id').single())
     check(await db().from('planner_vm_settings').upsert({username:attempt.username,google_account_id:account.id},{onConflict:'username'}))
+    await (await import('./google-fixed-sync.js')).enqueueFixedSync(attempt.username)
   } else check(await db().from('planner_connections').upsert({ username: attempt.username, provider, identity, credentials, updated_at: new Date().toISOString() }))
   return new Response(null, { status: 303, headers: { Location: `${ORIGIN}/?connection=connected`, 'Set-Cookie': 'planner-oauth=; HttpOnly; Secure; SameSite=Lax; Path=/api/agent/oauth; Max-Age=0', 'Cache-Control': 'no-store' } })
 }
@@ -124,6 +125,7 @@ export async function selectGoogleAccount(username:string,id:string) {
   const account=check(await db().from('planner_google_accounts').select('id').eq('id',id).eq('username',username).maybeSingle())
   if(!account) throw new ApiError(404,'Google account not found.')
   check(await db().from('planner_vm_settings').upsert({username,google_account_id:id},{onConflict:'username'}))
+  await (await import('./google-fixed-sync.js')).enqueueFixedSync(username)
 }
 export async function removeGoogleAccount(username:string,id:string) {
   const account=check(await db().from('planner_google_accounts').select('id,credentials').eq('id',id).eq('username',username).maybeSingle())
@@ -345,6 +347,7 @@ export async function handleAgentRequest(request: Request,path: string,username:
     const timestamp=request.headers.get('x-planner-timestamp') || '', signature=request.headers.get('x-planner-signature') || ''
     const signed=secret && /^\d{13}$/.test(timestamp) && Math.abs(Date.now()-Number(timestamp))<120000 && timingSafeEqual(Buffer.from(sha(signature)),Buffer.from(sha(createHmac('sha256',secret).update(timestamp).digest('hex'))))
     if (!secret || (!signed && !timingSafeEqual(Buffer.from(sha(header)),Buffer.from(sha('Bearer '+secret))))) throw new ApiError(401,'Unauthorized.')
+    await (await import('./google-fixed-sync.js')).processFixedSync()
     await expireMcpBrowsers()
     await cleanupBinStorage()
     const users=check(await db().from('planner_agent_settings').select('username,schedule_enabled').limit(100))

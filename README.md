@@ -275,3 +275,10 @@ node --test worker/browser-access.test.mjs
 After provisioning, verify the entire path: Setup AI → private browser login →
 Verify connections → chat → completed run → planner change. A successful web
 build or queue test alone does not establish a working VM or model turn.
+### Fixed and agent-planned events
+
+Every event has a `scheduleType` secondary classification (`fixed` or `planned`), independent of tags and planning locks. The sidebar filters both groups across all views without changing the stored events or Google export. Filter choices persist per account in the browser. The event editor and `planner_save_event` can change this classification.
+
+Fixed events automatically export to the selected OAuth Google primary calendar through the existing authenticated minute scheduler, without a VM or agent run. A durable queue, per-account event mappings, stable Google IDs and etag checks reconcile retries. Exact existing Google appointments are adopted rather than duplicated. Planned tasks, study sessions, routines, sleep, breaks and buffers are excluded. Only app-created mirrors can be automatically removed; original Google appointments remain when their local copies are removed or reclassified. This is a Planner-to-Google export, not an import of arbitrary external Google edits. Status and a manual sync action appear above Tags. OAuth event-edit permission is required.
+
+`scripts/connect-chrome.ps1` reuses the persistent browser-harness daemon, or starts one connection attempt. The Windows task **AI Planner Chrome Debug Connection** runs this script at user sign-in. It does not bypass Chrome approval or repeatedly retry permission prompts; Chrome restart or a revoked grant can require approval again.

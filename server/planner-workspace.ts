@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { ApiError, db } from './cloud.js'
 import { storage } from './mcp-auth.js'
 import type { CalendarEvent, StoredState } from '../src/types.js'
+import {eventType} from '../src/lib/eventType.js'
 import { descendantIds, folderPath, type FilesState } from '../src/lib/files.js'
 
 export const datetime = z.string().max(100).refine(v => /T.*(?:Z|[+-]\d\d:\d\d)$/.test(v) && Number.isFinite(Date.parse(v)), 'Use an ISO datetime with timezone.')
@@ -14,6 +15,7 @@ export const eventPatch = {
   tagIds:z.array(z.string().min(1).max(100)).max(100).optional(),recurrence:recurrence.optional(),
   urgency:z.number().int().min(0).max(99).nullable().optional(),
   planningLocked:z.boolean().optional(),
+  scheduleType:z.enum(['fixed','planned']).optional(),
   activityType:z.enum(['break','buffer']).optional(),bufferForEventId:z.string().min(1).max(100).optional(),
 }
 type EventPatch = z.infer<z.ZodObject<typeof eventPatch>>
@@ -36,6 +38,7 @@ export async function saveEvent(username:string,args:EventPatch) {
    if(event.planning?.kind!=='buffer'||bufferForEventId===event.id||!row.state.events.some(e=>e.id===bufferForEventId))throw new ApiError(400,'Choose an existing main activity for a separate buffer event.')
    event.planning={...event.planning,bufferForEventId}
   }
+  event.scheduleType=args.scheduleType||eventType(old||event,row.state.tags)
   if(event.reminder && !event.allDay && event.start)event.end=new Date(Date.parse(event.start)+1).toISOString()
   if(!event.title || !event.start || !event.end)throw new ApiError(400,'New events require title, start and end with explicit timezone offsets.')
   if(Date.parse(event.end)<Date.parse(event.start))throw new ApiError(400,'Event end must follow its start.')

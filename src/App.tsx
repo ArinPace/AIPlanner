@@ -14,6 +14,7 @@ import { TimeGridView } from './components/TimeGridView'
 import { YearView } from './components/YearView'
 import { adoptCalendarRevision, emptyCalendar, getSession, loadCalendar, logout, saveCalendar, setToken } from './lib/api'
 import { isEventVisible } from './lib/colors'
+import {eventType,type ScheduleType} from './lib/eventType'
 import {
   addDays,
   addMonths,
@@ -47,6 +48,7 @@ function draftFromPreset(date: Date, options?: { timed?: boolean; allDay?: boole
   const end = new Date(start.getTime() + 60 * 60 * 1000)
   return {
     title: '',
+    scheduleType:'fixed',
     description: '',
     date: toDateInput(start),
     endDate: toDateInput(allDay ? start : end),
@@ -63,6 +65,7 @@ function draftFromEvent(event: CalendarEvent): EventDraft {
   const end = new Date(event.end)
   return {
     reminder: event.reminder,
+    scheduleType:eventType(event),
     urgency: event.urgency,
     title: event.title,
     description: event.description,
@@ -81,6 +84,7 @@ function eventFromDraft(draft: EventDraft, id: string): CalendarEvent {
   const end = draft.reminder && !draft.allDay ? new Date(start.getTime()+1) : draft.allDay ? endOfDateInput(draft.reminder?draft.date:draft.endDate) : combineDateAndTime(draft.endDate, draft.endTime)
   return {
     id,
+    scheduleType:draft.scheduleType||'fixed',
     reminder: Boolean(draft.reminder),
     ...(draft.urgency===undefined?{}:{urgency:draft.urgency}),
     title: draft.title.trim(),
@@ -145,6 +149,8 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [tags, setTags] = useState<Tag[]>([])
   const [hiddenTagIds, setHiddenTagIds] = useState<string[]>([])
+  const [hiddenTypes,setHiddenTypes]=useState<ScheduleType[]>(()=>{try{return JSON.parse(localStorage.getItem('planner-event-types:'+username)||'[]').filter((type:unknown)=>type==='fixed'||type==='planned')}catch{return []}})
+  function toggleEventType(type:ScheduleType){setHiddenTypes(current=>{const next=current.includes(type)?current.filter(value=>value!==type):[...current,type];try{localStorage.setItem('planner-event-types:'+username,JSON.stringify(next))}catch{/* Keep the filter working when browser storage is unavailable. */}return next})}
   const [zoom, setZoom] = useState(DEFAULT_ZOOM)
   const [draft, setDraft] = useState<EventDraft | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -241,7 +247,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   }, [tab])
 
   const hiddenSet = useMemo(() => new Set(hiddenTagIds), [hiddenTagIds])
-  const visibleEvents = useMemo(() => events.filter(event => isEventVisible(event, hiddenSet)), [events, hiddenSet])
+  const visibleEvents = useMemo(() => events.filter(event => isEventVisible(event, hiddenSet)&&!hiddenTypes.includes(eventType(event,tags))), [events, hiddenSet,hiddenTypes,tags])
   const range = useMemo(() => visibleRange(cursor, view), [cursor, view])
   const occurrences = useMemo(() => {
     if (view === 'month' || view === 'year') return []
@@ -357,6 +363,8 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
           onCreate={() => openCreate(cursor)}
           tags={tags}
           hiddenTagIds={hiddenSet}
+          hiddenTypes={hiddenTypes}
+          onToggleType={toggleEventType}
           onToggleTag={toggleTag}
           onAddTag={addTag}
           onUpdateTag={tag=>setTags(current=>current.map(item=>item.id===tag.id?{...item,...tag}:item))}
@@ -375,7 +383,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
             <YearView
               key={cursor.getFullYear()}
               cursor={cursor}
-              events={events}
+              events={visibleEvents}
               tags={tags}
               hiddenTagIds={hiddenSet}
               onMonthOpen={(date) => {

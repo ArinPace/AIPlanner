@@ -3,6 +3,7 @@ import { DEFAULT_TAGS } from './storage'
 import type { FilesState } from './files'
 
 const TOKEN_KEY = 'ai-planner-token'
+export function fixedCalendarSync<T>(run=false){return request<T>('/api/calendar/google-sync',run?{method:'POST',body:'{}'}:{})}
 export function planningRequest<T>(input?:unknown):Promise<T>{return request<T>('/api/planning',input===undefined?{}:{method:'POST',body:JSON.stringify(input)})}
 export function noteHistoryRequest<T>(noteId:string,options:{before?:number;versionId?:number;offset?:number}={}):Promise<T>{return request<T>('/api/files/history?'+new URLSearchParams({noteId,...Object.fromEntries(Object.entries(options).map(([key,value])=>[key,String(value)]))}))}
 export function calendarHistoryRequest<T>(options:{before?:number;versionId?:number}={}):Promise<T>{return request<T>('/api/calendar/history?'+new URLSearchParams(Object.fromEntries(Object.entries(options).map(([key,value])=>[key,String(value)]))))}

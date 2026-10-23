@@ -4,6 +4,8 @@ import type { CalendarEvent, Tag } from '../types'
 import { nextTagColor, TAG_COLORS } from '../lib/colors'
 import { PlusIcon, TrashIcon } from './Icons'
 import { MiniCalendar } from './MiniCalendar'
+import type {ScheduleType} from '../lib/eventType'
+import {FixedCalendarSync} from './FixedCalendarSync'
 
 type SidebarProps = {
   open: boolean
@@ -13,6 +15,8 @@ type SidebarProps = {
   events: CalendarEvent[]
   tags: Tag[]
   hiddenTagIds: Set<string>
+  hiddenTypes:ScheduleType[]
+  onToggleType:(type:ScheduleType)=>void
   onToggleTag: (id: string) => void
   onUpdateTag: (tag: Tag) => void
   onAddTag: (tag: Tag) => void
@@ -27,6 +31,8 @@ export function Sidebar({
   events,
   tags,
   hiddenTagIds,
+  hiddenTypes,
+  onToggleType,
   onToggleTag,
   onAddTag,
   onUpdateTag,
@@ -61,6 +67,12 @@ export function Sidebar({
       </button>
 
       <MiniCalendar cursor={cursor} onCursorChange={onCursorChange} />
+      <section className="event-type-filter" aria-label="Event visibility">
+        <h2>Show events</h2>
+        <label><input type="checkbox" checked={!hiddenTypes.includes('fixed')} onChange={()=>onToggleType('fixed')}/>Fixed events</label>
+        <label><input type="checkbox" checked={!hiddenTypes.includes('planned')} onChange={()=>onToggleType('planned')}/>Agent-planned events</label>
+        <FixedCalendarSync/>
+      </section>
 
       <section className="tag-section">
         <div className="tag-section-head">

@@ -5,6 +5,7 @@ import {addDays,toDateInput} from '../src/lib/dates.js'
 import {expandEvents} from '../src/lib/recurrence.js'
 import {intensityFor,type PlanningProfile} from '../src/lib/planning.js'
 import type {CalendarEvent} from '../src/types.js'
+import {eventType} from '../src/lib/eventType.js'
 
 const minute=60000
 export function buildDayPlan(profile:PlanningProfile,events:CalendarEvent[],date:string,count:number,now=new Date()){
@@ -13,7 +14,7 @@ export function buildDayPlan(profile:PlanningProfile,events:CalendarEvent[],date
  const completed=new Set(profile.tasks.filter(task=>task.status==='done').map(task=>task.id))
  // A missing task record (for example after a chat reset) is not permission
  // to discard its calendar allocation. Keep it fixed until reconciled.
- const retained=removeCompletedTodoBlocks(events,completed,now.getTime()).filter(event=>!event.planning || event.planning.locked || (event.planning.kind==='task'&&!profile.tasks.some(task=>task.id===event.planning?.taskId)) || new Date(event.start)<now || new Date(event.start)<start || new Date(event.start)>=end)
+ const retained=removeCompletedTodoBlocks(events,completed,now.getTime()).filter(event=>eventType(event)==='fixed' || !event.planning || event.planning.locked || (event.planning.kind==='task'&&!profile.tasks.some(task=>task.id===event.planning?.taskId)) || new Date(event.start)<now || new Date(event.start)<start || new Date(event.start)>=end)
  const fixed=expandEvents(retained.filter(e=>!e.reminder),start,end)
  const remaining=new Map(profile.tasks.filter(t=>t.status==='todo').map(t=>[t.id,Math.max(5,Math.round(t.minutes*(profile.learning[t.category]?.ratio ?? 1)))]))
  // Preserve work already allocated outside the range being rebuilt.
@@ -22,7 +23,7 @@ export function buildDayPlan(profile:PlanningProfile,events:CalendarEvent[],date
  let breakIndex=0
  function add(title:string,a:number,b:number,kind:'task'|'break'|'routine'|'sleep',taskId?:string,urgency?:number){
   if(b<=a)return
-  planned.push({id:randomUUID(),title,description:(taskId?'Planned work. Tell Main Chat when completed, missed, or if the estimate was wrong.':'Planned '+kind+'. Adjust your preferences in Main Chat.')+(!profile.onboarded?' Provisional plan: routine windows and durations may be estimates; refine them in Main Chat.':''),start:new Date(a).toISOString(),end:new Date(b).toISOString(),allDay:false,tagIds:[],recurrence:{frequency:'none',interval:1,until:null},urgency,planning:{kind,taskId,locked:false}})
+  planned.push({id:randomUUID(),scheduleType:'planned',title,description:(taskId?'Planned work. Tell Main Chat when completed, missed, or if the estimate was wrong.':'Planned '+kind+'. Adjust your preferences in Main Chat.')+(!profile.onboarded?' Provisional plan: routine windows and durations may be estimates; refine them in Main Chat.':''),start:new Date(a).toISOString(),end:new Date(b).toISOString(),allDay:false,tagIds:[],recurrence:{frequency:'none',interval:1,until:null},urgency,planning:{kind,taskId,locked:false}})
  }
  for(let offset=0;offset<count;offset++){
   const day=addDays(start,offset),key=toDateInput(day),dayEnd=addDays(day,1).getTime()

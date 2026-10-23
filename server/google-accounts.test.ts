@@ -15,6 +15,8 @@ test('Google accounts are owner scoped, tokens stay private, and Calendar uses t
   globalThis.fetch=async(input,init)=>{
     const request=new Request(input,init),url=new URL(request.url)
     if(url.hostname==='database.test'){
+      if(url.pathname.endsWith('/planner_calendars')){assert.equal(url.searchParams.get('username'),'eq.arin');return Response.json({revision:4,state:{events:[],tags:[],hiddenTagIds:[]}})}
+      if(url.pathname.endsWith('/planner_google_fixed_sync')){const data=await request.json() as any;assert.equal(data.username,'arin');assert.equal(data.requested_revision,4);assert.equal(data.completed_revision,-1);return new Response(null,{status:201})}
       if(url.pathname.endsWith('/planner_oauth_attempts')){attempt=await request.json() as Record<string,unknown>;return new Response(null,{status:201})}
       if(url.pathname.endsWith('/planner_vm_settings')){
         if(request.method==='GET'){assert.equal(url.searchParams.get('username'),'eq.arin');return Response.json({google_account_id:account.id})}

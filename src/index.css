@@ -2175,3 +2175,9 @@ html, body { touch-action: pan-x pan-y; }
 .tag-custom-color { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted); }
 .tag-custom-color input { width:36px; height:30px; padding:2px; border:1px solid var(--line); background:transparent; border-radius:6px; cursor:pointer; }
 .tag-custom-color span { font-size:11px; }
+ .event-type-filter{padding:16px 20px 4px;display:grid;gap:12px}
+ .event-type-filter h2{font-size:14px;color:var(--muted,#5f6368);margin:0 0 2px}
+ .event-type-filter label{display:flex;align-items:center;gap:12px;font-size:14px;cursor:pointer}
+ .event-type-filter input{width:17px;height:17px;accent-color:#1a73e8;margin:0}
+ .fixed-calendar-sync{display:grid;gap:6px;line-height:1.4;overflow-wrap:anywhere;color:var(--muted,#5f6368)}
+ .fixed-calendar-sync button{justify-self:start}

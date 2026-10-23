@@ -15,6 +15,7 @@ export interface Tag {
 }
 
 export interface CalendarEvent {
+  scheduleType?: 'fixed' | 'planned'
   planning?: {kind:'task'|'break'|'buffer'|'routine'|'sleep';taskId?:string;bufferForEventId?:string;locked:boolean}
   id: string
   reminder?: boolean
@@ -44,6 +45,7 @@ export interface StoredState {
 }
 
 export interface EventDraft {
+  scheduleType?: 'fixed' | 'planned'
   reminder?: boolean
   urgency?: number | null
   title: string
