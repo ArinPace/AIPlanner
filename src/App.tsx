@@ -142,7 +142,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   const [tab, setTab] = useState<'calendar' | 'files' | 'agent' | 'grok' | 'chat'>(()=>sessionStorage.getItem(RECOVERY_TAB)===username?'agent':'calendar')
   const [filesUnsaved, setFilesUnsaved] = useState(false)
   const [cursor, setCursor] = useState(() => new Date())
-  const [view, setView] = useState<CalendarView>('month')
+  const [view, setView] = useState<CalendarView>('week')
   const [filesSidebar,setFilesSidebar]=useState(()=>window.innerWidth>600)
   const [agentSidebar,setAgentSidebar]=useState(()=>window.innerWidth>700)
   const [sidebarOpen, setSidebarOpen] = useState(() => window.matchMedia('(min-width: 861px)').matches)
