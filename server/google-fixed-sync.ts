@@ -24,7 +24,7 @@ export async function processFixedSync(onlyUsername?:string){
  try{
   const session=await googleCalendarSession(username,undefined,true),row=await calendarRow(username)
   const mappings=storage(await db().from('planner_google_fixed_events').select('*').eq('username',username).eq('account_id',session.accountId))
-  const fixed=row.state.events.filter(e=>eventType(e,row.state.tags)==='fixed'),ids=new Set(fixed.map(e=>e.id))
+  const fixed=row.state.events.filter(e=>e.eventKind!=='folder'&&eventType(e,row.state.tags)==='fixed'),ids=new Set(fixed.map(e=>e.id))
   const headers={Authorization:'Bearer '+session.tokens.access_token,'Content-Type':'application/json'}
   const call=async(url:string,init:RequestInit={})=>{const response=await fetch(url,{...init,headers:{...headers,...init.headers},signal:AbortSignal.timeout(Math.max(1,Math.min(8000,deadline-Date.now())))});if(!response.ok&&![404,410].includes(response.status))throw new ApiError(response.status===401?401:502,'Google sync failed ('+response.status+'). '+(response.status===412?'The Google event changed; retry to reconcile.':'Reconnect the account if access expired.'));return response}
   const read=async(id:string):Promise<any>=>{const response=await call(base+'/'+encodeURIComponent(id));return response.ok?await response.json():null}

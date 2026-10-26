@@ -1,7 +1,8 @@
 import { eventAppearance } from '../lib/eventAppearance'
 import { PlannerDate as Date } from '../lib/timezone.js'
 import { urgencyColor } from '../lib/urgencyColor'
-import { Fragment,useEffect,useLayoutEffect, useRef,useState } from 'react'
+import { Fragment,useEffect,useLayoutEffect, useRef,useState,type ReactNode } from 'react'
+import {occurrenceFolderGroups,folderExpanded} from '../lib/eventFolders'
 import type { CalendarEvent, CalendarView, Occurrence, Tag } from '../types'
 import { eventColor } from '../lib/colors'
 import {
@@ -55,12 +56,17 @@ export function TimeGridView({ active=true,cursor, view, zoom, occurrences, tags
   },[active])
   const previousLayout = useRef<{key:string;hourHeight:number}|null>(null)
   const bodyRef=useRef<HTMLDivElement>(null)
+  const [openedFolders,setOpenedFolders]=useState<Set<string>>(()=>new Set())
+  const now=new Date(),grouped=occurrenceFolderGroups(occurrences)
+  const folderOpen=(item:Occurrence)=>folderExpanded(item,now.getTime(),openedFolders)
+  const toggleFolder=(item:Occurrence)=>setOpenedFolders(current=>{const next=new Set(current);if(next.has(item.event.id))next.delete(item.event.id);else next.add(item.event.id);return next})
   // Give short activities a readable row without expanding cards past their time bounds.
-  const visibleDurations=occurrences.filter(item=>!item.event.allDay&&!item.event.reminder&&days.some(day=>clipToDay(item,day))).map(item=>(item.end.getTime()-item.start.getTime())/60000).filter(minutes=>minutes>=1)
+  const visibleDurations=grouped.top.filter(item=>item.event.eventKind!=='folder'&&!item.event.allDay&&!item.event.reminder&&days.some(day=>clipToDay(item,day))).map(item=>(item.end.getTime()-item.start.getTime())/60000).filter(minutes=>minutes>=1)
   const shortest=Math.min(30,...visibleDurations)
-  const hourHeight = Math.max(Math.round(BASE_HOUR_HEIGHT * zoom),Math.ceil(22*60/shortest))
+  const folderHeight=Math.max(0,...grouped.top.filter(item=>item.event.eventKind==='folder').map(item=>(36+(folderOpen(item)?(grouped.children.get(item.event.id)?.length||0)*36:0))*3600000/Math.max(60000,item.end.getTime()-item.start.getTime())))
+  const hourHeight = Math.max(Math.round(BASE_HOUR_HEIGHT * zoom),Math.ceil(22*60/shortest),Math.ceil(folderHeight))
 
-  const now=new Date(),dayKey=toDateInput(cursor)
+  const dayKey=toDateInput(cursor)
   const todayKey=toDateInput(now),mobileWeek=view==='week'
   const containsToday=days.some(day=>toDateInput(day)===todayKey)
   useLayoutEffect(() => {
@@ -85,15 +91,27 @@ export function TimeGridView({ active=true,cursor, view, zoom, occurrences, tags
   }, [active,view,dayKey,todayKey,mobileWeek,hourHeight,containsToday])
 
   const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 60) * hourHeight
+  function agendaRows(items:Occurrence[],day:Date,showNow:boolean,nested=false):ReactNode{
+    const currentFolder=items.find(item=>item.event.eventKind==='folder'&&item.start<=now&&now<item.end)
+    const next=items.findIndex(item=>!item.event.allDay&&item.end>now)
+    const marker=<div ref={mobileNowRef} className="mobile-week-now" role="img" aria-label={'Current time '+formatTimeCompact(now)}><span>Now · {formatTimeCompact(now)}</span></div>
+    return <>{items.map((item,index)=>{
+      const folder=item.event.eventKind==='folder',children=(grouped.children.get(item.event.id)||[]).filter(child=>clipToDay(child,day)),open=folder&&folderOpen(item)
+      const chip=<button type="button" className={'event-chip mobile-week-event'+(nested?' folder-child-event':'')} style={eventAppearance(eventColor(item.event,tags),item.event.reminder)} title={item.event.title} aria-expanded={folder?open:undefined} onClick={()=>folder?toggleFolder(item):onEventClick(item.event,item.start)}>
+        <span className="mobile-week-time">{item.event.allDay?(item.event.reminder?'Reminder':'All day'):formatTimeCompact(clipToDay(item,day)!.start)}</span>
+        <span className="event-title">{folder&&(open?'▾ ▣ ':'▸ ▣ ')}{item.event.urgency!=null&&<span className="event-urgency-badge" style={urgencyColor(item.event.urgency)}>{item.event.urgency}</span>}{item.event.title||'(No title)'}</span>
+        {folder&&<small className="folder-event-count">{children.length} events · {formatTimeCompact(item.end)}</small>}
+      </button>
+      return <Fragment key={item.event.id+item.start.toISOString()}>{showNow&&!currentFolder&&index===next&&marker}{folder?<div className="agenda-event-folder"><div className="folder-event-header">{chip}<button type="button" className="folder-edit-button" aria-label={'Edit folder '+item.event.title} onClick={()=>onEventClick(item.event,item.start)}>Edit</button></div>{open&&<div className="folder-agenda-children">{children.length?agendaRows(children,day,showNow&&currentFolder===item,true):<><p className="quiet">No visible events in this folder.</p>{showNow&&currentFolder===item&&marker}</>}</div>}</div>:chip}</Fragment>
+    })}{showNow&&!currentFolder&&next===-1&&marker}</>
+  }
 
   return (
     <div ref={weekScrollRef} data-layout={mobileWeek?'agenda':'grid'} className={`time-view-scroll ${view === 'week' ? 'has-mobile-week' : ''}`}>
       {view === 'week' && <div className="mobile-week">
         {days.map(day => {
-          const items = occurrences.filter(item => clipToDay(item, day)).sort((a, b) =>
+          const items = grouped.top.filter(item => clipToDay(item, day)).sort((a, b) =>
             Number(b.event.allDay) - Number(a.event.allDay) || a.start.getTime() - b.start.getTime())
-          const today=isToday(day),nextItem=items.findIndex(item=>!item.event.allDay&&item.end.getTime()>now.getTime())
-          const marker=<div ref={mobileNowRef} className="mobile-week-now" role="img" aria-label={'Current time '+formatTimeCompact(now)}><span>Now · {formatTimeCompact(now)}</span></div>
           return <section className="mobile-week-day" key={day.toISOString()}>
             <div className="mobile-week-heading">
               <h3 className={isToday(day) ? 'is-today' : ''}>{day.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</h3>
@@ -101,18 +119,7 @@ export function TimeGridView({ active=true,cursor, view, zoom, occurrences, tags
               <button type="button" className="text-btn" aria-label={'Add event on ' + day.toDateString()} onClick={() => onSlotClick(startOfDay(day), true)}>+</button>
             </div>
             {items.length === 0 && <p className="mobile-week-empty">No events</p>}
-            {items.map((item,index) => <Fragment key={item.event.id + item.start.toISOString()}>
-            {today&&index===nextItem&&marker}<button
-              type="button"
-              className="event-chip mobile-week-event"
-              title={item.event.title || '(No title)'}
-              style={eventAppearance(eventColor(item.event, tags), item.event.reminder)}
-              onClick={() => onEventClick(item.event, item.start)}
-            >
-              <span className="mobile-week-time">{item.event.allDay ? (item.event.reminder ? 'Reminder' : 'All day') : formatTimeCompact(clipToDay(item, day)!.start)}</span>
-              <span className="event-title">{item.event.urgency != null && <span className="event-urgency-badge" style={urgencyColor(item.event.urgency)} aria-label={'Urgency ' + item.event.urgency}>{item.event.urgency}</span>}{item.event.title || '(No title)'}</span>
-            </button></Fragment>)}
-            {today&&nextItem===-1&&marker}
+            {agendaRows(items,day,isToday(day))}
           </section>
         })}
       </div>}
@@ -166,7 +173,7 @@ export function TimeGridView({ active=true,cursor, view, zoom, occurrences, tags
           </div>
 
           {days.map((day) => {
-            const timed = occurrences.filter((item) => !item.event.allDay && clipToDay(item, day))
+            const timed = grouped.top.filter((item) => !item.event.allDay && clipToDay(item, day))
             const laidOut = layoutTimeCards(timed.map(item=>{
               const clipped=clipToDay(item,day)!
               const top=(clipped.start.getHours()*60+clipped.start.getMinutes()+clipped.start.getSeconds()/60)/60*hourHeight
@@ -199,6 +206,11 @@ export function TimeGridView({ active=true,cursor, view, zoom, occurrences, tags
                   const width = `calc((100% - 8px) / ${cols})`
                   const left = `calc(4px + ${col} * (100% - 8px) / ${cols})`
                   const color = eventColor(item.event, tags)
+
+                  if(item.event.eventKind==='folder'){
+                    const open=folderOpen(item),children=(grouped.children.get(item.event.id)||[]).filter(child=>clipToDay(child,day))
+                    return <div key={key} className="timed-event-folder" style={{top,height,width,left,borderColor:color}}><div className="folder-event-header"><button type="button" className="folder-grid-toggle" aria-expanded={open} onClick={()=>toggleFolder(item)} style={eventAppearance(color)}>{open?'▾':'▸'} ▣ {item.event.title}<small>{formatTimeCompact(item.start)}–{formatTimeCompact(item.end)} · {children.length} events</small></button><button type="button" className="folder-edit-button" aria-label={'Edit folder '+item.event.title} onClick={()=>onEventClick(item.event,item.start)}>Edit</button></div>{open&&<div className="folder-day-children">{children.map(child=><button type="button" key={child.event.id} className="event-chip folder-child-event" onClick={()=>onEventClick(child.event,child.start)} style={eventAppearance(eventColor(child.event,tags),child.event.reminder)}><span>{formatTimeCompact(child.start)}–{formatTimeCompact(child.end)}</span><strong>{child.event.title}</strong></button>)}</div>}</div>
+                  }
 
                   return (
                     <button

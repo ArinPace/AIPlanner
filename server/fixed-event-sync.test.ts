@@ -22,7 +22,7 @@ test('queued Google export excludes planned work, deduplicates originals, retrie
  const keys=['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','SUPABASE_SECRET_KEY','CONNECTION_ENCRYPTION_KEY'] as const,env=Object.fromEntries(keys.map(k=>[k,process.env[k]])),originalFetch=globalThis.fetch
  process.env.SUPABASE_URL='https://fixed-sync.test';process.env.SUPABASE_SERVICE_ROLE_KEY='service';delete process.env.SUPABASE_SECRET_KEY;process.env.CONNECTION_ENCRYPTION_KEY='ab'.repeat(32)
  const accountId='ee34ba25-54bc-44df-8515-f7e6784dfed1',mappings:any[]=[],audits:any[]=[],remote=new Map<string,any>()
- let events=[event('class'),event('homework',{scheduleType:'planned'}),event('existing')],writes=0,deletes=0,canEdit=true,uncertain=false,lastQueue:any
+ let events=[event('class'),event('homework',{scheduleType:'planned'}),event('existing'),event('visual-folder',{eventKind:'folder'})],writes=0,deletes=0,canEdit=true,uncertain=false,lastQueue:any
  remote.set('original',{id:'original',etag:'v1',...fixedEventPayload(event('existing')),recurringEventId:'original-series',attendees:[{email:'friend@example.com'}]})
  const reply=(value:unknown)=>Response.json(value)
  globalThis.fetch=async(input,init)=>{

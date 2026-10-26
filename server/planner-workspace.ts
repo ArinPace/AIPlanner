@@ -4,6 +4,7 @@ import { ApiError, db } from './cloud.js'
 import { storage } from './mcp-auth.js'
 import type { CalendarEvent, StoredState } from '../src/types.js'
 import {eventType} from '../src/lib/eventType.js'
+import {normalizeEventFolders,validateEventFolders} from '../src/lib/eventFolders.js'
 import { descendantIds, folderPath, type FilesState } from '../src/lib/files.js'
 
 export const datetime = z.string().max(100).refine(v => /T.*(?:Z|[+-]\d\d:\d\d)$/.test(v) && Number.isFinite(Date.parse(v)), 'Use an ISO datetime with timezone.')
@@ -16,6 +17,7 @@ export const eventPatch = {
   urgency:z.number().int().min(0).max(99).nullable().optional(),
   planningLocked:z.boolean().optional(),
   scheduleType:z.enum(['fixed','planned']).optional(),
+  eventKind:z.literal('folder').nullable().optional(),folderId:z.string().min(1).max(100).nullable().optional(),
   activityType:z.enum(['break','buffer']).optional(),bufferForEventId:z.string().min(1).max(100).optional(),
 }
 type EventPatch = z.infer<z.ZodObject<typeof eventPatch>>
@@ -45,9 +47,11 @@ export async function saveEvent(username:string,args:EventPatch) {
   if(event.tagIds.some(id=>!row.state.tags.some(t=>t.id===id)))throw new ApiError(400,'Choose tag IDs returned by planner_calendar_read.')
   if(event.recurrence.until && (!Number.isFinite(Date.parse(event.recurrence.until)) || event.recurrence.until<event.start.slice(0,10)))throw new ApiError(400,'Recurrence end must be a valid date on or after the event start.')
   if(old)Object.assign(old,event);else row.state.events.push(event)
+  row.state.events=normalizeEventFolders(row.state.events)
+  validateEventFolders(row.state.events)
   const rows=storage(await db().from('planner_calendars').update({state:row.state,revision:row.revision+1,updated_at:new Date().toISOString()}).eq('username',username).eq('revision',row.revision).select('revision'))
   if(!rows.length)throw new ApiError(409,'Calendar changed. Read it before retrying.')
-  return {saved:true,eventId:event.id,event,revision:rows[0].revision}
+  return {saved:true,eventId:event.id,event:row.state.events.find(item=>item.id===event.id)!,revision:rows[0].revision}
 }
 
 export function searchFiles(state:FilesState,args:{query?:string;folderId?:string;offset?:number;limit?:number}) {

@@ -12,6 +12,7 @@ import {readAgentInstructions,saveAgentInstructions} from './agent-instructions.
 import {readNoteHistory} from './note-history.js'
 import {calendarHistory,restoreCalendarEvent} from './calendar-history.js'
 import {fixedSyncStatus,requestFixedSync} from './google-fixed-sync.js'
+import {normalizeEventFolders,validateEventFolders} from '../src/lib/eventFolders.js'
 import {z} from 'zod'
 import { handleVmPool, queuePersonalVm, registerVmHost, touchVmActivity } from './vm-host.js'
 import { handleFilesBin, preserveRemovedFiles } from './files-bin.js'
@@ -176,13 +177,15 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
     if(path==='/api/calendar/restore'&&method==='POST')return json(await restoreCalendarEvent(username,z.object({versionId:z.number().int().positive(),revision:z.number().int().nonnegative(),side:z.enum(['before','after']),overwrite:z.boolean().optional()}).parse(await body(request))))
     if (path === '/api/calendar' && method === 'GET') {
       const row = dataResult(await db().from('planner_calendars').select('state,revision').eq('username', username).single())
-      return json({ ...row.state, revision: row.revision })
+      return json({ ...row.state,events:normalizeEventFolders(row.state.events), revision: row.revision })
     }
     if (['/api/files/bin','/api/files/trash','/api/files/restore','/api/files/purge'].includes(path))return await handleFilesBin(request,path,username)
     if (path === '/api/calendar' && method === 'PUT') {
       const input = await body(request)
       if (!Array.isArray(input.events) || !Array.isArray(input.tags) || !Array.isArray(input.hiddenTagIds)) throw new ApiError(400, 'Invalid calendar data.')
       const state = { events: input.events, tags: input.tags, hiddenTagIds: input.hiddenTagIds, zoom: typeof input.zoom === 'number' ? input.zoom : 1 }
+      state.events=normalizeEventFolders(state.events)
+      validateEventFolders(state.events)
       if (!Number.isSafeInteger(input.revision) || Number(input.revision) < 0) throw new ApiError(409, 'Reload your calendar before saving.')
       const rows = dataResult(await db().from('planner_calendars').update({ state, revision: Number(input.revision) + 1, updated_at: new Date().toISOString() }).eq('username', username).eq('revision', input.revision).select('revision'))
       if (!rows.length) throw new ApiError(409, 'Your calendar changed during a sync or in another tab. Reload before saving.')

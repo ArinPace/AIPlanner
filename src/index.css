@@ -2181,3 +2181,23 @@ html, body { touch-action: pan-x pan-y; }
  .event-type-filter input{width:17px;height:17px;accent-color:#1a73e8;margin:0}
  .fixed-calendar-sync{display:grid;gap:6px;line-height:1.4;overflow-wrap:anywhere;color:var(--muted,#5f6368)}
  .fixed-calendar-sync button{justify-self:start}
+ .folder-event-builder{padding:12px;border:1px solid var(--line,#dadce0);border-radius:12px;margin:12px 0}
+ .folder-builder-heading,.folder-builder-item,.folder-event-header{display:flex;align-items:center;gap:8px}
+ .folder-builder-heading{justify-content:space-between}
+ .folder-builder-item{justify-content:space-between;border-top:1px solid var(--line,#dadce0);padding:8px 0;min-width:0}
+ .folder-builder-item>button:first-child{min-width:0;text-align:left;overflow-wrap:anywhere}
+ .folder-builder-item small{display:block;font-size:11px;color:var(--muted,#5f6368)}
+ .folder-builder-item>button:last-child{font-size:11px;flex-shrink:0}
+ .folder-event-header>.mobile-week-event{flex:1;min-width:0}
+ .folder-event-count{margin-left:auto;white-space:nowrap;padding-right:8px;font-size:10px}
+ .folder-edit-button{flex-shrink:0;border:1px solid var(--line,#dadce0);border-radius:6px;padding:6px;background:var(--panel,#fff);color:var(--text,#202124);font:inherit;font-size:11px;cursor:pointer}
+ .folder-agenda-children{border-left:3px solid var(--line,#dadce0);padding-left:14px;margin:4px 6px 10px 16px}
+ .folder-child-event{min-width:0;white-space:normal;overflow-wrap:anywhere}
+ .timed-event-folder{position:absolute;z-index:1;box-sizing:border-box;border:2px solid;border-radius:8px;display:flex;flex-direction:column;overflow:hidden;background:var(--panel,#fff)}
+ .timed-event-folder .folder-event-header{flex-shrink:0;gap:2px;min-width:0}
+ .folder-grid-toggle{border:0;cursor:pointer;flex:1;min-width:0;text-align:left;font:inherit;font-size:12px;padding:4px 6px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+ .folder-grid-toggle small{display:block;font-size:10px}
+ .folder-day-children{display:flex;flex-direction:column;gap:3px;padding:3px;overflow:auto;min-height:0}
+ .folder-day-children>button{display:flex;align-items:center;gap:10px;flex-shrink:0;width:100%;min-height:32px;padding:5px;border-radius:4px;text-align:left;font-size:11px;border:0;cursor:pointer}
+ .folder-day-children>button>span{white-space:nowrap;font-size:10px}
+ @media(max-width:600px){.folder-event-count{font-size:9px;white-space:normal}.folder-builder-item{align-items:flex-start}.folder-agenda-children{padding-left:8px;margin-left:8px}}

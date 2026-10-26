@@ -4,6 +4,7 @@ import { urgencyColor } from '../lib/urgencyColor'
 import { Fragment,useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CalendarEvent, Tag } from '../types'
 import { expandEvents } from '../lib/recurrence'
+import {occurrenceFolderGroups} from '../lib/eventFolders'
 import { eventColor } from '../lib/colors'
 import {
   endOfDay,
@@ -37,7 +38,7 @@ export function MonthView({ cursor, zoom, events, onMonthChange, tags, onDayClic
   const [range, setRange] = useState(() => ({ start: startOfWeek(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1)), weeks: 18 }))
   const days = useMemo(() => Array.from({ length: range.weeks * 7 }, (_, index) => addDays(range.start, index)), [range])
   const rows = range.weeks
-  const occurrences = useMemo(() => expandEvents(events, range.start, endOfDay(addDays(range.start, range.weeks * 7 - 1))), [events, range])
+  const occurrences = useMemo(() => occurrenceFolderGroups(expandEvents(events, range.start, endOfDay(addDays(range.start, range.weeks * 7 - 1)))).top, [events, range])
   const dayItems = useMemo(() => days.map(day => {
     const start = startOfDay(day).getTime(), end = endOfDay(day).getTime()
     return occurrences.filter(item => item.start.getTime() < end && item.end.getTime() > start).sort((a,b)=>a.start.getTime()-b.start.getTime() || a.end.getTime()-b.end.getTime())

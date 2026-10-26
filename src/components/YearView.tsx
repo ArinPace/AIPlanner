@@ -2,6 +2,7 @@ import { PlannerDate as Date } from '../lib/timezone.js'
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CalendarEvent, Tag } from '../types'
 import { expandEvents } from '../lib/recurrence'
+import {occurrenceFolderGroups} from '../lib/eventFolders'
 import {yearDaySummary} from '../lib/yearCalendar'
 import {
   getMonthGrid,
@@ -27,7 +28,7 @@ export function YearView({ cursor, events, tags, hiddenTagIds, onMonthOpen, onDa
   const year = cursor.getFullYear()
   const [years, setYears] = useState({ start: year - 1, end: year + 1 })
   const months = Array.from({ length: (years.end - years.start + 1) * 12 }, (_, month) => monthCursor(years.start, month))
-  const occurrences = useMemo(() => expandEvents(events, monthCursor(years.start, 0), monthCursor(years.end + 1, 0)), [events, years.start, years.end])
+  const occurrences = useMemo(() => occurrenceFolderGroups(expandEvents(events, monthCursor(years.start, 0), monthCursor(years.end + 1, 0))).top, [events, years.start, years.end])
   const viewRef = useRef<HTMLDivElement>(null)
   const prependAnchor = useRef<{ height: number; top: number } | null>(null)
   const currentMonthRef = useRef<HTMLElement>(null)

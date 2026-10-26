@@ -1,6 +1,7 @@
 import {ApiError,db} from './cloud.js'
 import {storage} from './mcp-auth.js'
 import {calendarRow} from './planner-workspace.js'
+import {normalizeEventFolders} from '../src/lib/eventFolders.js'
 export async function calendarHistory(username:string,args:{before?:number;versionId?:number;eventId?:string;calendarKey?:string}){
  if(args.versionId){const row=storage(await db().from('planner_calendar_history').select('*').eq('username',username).eq('id',args.versionId).maybeSingle());if(!row)throw new ApiError(404,'Calendar version not found.');return {version:row}}
  let query=db().from('planner_calendar_history').select('id,calendar_key,event_id,title,kind,calendar_revision,created_at').eq('username',username)
@@ -25,7 +26,7 @@ export async function restoreCalendarEvent(username:string,args:{versionId:numbe
   const tag=history.flatMap(h=>[...(h.after||[]),...(h.before||[])]).find(t=>t.id===id)
   row.state.tags.push(tag||{id,name:'Restored tag',color:'#5f6368'})
  }
- row.state.events=[...row.state.events.filter(e=>e.id!==event.id),event]
+ row.state.events=normalizeEventFolders([...row.state.events.filter(e=>e.id!==event.id),event])
  const rows=storage(await db().from('planner_calendars').update({state:row.state,revision:row.revision+1,updated_at:new Date().toISOString()}).eq('username',username).eq('revision',row.revision).select('revision'))
  if(!rows.length)throw new ApiError(409,'Calendar changed. Read it again before restoring.')
  return {saved:true,event,revision:rows[0].revision}

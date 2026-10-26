@@ -6,6 +6,7 @@ import {expandEvents} from '../src/lib/recurrence.js'
 import {intensityFor,type PlanningProfile} from '../src/lib/planning.js'
 import type {CalendarEvent} from '../src/types.js'
 import {eventType} from '../src/lib/eventType.js'
+import {normalizeEventFolders} from '../src/lib/eventFolders.js'
 
 const minute=60000
 export function buildDayPlan(profile:PlanningProfile,events:CalendarEvent[],date:string,count:number,now=new Date()){
@@ -15,7 +16,7 @@ export function buildDayPlan(profile:PlanningProfile,events:CalendarEvent[],date
  // A missing task record (for example after a chat reset) is not permission
  // to discard its calendar allocation. Keep it fixed until reconciled.
  const retained=removeCompletedTodoBlocks(events,completed,now.getTime()).filter(event=>eventType(event)==='fixed' || !event.planning || event.planning.locked || (event.planning.kind==='task'&&!profile.tasks.some(task=>task.id===event.planning?.taskId)) || new Date(event.start)<now || new Date(event.start)<start || new Date(event.start)>=end)
- const fixed=expandEvents(retained.filter(e=>!e.reminder),start,end)
+ const fixed=expandEvents(retained.filter(e=>!e.reminder&&e.eventKind!=='folder'),start,end)
  const remaining=new Map(profile.tasks.filter(t=>t.status==='todo').map(t=>[t.id,Math.max(5,Math.round(t.minutes*(profile.learning[t.category]?.ratio ?? 1)))]))
  // Preserve work already allocated outside the range being rebuilt.
  for(const event of retained){if(event.planning?.taskId && new Date(event.end)>now){const id=event.planning.taskId;remaining.set(id,Math.max(0,(remaining.get(id)||0)-(new Date(event.end).getTime()-new Date(event.start).getTime())/minute))}}
@@ -91,5 +92,5 @@ export function buildDayPlan(profile:PlanningProfile,events:CalendarEvent[],date
   }
  }
  for(const task of profile.tasks){if(task.status==='todo'&&(remaining.get(task.id)||0)>0)warnings.push(task.title+': '+remaining.get(task.id)+' minutes not allocated'+(task.deadline?' before its deadline':''))}
- return {events:[...retained,...planned],added:planned.length,warnings,from:date,through:toDateInput(addDays(start,count-1))}
+ return {events:normalizeEventFolders([...retained,...planned]),added:planned.length,warnings,from:date,through:toDateInput(addDays(start,count-1))}
 }

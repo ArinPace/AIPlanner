@@ -12,6 +12,7 @@ export function TagChart({events,tags,cursor,onClose}:{events:CalendarEvent[];ta
  const start=new Date(year,m-1,1),end=new Date(year,m,1)
  const rows=[...tags,{id:'untagged',name:'Untagged',color:'#8a919c'}].map(tag=>({...tag,count:0,hours:0}))
  if(Number.isFinite(start.getTime()))for(const event of events){
+  if(event.eventKind==='folder')continue
   const duration=Math.max(0,new Date(event.end).getTime()-new Date(event.start).getTime())
   const occurrences=expandEvent(event,new Date(start.getTime()-duration),new Date(end.getTime()-1))
   const assigned=rows.filter(tag=>event.tagIds.includes(tag.id))

@@ -15,6 +15,8 @@ export interface Tag {
 }
 
 export interface CalendarEvent {
+  eventKind?: 'folder'
+  folderId?: string | null
   scheduleType?: 'fixed' | 'planned'
   planning?: {kind:'task'|'break'|'buffer'|'routine'|'sleep';taskId?:string;bufferForEventId?:string;locked:boolean}
   id: string
@@ -45,6 +47,8 @@ export interface StoredState {
 }
 
 export interface EventDraft {
+  eventKind?: 'folder'
+  folderChildren?: {id:string;draft:EventDraft}[]
   scheduleType?: 'fixed' | 'planned'
   reminder?: boolean
   urgency?: number | null

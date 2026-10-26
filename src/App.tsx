@@ -15,6 +15,7 @@ import { YearView } from './components/YearView'
 import { adoptCalendarRevision, emptyCalendar, getSession, loadCalendar, logout, saveCalendar, setToken } from './lib/api'
 import { isEventVisible } from './lib/colors'
 import {eventType,type ScheduleType} from './lib/eventType'
+import {saveEventGroup,normalizeEventFolders} from './lib/eventFolders'
 import {
   addDays,
   addMonths,
@@ -65,6 +66,7 @@ function draftFromEvent(event: CalendarEvent): EventDraft {
   const end = new Date(event.end)
   return {
     reminder: event.reminder,
+    eventKind:event.eventKind,
     scheduleType:eventType(event),
     urgency: event.urgency,
     title: event.title,
@@ -84,6 +86,7 @@ function eventFromDraft(draft: EventDraft, id: string): CalendarEvent {
   const end = draft.reminder && !draft.allDay ? new Date(start.getTime()+1) : draft.allDay ? endOfDateInput(draft.reminder?draft.date:draft.endDate) : combineDateAndTime(draft.endDate, draft.endTime)
   return {
     id,
+    eventKind:draft.eventKind,
     scheduleType:draft.scheduleType||'fixed',
     reminder: Boolean(draft.reminder),
     ...(draft.urgency===undefined?{}:{urgency:draft.urgency}),
@@ -268,7 +271,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
 
   function openEdit(event: CalendarEvent) {
     setEditingId(event.id)
-    setDraft(draftFromEvent(event))
+    setDraft({...draftFromEvent(event),...(event.eventKind==='folder'?{folderChildren:events.filter(child=>child.folderId===event.id).map(child=>({id:child.id,draft:draftFromEvent(child)}))}:{})})
   }
 
   function closeModal() {
@@ -278,20 +281,17 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
 
   function saveDraft() {
     if (!draft) return
-    const saved = eventFromDraft(draft, editingId ?? createId())
-    setEvents((current) => {
-      const previous=current.find(event=>event.id===saved.id)
-      if(previous?.planning)saved.planning={...previous.planning,locked:true}
-      const without = current.filter((event) => event.id !== saved.id)
-      return [...without, saved]
-    })
+    const converting=draft.eventKind==='folder'&&editingId&&events.find(event=>event.id===editingId)?.eventKind!=='folder'
+    const saved = eventFromDraft(draft, converting?createId():editingId??createId())
+    const children=draft.eventKind==='folder'?(draft.folderChildren||[]).map(child=>eventFromDraft(child.draft,child.id)):undefined
+    setEvents(saveEventGroup(events,saved,children))
     closeModal()
   }
 
   function deleteEvent() {
     if (!editingId) return
-    if (!window.confirm('Delete this event? If it repeats, the whole series will be removed.')) return
-    setEvents((current) => current.filter((event) => event.id !== editingId))
+    if (!window.confirm(events.find(event=>event.id===editingId)?.eventKind==='folder'?'Delete this folder? Its events will stay on the calendar.':'Delete this event? If it repeats, the whole series will be removed.')) return
+    setEvents((current) => normalizeEventFolders(current.filter((event) => event.id !== editingId).map(event=>event.folderId===editingId?{...event,folderId:null}:event)))
     closeModal()
   }
 
@@ -426,6 +426,8 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
 
       {draft && (
         <EventModal
+          existingId={editingId||undefined}
+          nested={Boolean(editingId&&events.find(event=>event.id===editingId)?.folderId)}
           mode={editingId ? 'edit' : 'create'}
           draft={draft}
           tags={tags}
