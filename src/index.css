@@ -2201,3 +2201,6 @@ html, body { touch-action: pan-x pan-y; }
  .folder-day-children>button{display:flex;align-items:center;gap:10px;flex-shrink:0;width:100%;min-height:32px;padding:5px;border-radius:4px;text-align:left;font-size:11px;border:0;cursor:pointer}
  .folder-day-children>button>span{white-space:nowrap;font-size:10px}
  @media(max-width:600px){.folder-event-count{font-size:9px;white-space:normal}.folder-builder-item{align-items:flex-start}.folder-agenda-children{padding-left:8px;margin-left:8px}}
+ .folder-builder-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+ .nested-day-folder{margin-left:8px;border-left:2px solid var(--line);padding-left:4px;flex-shrink:0}
+ .nested-day-folder .folder-day-children{overflow:visible}

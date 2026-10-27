@@ -4,22 +4,27 @@ import type {CalendarEvent,Occurrence} from '../types.js'
 export function normalizeEventFolders(events:CalendarEvent[]):CalendarEvent[]{
  const folders=new Set(events.filter(e=>e.eventKind==='folder').map(e=>e.id))
  const normalized=events.map(event=>event.folderId&&!folders.has(event.folderId)?{...event,folderId:null}:event)
- return normalized.map(folder=>{
-  if(folder.eventKind!=='folder')return folder
-  const children=normalized.filter(e=>e.folderId===folder.id)
-  if(!children.length)return folder
-  const start=Math.min(...children.map(e=>Date.parse(e.start)))
-  return {...folder,start:new Date(start).toISOString(),end:new Date(Math.max(start+60000,...children.map(e=>Date.parse(e.end)))).toISOString()}
- })
+ const resolved=new Map<string,CalendarEvent>(),visiting=new Set<string>()
+ function resolve(event:CalendarEvent):CalendarEvent{
+  if(resolved.has(event.id))return resolved.get(event.id)!
+  if(visiting.has(event.id))throw Error('An event folder cannot contain itself or one of its parent folders.')
+  visiting.add(event.id)
+  const children=event.eventKind==='folder'?normalized.filter(e=>e.folderId===event.id).map(resolve):[]
+  let result=event
+  if(children.length){const start=Math.min(...children.map(e=>Date.parse(e.start)));result={...event,start:new Date(start).toISOString(),end:new Date(Math.max(start+60000,...children.map(e=>Date.parse(e.end)))).toISOString()}}
+  visiting.delete(event.id);resolved.set(event.id,result);return result
+ }
+ return normalized.map(resolve)
 }
 export function validateEventFolders(events:CalendarEvent[]){
  for(const event of events){
   if(event.eventKind==='folder'&&event.planning)throw Error('Create a new folder and move the existing planning event into it; keep task links on the real event.')
-  if(event.eventKind==='folder'&&(event.folderId||event.allDay||event.reminder||event.recurrence.frequency!=='none'))throw Error('Folders group dated, timed events and cannot repeat or be nested.')
+  if(event.eventKind==='folder'&&(event.allDay||event.reminder||event.recurrence.frequency!=='none'))throw Error('Folders group dated, timed events and cannot repeat.')
   if(!event.folderId)continue
   if(event.folderId===event.id||!events.some(e=>e.id===event.folderId&&e.eventKind==='folder'))throw Error('Choose an existing event folder.')
   if(event.allDay||event.recurrence.frequency!=='none')throw Error('Events inside a folder must be timed and non-recurring.')
  }
+ normalizeEventFolders(events) // Validate the full ancestry, including indirect cycles.
 }
 export function occurrenceFolderGroups(occurrences:Occurrence[]){
  const children=new Map<string,Occurrence[]>()
@@ -43,9 +48,10 @@ export function saveEventGroup(events:CalendarEvent[],event:CalendarEvent,childr
  const previous=events.find(item=>item.id===event.id)
  const merge=(next:CalendarEvent)=>{const old=events.find(item=>item.id===next.id);const changed=old&&['title','description','start','end','allDay','reminder'].some(key=>old[key as keyof CalendarEvent]!==next[key as keyof CalendarEvent]);return {...old,...next,...(old?.planning?{planning:{...old.planning,locked:old.planning.locked||Boolean(changed)}}:{})}}
  const ids=new Set([event.id,...(children||[]).map(item=>item.id)])
- const kept=events.filter(item=>!ids.has(item.id)).map(item=>item.folderId===event.id&&(event.eventKind!=='folder'||children&&!children.some(child=>child.id===item.id))?{...item,folderId:null}:item)
- const saved=merge({...event,folderId:previous?.folderId||null})
- const next=normalizeEventFolders([...kept,saved,...(children||[]).map(child=>merge({...child,folderId:event.id}))])
+ const editedParents=new Set([event.id,...(children||[]).filter(item=>item.eventKind==='folder').map(item=>item.id)])
+ const kept=events.filter(item=>!ids.has(item.id)).map(item=>item.folderId&&editedParents.has(item.folderId)?{...item,folderId:null}:item)
+ const saved=merge({...event,folderId:event.folderId!==undefined?event.folderId:previous?.folderId||null})
+ const next=normalizeEventFolders([...kept,saved,...(children||[]).map(child=>merge({...child,folderId:child.folderId??event.id}))])
  validateEventFolders(next)
  return next
 }

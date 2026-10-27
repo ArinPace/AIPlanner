@@ -271,7 +271,8 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
 
   function openEdit(event: CalendarEvent) {
     setEditingId(event.id)
-    setDraft({...draftFromEvent(event),...(event.eventKind==='folder'?{folderChildren:events.filter(child=>child.folderId===event.id).map(child=>({id:child.id,draft:draftFromEvent(child)}))}:{})})
+    function tree(item:CalendarEvent):EventDraft{return {...draftFromEvent(item),...(item.eventKind==='folder'?{folderChildren:events.filter(child=>child.folderId===item.id).map(child=>({id:child.id,draft:tree(child)}))}:{})}}
+    setDraft(tree(event))
   }
 
   function closeModal() {
@@ -283,7 +284,9 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
     if (!draft) return
     const converting=draft.eventKind==='folder'&&editingId&&events.find(event=>event.id===editingId)?.eventKind!=='folder'
     const saved = eventFromDraft(draft, converting?createId():editingId??createId())
-    const children=draft.eventKind==='folder'?(draft.folderChildren||[]).map(child=>eventFromDraft(child.draft,child.id)):undefined
+    if(converting)saved.folderId=events.find(event=>event.id===editingId)?.folderId||null
+    function flatten(value:EventDraft,parentId:string):CalendarEvent[]{return (value.folderChildren||[]).flatMap(child=>[{...eventFromDraft(child.draft,child.id),folderId:parentId},...(child.draft.eventKind==='folder'?flatten(child.draft,child.id):[])])}
+    const children=draft.eventKind==='folder'?flatten(draft,saved.id):undefined
     setEvents(saveEventGroup(events,saved,children))
     closeModal()
   }

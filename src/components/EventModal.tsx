@@ -47,9 +47,9 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
     const end=new Date(Math.max(...items.map(item=>item.draft.reminder?combineDateAndTime(item.draft.date,item.draft.startTime).getTime()+60000:combineDateAndTime(item.draft.endDate,item.draft.endTime).getTime())))
     onChange({...draft,folderChildren:items,date:toDateInput(start),startTime:toTimeInput(start),endDate:toDateInput(end),endTime:toTimeInput(end)})
   }
-  function addChild(){
+  function addChild(eventKind?:'folder'){
     const last=draft.folderChildren?.at(-1)?.draft,start=combineDateAndTime(last?.endDate||draft.date,last?.endTime||draft.startTime),end=new Date(start.getTime()+30*60000)
-    setChild({id:crypto.randomUUID(),draft:{title:'',description:'',date:toDateInput(start),endDate:toDateInput(end),startTime:toTimeInput(start),endTime:toTimeInput(end),allDay:false,tagIds:[...draft.tagIds],scheduleType:draft.scheduleType,recurrence:{frequency:'none',interval:1,until:null}}})
+    setChild({id:crypto.randomUUID(),draft:{eventKind,title:'',description:'',date:toDateInput(start),endDate:toDateInput(end),startTime:toTimeInput(start),endTime:toTimeInput(end),allDay:false,tagIds:[...draft.tagIds],scheduleType:draft.scheduleType,recurrence:{frequency:'none',interval:1,until:null}}})
   }
   const accent = tags.find((tag) => draft.tagIds.includes(tag.id))?.color ?? '#1a73e8'
 
@@ -98,7 +98,7 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
 
   return (
     <><div className="modal-backdrop" inert={Boolean(child)} aria-hidden={child?true:undefined} onMouseDown={onClose}>
-      <form className="event-modal" role="dialog" aria-modal="true" aria-label={nested?'Event inside folder':folder?'Event folder':'Calendar event'} onMouseDown={(event) => event.stopPropagation()} onSubmit={handleSubmit}>
+      <form className="event-modal" role="dialog" aria-modal="true" aria-label={folder?'Event folder':nested?'Event inside folder':'Calendar event'} onMouseDown={(event) => event.stopPropagation()} onSubmit={handleSubmit}>
         <div className="modal-accent" style={{ background: accent }} />
         <div className="modal-top">
           <input
@@ -114,8 +114,8 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
           </button>
         </div>
 
-        <label className="field"><span>Type</span><select aria-label="Event type" value={folder?'folder':draft.reminder?'reminder':'event'} onChange={e=>onChange({...draft,eventKind:e.target.value==='folder'?'folder':undefined,reminder:e.target.value==='reminder',endDate:draft.date,...(e.target.value==='folder'?{...(existingId&&!folder?{folderChildren:[{id:existingId,draft:{...draft,eventKind:undefined,folderChildren:undefined}}]}:{}),allDay:false,recurrence:{frequency:'none',interval:1,until:null}}:{})})}><option value="event">Event</option><option value="reminder">Reminder</option>{!nested&&<option value="folder" disabled={mode==='edit'&&(draft.allDay||draft.recurrence.frequency!=='none')}>Folder</option>}</select></label>
-        {folder&&<section className="folder-event-builder" aria-label="Events inside folder"><div className="folder-builder-heading"><strong>Events in this folder</strong><button type="button" className="text-btn" onClick={addChild}>+ Add event</button></div><p className="quiet">The folder's time range fits its events. Events keep their own details. Folders group timed, non-recurring events.</p>{!(draft.folderChildren?.length)&&<p className="quiet">Add the first event to get started.</p>}{draft.folderChildren?.map(item=><div className="folder-builder-item" key={item.id}><button type="button" className="text-btn" onClick={()=>setChild(item)}>{item.draft.title}<small>{item.draft.date} · {item.draft.startTime}–{item.draft.endTime}</small></button><button type="button" className="text-btn" aria-label={'Remove '+item.draft.title+' from folder'} onClick={()=>updateChildren((draft.folderChildren||[]).filter(value=>value.id!==item.id))}>Remove from folder</button></div>)}</section>}
+        <label className="field"><span>Type</span><select aria-label="Event type" value={folder?'folder':draft.reminder?'reminder':'event'} onChange={e=>onChange({...draft,eventKind:e.target.value==='folder'?'folder':undefined,reminder:e.target.value==='reminder',endDate:draft.date,...(e.target.value==='folder'?{...(existingId&&!folder?{folderChildren:[{id:existingId,draft:{...draft,eventKind:undefined,folderChildren:undefined}}]}:{}),allDay:false,recurrence:{frequency:'none',interval:1,until:null}}:{})})}><option value="event">Event</option><option value="reminder">Reminder</option><option value="folder" disabled={mode==='edit'&&(draft.allDay||draft.recurrence.frequency!=='none')}>Folder</option></select></label>
+        {folder&&<section className="folder-event-builder" aria-label="Events inside folder"><div className="folder-builder-heading"><strong>Events in this folder</strong><div className="folder-builder-actions"><button type="button" className="text-btn" onClick={()=>addChild()}>+ Add event</button><button type="button" className="text-btn" onClick={()=>addChild('folder')}>+ Add folder</button></div></div><p className="quiet">The folder's time range fits its events. Events keep their own details. Folders group timed, non-recurring events.</p>{!(draft.folderChildren?.length)&&<p className="quiet">Add the first event to get started.</p>}{draft.folderChildren?.map(item=><div className="folder-builder-item" key={item.id}><button type="button" className="text-btn" onClick={()=>setChild(item)}>{item.draft.title}<small>{item.draft.date} · {item.draft.startTime}–{item.draft.endTime}</small></button><button type="button" className="text-btn" aria-label={'Remove '+item.draft.title+' from folder'} onClick={()=>updateChildren((draft.folderChildren||[]).filter(value=>value.id!==item.id))}>Remove from folder</button></div>)}</section>}
         {draft.reminder && <p className="quiet">A deadline or reminder with no duration. Choose a time, or leave it in the all-day row.</p>}
         <label className="field event-urgency-field">
           <span>Urgency <small>(optional)</small></span>
@@ -281,6 +281,6 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
           </div>
         </div>
       </form>
-    </div>{child&&<EventModal key={child.id} nested mode="create" draft={child.draft} tags={tags} onChange={value=>setChild({...child,draft:value})} onClose={()=>setChild(null)} onSave={()=>{updateChildren([...(draft.folderChildren||[]).filter(item=>item.id!==child.id),child]);setChild(null)}}/>}</>
+    </div>{child&&<EventModal key={child.id} nested existingId={draft.folderChildren?.some(item=>item.id===child.id)?child.id:undefined} mode={draft.folderChildren?.some(item=>item.id===child.id)?'edit':'create'} draft={child.draft} tags={tags} onChange={value=>setChild({...child,draft:value})} onClose={()=>setChild(null)} onSave={()=>{const old=draft.folderChildren?.find(item=>item.id===child.id);const converted=old&&old.draft.eventKind!=='folder'&&child.draft.eventKind==='folder';updateChildren([...(draft.folderChildren||[]).filter(item=>item.id!==child.id),{...child,id:converted?crypto.randomUUID():child.id}]);setChild(null)}}/>}</>
   )
 }
