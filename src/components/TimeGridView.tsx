@@ -103,9 +103,9 @@ export function TimeGridView({ active=true,cursor, view, zoom, occurrences, tags
     return <>{items.map((item,index)=>{
       const folder=item.event.eventKind==='folder',children=(grouped.children.get(item.event.id)||[]).filter(child=>clipToDay(child,day)),open=folder&&folderOpen(item)
       const chip=<button type="button" className={'event-chip mobile-week-event'+(nested?' folder-child-event':'')} style={eventAppearance(eventColor(item.event,tags),item.event.reminder)} title={item.event.title} aria-expanded={folder?open:undefined} onClick={()=>folder?toggleFolder(item):onEventClick(item.event,item.start)}>
-        <span className="mobile-week-time">{item.event.allDay?(item.event.reminder?'Reminder':'All day'):formatTimeCompact(clipToDay(item,day)!.start)}</span>
+        <span className="mobile-week-time">{item.event.allDay?(item.event.reminder?'Reminder':'All day'):item.event.reminder?formatTimeCompact(item.start):formatTimeCompact(item.start)+'–'+formatTimeCompact(item.end)}</span>
         <span className="event-title">{folder&&(open?'▾ ▣ ':'▸ ▣ ')}{item.event.urgency!=null&&<span className="event-urgency-badge" style={urgencyColor(item.event.urgency)}>{item.event.urgency}</span>}{item.event.title||'(No title)'}</span>
-        {folder&&<small className="folder-event-count">{children.length} {children.length===1?'item':'items'} · {formatTimeCompact(item.end)}</small>}
+        {folder&&<small className="folder-event-count">{children.length} {children.length===1?'item':'items'}</small>}
       </button>
       return <Fragment key={item.event.id+item.start.toISOString()}>{showNow&&!currentFolder&&index===next&&marker}{folder?<div className="agenda-event-folder"><div className="folder-event-header">{chip}<button type="button" className="folder-edit-button" aria-label={'Edit folder '+item.event.title} onClick={()=>onEventClick(item.event,item.start)}>Edit</button></div>{open&&<div className="folder-agenda-children">{children.length?agendaRows(children,day,showNow&&currentFolder===item,true):<><p className="quiet">No visible events in this folder.</p>{showNow&&currentFolder===item&&marker}</>}</div>}</div>:chip}</Fragment>
     })}{showNow&&!currentFolder&&next===-1&&marker}</>

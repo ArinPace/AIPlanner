@@ -2076,7 +2076,7 @@ textarea {
   .mobile-week-heading button { min-width: 44px; min-height: 44px; }
   .mobile-week-empty { color: var(--muted); font-size: 12px; margin: 4px 0; }
   .mobile-week .mobile-week-event { min-height: 36px; margin-top: 4px; font-size: 10px; }
-  .mobile-week-time { flex: 0 0 62px; }
+  .mobile-week-time { flex: 0 0 112px; white-space:normal; }
   .mobile-week .event-title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 
