@@ -2207,3 +2207,6 @@ html, body { touch-action: pan-x pan-y; }
 
 /* A single-note editor must fill the space even at intermediate laptop widths. */
 .apple-notes-content.notes-list-hidden { grid-template-columns: minmax(0, 1fr); }
+
+.apple-notes-content.standalone-todo-editor { grid-template-rows: minmax(0, 1fr); }
+.standalone-todo-editor .apple-note-detail { grid-row: 1; }

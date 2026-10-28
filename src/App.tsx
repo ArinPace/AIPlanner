@@ -1,5 +1,4 @@
 import {ChatExperiment} from './components/ChatExperiment'
-import {GrokExperiment} from './components/GrokExperiment'
 import {RECOVERY_TAB} from './lib/attachmentRecovery'
 import { PlannerDate as Date } from './lib/timezone.js'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
@@ -142,7 +141,7 @@ export default function App() {
 
 function CalendarApp({ username, onLogout }: { username: string; onLogout: () => void }) {
   useVmActivity(username)
-  const [tab, setTab] = useState<'calendar' | 'files' | 'todo' | 'agent' | 'grok' | 'chat'>(()=>sessionStorage.getItem(RECOVERY_TAB)===username?'agent':'calendar')
+  const [tab, setTab] = useState<'calendar' | 'files' | 'todo' | 'agent' | 'chat'>(()=>sessionStorage.getItem(RECOVERY_TAB)===username?'agent':'calendar')
   const [todoRequest,setTodoRequest]=useState(0)
   const [filesUnsaved, setFilesUnsaved] = useState(false)
   const [cursor, setCursor] = useState(() => new Date())
@@ -354,9 +353,8 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
         }}
       />
 
-      <div className="files-tab-panel" hidden={tab !== 'files' && tab !== 'todo'}><FilesView sidebar={filesSidebar} setSidebar={setFilesSidebar} username={username} active={tab === 'files' || tab === 'todo'} todoRequest={todoRequest} onUnsavedChange={setFilesUnsaved} /></div>
+      <div className="files-tab-panel" hidden={tab !== 'files' && tab !== 'todo'}><FilesView standaloneTodo={tab==='todo'} sidebar={filesSidebar} setSidebar={setFilesSidebar} username={username} active={tab === 'files' || tab === 'todo'} todoRequest={todoRequest} onUnsavedChange={setFilesUnsaved} /></div>
       <div className="agent-tab-panel" hidden={tab !== 'agent'}><AgentView username={username} sidebar={agentSidebar} setSidebar={setAgentSidebar} active={tab === 'agent'} /></div>
-      {tab==='grok' && <GrokExperiment/>}
       {username==='arin' && <div className="chat-tab-panel" hidden={tab!=='chat'}><ChatExperiment active={tab==='chat'} username={username}/></div>}
       <div className="app-body" hidden={tab !== 'calendar'}>
         <Sidebar
