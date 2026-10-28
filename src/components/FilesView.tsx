@@ -79,7 +79,7 @@ function DocumentDialog({ document, folders, busy, error, onClose, onSave }: {
   </dialog>
 }
 
-export function FilesView({ active, username, sidebar, setSidebar, onUnsavedChange }: { active: boolean; username: string; sidebar: boolean; setSidebar: (open:boolean)=>void; onUnsavedChange: (unsaved: boolean) => void }) {
+export function FilesView({ todoRequest = 0, active, username, sidebar, setSidebar, onUnsavedChange }: { todoRequest?: number; active: boolean; username: string; sidebar: boolean; setSidebar: (open:boolean)=>void; onUnsavedChange: (unsaved: boolean) => void }) {
   const [state, setState] = useState<FilesState | null>(null)
   const [loadError, setLoadError] = useState('')
   const [error, setError] = useState('')
@@ -119,6 +119,19 @@ export function FilesView({ active, username, sidebar, setSidebar, onUnsavedChan
   const storedFile = state?.files.find((file) => file.id === fileDraft?.id)
   const dirty = Boolean(fileDraft && (!storedFile || fileDraft.name !== storedFile.name || fileDraft.content !== storedFile.content || fileDraft.folderId !== storedFile.folderId || fileDraft.richText!==storedFile.richText || Boolean(fileDraft.pinned)!==Boolean(storedFile.pinned)))
   const unsaved = dirty || Boolean(folderDraft) || Boolean(documentDraft) || Boolean(renameItem) || Boolean(bulkMode) || busy
+
+  const handledTodoRequest=useRef(0)
+  useEffect(()=>{
+    if(!active || !state || !todoRequest || handledTodoRequest.current===todoRequest || busy)return
+    handledTodoRequest.current=todoRequest
+    const note=state.files.find(file=>file.systemRole==='todo') ?? state.files.find(file=>file.format==='note' && /^to[ -]?do(?: list)?$/i.test(file.name.trim()))
+    if(!note){setError('Your To-do note could not be found in Files.');return}
+    if(fileDraft?.id!==note.id && dirty && !window.confirm('Discard unsaved changes?'))return
+    setBin(false);setSelecting(false);setSelectedIds([]);setFolderId(note.folderId);setNotesMode(true)
+    if(fileDraft?.id!==note.id)setFileDraft({...note})
+    setError('');setNotice('')
+    if(window.innerWidth<=600)setSidebar(false)
+  },[active,state,todoRequest,busy,dirty,fileDraft,setSidebar])
 
   const saveNoteRef=useRef(saveFile)
   useEffect(()=>{saveNoteRef.current=saveFile})

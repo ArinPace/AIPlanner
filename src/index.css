@@ -2204,3 +2204,6 @@ html, body { touch-action: pan-x pan-y; }
  .folder-builder-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
  .nested-day-folder{margin-left:8px;border-left:2px solid var(--line);padding-left:4px;flex-shrink:0}
  .nested-day-folder .folder-day-children{overflow:visible}
+
+/* A single-note editor must fill the space even at intermediate laptop widths. */
+.apple-notes-content.notes-list-hidden { grid-template-columns: minmax(0, 1fr); }

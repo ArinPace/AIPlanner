@@ -142,7 +142,8 @@ export default function App() {
 
 function CalendarApp({ username, onLogout }: { username: string; onLogout: () => void }) {
   useVmActivity(username)
-  const [tab, setTab] = useState<'calendar' | 'files' | 'agent' | 'grok' | 'chat'>(()=>sessionStorage.getItem(RECOVERY_TAB)===username?'agent':'calendar')
+  const [tab, setTab] = useState<'calendar' | 'files' | 'todo' | 'agent' | 'grok' | 'chat'>(()=>sessionStorage.getItem(RECOVERY_TAB)===username?'agent':'calendar')
+  const [todoRequest,setTodoRequest]=useState(0)
   const [filesUnsaved, setFilesUnsaved] = useState(false)
   const [cursor, setCursor] = useState(() => new Date())
   const [view, setView] = useState<CalendarView>('week')
@@ -333,7 +334,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
     <div className="app-shell">
       <Header
         tab={tab}
-        onTabChange={setTab}
+        onTabChange={next=>{if(next==='todo')setTodoRequest(n=>n+1);setTab(next)}}
         cursor={cursor}
         view={view}
         zoom={zoom}
@@ -341,7 +342,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
         onViewChange={setView}
         onNavigate={navigate}
         onToday={() => setCursor(new Date())}
-        onToggleSidebar={() => {if(tab==='files')setFilesSidebar(v=>!v);else if(tab==='agent')setAgentSidebar(v=>!v);else setSidebarOpen(v=>!v)}}
+        onToggleSidebar={() => {if(tab==='files'||tab==='todo')setFilesSidebar(v=>!v);else if(tab==='agent')setAgentSidebar(v=>!v);else setSidebarOpen(v=>!v)}}
         onCreate={() => openCreate(cursor)}
         onVisualZoomChange={(value) => setZoom(clampZoom(value))}
         onLogout={() => {
@@ -353,7 +354,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
         }}
       />
 
-      <div className="files-tab-panel" hidden={tab !== 'files'}><FilesView sidebar={filesSidebar} setSidebar={setFilesSidebar} username={username} active={tab === 'files'} onUnsavedChange={setFilesUnsaved} /></div>
+      <div className="files-tab-panel" hidden={tab !== 'files' && tab !== 'todo'}><FilesView sidebar={filesSidebar} setSidebar={setFilesSidebar} username={username} active={tab === 'files' || tab === 'todo'} todoRequest={todoRequest} onUnsavedChange={setFilesUnsaved} /></div>
       <div className="agent-tab-panel" hidden={tab !== 'agent'}><AgentView username={username} sidebar={agentSidebar} setSidebar={setAgentSidebar} active={tab === 'agent'} /></div>
       {tab==='grok' && <GrokExperiment/>}
       {username==='arin' && <div className="chat-tab-panel" hidden={tab!=='chat'}><ChatExperiment active={tab==='chat'} username={username}/></div>}
