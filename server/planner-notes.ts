@@ -1,8 +1,9 @@
+import {isPermanentPlannerNote} from '../src/lib/files.js'
 import type {PlannerTextFile} from '../src/lib/files.js'
 
 export type NotePatch=Partial<Omit<PlannerTextFile,'format'>> & {format?:'note'|'text'}
 export function patchPlannerNote(old:PlannerTextFile,patch:NotePatch):PlannerTextFile {
-  if(old.systemRole&&patch.format==='text')throw new Error('Goals and To do must remain permanent Notes; edit their contents instead.')
+  if(isPermanentPlannerNote(old)&&patch.format==='text')throw new Error('Goals, To do and Work must remain permanent Notes; edit their contents instead.')
   const {format,...fields}=patch
   const next={...old,...Object.fromEntries(Object.entries(fields).filter(([,value])=>value!==undefined))} as PlannerTextFile
   if(format==='note')next.format='note'

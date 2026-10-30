@@ -139,3 +139,5 @@ export function validateFilesState(value: unknown): asserts value is FilesState 
 
 // Keep the saved instruction snapshot available to agents without listing it in Files.
 export function isVisiblePlannerFile(file:{name:string;systemRole?:string;folderId?:string|null}){return !(file.name==='Work' && file.folderId===null) && file.systemRole!=='todo' && !/^to[ -]?do(?: list)?$/i.test(file.name.trim()) && file.name.trim().toLowerCase()!=='system prompt.txt'}
+
+export function isPermanentPlannerNote(file:{name:string;systemRole?:string;folderId?:string|null}){return Boolean(file.systemRole) || (file.name==='Work' && file.folderId===null)}

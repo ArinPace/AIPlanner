@@ -43,3 +43,9 @@ test('restoring never overwrites newer IDs or names and missing parents use a re
   assert.equal(recovered.folders[0].name,'Restored files')
   assert.equal(recovered.files[0].folderId,recovered.folders[0].id)
 })
+
+test('Work cannot be moved to Bin directly or in a bulk selection',()=>{
+ const state={folders:[],files:[{id:'work',folderId:null,format:'note' as const,name:'Work',content:'- [ ] Homework',updatedAt:'2026-10-30T00:00:00Z'},{id:'other',folderId:null,name:'Other',content:'',updatedAt:'2026-10-30T00:00:00Z'}]}
+ for(const ids of [['work'],['work','other']])assert.throws(()=>buildTrash(state,ids),/permanent planning notes/)
+ assert.equal(buildTrash(state,['other']).state.files[0].id,'work')
+})

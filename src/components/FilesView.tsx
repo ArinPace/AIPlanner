@@ -2,7 +2,7 @@ import { PlannerDate as Date } from '../lib/timezone.js'
 import { lazy, Suspense, useEffect, useRef, useState, type FormEvent, type DragEvent } from 'react'
 import { downloadPdf, loadFiles, saveFiles, uploadPdf, loadFileBin, fileBinAction, type FileBinEntry } from '../lib/api'
 import { TAG_COLORS } from '../lib/colors'
-import { descendantIds, folderPath, validateFilesState, isVisiblePlannerFile, type FilesState, type PlannerFolder, type PlannerTextFile, type PlannerDocument } from '../lib/files'
+import { descendantIds, folderPath, validateFilesState, isVisiblePlannerFile, isPermanentPlannerNote, type FilesState, type PlannerFolder, type PlannerTextFile, type PlannerDocument } from '../lib/files'
 import { CloseIcon, TrashIcon } from './Icons'
 import { RenameDialog } from './RenameDialog'
 import { FilesSidebar, FILE_DRAG } from './FilesSidebar'
@@ -215,7 +215,7 @@ export function FilesView({ workMode = false, standaloneTodo = false, todoReques
   }
   async function deleteFile() {
     if (!fileDraft)return
-    if(fileDraft.systemRole){setError('Goals and To do are permanent notes. You can edit their contents, but cannot delete them.');return}
+    if(isPermanentPlannerNote(fileDraft)){setError('Goals, To do and Work are permanent notes. You can edit their contents, but cannot delete them.');return}
     if (!storedFile) { setFileDraft(null); setError(''); return }
     await binAction('trash',[fileDraft.id])
   }
@@ -239,7 +239,7 @@ export function FilesView({ workMode = false, standaloneTodo = false, todoReques
     if(!state || busy || !ids.length || !mayLeaveEditor())return
     if(action==='trash'){
       const selectedFolders=new Set(ids.flatMap(id=>state.folders.some(f=>f.id===id)?[...descendantIds(state.folders,id)]:[]))
-      if(state.files.some(file=>file.systemRole&&(ids.includes(file.id)||selectedFolders.has(file.folderId||'')))){setError('Goals and To do cannot be deleted. Deselect them or move them out of the selected folder first.');return}
+      if(state.files.some(file=>isPermanentPlannerNote(file)&&(ids.includes(file.id)||selectedFolders.has(file.folderId||'')))){setError('Goals, To do and Work cannot be deleted. Deselect them or move them out of the selected folder first.');return}
     }
     if(action==='trash' && !window.confirm(`Move ${ids.length} selected item(s) to the Bin? Selected folders include everything inside them. Restore them within 30 days.`))return
     if(action==='purge' && !window.confirm('Permanently delete the selected Bin items? This cannot be undone.'))return

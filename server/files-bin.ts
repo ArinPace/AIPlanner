@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { ApiError, db, json, body, cleanupUploads } from './cloud.js'
 import { storage } from './mcp-auth.js'
-import { descendantIds, validateFilesState, type FilesState } from '../src/lib/files.js'
+import { descendantIds, validateFilesState, isPermanentPlannerNote, type FilesState } from '../src/lib/files.js'
 import { uuid } from './vm-validation.js'
 
 export function selection(value:unknown) {
@@ -14,7 +14,7 @@ export function buildTrash(state:FilesState,ids:string[]) {
   const folders=new Set<string>()
   for(const id of ids)if(state.folders.some(f=>f.id===id))for(const child of descendantIds(state.folders,id))folders.add(child)
   const snapshot:FilesState={folders:state.folders.filter(f=>folders.has(f.id)),files:state.files.filter(f=>ids.includes(f.id) || folders.has(f.folderId ?? '')),documents:(state.documents || []).filter(d=>ids.includes(d.id) || folders.has(d.folderId ?? ''))}
-  if(snapshot.files.some(file=>file.systemRole))throw new ApiError(409,'Goals and To do are permanent planning notes. Move them out of a folder before deleting that folder; edit their contents instead of deleting them.')
+  if(snapshot.files.some(isPermanentPlannerNote))throw new ApiError(409,'Goals, To do and Work are permanent planning notes. Move them out of a folder before deleting that folder; edit their contents instead of deleting them.')
   const names=[...snapshot.folders.filter(f=>!f.parentId || !folders.has(f.parentId)),...snapshot.files.filter(f=>!folders.has(f.folderId ?? '')),...(snapshot.documents || []).filter(d=>!folders.has(d.folderId ?? ''))].map(f=>f.name)
   const removed=new Set([...snapshot.folders,...snapshot.files,...(snapshot.documents || [])].map(f=>f.id))
   return {state:{...state,folders:state.folders.filter(f=>!removed.has(f.id)),files:state.files.filter(f=>!removed.has(f.id)),documents:(state.documents || []).filter(f=>!removed.has(f.id))},entry:{names,snapshot,itemCount:removed.size}}
