@@ -270,7 +270,7 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
           {mode === 'edit' && onDelete && (
             <button type="button" className="danger-btn" onClick={onDelete}>
               <TrashIcon />
-              Delete
+              {onDeleteOccurrence?'Delete series':'Delete'}
             </button>
           )}
           <div className="modal-actions-right">

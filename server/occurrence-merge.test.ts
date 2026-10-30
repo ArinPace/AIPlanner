@@ -45,3 +45,13 @@ test('adjacent matching blocks merge into a longer event, preserve content and s
  assert.equal(mergeAdjacentEvents([a,{...b,tagIds:['different']}]).length,2)
  assert.equal(mergeAdjacentEvents([a,{...b,start:'2026-10-31T14:01:00Z'}]).length,2)
 })
+
+test('removing a recurring folder series removes its entire nested subtree, leaving unrelated events',()=>{
+ const events=normalizeEventFolders([event('root',{eventKind:'folder'}),event('inner',{eventKind:'folder',folderId:'root'}),event('work',{title:'Work',folderId:'inner'}),event('unrelated',{title:'Other'})])
+ const removed=removeCalendarItems(state(events),['root'],'events','series')
+ assert.deepEqual(removed.events.map(event=>event.id),['unrelated'])
+ assert.equal(events.length,4)
+ const skipped=removeCalendarItems(state(events),['root'],'events','occurrence','2026-11-01T14:00:00Z')
+ for(const id of ['root','inner','work'])assert.equal(expandEvents(skipped.events,...range).filter(item=>item.event.id===id).length,3)
+ assert.equal(expandEvents(skipped.events,...range).filter(item=>item.event.id==='unrelated').length,4)
+})

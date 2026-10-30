@@ -14,7 +14,7 @@ import { YearView } from './components/YearView'
 import { adoptCalendarRevision, emptyCalendar, getSession, loadCalendar, logout, saveCalendar, setToken } from './lib/api'
 import { isEventVisible } from './lib/colors'
 import {eventType,type ScheduleType} from './lib/eventType'
-import {saveEventGroup,normalizeEventFolders} from './lib/eventFolders'
+import {saveEventGroup,normalizeEventFolders,removeEventSeries} from './lib/eventFolders'
 import {
   addDays,
   addMonths,
@@ -295,15 +295,16 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
 
   function deleteOccurrence(){
     if(!editingId||!editingOccurrence)return
-    if(!window.confirm('Remove only this occurrence on '+new Date(editingOccurrence).toLocaleString()+'? Other dates in the series will stay.'))return
+    if(!window.confirm('Remove only this occurrence on '+new Date(editingOccurrence).toLocaleString()+(events.find(event=>event.id===editingId)?.eventKind==='folder'?' and all events inside this folder for that occurrence? Other dates will stay.':'? Other dates in the series will stay.')))return
     setEvents(current=>normalizeEventFolders(current.map(event=>event.id===editingId?{...event,excludedStarts:[...new Set([...(event.excludedStarts||[]),editingOccurrence])]}:event)))
     closeModal()
   }
 
   function deleteEvent() {
     if (!editingId) return
-    if (!window.confirm(events.find(event=>event.id===editingId)?.eventKind==='folder'?'Delete this folder? Its events will stay on the calendar.':'Delete this event? If it repeats, the whole series will be removed.')) return
-    setEvents((current) => normalizeEventFolders(current.filter((event) => event.id !== editingId).map(event=>event.folderId===editingId?{...event,folderId:null}:event)))
+    const selected=events.find(event=>event.id===editingId)
+    if (!window.confirm(selected?.eventKind==='folder'?(selected.recurrence.frequency!=='none'?'Delete this recurring folder and all events and nested folders inside it for every date?':'Delete this folder? Its events will stay on the calendar.'):'Delete this event? If it repeats, the whole series will be removed.')) return
+    setEvents((current) => removeEventSeries(current,[editingId]))
     closeModal()
   }
 

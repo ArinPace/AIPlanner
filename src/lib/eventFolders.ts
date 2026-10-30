@@ -85,3 +85,14 @@ export function mergeAdjacentEvents(events:CalendarEvent[]):CalendarEvent[]{
  }
  return result.map(event=>({...event,...(event.planning?.bufferForEventId&&redirects.has(event.planning.bufferForEventId)?{planning:{...event.planning,bufferForEventId:redirects.get(event.planning.bufferForEventId)}}:{})}))
 }
+
+export function eventRemovalIds(events:CalendarEvent[],ids:string[],includeFolderContents=false){
+ const selected=new Set(ids),parents=new Set(events.filter(event=>selected.has(event.id)&&event.eventKind==='folder'&&(includeFolderContents||event.recurrence.frequency!=='none')).map(event=>event.id))
+ let changed=true
+ while(changed){changed=false;for(const event of events)if(event.folderId&&parents.has(event.folderId)&&!selected.has(event.id)){selected.add(event.id);if(event.eventKind==='folder')parents.add(event.id);changed=true}}
+ return selected
+}
+export function removeEventSeries(events:CalendarEvent[],ids:string[]){
+ const selected=eventRemovalIds(events,ids)
+ return normalizeEventFolders(events.filter(event=>!selected.has(event.id)).map(event=>event.folderId&&selected.has(event.folderId)?{...event,folderId:null}:event))
+}
