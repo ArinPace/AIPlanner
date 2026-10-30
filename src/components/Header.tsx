@@ -6,8 +6,8 @@ import {CalendarHistory} from './CalendarHistory'
 import { CalendarMark, ChevronIcon, MenuIcon, PlusIcon, SettingsIcon } from './Icons'
 
 type HeaderProps = {
-  tab: 'calendar' | 'files' | 'todo' | 'agent' | 'chat'
-  onTabChange: (tab: 'calendar' | 'files' | 'todo' | 'agent' | 'chat') => void
+  tab: 'calendar' | 'files' | 'todo' | 'work' | 'agent' | 'chat'
+  onTabChange: (tab: 'calendar' | 'files' | 'todo' | 'work' | 'agent' | 'chat') => void
   cursor: Date
   view: CalendarView
   zoom: number
@@ -56,7 +56,7 @@ export function Header({
   return (
     <header className="app-header">
       <div className="header-left">
-        <button type="button" hidden={tab==='todo'} className="icon-btn menu-btn" title="Show or hide sidebar" aria-label="Toggle sidebar" onClick={onToggleSidebar}>
+        <button type="button" hidden={tab==='todo'||tab==='work'} className="icon-btn menu-btn" title="Show or hide sidebar" aria-label="Toggle sidebar" onClick={onToggleSidebar}>
           <MenuIcon />
         </button>
         <div className="brand">
@@ -70,7 +70,7 @@ export function Header({
       </div>
 
       <div className="header-center">
-        <nav className="workspace-tabs" aria-label="Workspace"><button type="button" aria-current={tab === 'calendar' ? 'page' : undefined} className={tab === 'calendar' ? 'is-active' : ''} onClick={() => onTabChange('calendar')}>Calendar</button><button type="button" aria-current={tab === 'files' ? 'page' : undefined} className={tab === 'files' ? 'is-active' : ''} onClick={() => onTabChange('files')}>Files</button><button type="button" aria-current={tab === 'todo' ? 'page' : undefined} className={tab === 'todo' ? 'is-active' : ''} onClick={() => onTabChange('todo')}>To-do</button><button type="button" aria-current={tab === 'agent' ? 'page' : undefined} className={tab === 'agent' ? 'is-active' : ''} onClick={() => onTabChange('agent')}>Agent</button>{username==='arin'&&<button type="button" aria-current={tab === 'chat' ? 'page' : undefined} className={tab === 'chat' ? 'is-active' : ''} onClick={() => onTabChange('chat')}>Chat</button>}</nav>
+        <nav className="workspace-tabs" aria-label="Workspace"><button type="button" aria-current={tab === 'calendar' ? 'page' : undefined} className={tab === 'calendar' ? 'is-active' : ''} onClick={() => onTabChange('calendar')}>Calendar</button><button type="button" aria-current={tab === 'files' ? 'page' : undefined} className={tab === 'files' ? 'is-active' : ''} onClick={() => onTabChange('files')}>Files</button><button type="button" aria-current={tab === 'todo' ? 'page' : undefined} className={tab === 'todo' ? 'is-active' : ''} onClick={() => onTabChange('todo')}>To-do</button><button type="button" aria-current={tab === 'work' ? 'page' : undefined} className={tab === 'work' ? 'is-active' : ''} onClick={() => onTabChange('work')}>Work</button><button type="button" aria-current={tab === 'agent' ? 'page' : undefined} className={tab === 'agent' ? 'is-active' : ''} onClick={() => onTabChange('agent')}>Agent</button>{username==='arin'&&<button type="button" aria-current={tab === 'chat' ? 'page' : undefined} className={tab === 'chat' ? 'is-active' : ''} onClick={() => onTabChange('chat')}>Chat</button>}</nav>
         {tab === 'calendar' && <>
 
         <button type="button" className="today-btn" onClick={onToday}>
