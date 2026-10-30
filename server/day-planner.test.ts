@@ -88,3 +88,23 @@ test('incomplete onboarding can produce a continuous provisional day with known 
  for(let i=1;i<events.length;i++)assert.equal(events[i].start,events[i-1].end)
  assert.ok(events.some(event=>event.planning?.taskId==='provisional work'))
 })
+
+test('gentle defaults choose one substantial personal task, allow tiny errands and leave continuous Free time',()=>{
+ assert.equal(DEFAULT_PLANNING.intensity,20);assert(DEFAULT_PLANNING.breakActivities.includes('Free time'))
+ const p={...profile(),intensity:20};p.tasks=[{...task('low',40,45),category:'personal'},{...task('high',99,60),category:'personal'},{...task('tiny',80,10),category:'personal'}]
+ const result=buildDayPlan(p,[],'2026-10-19',1,now)
+ const work=result.events.filter(e=>e.planning?.kind==='task')
+ assert.deepEqual([...new Set(work.map(e=>e.planning?.taskId))],['high','tiny'])
+ assert.equal(work.filter(e=>e.planning?.taskId==='high').length,1)
+ const free=result.events.filter(e=>e.planning?.kind==='break')
+ assert(free.length<=3);assert(free.every(e=>e.title==='Free time'))
+})
+test('deadline work stays prioritized at low intensity and retained personal work consumes the daily quota',()=>{
+ const p={...profile(),intensity:20};p.tasks=[{...task('fixedPersonal',90,30),category:'personal'},{...task('other',80,45),category:'personal'},{...task('assignment',10,180),category:'homework',deadline:'2026-10-19T20:00:00-04:00'}]
+ const kept={...fixed('kept','2026-10-19T15:00:00-04:00','2026-10-19T15:30:00-04:00'),scheduleType:'planned' as const,planning:{kind:'task' as const,taskId:'fixedPersonal',locked:true}}
+ const result=buildDayPlan(p,[kept],'2026-10-19',1,now)
+ assert(!result.events.some(e=>e.planning?.taskId==='other'))
+ assert.equal(result.events.filter(e=>e.planning?.taskId==='assignment').length,1)
+ const allocated=result.events.filter(e=>e.planning?.taskId==='assignment').reduce((n,e)=>n+(Date.parse(e.end)-Date.parse(e.start))/60000,0)
+ assert.equal(allocated,180)
+})

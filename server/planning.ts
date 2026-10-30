@@ -61,6 +61,10 @@ export async function planDays(username:string,input:{date:string;days:number;pr
  if(!preview&&!row.startedAt)throw new ApiError(409,'The user must click Start planning my calendar in Main Chat before any calendar is populated.')
  const calendar=await calendarRow(username)
  const result=buildDayPlan(row.profile,calendar.state.events,date,days)
+ const tags=[...calendar.state.tags]
+ let breakTag=tags.find(tag=>/^breaks?$/i.test(tag.name))
+ if(!breakTag && result.events.some(event=>event.planning?.kind==='break')){breakTag={id:randomUUID(),name:'Breaks',color:'#a78bfa'};tags.push(breakTag)}
+ if(breakTag)for(const event of result.events)if(event.planning?.kind==='break'&&!event.tagIds.length)event.tagIds=[breakTag.id]
  // An incomplete rebuild must not silently erase the last execution slot
  // for unfinished work. Keep the previous calendar until a feasible move
  // (possibly into a longer planning horizon) has been made.
@@ -72,7 +76,7 @@ export async function planDays(username:string,input:{date:string;days:number;pr
   result.warnings.push(warning)
  }
  for(const item of row.todoChecklist.filter(item=>!item.checked))if(!row.profile.tasks.some(task=>task.source===item.source&&task.status==='todo'))result.warnings.push(item.title+': unfinished To do item needs a linked task and duration estimate before it can be scheduled. Do not omit it from the plan review.')
- if(!preview){const saved=await db().rpc('planner_commit_day_plan',{p_username:username,p_revision:row.revision,p_calendar_revision:calendar.revision,p_calendar:{...calendar.state,events:result.events}});if(saved.error)throw new ApiError(409,saved.error.message)}
+ if(!preview){const saved=await db().rpc('planner_commit_day_plan',{p_username:username,p_revision:row.revision,p_calendar_revision:calendar.revision,p_calendar:{...calendar.state,tags,events:result.events}});if(saved.error)throw new ApiError(409,saved.error.message)}
  return {saved:!preview,added:result.added,warnings:result.warnings,from:result.from,through:result.through,revision:preview?calendar.revision:calendar.revision+1,events:result.events.filter(e=>e.planning&&e.start>=new Date(date+'T00:00:00').toISOString())}
 }
 export async function changePlanning(username:string,input:{revision:number;patch?:unknown;task?:unknown;feedback?:unknown;replan?:boolean}){
