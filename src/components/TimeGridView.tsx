@@ -213,7 +213,7 @@ export function TimeGridView({ active=true,cursor, view, zoom, occurrences, tags
                   const color = eventColor(item.event, tags)
 
                   if(item.event.eventKind==='folder'){
-                    return <div key={key} className="timed-event-folder" style={{top,height,width,left,borderColor:color}}>{dayFolderBody(item,day)}</div>
+                    return <div key={key} className={'timed-event-folder'+(folderOpen(item)?' is-expanded':' is-collapsed')} style={{top,height,width,left,borderColor:color,backgroundColor:color}}>{dayFolderBody(item,day)}</div>
                   }
 
                   return (

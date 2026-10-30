@@ -2210,3 +2210,8 @@ html, body { touch-action: pan-x pan-y; }
 
 .apple-notes-content.standalone-todo-editor { grid-template-rows: minmax(0, 1fr); }
 .standalone-todo-editor .apple-note-detail { grid-row: 1; }
+
+/* Collapsed folders fill their actual time span as one continuous colored block. */
+.timed-event-folder.is-collapsed > .folder-event-header { flex: 1; align-items: stretch; }
+.timed-event-folder.is-collapsed > .folder-event-header > .folder-grid-toggle { display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; }
+.timed-event-folder.is-collapsed > .folder-event-header > .folder-edit-button { align-self: flex-start; }
