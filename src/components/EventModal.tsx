@@ -14,6 +14,7 @@ type EventModalProps = {
   onChange: (draft: EventDraft) => void
   onClose: () => void
   onSave: () => void
+  onDeleteOccurrence?: () => void
   onDelete?: () => void
   nested?:boolean
   existingId?:string
@@ -34,7 +35,7 @@ const INTERVAL_UNITS: Record<Exclude<RecurrenceFrequency, 'none'>, [string, stri
   yearly: ['year', 'years'],
 }
 
-export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDelete,nested=false,existingId }: EventModalProps) {
+export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDelete,onDeleteOccurrence,nested=false,existingId }: EventModalProps) {
   const titleRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState('')
   const [child,setChild]=useState<{id:string;draft:EventDraft}|null>(null)
@@ -265,6 +266,7 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
         {error && <p className="form-error">{error}</p>}
 
         <div className="modal-actions">
+          {onDeleteOccurrence && <button type="button" className="danger-btn" onClick={onDeleteOccurrence}>Delete this occurrence</button>}
           {mode === 'edit' && onDelete && (
             <button type="button" className="danger-btn" onClick={onDelete}>
               <TrashIcon />

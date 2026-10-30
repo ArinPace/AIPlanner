@@ -11,7 +11,7 @@ export function fixedEventPayload(event:CalendarEvent){
  if(event.recurrence.frequency!=='none'){
   let rule='RRULE:FREQ='+event.recurrence.frequency.toUpperCase()+';INTERVAL='+Math.max(1,event.recurrence.interval)
   if(event.recurrence.until)rule+=';UNTIL='+(event.allDay?event.recurrence.until.replaceAll('-',''):new Date(endOfDateInput(event.recurrence.until).getTime()).toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z$/,'Z'))
-  payload.recurrence=[rule]
+  payload.recurrence=[rule,...[...new Set([...(event.excludedStarts||[]),...(event.inheritedExcludedStarts||[])])].map(value=>(event.allDay?'EXDATE;VALUE=DATE:':'EXDATE:')+(event.allDay?toDateInput(new PlannerDate(value)).replaceAll('-',''):new Date(value).toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z$/,'Z')))]
  }else payload.recurrence=[]
  return payload
 }

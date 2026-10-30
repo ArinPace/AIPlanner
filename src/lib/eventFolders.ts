@@ -1,7 +1,10 @@
+import {PlannerDate} from './timezone.js'
+import {addDays,daysBetween,toDateInput} from './dates.js'
 import type {CalendarEvent,Occurrence} from '../types.js'
 
 // Folder containers never replace the real events they group.
 export function normalizeEventFolders(events:CalendarEvent[]):CalendarEvent[]{
+ events=mergeAdjacentEvents(events)
  const folders=new Set(events.filter(e=>e.eventKind==='folder').map(e=>e.id))
  const normalized=events.map(event=>event.folderId&&!folders.has(event.folderId)?{...event,folderId:null}:event)
  const resolved=new Map<string,CalendarEvent>(),visiting=new Set<string>()
@@ -17,14 +20,16 @@ export function normalizeEventFolders(events:CalendarEvent[]):CalendarEvent[]{
  const bounded=normalized.map(resolve),byId=new Map(bounded.map(event=>[event.id,event]))
  function inherited(event:CalendarEvent):CalendarEvent{
   const parent=event.folderId?byId.get(event.folderId):undefined
-  if(!parent)return event
+  if(!parent){const {inheritedExcludedStarts:_excluded,...standalone}=event;return standalone}
   const owner=inherited(parent)
-  return {...event,recurrence:{...owner.recurrence}}
+  const excluded=[...(owner.excludedStarts||[]),...(owner.inheritedExcludedStarts||[])].map(value=>addDays(new PlannerDate(event.start),daysBetween(new PlannerDate(owner.start),new PlannerDate(value))).toISOString())
+  return {...event,recurrence:{...owner.recurrence},inheritedExcludedStarts:excluded.length?excluded:undefined}
  }
  return bounded.map(inherited)
 }
 export function validateEventFolders(events:CalendarEvent[]){
  for(const event of events){
+  if(event.excludedStarts!==undefined&&(!Array.isArray(event.excludedStarts)||event.excludedStarts.length>5000||event.excludedStarts.some(value=>typeof value!=='string'||!Number.isFinite(Date.parse(value)))))throw Error('Invalid excluded occurrence starts.')
   if(event.eventKind==='folder'&&event.planning)throw Error('Create a new folder and move the existing planning event into it; keep task links on the real event.')
   if(event.eventKind==='folder'&&(event.allDay||event.reminder))throw Error('Folders group dated, timed events.')
   if(!event.folderId)continue
@@ -63,4 +68,20 @@ export function saveEventGroup(events:CalendarEvent[],event:CalendarEvent,childr
  const next=normalizeEventFolders([...kept,saved,...(children||[]).map(child=>merge({...child,folderId:child.folderId??event.id}))])
  validateEventFolders(next)
  return next
+}
+
+export function mergeAdjacentEvents(events:CalendarEvent[]):CalendarEvent[]{
+ const result:CalendarEvent[]=[],redirects=new Map<string,string>()
+ const comparable=(event:CalendarEvent)=>JSON.stringify([event.title,[...event.tagIds].sort(),event.folderId||null,event.scheduleType||null,event.planning||null,event.recurrence,[...(event.excludedStarts||[])].map(Date.parse).sort(),[...(event.inheritedExcludedStarts||[])].map(Date.parse).sort()])
+ for(const event of [...events].sort((a,b)=>Date.parse(a.start)-Date.parse(b.start))){
+  const previous=[...result].reverse().find(item=>Date.parse(item.end)===Date.parse(event.start)&&!item.allDay&&!item.reminder&&item.eventKind!=='folder'&&comparable(item)===comparable(event)&&(event.recurrence.frequency==='none'||toDateInput(new PlannerDate(item.start))===toDateInput(new PlannerDate(event.start))))
+  if(previous&&!event.allDay&&!event.reminder&&event.eventKind!=='folder'){
+   previous.end=event.end
+   previous.description=[...new Set([previous.description,event.description].filter(Boolean).flatMap(value=>value.split('\n\n')))].join('\n\n')
+   previous.urgency=Math.max(previous.urgency??0,event.urgency??0)||previous.urgency
+   previous.mergedEventIds=[...new Set([...(previous.mergedEventIds||[]),event.id,...(event.mergedEventIds||[])])]
+   redirects.set(event.id,previous.id)
+  }else result.push({...event})
+ }
+ return result.map(event=>({...event,...(event.planning?.bufferForEventId&&redirects.has(event.planning.bufferForEventId)?{planning:{...event.planning,bufferForEventId:redirects.get(event.planning.bufferForEventId)}}:{})}))
 }

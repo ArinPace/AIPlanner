@@ -70,7 +70,7 @@ export function expandEvent(event: CalendarEvent, rangeStart: Date, rangeEnd: Da
     const end = event.allDay || event.eventKind==='folder'
       ? new Date(current.getFullYear(),current.getMonth(),current.getDate()+daysBetween(eventStart,eventEnd),eventEnd.getHours(),eventEnd.getMinutes(),eventEnd.getSeconds(),eventEnd.getMilliseconds())
       : new Date(current.getTime() + duration)
-    if (overlaps(current, end, rangeStart, rangeEnd)) {
+    if (!(event.excludedStarts||[]).some(value=>Date.parse(value)===current.getTime()) && !(event.inheritedExcludedStarts||[]).some(value=>Date.parse(value)===current.getTime()) && overlaps(current, end, rangeStart, rangeEnd)) {
       occurrences.push({ event, start: current, end })
     }
     current = nextOccurrence(current, event.recurrence)
@@ -90,6 +90,7 @@ export function expandEvents(events: CalendarEvent[], rangeStart: Date, rangeEnd
     const path=new Set(ancestry);path.add(event.id)
     const occurrences:Occurrence[]=parent?[{event,folderOccurrenceKey:parent.event.recurrence.frequency==='none'?parent.event.id:parent.event.id+'@'+parent.start.toISOString(),start:shifted(event.start,new Date(parent.event.start),parent.start),end:shifted(event.end,new Date(parent.event.start),parent.start)}]:expandEvent(event,addDays(rangeStart,-Math.max(1,Math.ceil((Date.parse(event.end)-Date.parse(event.start))/86400000))),rangeEnd)
     for(const item of occurrences){
+      if([...(event.excludedStarts||[]),...(event.inheritedExcludedStarts||[])].some(value=>Date.parse(value)===item.start.getTime()))continue
       if(overlaps(item.start,item.end,rangeStart,rangeEnd))result.push(item)
       for(const child of children.get(event.id)||[])visit(child,item,path)
     }

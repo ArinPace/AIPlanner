@@ -14,6 +14,7 @@ export const eventPatch = {
   title:z.string().trim().min(1).max(300).optional(),description:z.string().max(20000).optional(),
   start:datetime.optional(),end:datetime.optional(),allDay:z.boolean().optional(),reminder:z.boolean().optional(),
   tagIds:z.array(z.string().min(1).max(100)).max(100).optional(),recurrence:recurrence.optional(),
+  excludedStarts:z.array(datetime).max(5000).optional(),
   urgency:z.number().int().min(0).max(99).nullable().optional(),
   planningLocked:z.boolean().optional(),
   scheduleType:z.enum(['fixed','planned']).optional(),
@@ -51,7 +52,8 @@ export async function saveEvent(username:string,args:EventPatch) {
   validateEventFolders(row.state.events)
   const rows=storage(await db().from('planner_calendars').update({state:row.state,revision:row.revision+1,updated_at:new Date().toISOString()}).eq('username',username).eq('revision',row.revision).select('revision'))
   if(!rows.length)throw new ApiError(409,'Calendar changed. Read it before retrying.')
-  return {saved:true,eventId:event.id,event:row.state.events.find(item=>item.id===event.id)!,revision:rows[0].revision}
+  const stored=row.state.events.find(item=>item.id===event.id||item.mergedEventIds?.includes(event.id))!
+  return {saved:true,eventId:stored.id,event:stored,revision:rows[0].revision}
 }
 
 export function searchFiles(state:FilesState,args:{query?:string;folderId?:string;offset?:number;limit?:number}) {

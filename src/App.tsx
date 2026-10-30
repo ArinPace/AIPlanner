@@ -157,6 +157,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   const [zoom, setZoom] = useState(DEFAULT_ZOOM)
   const [draft, setDraft] = useState<EventDraft | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingOccurrence,setEditingOccurrence]=useState<string|null>(null)
   const [loaded, setLoaded] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [saveError, setSaveError] = useState('')
@@ -269,7 +270,8 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
     setDraft(draftFromPreset(date, options))
   }
 
-  function openEdit(event: CalendarEvent) {
+  function openEdit(event: CalendarEvent,occurrenceStart?: Date) {
+    setEditingOccurrence((occurrenceStart||new Date(event.start)).toISOString())
     setEditingId(event.id)
     function tree(item:CalendarEvent):EventDraft{return {...draftFromEvent(item),...(item.eventKind==='folder'?{folderChildren:events.filter(child=>child.folderId===item.id).map(child=>({id:child.id,draft:tree(child)}))}:{})}}
     setDraft(tree(event))
@@ -288,6 +290,13 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
     function flatten(value:EventDraft,parentId:string):CalendarEvent[]{return (value.folderChildren||[]).flatMap(child=>[{...eventFromDraft(child.draft,child.id),folderId:parentId},...(child.draft.eventKind==='folder'?flatten(child.draft,child.id):[])])}
     const children=draft.eventKind==='folder'?flatten(draft,saved.id):undefined
     setEvents(saveEventGroup(events,saved,children))
+    closeModal()
+  }
+
+  function deleteOccurrence(){
+    if(!editingId||!editingOccurrence)return
+    if(!window.confirm('Remove only this occurrence on '+new Date(editingOccurrence).toLocaleString()+'? Other dates in the series will stay.'))return
+    setEvents(current=>normalizeEventFolders(current.map(event=>event.id===editingId?{...event,excludedStarts:[...new Set([...(event.excludedStarts||[]),editingOccurrence])]}:event)))
     closeModal()
   }
 
@@ -409,7 +418,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
                 setCursor(date)
                 setView('day')
               }}
-              onEventClick={(event) => openEdit(event)}
+              onEventClick={(event,start) => openEdit(event,start)}
             />
           ) : (
             <TimeGridView
@@ -420,7 +429,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
               occurrences={occurrences}
               tags={tags}
               onSlotClick={(date, allDay) => openCreate(date, { timed: !allDay, allDay })}
-              onEventClick={(event) => openEdit(event)}
+              onEventClick={(event,start) => openEdit(event,start)}
             />
           )}
         </main>
@@ -436,6 +445,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
           onChange={setDraft}
           onClose={closeModal}
           onSave={saveDraft}
+          onDeleteOccurrence={editingId && events.find(event=>event.id===editingId)?.recurrence.frequency!=='none' ? deleteOccurrence:undefined}
           onDelete={editingId ? deleteEvent : undefined}
         />
       )}

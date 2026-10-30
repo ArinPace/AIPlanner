@@ -15,6 +15,9 @@ export interface Tag {
 }
 
 export interface CalendarEvent {
+  excludedStarts?: string[]
+  inheritedExcludedStarts?: string[]
+  mergedEventIds?: string[]
   eventKind?: 'folder'
   folderId?: string | null
   scheduleType?: 'fixed' | 'planned'
