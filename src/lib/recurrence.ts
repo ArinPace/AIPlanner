@@ -67,7 +67,7 @@ export function expandEvent(event: CalendarEvent, rangeStart: Date, rangeEnd: Da
 
   while (current <= rangeEnd && guard < 800) {
     if (until && current > until) break
-    const end = event.allDay
+    const end = event.allDay || event.eventKind==='folder'
       ? new Date(current.getFullYear(),current.getMonth(),current.getDate()+daysBetween(eventStart,eventEnd),eventEnd.getHours(),eventEnd.getMinutes(),eventEnd.getSeconds(),eventEnd.getMilliseconds())
       : new Date(current.getTime() + duration)
     if (overlaps(current, end, rangeStart, rangeEnd)) {
@@ -81,9 +81,21 @@ export function expandEvent(event: CalendarEvent, rangeStart: Date, rangeEnd: Da
 }
 
 export function expandEvents(events: CalendarEvent[], rangeStart: Date, rangeEnd: Date): Occurrence[] {
-  return events
-    .flatMap((event) => expandEvent(event, rangeStart, rangeEnd))
-    .sort((a, b) => a.start.getTime() - b.start.getTime() || a.end.getTime() - b.end.getTime())
+  const byId=new Map(events.map(event=>[event.id,event])),children=new Map<string,CalendarEvent[]>()
+  for(const event of events){if(event.folderId && byId.get(event.folderId)?.eventKind==='folder'){const list=children.get(event.folderId)||[];list.push(event);children.set(event.folderId,list)}}
+  const result:Occurrence[]=[]
+  function shifted(date:string,base:Date,target:Date){const original=new Date(date);const moved=addDays(original,daysBetween(base,target));moved.setHours(original.getHours(),original.getMinutes(),original.getSeconds(),original.getMilliseconds());return moved}
+  function visit(event:CalendarEvent,parent?:Occurrence,ancestry=new Set<string>()){
+    if(ancestry.has(event.id))return
+    const path=new Set(ancestry);path.add(event.id)
+    const occurrences:Occurrence[]=parent?[{event,folderOccurrenceKey:parent.event.recurrence.frequency==='none'?parent.event.id:parent.event.id+'@'+parent.start.toISOString(),start:shifted(event.start,new Date(parent.event.start),parent.start),end:shifted(event.end,new Date(parent.event.start),parent.start)}]:expandEvent(event,addDays(rangeStart,-Math.max(1,Math.ceil((Date.parse(event.end)-Date.parse(event.start))/86400000))),rangeEnd)
+    for(const item of occurrences){
+      if(overlaps(item.start,item.end,rangeStart,rangeEnd))result.push(item)
+      for(const child of children.get(event.id)||[])visit(child,item,path)
+    }
+  }
+  for(const event of events)if(!event.folderId || !children.get(event.folderId)?.includes(event))visit(event)
+  return result.sort((a,b)=>a.start.getTime()-b.start.getTime()||a.end.getTime()-b.end.getTime())
 }
 
 export function recurrenceLabel(recurrence: Recurrence): string {

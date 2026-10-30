@@ -33,6 +33,7 @@ export interface CalendarEvent {
 }
 
 export interface Occurrence {
+  folderOccurrenceKey?: string
   event: CalendarEvent
   start: Date
   end: Date

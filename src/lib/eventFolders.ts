@@ -14,35 +14,44 @@ export function normalizeEventFolders(events:CalendarEvent[]):CalendarEvent[]{
   if(children.length){const start=Math.min(...children.map(e=>Date.parse(e.start)));result={...event,start:new Date(start).toISOString(),end:new Date(Math.max(start+60000,...children.map(e=>Date.parse(e.end)))).toISOString()}}
   visiting.delete(event.id);resolved.set(event.id,result);return result
  }
- return normalized.map(resolve)
+ const bounded=normalized.map(resolve),byId=new Map(bounded.map(event=>[event.id,event]))
+ function inherited(event:CalendarEvent):CalendarEvent{
+  const parent=event.folderId?byId.get(event.folderId):undefined
+  if(!parent)return event
+  const owner=inherited(parent)
+  return {...event,recurrence:{...owner.recurrence}}
+ }
+ return bounded.map(inherited)
 }
 export function validateEventFolders(events:CalendarEvent[]){
  for(const event of events){
   if(event.eventKind==='folder'&&event.planning)throw Error('Create a new folder and move the existing planning event into it; keep task links on the real event.')
-  if(event.eventKind==='folder'&&(event.allDay||event.reminder||event.recurrence.frequency!=='none'))throw Error('Folders group dated, timed events and cannot repeat.')
+  if(event.eventKind==='folder'&&(event.allDay||event.reminder))throw Error('Folders group dated, timed events.')
   if(!event.folderId)continue
   if(event.folderId===event.id||!events.some(e=>e.id===event.folderId&&e.eventKind==='folder'))throw Error('Choose an existing event folder.')
-  if(event.allDay||event.recurrence.frequency!=='none')throw Error('Events inside a folder must be timed and non-recurring.')
+  if(event.allDay)throw Error('Events inside a folder must be timed.')
  }
  normalizeEventFolders(events) // Validate the full ancestry, including indirect cycles.
 }
+export function folderOccurrenceKey(item:Occurrence){return item.event.recurrence.frequency==='none'?item.event.id:item.event.id+'@'+item.start.toISOString()}
 export function occurrenceFolderGroups(occurrences:Occurrence[]){
  const children=new Map<string,Occurrence[]>()
- const parents=new Map(occurrences.filter(item=>item.event.eventKind==='folder').map(item=>[item.event.id,item]))
+ const parents=new Map<string,Occurrence[]>()
+ for(const item of occurrences.filter(item=>item.event.eventKind==='folder')){const list=parents.get(item.event.id)||[];list.push(item);parents.set(item.event.id,list)}
  const top:Occurrence[]=[]
  for(const item of occurrences){
-  const parent=item.event.folderId?parents.get(item.event.folderId):undefined
+  const parent=item.event.folderId?parents.get(item.event.folderId)?.find(parent=>item.folderOccurrenceKey?folderOccurrenceKey(parent)===item.folderOccurrenceKey:item.start>=parent.start&&item.end<=parent.end):undefined
   // If filters hide the folder, or a source moves a child out of its range,
   // keep the child visible as a standalone event rather than losing it.
   if(parent&&item.start>=parent.start&&item.end<=parent.end){
-   const list=children.get(parent.event.id)||[];list.push(item);children.set(parent.event.id,list)
+   const list=children.get(folderOccurrenceKey(parent))||[];list.push(item);children.set(folderOccurrenceKey(parent),list)
   }else top.push(item)
  }
  for(const list of children.values())list.sort((a,b)=>a.start.getTime()-b.start.getTime())
  return {top,children}
 }
 export function folderExpanded(item:Occurrence,now:number,opened:ReadonlySet<string>){
- return opened.has(item.event.id)||(item.start.getTime()<=now&&now<item.end.getTime())
+ return opened.has(folderOccurrenceKey(item))||(item.start.getTime()<=now&&now<item.end.getTime())
 }
 export function saveEventGroup(events:CalendarEvent[],event:CalendarEvent,children?:CalendarEvent[]){
  const previous=events.find(item=>item.id===event.id)
