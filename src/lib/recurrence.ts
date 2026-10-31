@@ -2,8 +2,22 @@ import { PlannerDate as Date } from './timezone.js'
 import type { CalendarEvent, Occurrence, Recurrence } from '../types.js'
 import { addDays, addMonths, addYears, daysBetween, endOfDateInput, overlaps } from './dates.js'
 
-function nextOccurrence(date: Date, recurrence: Recurrence): Date {
+function customOnOrAfter(anchor:Date,from:Date,recurrence:Recurrence){
+ const days=recurrence.weekdays?.length?recurrence.weekdays:[anchor.getDay()]
+ let candidate=addDays(anchor,Math.max(0,daysBetween(anchor,from)))
+ if(candidate<from)candidate=addDays(candidate,1)
+ for(let guard=0;guard<7*recurrence.interval+7;guard++){
+  const weekStart=(date:Date)=>addDays(date,-((date.getDay()-(recurrence.weekStartsOn||0)+7)%7))
+  const week=Math.round(daysBetween(weekStart(anchor),weekStart(candidate))/7)
+  if(week%recurrence.interval===0 && days.includes(candidate.getDay()))return candidate
+  candidate=addDays(candidate,1)
+ }
+ return candidate
+}
+function nextOccurrence(date: Date, recurrence: Recurrence,anchor=date): Date {
   switch (recurrence.frequency) {
+    case 'custom':
+      return customOnOrAfter(anchor,addDays(date,1),recurrence)
     case 'daily':
       return addDays(date, recurrence.interval)
     case 'weekly':
@@ -18,6 +32,7 @@ function nextOccurrence(date: Date, recurrence: Recurrence): Date {
 }
 
 function firstOnOrAfter(eventStart: Date, rangeStart: Date, recurrence: Recurrence): Date {
+  if(recurrence.frequency==='custom')return customOnOrAfter(eventStart,rangeStart,recurrence)
   if (eventStart >= rangeStart) return eventStart
 
   if (recurrence.frequency === 'daily' || recurrence.frequency === 'weekly') {
@@ -73,7 +88,7 @@ export function expandEvent(event: CalendarEvent, rangeStart: Date, rangeEnd: Da
     if (!(event.excludedStarts||[]).some(value=>Date.parse(value)===current.getTime()) && !(event.inheritedExcludedStarts||[]).some(value=>Date.parse(value)===current.getTime()) && overlaps(current, end, rangeStart, rangeEnd)) {
       occurrences.push({ event, start: current, end })
     }
-    current = nextOccurrence(current, event.recurrence)
+    current = nextOccurrence(current, event.recurrence,eventStart)
     guard += 1
   }
 
@@ -102,6 +117,7 @@ export function expandEvents(events: CalendarEvent[], rangeStart: Date, rangeEnd
 export function recurrenceLabel(recurrence: Recurrence): string {
   if (recurrence.frequency === 'none') return 'Does not repeat'
 
+  if(recurrence.frequency==='custom'){const days=(recurrence.weekdays||[]).map(day=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][day]).join(', ');return 'Every '+(recurrence.interval===1?'week':recurrence.interval+' weeks')+' on '+days+(recurrence.until?' until '+recurrence.until:'')}
   const interval = recurrence.interval
   const unit = {
     daily: interval === 1 ? 'day' : 'days',

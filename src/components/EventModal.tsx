@@ -26,11 +26,13 @@ const FREQUENCIES: { value: RecurrenceFrequency; label: string }[] = [
   { value: 'weekly', label: 'Weekly' },
   { value: 'monthly', label: 'Monthly' },
   { value: 'yearly', label: 'Yearly' },
+  { value: 'custom', label: 'Custom' },
 ]
 
 const INTERVAL_UNITS: Record<Exclude<RecurrenceFrequency, 'none'>, [string, string]> = {
   daily: ['day', 'days'],
   weekly: ['week', 'weeks'],
+  custom: ['week', 'weeks'],
   monthly: ['month', 'months'],
   yearly: ['year', 'years'],
 }
@@ -74,6 +76,7 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
       titleRef.current?.focus()
       return
     }
+    if(draft.recurrence.frequency==='custom'&&!draft.recurrence.weekdays?.length){setError('Choose at least one day to repeat on.');return}
     if (!(folder&&draft.folderChildren?.length)&&!draft.reminder && draft.endDate < draft.date) {
       setError('The end date must be on or after the start date.')
       return
@@ -170,6 +173,7 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
                 ...draft.recurrence,
                 frequency: event.target.value as RecurrenceFrequency,
                 interval: draft.recurrence.interval || 1,
+                ...(event.target.value==='custom'?{weekdays:draft.recurrence.weekdays?.length?draft.recurrence.weekdays:[new Date(draft.date+'T12:00:00').getDay()]}:{}),
               })
             }
           >
@@ -183,6 +187,7 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
 
         {repeating && (
           <div className="repeat-box">
+            {frequency==='custom' && <fieldset disabled={nested} className="custom-repeat-days"><legend>Repeat on</legend>{['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map((name,day)=><label key={name}><input type="checkbox" checked={Boolean(draft.recurrence.weekdays?.includes(day))} onChange={event=>{const selected=draft.recurrence.weekdays||[];update('recurrence',{...draft.recurrence,weekdays:event.target.checked?[...selected,day].sort():selected.filter(value=>value!==day)})}}/>{name.slice(0,3)}</label>)}</fieldset>}
             <label className="field">
               <span>How often</span>
               <div className="field-row">

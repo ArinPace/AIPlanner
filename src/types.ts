@@ -1,8 +1,10 @@
 export type CalendarView = 'day' | 'week' | 'month' | 'year'
 
-export type RecurrenceFrequency = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'
+export type RecurrenceFrequency = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom'
 
 export interface Recurrence {
+  weekdays?: number[]
+  weekStartsOn?: number
   frequency: RecurrenceFrequency
   interval: number
   until: string | null

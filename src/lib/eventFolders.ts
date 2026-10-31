@@ -24,12 +24,14 @@ export function normalizeEventFolders(events:CalendarEvent[]):CalendarEvent[]{
   if(!parent){const {inheritedExcludedStarts:_excluded,...standalone}=event;return standalone}
   const owner=inherited(parent)
   const excluded=[...(owner.excludedStarts||[]),...(owner.inheritedExcludedStarts||[])].map(value=>addDays(new PlannerDate(event.start),daysBetween(new PlannerDate(owner.start),new PlannerDate(value))).toISOString())
-  return {...event,recurrence:{...owner.recurrence},inheritedExcludedStarts:excluded.length?excluded:undefined}
+  const offset=daysBetween(new PlannerDate(owner.start),new PlannerDate(event.start)),shift=(day:number)=>(day+offset%7+7)%7
+  return {...event,recurrence:{...owner.recurrence,...(owner.recurrence.until&&offset?{until:toDateInput(addDays(new PlannerDate(owner.recurrence.until+'T12:00:00'),offset))}:{}),...(owner.recurrence.frequency==='custom'?{weekdays:owner.recurrence.weekdays?.map(shift).sort(),weekStartsOn:shift(owner.recurrence.weekStartsOn||0)}:{})},inheritedExcludedStarts:excluded.length?excluded:undefined}
  }
  return bounded.map(inherited)
 }
 export function validateEventFolders(events:CalendarEvent[]){
  for(const event of events){
+  if(event.recurrence.frequency==='custom'&&(!event.recurrence.weekdays?.length||event.recurrence.weekdays.length>7||event.recurrence.weekdays.some(day=>!Number.isInteger(day)||day<0||day>6)))throw Error('Choose at least one valid weekday for custom repeats.')
   if(event.excludedStarts!==undefined&&(!Array.isArray(event.excludedStarts)||event.excludedStarts.length>5000||event.excludedStarts.some(value=>typeof value!=='string'||!Number.isFinite(Date.parse(value)))))throw Error('Invalid excluded occurrence starts.')
   if(event.eventKind==='folder'&&event.planning)throw Error('Create a new folder and move the existing planning event into it; keep task links on the real event.')
   if(event.eventKind==='folder'&&(event.allDay||event.reminder))throw Error('Folders group dated, timed events.')

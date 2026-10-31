@@ -97,6 +97,7 @@ function eventFromDraft(draft: EventDraft, id: string): CalendarEvent {
     tagIds: draft.tagIds,
     recurrence: {
       frequency: draft.recurrence.frequency,
+      ...(draft.recurrence.frequency==='custom'?{weekdays:[...new Set(draft.recurrence.weekdays||[])].sort(),...(draft.recurrence.weekStartsOn===undefined?{}:{weekStartsOn:draft.recurrence.weekStartsOn})}:{}),
       interval: Math.max(1, draft.recurrence.interval || 1),
       until: draft.recurrence.frequency === 'none' ? null : draft.recurrence.until,
     },

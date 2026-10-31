@@ -8,7 +8,7 @@ import {normalizeEventFolders,validateEventFolders} from '../src/lib/eventFolder
 import { descendantIds, folderPath, type FilesState } from '../src/lib/files.js'
 
 export const datetime = z.string().max(100).refine(v => /T.*(?:Z|[+-]\d\d:\d\d)$/.test(v) && Number.isFinite(Date.parse(v)), 'Use an ISO datetime with timezone.')
-const recurrence = z.object({frequency:z.enum(['none','daily','weekly','monthly','yearly']),interval:z.number().int().min(1).max(1000),until:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable()})
+const recurrence = z.object({frequency:z.enum(['none','daily','weekly','monthly','yearly','custom']),interval:z.number().int().min(1).max(1000),weekStartsOn:z.number().int().min(0).max(6).optional(),weekdays:z.array(z.number().int().min(0).max(6)).min(1).max(7).optional(),until:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable()}).refine(value=>value.frequency!=='custom'||Boolean(value.weekdays?.length),'Custom repeats need weekdays (Sunday=0 through Saturday=6).')
 export const eventPatch = {
   id:z.string().min(1).max(100).optional(), revision:z.number().int().nonnegative(),
   title:z.string().trim().min(1).max(300).optional(),description:z.string().max(20000).optional(),
