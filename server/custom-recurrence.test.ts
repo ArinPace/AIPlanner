@@ -29,3 +29,25 @@ test('custom recurring folder children crossing midnight inherit shifted weekday
  assert.deepEqual(dates(expandEvent(child,from,to)),dates(expandEvents(events,from,to).filter(item=>item.event.id==='later')))
  assert.match(fixedEventPayload(child).recurrence[0],/BYDAY=SU,MO;WKST=MO/)
 })
+
+test('alternate Tuesdays and every fourth Monday use the selected week interval',()=>{
+ const from=new Date('2026-10-25T00:00Z'),to=new Date('2026-12-31T23:59Z')
+ const alternating=event('tuesday',{recurrence:{frequency:'custom',weekdays:[2],interval:2,until:'2026-11-30'}})
+ assert.deepEqual(dates(expandEvent(alternating,from,to)).map(value=>value.slice(0,10)),['2026-10-27','2026-11-10','2026-11-24'])
+ const monday=event('monday',{recurrence:{frequency:'custom',weekdays:[1],interval:4,until:'2026-12-31'}})
+ assert.deepEqual(dates(expandEvent(monday,from,to)).map(value=>value.slice(0,10)),['2026-10-26','2026-11-23','2026-12-21'])
+})
+test('specific month dates skip missing dates, retain local time, support month intervals and export Google rules',()=>{
+ const monthly=event('monthly',{start:'2027-01-01T14:00:00Z',end:'2027-01-01T15:00:00Z',recurrence:{frequency:'custom',customMode:'monthdates',monthDays:[1,15,31],interval:1,until:'2027-03-31'}})
+ validateEventFolders([monthly])
+ const items=dates(expandEvent(monthly,new Date('2027-01-01T00:00Z'),new Date('2027-04-01T00:00Z')))
+ assert.deepEqual(items.map(value=>value.slice(0,10)),['2027-01-01','2027-01-15','2027-01-31','2027-02-01','2027-02-15','2027-03-01','2027-03-15','2027-03-31'])
+ assert.equal(items[6],'2027-03-15T13:00:00.000Z')
+ const alternate={...monthly,recurrence:{...monthly.recurrence,monthDays:[5,20],interval:2,until:'2027-05-31'}}
+ assert.deepEqual(dates(expandEvent(alternate,new Date('2027-01-01T00:00Z'),new Date('2027-06-01T00:00Z'))).map(value=>value.slice(0,10)),['2027-01-05','2027-01-20','2027-03-05','2027-03-20','2027-05-05','2027-05-20'])
+ const payload=fixedEventPayload(alternate)
+ assert.match(payload.recurrence[0],/^RRULE:FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=5,20;/)
+ assert.equal(Date.parse(payload.start.dateTime),Date.parse('2027-01-05T14:00:00Z'))
+ assert.match(recurrenceLabel(alternate.recurrence),/Every 2 months on dates 5, 20/)
+ assert.throws(()=>validateEventFolders([{...monthly,recurrence:{...monthly.recurrence,monthDays:[]}}]),/dates/)
+})

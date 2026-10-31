@@ -2,7 +2,20 @@ import { PlannerDate as Date } from './timezone.js'
 import type { CalendarEvent, Occurrence, Recurrence } from '../types.js'
 import { addDays, addMonths, addYears, daysBetween, endOfDateInput, overlaps } from './dates.js'
 
+function customMonthOnOrAfter(anchor:Date,from:Date,recurrence:Recurrence){
+ const monthDays=[...new Set(recurrence.monthDays||[])].sort((a,b)=>a-b)
+ const distance=Math.max(0,(from.getFullYear()-anchor.getFullYear())*12+from.getMonth()-anchor.getMonth())
+ let steps=Math.ceil(distance/recurrence.interval)*recurrence.interval
+ for(let guard=0;guard<4800;guard++,steps+=recurrence.interval){
+  const month=addMonths(new Date(anchor.getFullYear(),anchor.getMonth(),1,anchor.getHours(),anchor.getMinutes(),anchor.getSeconds(),anchor.getMilliseconds()),steps)
+  if(!Number.isFinite(month.getTime()))break
+  const last=new Date(month.getFullYear(),month.getMonth()+1,0).getDate()
+  for(const day of monthDays){if(day>last)continue;const candidate=new Date(month.getFullYear(),month.getMonth(),day,anchor.getHours(),anchor.getMinutes(),anchor.getSeconds(),anchor.getMilliseconds());if(candidate>=anchor&&candidate>=from)return candidate}
+ }
+ return new Date(NaN)
+}
 function customOnOrAfter(anchor:Date,from:Date,recurrence:Recurrence){
+ if(recurrence.customMode==='monthdates')return customMonthOnOrAfter(anchor,from,recurrence)
  const days=recurrence.weekdays?.length?recurrence.weekdays:[anchor.getDay()]
  let candidate=addDays(anchor,Math.max(0,daysBetween(anchor,from)))
  if(candidate<from)candidate=addDays(candidate,1)
@@ -117,6 +130,7 @@ export function expandEvents(events: CalendarEvent[], rangeStart: Date, rangeEnd
 export function recurrenceLabel(recurrence: Recurrence): string {
   if (recurrence.frequency === 'none') return 'Does not repeat'
 
+  if(recurrence.frequency==='custom'&&recurrence.customMode==='monthdates')return 'Every '+(recurrence.interval===1?'month':recurrence.interval+' months')+' on dates '+(recurrence.monthDays||[]).join(', ')+(recurrence.until?' until '+recurrence.until:'')
   if(recurrence.frequency==='custom'){const days=(recurrence.weekdays||[]).map(day=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][day]).join(', ');return 'Every '+(recurrence.interval===1?'week':recurrence.interval+' weeks')+' on '+days+(recurrence.until?' until '+recurrence.until:'')}
   const interval = recurrence.interval
   const unit = {

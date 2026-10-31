@@ -3,6 +3,8 @@ export type CalendarView = 'day' | 'week' | 'month' | 'year'
 export type RecurrenceFrequency = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom'
 
 export interface Recurrence {
+  customMode?: 'weekdays'|'monthdates'
+  monthDays?: number[]
   weekdays?: number[]
   weekStartsOn?: number
   frequency: RecurrenceFrequency

@@ -76,7 +76,7 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
       titleRef.current?.focus()
       return
     }
-    if(draft.recurrence.frequency==='custom'&&!draft.recurrence.weekdays?.length){setError('Choose at least one day to repeat on.');return}
+    if(draft.recurrence.frequency==='custom'&&!(draft.recurrence.customMode==='monthdates'?draft.recurrence.monthDays?.length:draft.recurrence.weekdays?.length)){setError('Choose at least one day to repeat on.');return}
     if (!(folder&&draft.folderChildren?.length)&&!draft.reminder && draft.endDate < draft.date) {
       setError('The end date must be on or after the start date.')
       return
@@ -98,7 +98,7 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
 
   const frequency = draft.recurrence.frequency
   const repeating = frequency !== 'none'
-  const unit = frequency === 'none' ? ['day', 'days'] : INTERVAL_UNITS[frequency]
+  const unit = frequency==='custom'&&draft.recurrence.customMode==='monthdates'?['month','months']:frequency === 'none' ? ['day', 'days'] : INTERVAL_UNITS[frequency]
 
   return (
     <><div className="modal-backdrop" inert={Boolean(child)} aria-hidden={child?true:undefined} onMouseDown={onClose}>
@@ -187,13 +187,16 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
 
         {repeating && (
           <div className="repeat-box">
-            {frequency==='custom' && <fieldset disabled={nested} className="custom-repeat-days"><legend>Repeat on</legend>{['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map((name,day)=><label key={name}><input type="checkbox" checked={Boolean(draft.recurrence.weekdays?.includes(day))} onChange={event=>{const selected=draft.recurrence.weekdays||[];update('recurrence',{...draft.recurrence,weekdays:event.target.checked?[...selected,day].sort():selected.filter(value=>value!==day)})}}/>{name.slice(0,3)}</label>)}</fieldset>}
+            {frequency==='custom' && <label className="field"><span>Custom repeat pattern</span><select disabled={nested} value={draft.recurrence.customMode||'weekdays'} onChange={event=>update('recurrence',{...draft.recurrence,customMode:event.target.value as 'weekdays'|'monthdates',...(event.target.value==='monthdates'?{monthDays:draft.recurrence.monthDays?.length?draft.recurrence.monthDays:[new Date(draft.date+'T12:00:00').getDate()]}:{weekdays:draft.recurrence.weekdays?.length?draft.recurrence.weekdays:[new Date(draft.date+'T12:00:00').getDay()]})})}><option value="weekdays">Days of the week</option><option value="monthdates">Dates of the month</option></select></label>}
+            {frequency==='custom'&&draft.recurrence.customMode==='monthdates'&&<fieldset disabled={nested} className="custom-month-days"><legend>Repeat on dates</legend>{Array.from({length:31},(_,index)=>index+1).map(day=><label key={day}><input type="checkbox" checked={Boolean(draft.recurrence.monthDays?.includes(day))} onChange={event=>{const selected=draft.recurrence.monthDays||[];update('recurrence',{...draft.recurrence,monthDays:event.target.checked?[...selected,day].sort((a,b)=>a-b):selected.filter(value=>value!==day)})}}/>{day}</label>)}<small>Dates missing from a month are skipped, such as the 31st in February.</small></fieldset>}
+            {frequency==='custom'&&draft.recurrence.customMode!=='monthdates' && <fieldset disabled={nested} className="custom-repeat-days"><legend>Repeat on</legend>{['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map((name,day)=><label key={name}><input type="checkbox" checked={Boolean(draft.recurrence.weekdays?.includes(day))} onChange={event=>{const selected=draft.recurrence.weekdays||[];update('recurrence',{...draft.recurrence,weekdays:event.target.checked?[...selected,day].sort():selected.filter(value=>value!==day)})}}/>{name.slice(0,3)}</label>)}</fieldset>}
             <label className="field">
               <span>How often</span>
               <div className="field-row">
                 <span className="quiet">Every</span>
                 <input
                   type="number"
+                  aria-label="Repeat interval"
                   min={1}
                   max={99}
                   disabled={nested} value={draft.recurrence.interval}

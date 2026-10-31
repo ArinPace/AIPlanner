@@ -31,7 +31,8 @@ export function normalizeEventFolders(events:CalendarEvent[]):CalendarEvent[]{
 }
 export function validateEventFolders(events:CalendarEvent[]){
  for(const event of events){
-  if(event.recurrence.frequency==='custom'&&(!event.recurrence.weekdays?.length||event.recurrence.weekdays.length>7||event.recurrence.weekdays.some(day=>!Number.isInteger(day)||day<0||day>6)))throw Error('Choose at least one valid weekday for custom repeats.')
+  if(event.recurrence.frequency==='custom'&&event.recurrence.customMode!=='monthdates'&&(!event.recurrence.weekdays?.length||event.recurrence.weekdays.length>7||event.recurrence.weekdays.some(day=>!Number.isInteger(day)||day<0||day>6)))throw Error('Choose at least one valid weekday for custom repeats.')
+  if(event.recurrence.frequency==='custom'&&event.recurrence.customMode==='monthdates'&&(!event.recurrence.monthDays?.length||event.recurrence.monthDays.length>31||event.recurrence.monthDays.some(day=>!Number.isInteger(day)||day<1||day>31)))throw Error('Choose valid dates of the month.')
   if(event.excludedStarts!==undefined&&(!Array.isArray(event.excludedStarts)||event.excludedStarts.length>5000||event.excludedStarts.some(value=>typeof value!=='string'||!Number.isFinite(Date.parse(value)))))throw Error('Invalid excluded occurrence starts.')
   if(event.eventKind==='folder'&&event.planning)throw Error('Create a new folder and move the existing planning event into it; keep task links on the real event.')
   if(event.eventKind==='folder'&&(event.allDay||event.reminder))throw Error('Folders group dated, timed events.')
