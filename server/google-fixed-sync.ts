@@ -3,7 +3,7 @@ import {storage} from './mcp-auth.js'
 import {googleCalendarSession,googleCalendarStatus} from './agent.js'
 import {calendarRow} from './planner-workspace.js'
 import {eventType} from '../src/lib/eventType.js'
-import {fixedEventPayload,fixedFingerprint,fixedGoogleId} from './fixed-event-payload.js'
+import {fixedEventPayload,fixedEventPatch,fixedFingerprint,fixedGoogleId} from './fixed-event-payload.js'
 
 const base='https://www.googleapis.com/calendar/v3/calendars/primary/events'
 export async function fixedSyncStatus(username:string){
@@ -26,7 +26,7 @@ export async function processFixedSync(onlyUsername?:string){
   const mappings=storage(await db().from('planner_google_fixed_events').select('*').eq('username',username).eq('account_id',session.accountId))
   const fixed=row.state.events.filter(e=>e.eventKind!=='folder'&&eventType(e,row.state.tags)==='fixed'),ids=new Set(fixed.map(e=>e.id))
   const headers={Authorization:'Bearer '+session.tokens.access_token,'Content-Type':'application/json'}
-  const call=async(url:string,init:RequestInit={})=>{const response=await fetch(url,{...init,headers:{...headers,...init.headers},signal:AbortSignal.timeout(Math.max(1,Math.min(8000,deadline-Date.now())))});if(!response.ok&&![404,410].includes(response.status))throw new ApiError(response.status===401?401:502,'Google sync failed ('+response.status+'). '+(response.status===412?'The Google event changed; retry to reconcile.':'Reconnect the account if access expired.'));return response}
+  const call=async(url:string,init:RequestInit={})=>{const response=await fetch(url,{...init,headers:{...headers,...init.headers},signal:AbortSignal.timeout(Math.max(1,Math.min(8000,deadline-Date.now())))});if(!response.ok&&![404,410].includes(response.status)){const details=await response.json().catch(()=>null) as any;const reason=typeof details?.error?.message==='string'?details.error.message.slice(0,300):'';throw new ApiError(response.status===401?401:502,'Google sync failed ('+response.status+'). '+(response.status===401?'Reconnect the account to renew access.':response.status===412?'The Google event changed; retry to reconcile.':reason||'The calendar update was rejected; it will retry.'))}return response}
   const read=async(id:string):Promise<any>=>{const response=await call(base+'/'+encodeURIComponent(id));return response.ok?await response.json():null}
   const persist=async(localId:string,remoteId:string,managed:boolean,fingerprint:string)=>storage(await db().from('planner_google_fixed_events').upsert({username,account_id:session.accountId,local_id:localId,remote_id:remoteId,managed,fingerprint,updated_at:new Date().toISOString()},{onConflict:'username,account_id,local_id'}))
   const backup=async(id:string,before:any,after:any,kind:string)=>storage(await db().from('planner_calendar_history').insert({username,calendar_key:'google:'+session.accountId+':primary',event_id:id,title:after?.summary||before?.summary||'',kind,before,after}).select('id').single())
@@ -50,7 +50,7 @@ export async function processFixedSync(onlyUsername?:string){
    if(before&&managed&&before.extendedProperties?.private?.aipLocalId!==event.id)throw Error('Google event ownership could not be verified; no event was overwritten.')
    if(mapping&&!before){managed=true;/* Recreate under the stable app-owned ID, never another account's event ID. */}
    const remoteId=before?.id||fixedGoogleId(username,event.id)
-   const body:Record<string,any>={...payload,...(!before?{id:remoteId,extendedProperties:{private:{aipLocalId:event.id}}}:{})}
+   const body:Record<string,any>={...fixedEventPatch(payload,before),...(!before?{id:remoteId,extendedProperties:{private:{aipLocalId:event.id}}}:{})}
    if(before?.recurringEventId){
     if(payload.recurrence.length)throw Error('This Google event is one occurrence of a series. Review series scope before turning it into a new recurring event.')
     delete body.recurrence // Google occurrence edits must preserve the parent series.

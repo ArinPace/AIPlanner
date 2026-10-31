@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {eventType} from '../src/lib/eventType.js'
-import {fixedEventPayload,fixedGoogleId} from './fixed-event-payload.js'
+import {fixedEventPayload,fixedEventPatch,fixedGoogleId} from './fixed-event-payload.js'
 import {processFixedSync} from './google-fixed-sync.js'
 import {sealVmCredential} from './vm-vault.js'
 import {GOOGLE_CALENDAR_SCOPE,GOOGLE_CALENDAR_WRITE_SCOPE} from './agent.js'
@@ -66,4 +66,17 @@ test('queued Google export excludes planned work, deduplicates originals, retrie
   await processFixedSync('owner');assert.equal(deletes,1);assert(remote.has('original'));assert.equal(mappings.length,0)
   canEdit=false;const before=writes;assert.match((await processFixedSync('owner')).error!,/approve event editing/);assert.equal(writes,before)
  }finally{globalThis.fetch=originalFetch;for(const key of keys){if(env[key]===undefined)delete process.env[key];else process.env[key]=env[key]}}
+})
+
+test('Google PATCH clears the opposite time representation when switching all-day and timed events',()=>{
+ const timed={start:{dateTime:'2026-10-28T23:59:00-04:00',timeZone:'America/New_York'},end:{dateTime:'2026-10-29T04:00:00Z',timeZone:'America/New_York'}}
+ const allDay={start:{date:'2026-10-28'},end:{date:'2026-10-29'}}
+ const toTimed=fixedEventPatch(timed,allDay)
+ assert.equal(toTimed.start.date,null);assert.equal(toTimed.end.date,null)
+ assert.equal(toTimed.start.dateTime,timed.start.dateTime)
+ const toAllDay=fixedEventPatch(allDay,timed)
+ assert.equal(toAllDay.start.dateTime,null);assert.equal(toAllDay.end.dateTime,null)
+ assert.equal(toAllDay.start.timeZone,null);assert.equal(toAllDay.end.timeZone,null)
+ assert.equal(toAllDay.start.date,'2026-10-28')
+ assert.equal('date' in timed.start,false);assert.equal('dateTime' in allDay.start,false)
 })

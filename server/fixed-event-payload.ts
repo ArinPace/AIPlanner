@@ -24,3 +24,12 @@ export function fixedEventPayload(event:CalendarEvent){
  return payload
 }
 export function fixedFingerprint(event:CalendarEvent){return createHash('sha256').update(JSON.stringify(fixedEventPayload(event))).digest('hex')}
+
+export function fixedEventPatch(payload:Record<string,any>,before:any){
+ const patch={...payload}
+ for(const side of ['start','end']){
+  if(payload[side]?.dateTime&&before?.[side]?.date)patch[side]={...payload[side],date:null}
+  if(payload[side]?.date&&before?.[side]?.dateTime)patch[side]={...payload[side],dateTime:null,timeZone:null}
+ }
+ return patch
+}
