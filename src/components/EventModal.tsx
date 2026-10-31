@@ -266,11 +266,11 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
         {error && <p className="form-error">{error}</p>}
 
         <div className="modal-actions">
-          {onDeleteOccurrence && <button type="button" className="danger-btn" onClick={onDeleteOccurrence}>Delete this occurrence</button>}
+          {onDeleteOccurrence && <button type="button" className="danger-btn" onClick={onDeleteOccurrence}>Remove occurrence from series</button>}
           {mode === 'edit' && onDelete && (
             <button type="button" className="danger-btn" onClick={onDelete}>
               <TrashIcon />
-              {onDeleteOccurrence?'Delete series':'Delete'}
+              Delete
             </button>
           )}
           <div className="modal-actions-right">

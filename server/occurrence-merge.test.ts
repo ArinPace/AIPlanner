@@ -2,7 +2,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {removeCalendarItems} from './planner-control.js'
-import {normalizeEventFolders,mergeAdjacentEvents,occurrenceFolderGroups,folderOccurrenceKey} from '../src/lib/eventFolders.js'
+import {normalizeEventFolders,mergeAdjacentEvents,detachEventOccurrence,occurrenceFolderGroups,folderOccurrenceKey} from '../src/lib/eventFolders.js'
 import {expandEvents} from '../src/lib/recurrence.js'
 import {fixedEventPayload} from './fixed-event-payload.js'
 import type {CalendarEvent,StoredState} from '../src/types.js'
@@ -54,4 +54,19 @@ test('removing a recurring folder series removes its entire nested subtree, leav
  const skipped=removeCalendarItems(state(events),['root'],'events','occurrence','2026-11-01T14:00:00Z')
  for(const id of ['root','inner','work'])assert.equal(expandEvents(skipped.events,...range).filter(item=>item.event.id===id).length,3)
  assert.equal(expandEvents(skipped.events,...range).filter(item=>item.event.id==='unrelated').length,4)
+})
+
+test('detaching a recurring folder keeps a standalone subtree and leaves all other series dates intact',()=>{
+ const original=normalizeEventFolders([event('root',{eventKind:'folder'}),event('nested',{eventKind:'folder',folderId:'root'}),event('work',{title:'Work',folderId:'nested'})])
+ const detached=detachEventOccurrence(original,'root','2026-11-01T14:00:00Z')
+ assert.equal(detached.event.recurrence.frequency,'none')
+ assert.equal(detached.event.folderId,null)
+ const clones=detached.events.filter(event=>event.detachedFrom)
+ assert.equal(clones.length,3)
+ assert.equal(clones.find(event=>event.detachedFrom==='work')?.folderId,clones.find(event=>event.detachedFrom==='nested')?.id)
+ assert.equal(expandEvents(detached.events,...range).length,12)
+ const deleted=removeCalendarItems(state(detached.events),[detached.event.id],'events','event')
+ assert.equal(deleted.events.length,3)
+ for(const id of ['root','nested','work'])assert.equal(expandEvents(deleted.events,...range).filter(item=>item.event.id===id).length,3)
+ assert.equal(original[0].excludedStarts,undefined)
 })

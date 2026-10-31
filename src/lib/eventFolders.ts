@@ -1,3 +1,4 @@
+import {expandEvents} from './recurrence.js'
 import {PlannerDate} from './timezone.js'
 import {addDays,daysBetween,toDateInput} from './dates.js'
 import type {CalendarEvent,Occurrence} from '../types.js'
@@ -87,7 +88,7 @@ export function mergeAdjacentEvents(events:CalendarEvent[]):CalendarEvent[]{
 }
 
 export function eventRemovalIds(events:CalendarEvent[],ids:string[],includeFolderContents=false){
- const selected=new Set(ids),parents=new Set(events.filter(event=>selected.has(event.id)&&event.eventKind==='folder'&&(includeFolderContents||event.recurrence.frequency!=='none')).map(event=>event.id))
+ const selected=new Set(ids),parents=new Set(events.filter(event=>selected.has(event.id)&&event.eventKind==='folder'&&(includeFolderContents||event.recurrence.frequency!=='none'||Boolean(event.detachedFrom))).map(event=>event.id))
  let changed=true
  while(changed){changed=false;for(const event of events)if(event.folderId&&parents.has(event.folderId)&&!selected.has(event.id)){selected.add(event.id);if(event.eventKind==='folder')parents.add(event.id);changed=true}}
  return selected
@@ -95,4 +96,21 @@ export function eventRemovalIds(events:CalendarEvent[],ids:string[],includeFolde
 export function removeEventSeries(events:CalendarEvent[],ids:string[]){
  const selected=eventRemovalIds(events,ids)
  return normalizeEventFolders(events.filter(event=>!selected.has(event.id)).map(event=>event.folderId&&selected.has(event.folderId)?{...event,folderId:null}:event))
+}
+
+export function detachEventOccurrence(events:CalendarEvent[],id:string,start:string){
+ const instant=Date.parse(start),source=events.find(event=>event.id===id)
+ if(!source||source.recurrence.frequency==='none'||!Number.isFinite(instant))throw Error('Select an exact occurrence of a recurring event.')
+ const selected=eventRemovalIds(events,[id],true),occurrences=expandEvents(events,new PlannerDate(instant-1),new PlannerDate(instant+Math.max(60000,Date.parse(source.end)-Date.parse(source.start))+86400000))
+ const occurrence=occurrences.find(item=>item.event.id===id&&item.start.getTime()===instant)
+ if(!occurrence)throw Error('The selected occurrence is no longer available.')
+ const included:Occurrence[]=[occurrence]
+ for(let index=0;index<included.length;index++){const parent=included[index];included.push(...occurrences.filter(item=>selected.has(item.event.id)&&item.event.folderId===parent.event.id&&item.folderOccurrenceKey===folderOccurrenceKey(parent)))}
+ const ids=new Map(included.map(item=>[item.event.id,crypto.randomUUID()]))
+ const detached=included.map(item=>{
+  const {excludedStarts:_excluded,inheritedExcludedStarts:_inherited,mergedEventIds:_merged,...base}=item.event
+  return {...base,id:ids.get(item.event.id)!,detachedFrom:item.event.id,start:item.start.toISOString(),end:item.end.toISOString(),folderId:item.event.id===id?null:ids.get(item.event.folderId||'')||null,recurrence:{frequency:'none' as const,interval:1,until:null},...(item.event.planning?{planning:{...item.event.planning,locked:true,bufferForEventId:ids.get(item.event.planning.bufferForEventId||'')||item.event.planning.bufferForEventId}}:{})}
+ })
+ const next=normalizeEventFolders([...events.map(event=>event.id===id?{...event,excludedStarts:[...new Set([...(event.excludedStarts||[]),new Date(instant).toISOString()])]}:event),...detached])
+ return {events:next,event:next.find(event=>event.id===ids.get(id)||event.mergedEventIds?.includes(ids.get(id)!))!}
 }

@@ -14,7 +14,7 @@ import { YearView } from './components/YearView'
 import { adoptCalendarRevision, emptyCalendar, getSession, loadCalendar, logout, saveCalendar, setToken } from './lib/api'
 import { isEventVisible } from './lib/colors'
 import {eventType,type ScheduleType} from './lib/eventType'
-import {saveEventGroup,normalizeEventFolders,removeEventSeries} from './lib/eventFolders'
+import {saveEventGroup,removeEventSeries,detachEventOccurrence} from './lib/eventFolders'
 import {
   addDays,
   addMonths,
@@ -270,10 +270,10 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
     setDraft(draftFromPreset(date, options))
   }
 
-  function openEdit(event: CalendarEvent,occurrenceStart?: Date) {
+  function openEdit(event: CalendarEvent,occurrenceStart?: Date,sourceEvents=events) {
     setEditingOccurrence((occurrenceStart||new Date(event.start)).toISOString())
     setEditingId(event.id)
-    function tree(item:CalendarEvent):EventDraft{return {...draftFromEvent(item),...(item.eventKind==='folder'?{folderChildren:events.filter(child=>child.folderId===item.id).map(child=>({id:child.id,draft:tree(child)}))}:{})}}
+    function tree(item:CalendarEvent):EventDraft{return {...draftFromEvent(item),...(item.eventKind==='folder'?{folderChildren:sourceEvents.filter(child=>child.folderId===item.id).map(child=>({id:child.id,draft:tree(child)}))}:{})}}
     setDraft(tree(event))
   }
 
@@ -293,17 +293,18 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
     closeModal()
   }
 
-  function deleteOccurrence(){
+  function detachOccurrence(){
     if(!editingId||!editingOccurrence)return
-    if(!window.confirm('Remove only this occurrence on '+new Date(editingOccurrence).toLocaleString()+(events.find(event=>event.id===editingId)?.eventKind==='folder'?' and all events inside this folder for that occurrence? Other dates will stay.':'? Other dates in the series will stay.')))return
-    setEvents(current=>normalizeEventFolders(current.map(event=>event.id===editingId?{...event,excludedStarts:[...new Set([...(event.excludedStarts||[]),editingOccurrence])]}:event)))
-    closeModal()
+    if(!window.confirm('Remove this occurrence from the repeating series? It and its contents will remain on the calendar as standalone items you can edit or delete.'))return
+    const detached=detachEventOccurrence(events,editingId,editingOccurrence)
+    setEvents(detached.events)
+    openEdit(detached.event,new Date(detached.event.start),detached.events)
   }
 
   function deleteEvent() {
     if (!editingId) return
     const selected=events.find(event=>event.id===editingId)
-    if (!window.confirm(selected?.eventKind==='folder'?(selected.recurrence.frequency!=='none'?'Delete this recurring folder and all events and nested folders inside it for every date?':'Delete this folder? Its events will stay on the calendar.'):'Delete this event? If it repeats, the whole series will be removed.')) return
+    if (!window.confirm(selected?.eventKind==='folder'?(selected.recurrence.frequency!=='none'?'Delete this recurring folder and all events and nested folders inside it for every date?':selected.detachedFrom?'Delete this standalone folder and all events inside it?':'Delete this folder? Its events will stay on the calendar.'):'Delete this event? If it repeats, the whole series will be removed.')) return
     setEvents((current) => removeEventSeries(current,[editingId]))
     closeModal()
   }
@@ -446,7 +447,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
           onChange={setDraft}
           onClose={closeModal}
           onSave={saveDraft}
-          onDeleteOccurrence={editingId && events.find(event=>event.id===editingId)?.recurrence.frequency!=='none' ? deleteOccurrence:undefined}
+          onDeleteOccurrence={editingId && events.find(event=>event.id===editingId)?.recurrence.frequency!=='none' ? detachOccurrence:undefined}
           onDelete={editingId ? deleteEvent : undefined}
         />
       )}

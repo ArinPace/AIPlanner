@@ -15,6 +15,7 @@ export interface Tag {
 }
 
 export interface CalendarEvent {
+  detachedFrom?: string
   excludedStarts?: string[]
   inheritedExcludedStarts?: string[]
   mergedEventIds?: string[]
