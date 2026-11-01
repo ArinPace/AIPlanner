@@ -164,6 +164,14 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
     if (path === '/api/agent/vm' || path.startsWith('/api/agent/vm/')) return await handleVmRequest(request, path, username)
     if (path === '/api/agent/chats' || path === '/api/agent/chats/remove' || path === '/api/agent/mcp/disconnect') return await handleChatLinks(request, path, username)
     if (path.startsWith('/api/agent/')) return await handleAgentRequest(request, path, username)
+    if(path==='/api/calendar/staging/prepare'&&method==='POST'){
+      const input=z.object({refresh:z.boolean().optional()}).parse(await body(request))
+      return json(await (await import('./calendar-staging.js')).prepareCalendarStage(username,input.refresh))
+    }
+    if(['/api/calendar/export.json','/api/calendar/staging.json'].includes(path)&&method==='GET'){
+      const data=await (await import('./calendar-staging.js')).calendarDownload(username,path.endsWith('staging.json'))
+      return new Response(JSON.stringify(data,null,2),{headers:{'Content-Type':'application/json; charset=utf-8','Content-Disposition':'attachment; filename="'+(path.endsWith('staging.json')?'calendar-staging.json':'calendar.json')+'"','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}})
+    }
     if(path==='/api/calendar/google-sync'&&method==='GET')return json(await fixedSyncStatus(username))
     if(path==='/api/calendar/google-sync'&&method==='POST'){await requestFixedSync(username);return json(await fixedSyncStatus(username))}
     if(path==='/api/calendar/history'&&method==='GET'){

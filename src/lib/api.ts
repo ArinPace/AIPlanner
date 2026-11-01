@@ -140,3 +140,10 @@ let googleFinish:Promise<GoogleLoginResult>|undefined
 export function finishGoogleLogin(){return googleFinish??=request<GoogleLoginResult>('/api/auth/google/finish',{method:'POST',body:'{}'}).finally(()=>{setTimeout(()=>{googleFinish=undefined},1000)})}
 export function linkGoogleLogin(identifier:string,password:string){return request<GoogleLoginResult>('/api/auth/google/link',{method:'POST',body:JSON.stringify({identifier,password})})}
 export function createGoogleLogin(){return request<GoogleLoginResult>('/api/auth/google/create',{method:'POST',body:'{}'})}
+
+
+export async function downloadCalendarJson(staging=false){
+ const data=await request<unknown>(staging?'/api/calendar/staging.json':'/api/calendar/export.json')
+ const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}))
+ const a=document.createElement('a');a.href=url;a.download=staging?'calendar-staging.json':'calendar.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)
+}

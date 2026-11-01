@@ -7,7 +7,7 @@ test('Google edits require owner consent/current etag, save a backup first, pres
  const originalFetch=globalThis.fetch,keys=['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','SUPABASE_SECRET_KEY','CONNECTION_ENCRYPTION_KEY'] as const,saved=Object.fromEntries(keys.map(k=>[k,process.env[k]]))
  process.env.SUPABASE_URL='https://database.test';process.env.SUPABASE_SERVICE_ROLE_KEY='service';delete process.env.SUPABASE_SECRET_KEY;process.env.CONNECTION_ENCRYPTION_KEY='ab'.repeat(32)
  const accountId='ee34ba25-54bc-44df-8515-f7e6784dfed1',tokens={access_token:'private-token',scope:GOOGLE_CALENDAR_SCOPE+' '+GOOGLE_CALENDAR_WRITE_SCOPE,expires_at:Date.now()+3600000}
- let canEdit=true,writes=0,backedUp=false,audit:any=null
+ let linked=false,canEdit=true,writes=0,backedUp=false,audit:any=null
  let event:any={id:'existing',etag:'v1',summary:'Call',description:'Preserved notes',attendees:[{email:'friend@example.com'}],start:{dateTime:'2026-10-20T10:00:00-04:00'},end:{dateTime:'2026-10-20T10:30:00-04:00'}}
  globalThis.fetch=async(input,init)=>{
   const request=new Request(input,init),url=new URL(request.url)
@@ -19,6 +19,7 @@ test('Google edits require owner consent/current etag, save a backup first, pres
     const account={id:accountId,identity:'owner@example.com',credentials:sealVmCredential({...tokens,scope:canEdit?tokens.scope:GOOGLE_CALENDAR_SCOPE})}
     return Response.json(url.searchParams.get('id')?account:[account])
    }
+   if(url.pathname.endsWith('planner_google_fixed_events'))return Response.json(linked?{local_id:'class'}:null)
    if(url.pathname.endsWith('planner_calendar_history')){
     const body=await request.json() as any
     if(request.method==='POST'){assert.equal(body.username,'arin');if(body.before)assert.deepEqual(body.before,event);audit=body;backedUp=true;return Response.json({id:42})}
@@ -38,7 +39,10 @@ test('Google edits require owner consent/current etag, save a backup first, pres
  }
  try{
   canEdit=false;await assert.rejects(()=>saveGoogleEvent('arin',{eventId:'existing',etag:'v1',title:'New'}),/read-only/);assert.equal(writes,0)
-  canEdit=true;await assert.rejects(()=>saveGoogleEvent('arin',{eventId:'existing',etag:'stale',title:'New'}),/changed/);assert.equal(writes,0)
+  canEdit=true;linked=true
+  await assert.rejects(()=>saveGoogleEvent('arin',{eventId:'existing',etag:'v1',title:'Bypass'}),/staging draft/)
+  assert.equal(writes,0);linked=false
+  await assert.rejects(()=>saveGoogleEvent('arin',{eventId:'existing',etag:'stale',title:'New'}),/changed/);assert.equal(writes,0)
   await assert.rejects(()=>saveGoogleEvent('arin',{accountId:'bb34ba25-54bc-44df-8515-f7e6784dfed1',eventId:'existing',etag:'v1',title:'New'}),/Connect Google/)
   const result=await saveGoogleEvent('arin',{eventId:'existing',etag:'v1',start:'2026-10-20T11:00:00-04:00',end:'2026-10-20T11:30:00-04:00'})
   assert.equal(result.saved,true);assert.equal(result.event.description,'Preserved notes');assert.equal(result.event.attendees.length,1);assert.equal(audit.kind,'google-updated');assert.equal(audit.after.etag,'v2')

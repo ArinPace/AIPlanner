@@ -20,6 +20,8 @@ export async function saveGoogleEvent(username:string,args:Patch){
  const base='https://www.googleapis.com/calendar/v3/calendars/primary/events',headers={Authorization:'Bearer '+session.tokens.access_token}
  async function read(id:string){const response=await fetch(base+'/'+encodeURIComponent(id),{headers,signal:AbortSignal.timeout(15000)});if(!response.ok)throw new ApiError(response.status===404?404:502,'Could not read this Google event. Check the account and event ID.');return response.json() as Promise<Record<string,any>>}
  const before=args.eventId?await read(args.eventId):null
+ const linked=args.eventId?storage(await db().from('planner_google_fixed_events').select('local_id').eq('username',username).eq('account_id',session.accountId).eq('remote_id',args.eventId).maybeSingle()):null
+ if(linked||before?.extendedProperties?.private?.aipLocalId)throw new ApiError(409,'This event belongs to the Planner sync. Edit and publish its staging draft instead of bypassing review.')
  if(before&&(!args.etag||args.etag!==before.etag))throw new ApiError(409,'Google event changed or etag is missing. Read it again before editing.')
  if(before?.recurrence&&args.scope!=='series')throw new ApiError(400,'This is a recurring Google series. Confirm scope series, or select an individual occurrence ID.')
  if(!before&&!args.requestId)throw new ApiError(400,'New Google events require a stable UUID requestId. Reuse it on retries to prevent duplicates.')

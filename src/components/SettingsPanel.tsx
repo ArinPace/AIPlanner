@@ -1,3 +1,4 @@
+import {downloadCalendarJson} from '../lib/api'
 import { useEffect, useState } from 'react'
 import { applyTheme, readTheme } from '../lib/theme'
 import { DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM, ZOOM_STEP } from '../lib/zoom'
@@ -15,6 +16,7 @@ function shortcutMod(): string {
 }
 
 export function SettingsPanel({ zoom, onZoomChange, onClose }: SettingsPanelProps) {
+  const [downloadError,setDownloadError]=useState('')
   const mod = shortcutMod()
   const [theme, setTheme] = useState(readTheme)
   const [planningOpen,setPlanningOpen]=useState(false)
@@ -45,6 +47,9 @@ export function SettingsPanel({ zoom, onZoomChange, onClose }: SettingsPanelProp
       </label>
       <button type="button" className="today-btn" onClick={()=>setPlanningOpen(true)}>Planning & intensity</button>
       {planningOpen&&<PlanningSettings onClose={()=>setPlanningOpen(false)}/>}
+      <button type="button" className="today-btn" onClick={()=>void downloadCalendarJson().catch(e=>setDownloadError(e.message))}>Download calendar JSON</button>
+      <button type="button" className="today-btn" onClick={()=>void downloadCalendarJson(true).catch(e=>setDownloadError(e.message))}>Download staging JSON</button>
+      {downloadError&&<p className="form-error" role="alert">{downloadError}</p>}
       <label className="settings-field">
         <span>Display size</span>
         <div className="settings-zoom-row">
