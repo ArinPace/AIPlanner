@@ -7,6 +7,12 @@
  let calendar={revision:1,events:[],tags:[{id:'school',name:'Classes',color:'#1a73e8'}],hiddenTagIds:[],zoom:1};
  let files={revision:1,folders:[{id:'school-folder',parentId:null,name:'Subjects',color:'#1a73e8',labels:[],updatedAt:now}],documents:[],files:[{id:'todo',name:'To do',systemRole:'todo',format:'note',folderId:null,content:'- [ ] [urgency:80] Prepare for statistics quiz',updatedAt:now},{id:'work',name:'Work',format:'note',folderId:null,content:'- [ ] [urgency:85] Homework due Friday',updatedAt:now},{id:'note',name:'iPhone test note',format:'note',folderId:null,content:'Your notes stay in the same Planner account.',updatedAt:now}]};
  const main={id:'00000000-0000-4000-8000-000000000001',title:'Main Chat',is_main:true,pinned:true,updated_at:now};
+ // Simulate a change saved by another device while this test app is away.
+ if(globalThis.__plannerFixtureResumeSync)document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden)return;
+  const start=new Date(),end=new Date(start.getTime()+3600000);
+  calendar={...calendar,revision:calendar.revision+1,events:[{id:'resume-sync',title:'Phone resume sync check',description:'Saved on another device',start:start.toISOString(),end:end.toISOString(),allDay:false,tagIds:[],scheduleType:'planned',recurrence:{frequency:'none',interval:1,until:null}}]};
+ });
  const fetchReal=window.fetch.bind(window);
  window.fetch=async(input,options={})=>{
   const raw=typeof input==='string'?input:input.url;const url=new URL(raw,location.href);

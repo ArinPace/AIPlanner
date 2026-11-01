@@ -12,7 +12,7 @@ struct PlannerWebView: UIViewRepresentable {
         config.userContentController.addUserScript(WKUserScript(source: "document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true'});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-UITestFixture"), ["127.0.0.1", "localhost"].contains(AppConfiguration.origin.host ?? ""), let url = Bundle.main.url(forResource: "UITestFixture", withExtension: "js"), let script = try? String(contentsOf: url, encoding: .utf8) {
-            let fixture = (ProcessInfo.processInfo.arguments.contains("-UITestSignedIn") ? "globalThis.__plannerFixtureSignedIn=true;" : "") + script
+            let fixture = (ProcessInfo.processInfo.arguments.contains("-UITestSignedIn") ? "globalThis.__plannerFixtureSignedIn=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestResumeSync") ? "globalThis.__plannerFixtureResumeSync=true;" : "") + script
             config.userContentController.addUserScript(WKUserScript(source: fixture, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         }
         #endif
@@ -29,6 +29,13 @@ struct PlannerWebView: UIViewRepresentable {
         model.reload = { [weak web] in
             guard let web else { return }
             if web.url == nil { web.load(URLRequest(url: AppConfiguration.origin)) } else { web.reload() }
+        }
+        model.resume = { [weak web] in
+            // Wait for WebKit to become visible, then reuse the frontend's
+            // guarded refresh listeners. Do not reload or erase local drafts.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                web?.evaluateJavaScript("window.dispatchEvent(new Event('focus'));") { _, _ in }
+            }
         }
         web.load(URLRequest(url: AppConfiguration.origin))
         return web

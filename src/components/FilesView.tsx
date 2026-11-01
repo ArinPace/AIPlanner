@@ -163,8 +163,10 @@ export function FilesView({ workMode = false, standaloneTodo = false, todoReques
     }
     void refresh()
     const timer = window.setInterval(() => void refresh(), 15000)
+    const resume=()=>{if(document.visibilityState==='visible')void refresh()}
     window.addEventListener('focus', refresh)
-    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener('focus', refresh) }
+    document.addEventListener('visibilitychange',resume)
+    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener('focus', refresh);document.removeEventListener('visibilitychange',resume) }
   }, [active, unsaved])
 
   async function persist(next: FilesState): Promise<boolean> {

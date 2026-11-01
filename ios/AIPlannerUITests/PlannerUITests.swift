@@ -1,10 +1,10 @@
 import XCTest
 
 final class PlannerUITests: XCTestCase {
-    private func launch(signedIn: Bool = true) -> XCUIApplication {
+    private func launch(signedIn: Bool = true, resumeSync: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"
-        app.launchArguments = ["-UITestFixture"] + (signedIn ? ["-UITestSignedIn"] : [])
+        app.launchArguments = ["-UITestFixture"] + (signedIn ? ["-UITestSignedIn"] : []) + (resumeSync ? ["-UITestResumeSync"] : [])
         app.launch(); return app
     }
     override func setUpWithError() throws { continueAfterFailure = false }
@@ -53,4 +53,14 @@ final class PlannerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Copy"].waitForExistence(timeout: 10) || app.buttons["Save to Files"].exists || app.otherElements["ActivityListView"].exists)
         let screenshot = XCTAttachment(screenshot: app.screenshot()); screenshot.name = "iPhone native JSON share"; screenshot.lifetime = .keepAlways; add(screenshot)
     }
+    func testRefreshesSharedCalendarOnReturningToApp() {
+        let app = launch(resumeSync: true)
+        XCTAssertTrue(app.buttons["Calendar"].waitForExistence(timeout: 40))
+        XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Phone resume sync check")).firstMatch.exists)
+        XCUIDevice.shared.press(.home)
+        XCTAssertTrue(XCUIApplication(bundleIdentifier: "com.apple.springboard").wait(for: .runningForeground, timeout: 5))
+        app.activate()
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Phone resume sync check")).firstMatch.waitForExistence(timeout: 5))
+    }
+
 }

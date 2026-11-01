@@ -222,9 +222,11 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
     }
     void refresh()
     const timer = window.setInterval(() => void refresh(), 15000)
+    const resume=()=>{if(document.visibilityState==='visible')void refresh()}
     window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange',resume)
     window.addEventListener('planner-calendar-refresh',refresh)
-    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener('focus', refresh);window.removeEventListener('planner-calendar-refresh',refresh) }
+    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener('focus', refresh);document.removeEventListener('visibilitychange',resume);window.removeEventListener('planner-calendar-refresh',refresh) }
   }, [tab, loaded, loadError, draft, events, tags, hiddenTagIds, zoom, applyState])
 
   useDatePinch(mainRef, setView, loaded && tab === 'calendar')

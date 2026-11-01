@@ -7,11 +7,13 @@ import SafariServices
     @Published var sharedFile: SharedFile?
     @Published var browser: BrowserDestination?
     var reload: (() -> Void)?
+    var resume: (() -> Void)?
 }
 struct SharedFile: Identifiable { let id = UUID(); let url: URL }
 struct BrowserDestination: Identifiable { let id = UUID(); let url: URL }
 
 struct PlannerScreen: View {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var model = PlannerModel()
     var body: some View {
         ZStack {
@@ -30,6 +32,7 @@ struct PlannerScreen: View {
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
             }
         }
+        .onChange(of: scenePhase) { _, phase in if phase == .active { model.resume?() } }
         .sheet(item: $model.sharedFile) { item in ShareSheet(url: item.url) }
         .sheet(item: $model.browser) { item in SiteBrowser(url: item.url).ignoresSafeArea() }
     }
