@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import path from 'node:path'
 const extension=path.resolve('chat-extension')
 const context=await chromium.launchPersistentContext('data/relay-regression-'+Date.now(),{
- channel:'msedge',headless:true,args:['--disable-extensions-except='+extension,'--load-extension='+extension],
+ ...(process.env.RELAY_TEST_BROWSER_EXECUTABLE?{executablePath:process.env.RELAY_TEST_BROWSER_EXECUTABLE}:{channel:process.env.RELAY_TEST_BROWSER_CHANNEL||'msedge'}),headless:true,args:['--disable-extensions-except='+extension,'--load-extension='+extension],
 })
 try{
  await context.route('https://aiplanner-ten.vercel.app/**',route=>route.fulfill({contentType:'text/html',body:`
