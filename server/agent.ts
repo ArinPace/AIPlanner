@@ -1,3 +1,4 @@
+import {nativeConnectionReturn} from './native-auth.js'
 import { refreshSubjectOverview,subjectTitle } from './subject-folders.js'
 import { cleanupBinStorage } from './files-bin.js'
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
@@ -73,7 +74,7 @@ async function oauthCallback(request: Request, provider: string) {
   const cookie = request.headers.get('cookie')?.split(';').map(x=>x.trim()).find(x=>x.startsWith('planner-oauth='))?.slice(14) || ''
   const attempt = check(await db().from('planner_oauth_attempts').delete().eq('state_hash', sha(state)).eq('provider', provider).gt('expires_at', new Date().toISOString()).select('*').maybeSingle())
   if (!attempt || !cookie || sha(cookie) !== attempt.browser_hash) throw new ApiError(400, 'This connection attempt expired or belongs to a different browser. Start again from the planner.')
-  if (url.searchParams.has('error')) return Response.redirect(`${ORIGIN}/?connection=cancelled`, 303)
+  if (url.searchParams.has('error')) return nativeConnectionReturn(request,'cancelled')||Response.redirect(`${ORIGIN}/?connection=cancelled`, 303)
   const code = url.searchParams.get('code'); if (!code) throw new ApiError(400, 'The provider did not return an authorization code.')
   const config = oauthConfig(provider)
   const headers: Record<string, string> = { 'Content-Type': 'application/x-www-form-urlencoded' }
@@ -100,7 +101,7 @@ async function oauthCallback(request: Request, provider: string) {
     check(await db().from('planner_vm_settings').upsert({username:attempt.username,google_account_id:account.id},{onConflict:'username'}))
     await (await import('./google-fixed-sync.js')).enqueueFixedSync(attempt.username)
   } else check(await db().from('planner_connections').upsert({ username: attempt.username, provider, identity, credentials, updated_at: new Date().toISOString() }))
-  return new Response(null, { status: 303, headers: { Location: `${ORIGIN}/?connection=connected`, 'Set-Cookie': 'planner-oauth=; HttpOnly; Secure; SameSite=Lax; Path=/api/agent/oauth; Max-Age=0', 'Cache-Control': 'no-store' } })
+  return nativeConnectionReturn(request,'connected')||new Response(null, { status: 303, headers: { Location: `${ORIGIN}/?connection=connected`, 'Set-Cookie': 'planner-oauth=; HttpOnly; Secure; SameSite=Lax; Path=/api/agent/oauth; Max-Age=0', 'Cache-Control': 'no-store' } })
 }
 async function googleTokens(username: string) {
   const connection = check(await db().from('planner_connections').select('*').eq('username', username).eq('provider', 'google').maybeSingle())

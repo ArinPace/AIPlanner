@@ -1,3 +1,4 @@
+import {isIPhoneApp,nativeRequest} from '../lib/platform'
 import { useEffect, useState, type FormEvent } from 'react'
 import { login, register, setToken, authOptions, startGoogleLogin, finishGoogleLogin, linkGoogleLogin, createGoogleLogin, type GoogleLoginResult } from '../lib/api'
 import { CalendarMark } from './Icons'
@@ -51,7 +52,7 @@ export function LoginScreen({onSignedIn}:{onSignedIn:(username:string)=>void}) {
     </> : <>
       {googleEnabled&&<button type="button" className="secondary-btn login-submit" disabled={busy} onClick={async()=>{
         setError('');setBusy(true)
-        try{const result=await startGoogleLogin();location.assign(result.url)}catch(err){setError(err instanceof Error?err.message:'Could not open Google sign-in.');setBusy(false)}
+        try{if(isIPhoneApp()){await nativeRequest({action:'googleSignIn'});location.assign('/?google_login=success')}else{const result=await startGoogleLogin();location.assign(result.url)}}catch(err){setError(err instanceof Error?err.message:'Could not open Google sign-in.');setBusy(false)}
       }}>Continue with Google</button>}
       <div className="login-switch" role="tablist" aria-label="Account mode">
         <button type="button" role="tab" aria-selected={mode==='login'} className={mode==='login'?'is-active':''} onClick={()=>setMode('login')}>Sign in</button>

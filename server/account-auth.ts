@@ -1,3 +1,4 @@
+import {nativeContext,nativeLoginResult,redeemNativeLogin,nativeConnectionBootstrap,nativeConnectionStart,type NativeContext} from './native-auth.js'
 import {randomBytes,createHash,timingSafeEqual} from 'node:crypto'
 import {createRemoteJWKSet,jwtVerify,type JWTVerifyGetKey} from 'jose'
 import {ApiError,body,db,json,sessionToken} from './cloud.js'
@@ -60,22 +61,24 @@ async function complete(request:Request,action:string){
  }
  throw new ApiError(400,'Choose a sign-in action.')
 }
-async function start(request:Request){
+async function start(request:Request,native?:NativeContext){
  sameOrigin(request)
  if(!process.env.GOOGLE_CLIENT_ID||!process.env.GOOGLE_CLIENT_SECRET)throw new ApiError(503,'Google sign-in is not configured yet.')
  const state='login_'+randomBytes(32).toString('hex'),verifier=randomBytes(32).toString('base64url'),nonce=randomBytes(24).toString('hex')
- const sealed=sealVmCredential({kind:'planner-google-login',state,verifier,nonce,expiresAt:Date.now()+600000})
+ const sealed=sealVmCredential({kind:'planner-google-login',state,verifier,nonce,...(native?{native}:{}),expiresAt:Date.now()+600000})
  const url=new URL('https://accounts.google.com/o/oauth2/v2/auth')
  url.search=new URLSearchParams({client_id:process.env.GOOGLE_CLIENT_ID,redirect_uri:ORIGIN+CALLBACK,response_type:'code',scope:'openid email profile',state,nonce,code_challenge:createHash('sha256').update(verifier).digest('base64url'),code_challenge_method:'S256',prompt:'select_account'}).toString()
- return setCookie(json({url:url.toString()}),STATE_COOKIE,sealed,600,CALLBACK)
+ return setCookie(native?new Response(null,{status:303,headers:{Location:url.toString(),'Cache-Control':'no-store'}}):json({url:url.toString()}),STATE_COOKIE,sealed,600,CALLBACK)
 }
 async function callback(request:Request){
  const url=new URL(request.url)
- const response=(status:string)=>setCookie(new Response(null,{status:303,headers:{Location:ORIGIN+'/?google_login='+status,'Cache-Control':'no-store'}}),STATE_COOKIE,'',0,CALLBACK)
+ let native:NativeContext|undefined
+ const response=(status:string)=>setCookie(native?nativeLoginResult(status,native):new Response(null,{status:303,headers:{Location:ORIGIN+'/?google_login='+status,'Cache-Control':'no-store'}}),STATE_COOKIE,'',0,CALLBACK)
  try{
-  const attempt=openVmCredential(cookie(request,STATE_COOKIE)) as unknown as {kind:string;state:string;verifier:string;nonce:string;expiresAt:number}
+  const attempt=openVmCredential(cookie(request,STATE_COOKIE)) as unknown as {kind:string;state:string;verifier:string;nonce:string;expiresAt:number;native?:NativeContext}
   const state=url.searchParams.get('state')||''
   if(attempt.kind!=='planner-google-login'||attempt.expiresAt<=Date.now()||state.length!==attempt.state.length||!timingSafeEqual(Buffer.from(state),Buffer.from(attempt.state)))throw new Error('Invalid login state')
+  native=attempt.native
   if(url.searchParams.get('error'))return response('cancelled')
   const code=url.searchParams.get('code');if(!code)throw new Error('Missing authorization code')
   const tokens=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'authorization_code',code,client_id:process.env.GOOGLE_CLIENT_ID!,client_secret:process.env.GOOGLE_CLIENT_SECRET!,redirect_uri:ORIGIN+CALLBACK,code_verifier:attempt.verifier}),signal:AbortSignal.timeout(15000)})
@@ -84,11 +87,15 @@ async function callback(request:Request){
   const identity=await verifyGoogleIdentity(result.id_token,attempt.nonce),ticket=createToken()
   check(await db().from('planner_login_tickets').delete().lt('expires_at',new Date().toISOString()))
   check(await db().from('planner_login_tickets').insert({token_hash:tokenHash(ticket),...identity,expires_at:new Date(Date.now()+600000).toISOString()}))
-  return setCookie(response('success'),TICKET_COOKIE,ticket,600)
+  return native?setCookie(nativeLoginResult('success',native,ticket),STATE_COOKIE,'',0,CALLBACK):setCookie(response('success'),TICKET_COOKIE,ticket,600)
  }catch{console.error('Google account sign-in could not finish.');return response('failed')}
 }
 export async function handleAccountAuth(request:Request,path:string):Promise<Response|null>{
  const method=request.method
+ if(path==='/api/auth/google/native/start'&&method==='GET')return start(request,nativeContext(new URL(request.url)))
+ if(path==='/api/auth/google/native/redeem'&&method==='POST')return redeemNativeLogin(request)
+ if(path==='/api/auth/native/connection/bootstrap'&&method==='POST')return nativeConnectionBootstrap(request)
+ if(path==='/api/auth/native/connection/start'&&method==='GET')return nativeConnectionStart(request)
  if(path===CALLBACK&&new URL(request.url).searchParams.get('state')?.startsWith('login_'))return callback(request)
  if(path==='/api/auth/options'&&method==='GET')return json({googleEnabled:Boolean(process.env.GOOGLE_CLIENT_ID&&process.env.GOOGLE_CLIENT_SECRET&&process.env.CONNECTION_ENCRYPTION_KEY),pendingGoogle:Boolean(cookie(request,TICKET_COOKIE))})
  if(path==='/api/auth/google/start'&&method==='POST')return start(request)

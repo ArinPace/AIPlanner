@@ -297,3 +297,7 @@ Custom repeat supports selected weekdays (Sunday=0 through Saturday=6), a week i
 On macOS, run `npm ci` in the repository and `npm ci --prefix worker` to regenerate native dependencies instead of copying Windows node_modules. `scripts/connect-chrome.sh` checks the existing browser-harness daemon and makes at most one connection attempt when Chrome is running. The local LaunchAgent `com.aiplanner.chrome-debug` runs it once at login; it does not loop permission prompts. Chrome may require a fresh approval after a restart. The local `.vercel/project.json` linkage is ignored by Git.
 
 In Custom repeat, **Days of the week** plus an interval of 2 means every other selected weekday, while interval 4 means every fourth week. **Dates of the month** selects one or more dates from 1–31, with an interval measured in months. Dates absent from a month are skipped, not moved to another date. To-do and Work keep their dedicated note features without a pin control.
+
+## iPhone app
+
+The native Xcode project is in [ios/AIPlanner.xcodeproj](ios/AIPlanner.xcodeproj). See [iPhone setup and scope](ios/README.md), or run `npm run ios` on a Mac with an iPhone simulator installed. It uses the existing Planner backend and account, includes the Agent tab, and omits the experimental Chat relay tab. The VM-free subscription/browser agent is a separate integration, not implied by the iPhone build.

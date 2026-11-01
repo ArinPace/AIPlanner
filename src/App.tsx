@@ -1,3 +1,4 @@
+import {isIPhoneApp} from './lib/platform'
 import {ChatExperiment} from './components/ChatExperiment'
 import {RECOVERY_TAB} from './lib/attachmentRecovery'
 import { PlannerDate as Date } from './lib/timezone.js'
@@ -367,7 +368,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
 
       <div className="files-tab-panel" hidden={tab !== 'files' && tab !== 'todo' && tab !== 'work'}><FilesView standaloneTodo={tab==='todo'||tab==='work'} workMode={tab==='work'} sidebar={filesSidebar} setSidebar={setFilesSidebar} username={username} active={tab === 'files' || tab === 'todo' || tab === 'work'} todoRequest={todoRequest} onUnsavedChange={setFilesUnsaved} /></div>
       <div className="agent-tab-panel" hidden={tab !== 'agent'}><AgentView username={username} sidebar={agentSidebar} setSidebar={setAgentSidebar} active={tab === 'agent'} /></div>
-      {username==='arin' && <div className="chat-tab-panel" hidden={tab!=='chat'}><ChatExperiment active={tab==='chat'} username={username}/></div>}
+      {username==='arin' && !isIPhoneApp() && <div className="chat-tab-panel" hidden={tab!=='chat'}><ChatExperiment active={tab==='chat'} username={username}/></div>}
       <div className="app-body" hidden={tab !== 'calendar'}>
         <Sidebar
           events={events}

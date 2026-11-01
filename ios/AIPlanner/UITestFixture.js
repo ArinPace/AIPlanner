@@ -1,0 +1,30 @@
+// Loaded only by a DEBUG simulator UI-test launch against loopback, never Release.
+(()=>{
+ let signedIn=globalThis.__plannerFixtureSignedIn===true;
+ localStorage.removeItem('ai-planner-token');
+ if(signedIn)localStorage.setItem('ai-planner-token','fixture-session');
+ const now=new Date().toISOString();
+ let calendar={revision:1,events:[],tags:[{id:'school',name:'Classes',color:'#1a73e8'}],hiddenTagIds:[],zoom:1};
+ let files={revision:1,folders:[{id:'school-folder',parentId:null,name:'Subjects',color:'#1a73e8',labels:[],updatedAt:now}],documents:[],files:[{id:'todo',name:'To do',systemRole:'todo',format:'note',folderId:null,content:'- [ ] [urgency:80] Prepare for statistics quiz',updatedAt:now},{id:'work',name:'Work',format:'note',folderId:null,content:'- [ ] [urgency:85] Homework due Friday',updatedAt:now},{id:'note',name:'iPhone test note',format:'note',folderId:null,content:'Your notes stay in the same Planner account.',updatedAt:now}]};
+ const main={id:'00000000-0000-4000-8000-000000000001',title:'Main Chat',is_main:true,pinned:true,updated_at:now};
+ const fetchReal=window.fetch.bind(window);
+ window.fetch=async(input,options={})=>{
+  const raw=typeof input==='string'?input:input.url;const url=new URL(raw,location.href);
+  if(!url.pathname.startsWith('/api/'))return fetchReal(input,options);
+  const path=url.pathname,method=options.method||'GET';let value={};
+  if(path==='/api/session')value={username:signedIn?'arin':null};
+  else if(path==='/api/auth/options')value={googleEnabled:true,pendingGoogle:false};
+  else if(path==='/api/login'||path==='/api/register'){signedIn=true;value={username:'arin',token:'fixture-session'}}
+  else if(path==='/api/logout'){signedIn=false;value={ok:true}}
+  else if(path==='/api/calendar'){if(method==='PUT'){calendar={...JSON.parse(options.body),revision:calendar.revision+1};value={ok:true,revision:calendar.revision}}else value=calendar}
+  else if(path==='/api/files'){if(method==='PUT'){files={...JSON.parse(options.body),revision:files.revision+1};value={ok:true,revision:files.revision}}else value=files}
+  else if(path==='/api/calendar/google-sync')value={connected:true,reviewRequired:true,pending:true,error:null,identity:'fixture@example.com'};
+  else if(path==='/api/calendar/export.json')value={format:'ai-planner-calendar',formatVersion:1,calendar};
+  else if(path==='/api/calendar/staging.json')value={format:'ai-planner-calendar-stage',formatVersion:1,status:'draft',payload:{calendar}};
+  else if(path==='/api/agent/vm')value={power:'offline',hosts:[],chats:[main],deletedChats:[],runs:[],settings:{ai_provider:'codex',sources:[],sites:{},schedule_enabled:false,schedule:{timezone:'America/New_York',times:[]}},accounts:[],google:{accounts:[],connected:false,configured:true,activeAccountId:null},queue:{active:null,queuedIds:[]},planning:{startedAt:now,ready:true,revision:1},provisioning:null,personalChatGptAvailable:true,hostedChatGptAvailable:false,recordings:false};
+  else if(path.includes('/jobs'))value={jobs:[],hasMore:false};
+  else if(path==='/api/planning')value={preferences:{intensity:20},tasks:[]};
+  else value={items:[],chats:[main],jobs:[],hasMore:false};
+  return new Response(JSON.stringify(value),{status:200,headers:{'Content-Type':'application/json'}});
+ };
+})();

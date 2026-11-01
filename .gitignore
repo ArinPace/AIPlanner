@@ -32,3 +32,8 @@ data/
 .vercel/
 .env*
 !.env.example
+
+# Xcode build output and personal signing settings
+ios/build/
+ios/**/xcuserdata/
+ios/**/*.xcuserstate

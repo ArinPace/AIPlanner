@@ -1,3 +1,4 @@
+import {isIPhoneApp,nativeRequest} from './platform'
 import type { StoredState } from '../types'
 import { DEFAULT_TAGS } from './storage'
 import type { FilesState } from './files'
@@ -144,6 +145,7 @@ export function createGoogleLogin(){return request<GoogleLoginResult>('/api/auth
 
 export async function downloadCalendarJson(staging=false){
  const data=await request<unknown>(staging?'/api/calendar/staging.json':'/api/calendar/export.json')
+ if(isIPhoneApp()){await nativeRequest({action:'downloadText',name:staging?'calendar-staging.json':'calendar.json',text:JSON.stringify(data,null,2)});return}
  const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}))
  const a=document.createElement('a');a.href=url;a.download=staging?'calendar-staging.json':'calendar.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)
 }

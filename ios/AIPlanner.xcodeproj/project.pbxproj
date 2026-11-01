@@ -1,0 +1,46 @@
+// !$*UTF8*$!
+{archiveVersion = 1; classes = {}; objectVersion = 56; objects = {
+468E1EFC485461A13F772A9B = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIPlannerApp.swift; sourceTree = "<group>";};
+BC64D87B7B585C5A2A0650CB = {isa = PBXBuildFile; fileRef = 468E1EFC485461A13F772A9B;};
+6A173FAE6A6CE2B833F169D3 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfiguration.swift; sourceTree = "<group>";};
+D518A63D9718D955905D2A2A = {isa = PBXBuildFile; fileRef = 6A173FAE6A6CE2B833F169D3;};
+96F150B5D75FA26CF9EB8CFB = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlannerScreen.swift; sourceTree = "<group>";};
+5BF6FE0B6DED4B4F507AE25D = {isa = PBXBuildFile; fileRef = 96F150B5D75FA26CF9EB8CFB;};
+C0635749205FA9D608621B53 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlannerWebView.swift; sourceTree = "<group>";};
+D1E4E6F11FE11533500ED179 = {isa = PBXBuildFile; fileRef = C0635749205FA9D608621B53;};
+506DDB4FB555EC4D72A947D5 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeAuthentication.swift; sourceTree = "<group>";};
+6D899446BF30B531574A291C = {isa = PBXBuildFile; fileRef = 506DDB4FB555EC4D72A947D5;};
+7B594B6DB375E1BF3F23CDD6 = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>";};
+28AAD1477D5182D66D4B03B3 = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>";};
+2537154DE24E02FEF8750CD9 = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = UITestFixture.js; sourceTree = "<group>";};
+222F0DBFFE5EB23DCD3FD16F = {isa = PBXBuildFile; fileRef = 28AAD1477D5182D66D4B03B3;};
+24F88BC2A69FB22CE43C0D00 = {isa = PBXBuildFile; fileRef = 2537154DE24E02FEF8750CD9;};
+C1BCCE501AEDC0264BA39582 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlannerUITests.swift; sourceTree = "<group>";};
+52B66C0F5E869D612E6AFDA0 = {isa = PBXBuildFile; fileRef = C1BCCE501AEDC0264BA39582;};
+4E783A9E10D2A8ABA38CD11C = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AIPlanner.app; sourceTree = BUILT_PRODUCTS_DIR;};
+6C7CCDEB3609F1FAA874E941 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AIPlannerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR;};
+EAE9011C23DCA5E5F486AF2D = {isa = PBXGroup; path = AIPlanner; sourceTree = "<group>"; children = (468E1EFC485461A13F772A9B,6A173FAE6A6CE2B833F169D3,96F150B5D75FA26CF9EB8CFB,C0635749205FA9D608621B53,506DDB4FB555EC4D72A947D5,7B594B6DB375E1BF3F23CDD6,28AAD1477D5182D66D4B03B3,2537154DE24E02FEF8750CD9);};
+85C5DB4F40FFFAEAACDDBAA2 = {isa = PBXGroup; path = AIPlannerUITests; sourceTree = "<group>"; children = (C1BCCE501AEDC0264BA39582);};
+A511EC6FC8BCAFC6B21CD81D = {isa = PBXGroup; name = Products; sourceTree = "<group>"; children = (4E783A9E10D2A8ABA38CD11C,6C7CCDEB3609F1FAA874E941);};
+22EA56DD29576E62BCCCA1AA = {isa = PBXGroup; sourceTree = "<group>"; children = (EAE9011C23DCA5E5F486AF2D,85C5DB4F40FFFAEAACDDBAA2,A511EC6FC8BCAFC6B21CD81D);};
+949D493B91791558E87BC5D7 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (BC64D87B7B585C5A2A0650CB,D518A63D9718D955905D2A2A,5BF6FE0B6DED4B4F507AE25D,D1E4E6F11FE11533500ED179,6D899446BF30B531574A291C); runOnlyForDeploymentPostprocessing = 0;};
+8ECC8B5D05B79F879ACDF1A2 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (222F0DBFFE5EB23DCD3FD16F,24F88BC2A69FB22CE43C0D00); runOnlyForDeploymentPostprocessing = 0;};
+BD92572B49AC16A86614498D = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
+77A03FEE20FE96AD9384861E = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (52B66C0F5E869D612E6AFDA0); runOnlyForDeploymentPostprocessing = 0;};
+D5C76E148680C094C001AC35 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
+E05DB79C430AA1B0BA487AFC = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
+ED8772ADEC3A6C25161BC957 = {isa = XCBuildConfiguration; name = Debug; buildSettings = {CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0; DEBUG_INFORMATION_FORMAT = dwarf; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)"; ENABLE_TESTABILITY = YES;};};
+F8975E934DA2067E0E497395 = {isa = XCBuildConfiguration; name = Debug; buildSettings = {PRODUCT_BUNDLE_IDENTIFIER = com.arinpace.aiplanner; PRODUCT_NAME = "$(TARGET_NAME)"; INFOPLIST_FILE = AIPlanner/Info.plist; GENERATE_INFOPLIST_FILE = NO; CODE_SIGN_STYLE = Automatic; TARGETED_DEVICE_FAMILY = 1; ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CURRENT_PROJECT_VERSION = 1; MARKETING_VERSION = 1.0; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";};};
+C449802CFC00FE43A29E0F19 = {isa = XCBuildConfiguration; name = Debug; buildSettings = {PRODUCT_BUNDLE_IDENTIFIER = com.arinpace.aiplanner.uitests; PRODUCT_NAME = "$(TARGET_NAME)"; GENERATE_INFOPLIST_FILE = YES; CODE_SIGN_STYLE = Automatic; TARGETED_DEVICE_FAMILY = 1; TEST_TARGET_NAME = AIPlanner;};};
+00F209874A1F7309F6DCEAA7 = {isa = XCBuildConfiguration; name = Release; buildSettings = {CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0; SWIFT_OPTIMIZATION_LEVEL = "-O"; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"; VALIDATE_PRODUCT = YES;};};
+F72D4F08E84CA4C7F809A7CF = {isa = XCBuildConfiguration; name = Release; buildSettings = {PRODUCT_BUNDLE_IDENTIFIER = com.arinpace.aiplanner; PRODUCT_NAME = "$(TARGET_NAME)"; INFOPLIST_FILE = AIPlanner/Info.plist; GENERATE_INFOPLIST_FILE = NO; CODE_SIGN_STYLE = Automatic; TARGETED_DEVICE_FAMILY = 1; ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CURRENT_PROJECT_VERSION = 1; MARKETING_VERSION = 1.0; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";};};
+C4D458CFDB61996E24F4F16F = {isa = XCBuildConfiguration; name = Release; buildSettings = {PRODUCT_BUNDLE_IDENTIFIER = com.arinpace.aiplanner.uitests; PRODUCT_NAME = "$(TARGET_NAME)"; GENERATE_INFOPLIST_FILE = YES; CODE_SIGN_STYLE = Automatic; TARGETED_DEVICE_FAMILY = 1; TEST_TARGET_NAME = AIPlanner;};};
+96316AF13F45443E4E9C4BA0 = {isa = XCConfigurationList; buildConfigurations = (ED8772ADEC3A6C25161BC957,00F209874A1F7309F6DCEAA7); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;};
+277EF9D2908DE87D83B8FECE = {isa = XCConfigurationList; buildConfigurations = (F8975E934DA2067E0E497395,F72D4F08E84CA4C7F809A7CF); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;};
+0B9C531D8D86E4E4E21E4B5A = {isa = XCConfigurationList; buildConfigurations = (C449802CFC00FE43A29E0F19,C4D458CFDB61996E24F4F16F); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;};
+7E85D4A68785761E1DBB22D8 = {isa = PBXContainerItemProxy; containerPortal = 98F54143AB4E86B28C3AFEE0; proxyType = 1; remoteGlobalIDString = F75109BEB4DD8800DA6B45F8; remoteInfo = AIPlanner;};
+BAE932EF166B50AB877FDC6F = {isa = PBXTargetDependency; target = F75109BEB4DD8800DA6B45F8; targetProxy = 7E85D4A68785761E1DBB22D8;};
+F75109BEB4DD8800DA6B45F8 = {isa = PBXNativeTarget; buildConfigurationList = 277EF9D2908DE87D83B8FECE; buildPhases = (949D493B91791558E87BC5D7,BD92572B49AC16A86614498D,8ECC8B5D05B79F879ACDF1A2); buildRules = (); dependencies = (); name = AIPlanner; productName = AIPlanner; productReference = 4E783A9E10D2A8ABA38CD11C; productType = "com.apple.product-type.application";};
+C062A5A4A7F4F37DD90F54CB = {isa = PBXNativeTarget; buildConfigurationList = 0B9C531D8D86E4E4E21E4B5A; buildPhases = (77A03FEE20FE96AD9384861E,E05DB79C430AA1B0BA487AFC,D5C76E148680C094C001AC35); buildRules = (); dependencies = (BAE932EF166B50AB877FDC6F); name = AIPlannerUITests; productName = AIPlannerUITests; productReference = 6C7CCDEB3609F1FAA874E941; productType = "com.apple.product-type.bundle.ui-testing";};
+98F54143AB4E86B28C3AFEE0 = {isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 1640; TargetAttributes = {F75109BEB4DD8800DA6B45F8 = {CreatedOnToolsVersion = 16.4;};C062A5A4A7F4F37DD90F54CB = {CreatedOnToolsVersion = 16.4; TestTargetID = F75109BEB4DD8800DA6B45F8;};};}; buildConfigurationList = 96316AF13F45443E4E9C4BA0; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en,Base); mainGroup = 22EA56DD29576E62BCCCA1AA; productRefGroup = A511EC6FC8BCAFC6B21CD81D; projectDirPath = ""; projectRoot = ""; targets = (F75109BEB4DD8800DA6B45F8,C062A5A4A7F4F37DD90F54CB);};
+}; rootObject = 98F54143AB4E86B28C3AFEE0; }
