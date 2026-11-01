@@ -13,6 +13,11 @@
   const start=new Date(),end=new Date(start.getTime()+3600000);
   calendar={...calendar,revision:calendar.revision+1,events:[{id:'resume-sync',title:'Phone resume sync check',description:'Saved on another device',start:start.toISOString(),end:end.toISOString(),allDay:false,tagIds:[],scheduleType:'planned',recurrence:{frequency:'none',interval:1,until:null}}]};
  });
+ if(globalThis.__plannerFixtureFocusZoom)document.addEventListener('DOMContentLoaded',()=>{
+  const probe=document.createElement('output');probe.id='fixture-viewport-scale';probe.setAttribute('role','status');probe.style.cssText='position:fixed;top:0;left:0;z-index:10000;font-size:10px;pointer-events:none;background:white;color:black';document.body.append(probe);
+  const update=()=>{probe.textContent='Viewport scale '+(window.visualViewport?.scale||1).toFixed(2)};
+  update();window.visualViewport?.addEventListener('resize',update);window.visualViewport?.addEventListener('scroll',update);document.addEventListener('focusin',()=>setTimeout(update,350));document.addEventListener('focusout',()=>setTimeout(update,350));
+ });
  const fetchReal=window.fetch.bind(window);
  window.fetch=async(input,options={})=>{
   const raw=typeof input==='string'?input:input.url;const url=new URL(raw,location.href);

@@ -12,4 +12,11 @@ xcrun simctl bootstatus "$planner_simulator_id" -b
 xcodebuild -project ios/AIPlanner.xcodeproj -scheme AIPlanner -destination "platform=iOS Simulator,id=$planner_simulator_id" -derivedDataPath ios/build CODE_SIGNING_ALLOWED=NO build
 xcrun simctl install "$planner_simulator_id" ios/build/Build/Products/Debug-iphonesimulator/AIPlanner.app
 xcrun simctl launch "$planner_simulator_id" com.arinpace.aiplanner
-open -a Simulator
+planner_developer_dir="$(xcode-select -p)"
+if [[ -d "$planner_developer_dir/Applications/Simulator.app" ]]; then
+  open "$planner_developer_dir/Applications/Simulator.app"
+elif [[ -d "$planner_developer_dir/../Applications/DeviceHub.app" ]]; then
+  open "$planner_developer_dir/../Applications/DeviceHub.app"
+else
+  open -a Simulator
+fi

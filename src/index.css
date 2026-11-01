@@ -2244,3 +2244,17 @@ html, body { touch-action: pan-x pan-y; }
 
 .login-card > *, .login-brand > div { min-width: 0; }
 .login-card .form-error { overflow-wrap: anywhere; word-break: break-word; }
+
+/* Keep iPhone focus from magnifying small editable text, in either orientation.
+   Preserve the intentionally larger event and note titles. */
+@supports (-webkit-touch-callout: none) {
+  @media (pointer: coarse), (hover: none) {
+    input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']):not([type='button']):not([type='submit']):not(.title-input),
+    textarea:not(.apple-note-title), select,
+    [contenteditable='true'],
+    [contenteditable='true'] :is(p, li, td, th, pre, code, span) {
+      font-size: max(16px, 1em) !important;
+    }
+    .apple-note-document input.task-urgency { min-height: 26px; line-height: 1.1; }
+  }
+}

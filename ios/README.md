@@ -1,8 +1,16 @@
 # AI Planner for iPhone
 
-Open [AIPlanner.xcodeproj](AIPlanner.xcodeproj) in Xcode, select the **AIPlanner** scheme and an iPhone simulator, and press Run. The minimum OS is iOS 17; Xcode 16.4 and the iOS 18.5 simulator were used for development.
+Open [AIPlanner.xcodeproj](AIPlanner.xcodeproj) in Xcode, select the **AIPlanner** scheme and an iPhone simulator, and press Run. The minimum OS is iOS 17; Simulator checks cover iOS 18.5 and iOS 27.2; the current toolchain is Xcode 27.2.
 
 From the repository root, `npm run ios` builds, installs and launches an available iPhone simulator. No Apple Developer membership or signing identity is needed for the simulator. A specific simulator UUID can be supplied to `scripts/run-ios-simulator.sh`.
+
+## Shared changes and updates
+
+Unless the user specifically requests a web-only or iOS-only change, implement shared feature and behavior changes for both. The native app loads the production frontend, so deployed web-interface and backend changes reach both clients when the page is next loaded. Saved account data is shared immediately through the existing revision-checked backend. A deployment does not replace an already open page mid-edit; reopen the app to load the new interface safely.
+
+Swift code, permissions, URL schemes and other native configuration changes require a new signed app build. During development use Xcode Run; for regular beta distribution use TestFlight, and later App Store updates. Replacing a signed build while retaining the same app identity preserves the existing account-backed data. Do not automatically reload a page while the user is typing.
+
+Xcode 27 uses Device Hub for simulator windows; the launch script supports Device Hub and the older Simulator app. Physical-device signing requires the owner's Apple Account/team and device trust/Developer Mode. No signing secrets or personal team settings should be committed.
 
 ## What this app contains
 
@@ -36,7 +44,7 @@ The intended future agent must use the user's ChatGPT subscription and retain an
 
 ## Verification
 
-The UI-test target runs the actual frontend from a loopback Vite server with isolated API fixtures. It never logs into or edits a real user's account. Start `npm run dev -- --host 127.0.0.1 --port 5174`, then run the **AIPlanner** scheme's tests in Xcode. Tests cover sign-in, omission of Chat, the other Planner tabs, calendar event creation, and native JSON sharing.
+The UI-test target runs the actual frontend from a loopback Vite server with isolated API fixtures. It never logs into or edits a real user's account. Start `npm run dev -- --host 127.0.0.1 --port 5174`, then run the **AIPlanner** scheme's tests in Xcode. Tests cover sign-in, Google sign-in cancellation, omission of Chat, the other Planner tabs, calendar event creation, native JSON sharing, foreground sync, and text-field focus/dismissal without viewport zoom.
 
 The fixture loader exists only under `#if DEBUG` and additionally requires an explicit UI-test launch argument and a loopback app origin. Release builds always use the production origin.
 

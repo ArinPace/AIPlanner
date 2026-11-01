@@ -1,10 +1,10 @@
 import XCTest
 
 final class PlannerUITests: XCTestCase {
-    private func launch(signedIn: Bool = true, resumeSync: Bool = false) -> XCUIApplication {
+    private func launch(signedIn: Bool = true, resumeSync: Bool = false, focusZoom: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"
-        app.launchArguments = ["-UITestFixture"] + (signedIn ? ["-UITestSignedIn"] : []) + (resumeSync ? ["-UITestResumeSync"] : [])
+        app.launchArguments = ["-UITestFixture"] + (signedIn ? ["-UITestSignedIn"] : []) + (resumeSync ? ["-UITestResumeSync"] : []) + (focusZoom ? ["-UITestFocusZoom"] : [])
         app.launch(); return app
     }
     override func setUpWithError() throws { continueAfterFailure = false }
@@ -82,6 +82,31 @@ final class PlannerUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "AuthenticationServices")).firstMatch.exists)
         XCTAssertEqual(before.width, identifier.frame.width, accuracy: 1)
         XCTAssertLessThanOrEqual(identifier.frame.maxX, app.windows.firstMatch.frame.maxX)
+    }
+
+    func testEditableFieldsKeepViewportScaleAfterFocusAndDismissal() {
+        let app = launch(focusZoom: true)
+        XCTAssertTrue(app.buttons["Calendar"].waitForExistence(timeout: 40))
+        let scale = app.staticTexts["Viewport scale 1.00"]
+        XCTAssertTrue(scale.waitForExistence(timeout: 5))
+        app.buttons["Agent"].tap()
+        let message = app.textViews["Message your assistant"]
+        XCTAssertTrue(message.waitForExistence(timeout: 10))
+        let width = message.frame.width
+        message.tap(); message.typeText("Focus zoom check")
+        XCTAssertTrue(scale.waitForExistence(timeout: 5))
+        XCTAssertEqual(message.frame.width, width, accuracy: 1)
+        let done = app.buttons["Done"].firstMatch
+        if done.exists { done.tap() } else { app.staticTexts["Main Chat"].firstMatch.tap() }
+        XCTAssertTrue(scale.exists)
+        app.buttons["To-do"].tap()
+        let note = app.textViews["Note content"]
+        XCTAssertTrue(note.waitForExistence(timeout: 10))
+        note.tap(); note.typeText(" Note focus check")
+        XCTAssertTrue(scale.exists)
+        if done.exists { done.tap() } else { app.buttons["Work"].tap() }
+        XCTAssertTrue(scale.exists)
+        let screenshot = XCTAttachment(screenshot: app.screenshot()); screenshot.name = "Focus zoom remains 1.00"; screenshot.lifetime = .keepAlways; add(screenshot)
     }
 
 }
