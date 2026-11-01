@@ -29,13 +29,14 @@ struct PlannerWidgetView: View {
     @Environment(\.widgetFamily) var family
     let entry: PlannerEntry
     let countdown: Bool
+    var combined = false
     private var isHome: Bool { family == .systemSmall || family == .systemMedium }
     private var taskHex: String { entry.task?.color ?? "#1a73e8" }
     private var taskColor: Color {
         let value = UInt64(taskHex.trimmingCharacters(in: CharacterSet(charactersIn: "#")), radix: 16) ?? 0x1a73e8
         return Color(red: Double((value >> 16) & 255) / 255, green: Double((value >> 8) & 255) / 255, blue: Double(value & 255) / 255)
     }
-    private var colored: Bool { isHome && !countdown && entry.task != nil }
+    private var colored: Bool { isHome && (combined || !countdown) && entry.task != nil }
     private var taskTextColor: Color {
         let value = UInt64(taskHex.trimmingCharacters(in: CharacterSet(charactersIn: "#")), radix: 16) ?? 0x1a73e8
         let luminance = (0.299 * Double((value >> 16) & 255) + 0.587 * Double((value >> 8) & 255) + 0.114 * Double(value & 255)) / 255
@@ -63,11 +64,16 @@ struct PlannerWidgetView: View {
                     }
                 } else { Image(systemName: "calendar") }
             } else {
-                VStack(alignment: .leading, spacing: isHome ? 8 : 2) {
-                    Label(countdown ? "Time remaining" : "Current task", systemImage: countdown ? "hourglass" : "calendar")
-                        .font(isHome ? .caption : .caption2).foregroundStyle(colored ? taskTextColor.opacity(0.85) : Color.secondary)
+                VStack(alignment: .leading, spacing: isHome ? (combined ? 5 : 8) : 2) {
+                    if !combined || isHome { Label(combined ? "Now" : countdown ? "Time remaining" : "Current task", systemImage: countdown && !combined ? "hourglass" : "calendar")
+                        .font(isHome ? .caption : .caption2).foregroundStyle(colored ? taskTextColor.opacity(0.85) : Color.secondary) }
                     if let task = entry.task {
-                        if countdown {
+                        if combined {
+                            Text(task.title).privacySensitive().font(isHome ? .headline : .caption).lineLimit(isHome ? 2 : 1)
+                            Text("\(task.startDate.formatted(date: .omitted, time: .shortened)) – \(task.endDate.formatted(date: .omitted, time: .shortened))").font(.caption2).foregroundStyle(colored ? taskTextColor.opacity(0.85) : Color.secondary).lineLimit(1)
+                            if isHome { Spacer(minLength: 2) }
+                            countdownText(task).font(isHome ? .system(size: 28, weight: .semibold, design: .rounded) : .title3).monospacedDigit().lineLimit(1)
+                        } else if countdown {
                             countdownText(task)
                                 .font(isHome ? .system(size: 34, weight: .semibold, design: .rounded) : .title3)
                                 .monospacedDigit().lineLimit(1)
@@ -110,6 +116,14 @@ struct TimeRemainingWidget: Widget {
             .supportedFamilies([.systemSmall, .systemMedium, .accessoryRectangular, .accessoryCircular, .accessoryInline])
     }
 }
+struct TaskAndTimeWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "PlannerTaskAndTime", provider: PlannerProvider()) { PlannerWidgetView(entry: $0, countdown: true, combined: true) }
+            .configurationDisplayName("Task & Time")
+            .description("Your current activity and live countdown in one small widget.")
+            .supportedFamilies([.systemSmall, .accessoryRectangular])
+    }
+}
 @main struct PlannerWidgetBundle: WidgetBundle {
-    var body: some Widget { CurrentTaskWidget(); TimeRemainingWidget() }
+    var body: some Widget { TaskAndTimeWidget(); CurrentTaskWidget(); TimeRemainingWidget() }
 }
