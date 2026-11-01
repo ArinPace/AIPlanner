@@ -104,7 +104,7 @@ struct PlannerWebView: UIViewRepresentable {
             return folder.appendingPathComponent(safe.isEmpty ? "Planner download" : safe)
         }
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) { model.loading = true; model.error = nil }
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { model.loading = false }
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { model.loading = false; WidgetCenter.shared.reloadAllTimelines() }
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { failed(error) }
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { failed(error) }
         private func failed(_ error: Error) {

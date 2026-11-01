@@ -77,3 +77,9 @@ Calendar refresh remains active on other tabs (once a minute), guarded against u
 Settings shows local-copy timestamps, widget sync/availability status, a sync action and JSON export. Native sharing failures are displayed instead of being silently swallowed. Old native builds can still receive widget schedules, but must be updated for the full native mirror/status features. The widget gallery uses the actual saved schedule where available and explicitly names fallback preview content "Example task".
 
 Current Task uses the calendar task's tag colour and matching contrast text on the Home Screen. Lock Screen and user-selected tinted widget modes follow iOS colour restrictions. Verify local snapshot isolation and network/revision safety with `node tests/local-replica.mjs` against the loopback Vite server.
+
+### Live countdown verification
+
+Use SwiftUI's `TimeDataSource.currentDate` with a second-precision countdown format on iOS 18+, with the dynamic date timer style on iOS 17. These are system-driven text updates; do not replace them with polling the backend or a once-per-second widget timeline. Native page loading also requests a timeline refresh so newly installed widget code is picked up. Task titles remain marked privacy-sensitive without redacting the entire dynamic timer view.
+
+Testing on 2026-10-31: actual placed Home Screen widgets display the real calendar task and its tag colour. The user confirmed that the countdown ticks on the clean iOS 18.5 simulator. On the iPhone 18 Pro/iOS 27.2 (24B8117) simulator, all three supported dynamic-time implementations froze while continuously visible, including with normal Home Screen backgrounding. Do not report continuous ticking on that runtime as verified or fixed; the comparison points to a runtime-specific issue, and physical-device iOS 27.2 verification remains outstanding. The isolated simulator named “Planner timer test — iOS 18.5” uses loopback fixture data, not the user's account.

@@ -41,18 +41,25 @@ struct PlannerWidgetView: View {
         let luminance = (0.299 * Double((value >> 16) & 255) + 0.587 * Double((value >> 8) & 255) + 0.114 * Double(value & 255)) / 255
         return luminance > 0.65 ? Color(red: 0.125, green: 0.13, blue: 0.14) : .white
     }
+    @ViewBuilder private func countdownText(_ task: WidgetTask) -> some View {
+        if #available(iOS 18.0, *) {
+            Text(.currentDate, format: .timer(countingDownIn: task.startDate..<task.endDate, maxPrecision: .seconds(1)))
+        } else {
+            Text(task.endDate, style: .timer)
+        }
+    }
     var body: some View {
         Group {
             if family == .accessoryInline {
                 if let task = entry.task {
-                    if countdown { Text(timerInterval: entry.date...task.endDate, countsDown: true).monospacedDigit() }
-                    else { Label(task.title, systemImage: "calendar") }
+                    if countdown { countdownText(task).monospacedDigit() }
+                    else { Label(task.title, systemImage: "calendar").privacySensitive() }
                 } else { Text("No current task") }
             } else if family == .accessoryCircular {
                 if let task = entry.task {
                     VStack(spacing: 1) {
                         Image(systemName: "hourglass")
-                        Text(timerInterval: entry.date...task.endDate, countsDown: true).font(.caption).monospacedDigit().minimumScaleFactor(0.5)
+                        countdownText(task).font(.caption).monospacedDigit()
                     }
                 } else { Image(systemName: "calendar") }
             } else {
@@ -61,12 +68,12 @@ struct PlannerWidgetView: View {
                         .font(isHome ? .caption : .caption2).foregroundStyle(colored ? taskTextColor.opacity(0.85) : Color.secondary)
                     if let task = entry.task {
                         if countdown {
-                            Text(timerInterval: entry.date...task.endDate, countsDown: true)
+                            countdownText(task)
                                 .font(isHome ? .system(size: 34, weight: .semibold, design: .rounded) : .title3)
-                                .monospacedDigit().minimumScaleFactor(0.5).lineLimit(1)
-                            Text(task.title).font(.caption).lineLimit(isHome ? 2 : 1)
+                                .monospacedDigit().lineLimit(1)
+                            Text(task.title).privacySensitive().font(.caption).lineLimit(isHome ? 2 : 1)
                         } else {
-                            Text(task.title).font(isHome ? .headline : .body).lineLimit(isHome ? 4 : 2)
+                            Text(task.title).privacySensitive().font(isHome ? .headline : .body).lineLimit(isHome ? 4 : 2)
                             if isHome { Text("\(task.startDate.formatted(date: .omitted, time: .shortened)) – \(task.endDate.formatted(date: .omitted, time: .shortened))").font(.caption).foregroundStyle(colored ? taskTextColor.opacity(0.85) : Color.secondary) }
                         }
                     } else if entry.date.timeIntervalSince1970 >= entry.schedule.validUntil {
@@ -83,7 +90,6 @@ struct PlannerWidgetView: View {
             }
         }
         .foregroundStyle(colored ? taskTextColor : Color.primary)
-        .privacySensitive()
         .containerBackground(for: .widget) { if colored { taskColor } else { Color(.systemBackground) } }
         .widgetURL(URL(string: "aiplanner://calendar"))
     }
