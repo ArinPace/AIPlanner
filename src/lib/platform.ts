@@ -4,5 +4,11 @@ export function isIPhoneApp(){return Boolean(window.webkit?.messageHandlers?.pla
 export async function nativeRequest<T=unknown>(message:NativeMessage):Promise<T>{
  const bridge=window.webkit?.messageHandlers?.plannerNative
  if(!bridge)throw new Error('This action requires the iPhone app.')
- return await bridge.postMessage(message) as T
+ try{return await bridge.postMessage(message) as T}
+ catch(error){
+  // Older installed app builds return Apple's cancellation as a rejected error.
+  const text=error instanceof Error?error.message:String(error)
+  if(['googleSignIn','googleConnection'].includes(message.action)&&/com\.apple\.AuthenticationServices\.WebAuthenticationSession[\s\S]*\berror\s+1\b/i.test(text))return {cancelled:true} as T
+  throw error
+ }
 }

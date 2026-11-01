@@ -19,6 +19,7 @@ import WebKit
         let result = try await authenticate(url.url!)
         let query = URLComponents(url: result, resolvingAgainstBaseURL: false)?.queryItems ?? []
         guard result.host == "auth", query.first(where: { $0.name == "state" })?.value == state else { throw NativeError("Sign-in response could not be verified.") }
+        if query.first(where: { $0.name == "status" })?.value == "cancelled" { throw NativeAuthenticationCancelled() }
         guard query.first(where: { $0.name == "status" })?.value == "success",
               let bridge = query.first(where: { $0.name == "bridge" })?.value else { throw NativeError("Google sign-in was cancelled or could not finish.") }
         var request = URLRequest(url: AppConfiguration.origin.appendingPathComponent("api/auth/google/native/redeem"))
@@ -48,6 +49,7 @@ import WebKit
         guard (response as? HTTPURLResponse)?.statusCode == 200, let raw = value?["url"] as? String, let start = URL(string: raw), AppConfiguration.isPlanner(start) else { throw NativeError(value?["error"] as? String ?? "Could not start Google connection.") }
         let result = try await authenticate(start)
         let query = URLComponents(url: result, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        if result.host == "connection", query.first(where: { $0.name == "state" })?.value == state, query.first(where: { $0.name == "status" })?.value == "cancelled" { throw NativeAuthenticationCancelled() }
         guard result.host == "connection", query.first(where: { $0.name == "state" })?.value == state,
               query.first(where: { $0.name == "status" })?.value == "connected" else { throw NativeError("Google connection was cancelled or could not finish.") }
     }
@@ -58,7 +60,8 @@ import WebKit
                 Task { @MainActor in
                     self?.session = nil
                     if let url { continuation.resume(returning: url) }
-                    else { continuation.resume(throwing: error ?? NativeError("Sign-in was cancelled.")) }
+                    else if let authError = error as? ASWebAuthenticationSessionError, authError.code == .canceledLogin { continuation.resume(throwing: NativeAuthenticationCancelled()) }
+                    else { continuation.resume(throwing: error ?? NativeError("Could not finish sign-in. Try again.")) }
                 }
             }
             flow.presentationContextProvider = self
@@ -73,5 +76,6 @@ import WebKit
         return Data(bytes).base64URL
     }
 }
+struct NativeAuthenticationCancelled: Error {}
 struct NativeError: LocalizedError { let message: String; init(_ message: String) { self.message = message }; var errorDescription: String? { message } }
 private extension Data { var base64URL: String { base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "") } }

@@ -63,4 +63,25 @@ final class PlannerUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Phone resume sync check")).firstMatch.waitForExistence(timeout: 5))
     }
 
+    func testCancelGoogleSignInKeepsLoginLayout() {
+        let app = launch(signedIn: false)
+        let google = app.buttons["Continue with Google"]
+        XCTAssertTrue(google.waitForExistence(timeout: 40))
+        let identifier = app.textFields["Username or email"]
+        let before = identifier.frame
+        google.tap()
+        let appCancel = app.buttons["Cancel"].firstMatch
+        let systemCancel = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons["Cancel"].firstMatch
+        let browserCancel = XCUIApplication(bundleIdentifier: "com.apple.SafariViewService").buttons["Cancel"].firstMatch
+        if appCancel.waitForExistence(timeout: 5) { appCancel.tap() }
+        else if systemCancel.exists { systemCancel.tap() }
+        else { XCTAssertTrue(browserCancel.waitForExistence(timeout: 5)); browserCancel.tap() }
+        XCTAssertTrue(google.waitForExistence(timeout: 5))
+        let ready = NSPredicate(format: "enabled == true")
+        expectation(for: ready, evaluatedWith: google); waitForExpectations(timeout: 5)
+        XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "AuthenticationServices")).firstMatch.exists)
+        XCTAssertEqual(before.width, identifier.frame.width, accuracy: 1)
+        XCTAssertLessThanOrEqual(identifier.frame.maxX, app.windows.firstMatch.frame.maxX)
+    }
+
 }

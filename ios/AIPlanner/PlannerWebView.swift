@@ -69,7 +69,8 @@ struct PlannerWebView: UIViewRepresentable {
                     default: throw NativeError("Unsupported native action.")
                     }
                     replyHandler(["ok": true], nil)
-                } catch { replyHandler(nil, error.localizedDescription) }
+                } catch is NativeAuthenticationCancelled { replyHandler(["cancelled": true], nil) }
+                catch { replyHandler(nil, error.localizedDescription) }
             }
         }
         private func destination(_ name: String) throws -> URL {
