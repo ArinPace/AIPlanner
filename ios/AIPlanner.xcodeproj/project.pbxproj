@@ -1,46 +1,543 @@
 // !$*UTF8*$!
-{archiveVersion = 1; classes = {}; objectVersion = 56; objects = {
-468E1EFC485461A13F772A9B = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIPlannerApp.swift; sourceTree = "<group>";};
-BC64D87B7B585C5A2A0650CB = {isa = PBXBuildFile; fileRef = 468E1EFC485461A13F772A9B;};
-6A173FAE6A6CE2B833F169D3 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfiguration.swift; sourceTree = "<group>";};
-D518A63D9718D955905D2A2A = {isa = PBXBuildFile; fileRef = 6A173FAE6A6CE2B833F169D3;};
-96F150B5D75FA26CF9EB8CFB = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlannerScreen.swift; sourceTree = "<group>";};
-5BF6FE0B6DED4B4F507AE25D = {isa = PBXBuildFile; fileRef = 96F150B5D75FA26CF9EB8CFB;};
-C0635749205FA9D608621B53 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlannerWebView.swift; sourceTree = "<group>";};
-D1E4E6F11FE11533500ED179 = {isa = PBXBuildFile; fileRef = C0635749205FA9D608621B53;};
-506DDB4FB555EC4D72A947D5 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeAuthentication.swift; sourceTree = "<group>";};
-6D899446BF30B531574A291C = {isa = PBXBuildFile; fileRef = 506DDB4FB555EC4D72A947D5;};
-7B594B6DB375E1BF3F23CDD6 = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>";};
-28AAD1477D5182D66D4B03B3 = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>";};
-2537154DE24E02FEF8750CD9 = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = UITestFixture.js; sourceTree = "<group>";};
-222F0DBFFE5EB23DCD3FD16F = {isa = PBXBuildFile; fileRef = 28AAD1477D5182D66D4B03B3;};
-24F88BC2A69FB22CE43C0D00 = {isa = PBXBuildFile; fileRef = 2537154DE24E02FEF8750CD9;};
-C1BCCE501AEDC0264BA39582 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlannerUITests.swift; sourceTree = "<group>";};
-52B66C0F5E869D612E6AFDA0 = {isa = PBXBuildFile; fileRef = C1BCCE501AEDC0264BA39582;};
-4E783A9E10D2A8ABA38CD11C = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AIPlanner.app; sourceTree = BUILT_PRODUCTS_DIR;};
-6C7CCDEB3609F1FAA874E941 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AIPlannerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR;};
-EAE9011C23DCA5E5F486AF2D = {isa = PBXGroup; path = AIPlanner; sourceTree = "<group>"; children = (468E1EFC485461A13F772A9B,6A173FAE6A6CE2B833F169D3,96F150B5D75FA26CF9EB8CFB,C0635749205FA9D608621B53,506DDB4FB555EC4D72A947D5,7B594B6DB375E1BF3F23CDD6,28AAD1477D5182D66D4B03B3,2537154DE24E02FEF8750CD9);};
-85C5DB4F40FFFAEAACDDBAA2 = {isa = PBXGroup; path = AIPlannerUITests; sourceTree = "<group>"; children = (C1BCCE501AEDC0264BA39582);};
-A511EC6FC8BCAFC6B21CD81D = {isa = PBXGroup; name = Products; sourceTree = "<group>"; children = (4E783A9E10D2A8ABA38CD11C,6C7CCDEB3609F1FAA874E941);};
-22EA56DD29576E62BCCCA1AA = {isa = PBXGroup; sourceTree = "<group>"; children = (EAE9011C23DCA5E5F486AF2D,85C5DB4F40FFFAEAACDDBAA2,A511EC6FC8BCAFC6B21CD81D);};
-949D493B91791558E87BC5D7 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (BC64D87B7B585C5A2A0650CB,D518A63D9718D955905D2A2A,5BF6FE0B6DED4B4F507AE25D,D1E4E6F11FE11533500ED179,6D899446BF30B531574A291C); runOnlyForDeploymentPostprocessing = 0;};
-8ECC8B5D05B79F879ACDF1A2 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (222F0DBFFE5EB23DCD3FD16F,24F88BC2A69FB22CE43C0D00); runOnlyForDeploymentPostprocessing = 0;};
-BD92572B49AC16A86614498D = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
-77A03FEE20FE96AD9384861E = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (52B66C0F5E869D612E6AFDA0); runOnlyForDeploymentPostprocessing = 0;};
-D5C76E148680C094C001AC35 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
-E05DB79C430AA1B0BA487AFC = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
-ED8772ADEC3A6C25161BC957 = {isa = XCBuildConfiguration; name = Debug; buildSettings = {CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0; DEBUG_INFORMATION_FORMAT = dwarf; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)"; ENABLE_TESTABILITY = YES;};};
-F8975E934DA2067E0E497395 = {isa = XCBuildConfiguration; name = Debug; buildSettings = {PRODUCT_BUNDLE_IDENTIFIER = com.arinpace.aiplanner; PRODUCT_NAME = "$(TARGET_NAME)"; INFOPLIST_FILE = AIPlanner/Info.plist; GENERATE_INFOPLIST_FILE = NO; CODE_SIGN_STYLE = Automatic; TARGETED_DEVICE_FAMILY = 1; ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CURRENT_PROJECT_VERSION = 1; MARKETING_VERSION = 1.0; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";};};
-C449802CFC00FE43A29E0F19 = {isa = XCBuildConfiguration; name = Debug; buildSettings = {PRODUCT_BUNDLE_IDENTIFIER = com.arinpace.aiplanner.uitests; PRODUCT_NAME = "$(TARGET_NAME)"; GENERATE_INFOPLIST_FILE = YES; CODE_SIGN_STYLE = Automatic; TARGETED_DEVICE_FAMILY = 1; TEST_TARGET_NAME = AIPlanner;};};
-00F209874A1F7309F6DCEAA7 = {isa = XCBuildConfiguration; name = Release; buildSettings = {CLANG_ENABLE_MODULES = YES; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0; SWIFT_OPTIMIZATION_LEVEL = "-O"; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"; VALIDATE_PRODUCT = YES;};};
-F72D4F08E84CA4C7F809A7CF = {isa = XCBuildConfiguration; name = Release; buildSettings = {PRODUCT_BUNDLE_IDENTIFIER = com.arinpace.aiplanner; PRODUCT_NAME = "$(TARGET_NAME)"; INFOPLIST_FILE = AIPlanner/Info.plist; GENERATE_INFOPLIST_FILE = NO; CODE_SIGN_STYLE = Automatic; TARGETED_DEVICE_FAMILY = 1; ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CURRENT_PROJECT_VERSION = 1; MARKETING_VERSION = 1.0; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";};};
-C4D458CFDB61996E24F4F16F = {isa = XCBuildConfiguration; name = Release; buildSettings = {PRODUCT_BUNDLE_IDENTIFIER = com.arinpace.aiplanner.uitests; PRODUCT_NAME = "$(TARGET_NAME)"; GENERATE_INFOPLIST_FILE = YES; CODE_SIGN_STYLE = Automatic; TARGETED_DEVICE_FAMILY = 1; TEST_TARGET_NAME = AIPlanner;};};
-96316AF13F45443E4E9C4BA0 = {isa = XCConfigurationList; buildConfigurations = (ED8772ADEC3A6C25161BC957,00F209874A1F7309F6DCEAA7); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;};
-277EF9D2908DE87D83B8FECE = {isa = XCConfigurationList; buildConfigurations = (F8975E934DA2067E0E497395,F72D4F08E84CA4C7F809A7CF); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;};
-0B9C531D8D86E4E4E21E4B5A = {isa = XCConfigurationList; buildConfigurations = (C449802CFC00FE43A29E0F19,C4D458CFDB61996E24F4F16F); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;};
-7E85D4A68785761E1DBB22D8 = {isa = PBXContainerItemProxy; containerPortal = 98F54143AB4E86B28C3AFEE0; proxyType = 1; remoteGlobalIDString = F75109BEB4DD8800DA6B45F8; remoteInfo = AIPlanner;};
-BAE932EF166B50AB877FDC6F = {isa = PBXTargetDependency; target = F75109BEB4DD8800DA6B45F8; targetProxy = 7E85D4A68785761E1DBB22D8;};
-F75109BEB4DD8800DA6B45F8 = {isa = PBXNativeTarget; buildConfigurationList = 277EF9D2908DE87D83B8FECE; buildPhases = (949D493B91791558E87BC5D7,BD92572B49AC16A86614498D,8ECC8B5D05B79F879ACDF1A2); buildRules = (); dependencies = (); name = AIPlanner; productName = AIPlanner; productReference = 4E783A9E10D2A8ABA38CD11C; productType = "com.apple.product-type.application";};
-C062A5A4A7F4F37DD90F54CB = {isa = PBXNativeTarget; buildConfigurationList = 0B9C531D8D86E4E4E21E4B5A; buildPhases = (77A03FEE20FE96AD9384861E,E05DB79C430AA1B0BA487AFC,D5C76E148680C094C001AC35); buildRules = (); dependencies = (BAE932EF166B50AB877FDC6F); name = AIPlannerUITests; productName = AIPlannerUITests; productReference = 6C7CCDEB3609F1FAA874E941; productType = "com.apple.product-type.bundle.ui-testing";};
-98F54143AB4E86B28C3AFEE0 = {isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 1640; TargetAttributes = {F75109BEB4DD8800DA6B45F8 = {CreatedOnToolsVersion = 16.4;};C062A5A4A7F4F37DD90F54CB = {CreatedOnToolsVersion = 16.4; TestTargetID = F75109BEB4DD8800DA6B45F8;};};}; buildConfigurationList = 96316AF13F45443E4E9C4BA0; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en,Base); mainGroup = 22EA56DD29576E62BCCCA1AA; productRefGroup = A511EC6FC8BCAFC6B21CD81D; projectDirPath = ""; projectRoot = ""; targets = (F75109BEB4DD8800DA6B45F8,C062A5A4A7F4F37DD90F54CB);};
-}; rootObject = 98F54143AB4E86B28C3AFEE0; }
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		177F33768F3D4AB6A48C7A93 /* WidgetSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4444D16B97D810016A359AEB /* WidgetSchedule.swift */; };
+		222F0DBFFE5EB23DCD3FD16F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 28AAD1477D5182D66D4B03B3 /* Assets.xcassets */; };
+		24F88BC2A69FB22CE43C0D00 /* UITestFixture.js in Resources */ = {isa = PBXBuildFile; fileRef = 2537154DE24E02FEF8750CD9 /* UITestFixture.js */; };
+		529D71502D6AFB2969202948 /* PlannerWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 5D1F455AA1CC1C61166C41A3 /* PlannerWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		52B66C0F5E869D612E6AFDA0 /* PlannerUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1BCCE501AEDC0264BA39582 /* PlannerUITests.swift */; };
+		5BF6FE0B6DED4B4F507AE25D /* PlannerScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96F150B5D75FA26CF9EB8CFB /* PlannerScreen.swift */; };
+		6D899446BF30B531574A291C /* NativeAuthentication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 506DDB4FB555EC4D72A947D5 /* NativeAuthentication.swift */; };
+		76EB143C4340AA9F649A4F3C /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8828692B26B9612F431BE690 /* Foundation.framework */; };
+		94692D240F205E45DC5631A6 /* WidgetSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4444D16B97D810016A359AEB /* WidgetSchedule.swift */; };
+		BC64D87B7B585C5A2A0650CB /* AIPlannerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 468E1EFC485461A13F772A9B /* AIPlannerApp.swift */; };
+		D1E4E6F11FE11533500ED179 /* PlannerWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0635749205FA9D608621B53 /* PlannerWebView.swift */; };
+		D518A63D9718D955905D2A2A /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A173FAE6A6CE2B833F169D3 /* AppConfiguration.swift */; };
+		D6C52B55386A4600216066B5 /* PlannerWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11C8F5F7EBA96DCB0171195 /* PlannerWidgets.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		14D5C788CEBEC86EA837BD4E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 98F54143AB4E86B28C3AFEE0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D38143C02EAE0E92AB278B74;
+			remoteInfo = PlannerWidgets;
+		};
+		7E85D4A68785761E1DBB22D8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 98F54143AB4E86B28C3AFEE0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F75109BEB4DD8800DA6B45F8;
+			remoteInfo = AIPlanner;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		7FAA6CE5E85994AF50A25284 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				529D71502D6AFB2969202948 /* PlannerWidgets.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		2537154DE24E02FEF8750CD9 /* UITestFixture.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = UITestFixture.js; sourceTree = "<group>"; };
+		28AAD1477D5182D66D4B03B3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		4444D16B97D810016A359AEB /* WidgetSchedule.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetSchedule.swift; sourceTree = "<group>"; };
+		468E1EFC485461A13F772A9B /* AIPlannerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIPlannerApp.swift; sourceTree = "<group>"; };
+		4E783A9E10D2A8ABA38CD11C /* AIPlanner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AIPlanner.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		506DDB4FB555EC4D72A947D5 /* NativeAuthentication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeAuthentication.swift; sourceTree = "<group>"; };
+		5D1F455AA1CC1C61166C41A3 /* PlannerWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PlannerWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		6A173FAE6A6CE2B833F169D3 /* AppConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfiguration.swift; sourceTree = "<group>"; };
+		6C7CCDEB3609F1FAA874E941 /* AIPlannerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AIPlannerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		7B594B6DB375E1BF3F23CDD6 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		8828692B26B9612F431BE690 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		96F150B5D75FA26CF9EB8CFB /* PlannerScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlannerScreen.swift; sourceTree = "<group>"; };
+		B11C8F5F7EBA96DCB0171195 /* PlannerWidgets.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlannerWidgets.swift; sourceTree = "<group>"; };
+		BC4BD313A16E37449327877F /* AIPlanner.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = AIPlanner.entitlements; sourceTree = "<group>"; };
+		C0635749205FA9D608621B53 /* PlannerWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlannerWebView.swift; sourceTree = "<group>"; };
+		C1BCCE501AEDC0264BA39582 /* PlannerUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlannerUITests.swift; sourceTree = "<group>"; };
+		DADB8EA1ADF96CCB3DF82135 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		E33A241C0B4FBF94A09D87BF /* PlannerWidgets.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = PlannerWidgets.entitlements; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		506B38C7797C3EFF5AF1B290 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				76EB143C4340AA9F649A4F3C /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BD92572B49AC16A86614498D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E05DB79C430AA1B0BA487AFC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		22EA56DD29576E62BCCCA1AA = {
+			isa = PBXGroup;
+			children = (
+				EAE9011C23DCA5E5F486AF2D /* AIPlanner */,
+				85C5DB4F40FFFAEAACDDBAA2 /* AIPlannerUITests */,
+				A511EC6FC8BCAFC6B21CD81D /* Products */,
+				EFF643C04B68CB92999C8E97 /* Shared */,
+				BB63111E523AB2A0DE8652DB /* PlannerWidgets */,
+				3910C8C33D0A4DB863EB0E4C /* Frameworks */,
+			);
+			sourceTree = "<group>";
+		};
+		3910C8C33D0A4DB863EB0E4C /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				67105872D4374E7EE59FD63B /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		67105872D4374E7EE59FD63B /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				8828692B26B9612F431BE690 /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		85C5DB4F40FFFAEAACDDBAA2 /* AIPlannerUITests */ = {
+			isa = PBXGroup;
+			children = (
+				C1BCCE501AEDC0264BA39582 /* PlannerUITests.swift */,
+			);
+			path = AIPlannerUITests;
+			sourceTree = "<group>";
+		};
+		A511EC6FC8BCAFC6B21CD81D /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				4E783A9E10D2A8ABA38CD11C /* AIPlanner.app */,
+				6C7CCDEB3609F1FAA874E941 /* AIPlannerUITests.xctest */,
+				5D1F455AA1CC1C61166C41A3 /* PlannerWidgets.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		BB63111E523AB2A0DE8652DB /* PlannerWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				B11C8F5F7EBA96DCB0171195 /* PlannerWidgets.swift */,
+				DADB8EA1ADF96CCB3DF82135 /* Info.plist */,
+				E33A241C0B4FBF94A09D87BF /* PlannerWidgets.entitlements */,
+			);
+			name = PlannerWidgets;
+			path = PlannerWidgets;
+			sourceTree = "<group>";
+		};
+		EAE9011C23DCA5E5F486AF2D /* AIPlanner */ = {
+			isa = PBXGroup;
+			children = (
+				468E1EFC485461A13F772A9B /* AIPlannerApp.swift */,
+				6A173FAE6A6CE2B833F169D3 /* AppConfiguration.swift */,
+				96F150B5D75FA26CF9EB8CFB /* PlannerScreen.swift */,
+				C0635749205FA9D608621B53 /* PlannerWebView.swift */,
+				506DDB4FB555EC4D72A947D5 /* NativeAuthentication.swift */,
+				7B594B6DB375E1BF3F23CDD6 /* Info.plist */,
+				28AAD1477D5182D66D4B03B3 /* Assets.xcassets */,
+				2537154DE24E02FEF8750CD9 /* UITestFixture.js */,
+				BC4BD313A16E37449327877F /* AIPlanner.entitlements */,
+			);
+			path = AIPlanner;
+			sourceTree = "<group>";
+		};
+		EFF643C04B68CB92999C8E97 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				4444D16B97D810016A359AEB /* WidgetSchedule.swift */,
+			);
+			name = Shared;
+			path = Shared;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		C062A5A4A7F4F37DD90F54CB /* AIPlannerUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0B9C531D8D86E4E4E21E4B5A /* Build configuration list for PBXNativeTarget "AIPlannerUITests" */;
+			buildPhases = (
+				77A03FEE20FE96AD9384861E /* Sources */,
+				E05DB79C430AA1B0BA487AFC /* Frameworks */,
+				D5C76E148680C094C001AC35 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				BAE932EF166B50AB877FDC6F /* PBXTargetDependency */,
+			);
+			name = AIPlannerUITests;
+			productName = AIPlannerUITests;
+			productReference = 6C7CCDEB3609F1FAA874E941 /* AIPlannerUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		D38143C02EAE0E92AB278B74 /* PlannerWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 00945D8723C583E65F32D1A6 /* Build configuration list for PBXNativeTarget "PlannerWidgets" */;
+			buildPhases = (
+				4C10F57BE612F342058A1D87 /* Sources */,
+				506B38C7797C3EFF5AF1B290 /* Frameworks */,
+				0519384DD69D2508239D4B24 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PlannerWidgets;
+			productName = PlannerWidgets;
+			productReference = 5D1F455AA1CC1C61166C41A3 /* PlannerWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		F75109BEB4DD8800DA6B45F8 /* AIPlanner */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 277EF9D2908DE87D83B8FECE /* Build configuration list for PBXNativeTarget "AIPlanner" */;
+			buildPhases = (
+				949D493B91791558E87BC5D7 /* Sources */,
+				BD92572B49AC16A86614498D /* Frameworks */,
+				8ECC8B5D05B79F879ACDF1A2 /* Resources */,
+				7FAA6CE5E85994AF50A25284 /* Embed App Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				933ADDA46E612C77A03585BB /* PBXTargetDependency */,
+			);
+			name = AIPlanner;
+			productName = AIPlanner;
+			productReference = 4E783A9E10D2A8ABA38CD11C /* AIPlanner.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		98F54143AB4E86B28C3AFEE0 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1640;
+				TargetAttributes = {
+					C062A5A4A7F4F37DD90F54CB = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = F75109BEB4DD8800DA6B45F8;
+					};
+					D38143C02EAE0E92AB278B74 = {
+						SystemCapabilities = {
+							com.apple.ApplicationGroups.iOS = {
+								enabled = 1;
+							};
+						};
+					};
+					F75109BEB4DD8800DA6B45F8 = {
+						CreatedOnToolsVersion = 16.4;
+						SystemCapabilities = {
+							com.apple.ApplicationGroups.iOS = {
+								enabled = 1;
+							};
+						};
+					};
+				};
+			};
+			buildConfigurationList = 96316AF13F45443E4E9C4BA0 /* Build configuration list for PBXProject "AIPlanner" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 22EA56DD29576E62BCCCA1AA;
+			productRefGroup = A511EC6FC8BCAFC6B21CD81D /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				F75109BEB4DD8800DA6B45F8 /* AIPlanner */,
+				C062A5A4A7F4F37DD90F54CB /* AIPlannerUITests */,
+				D38143C02EAE0E92AB278B74 /* PlannerWidgets */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		0519384DD69D2508239D4B24 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8ECC8B5D05B79F879ACDF1A2 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				222F0DBFFE5EB23DCD3FD16F /* Assets.xcassets in Resources */,
+				24F88BC2A69FB22CE43C0D00 /* UITestFixture.js in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D5C76E148680C094C001AC35 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		4C10F57BE612F342058A1D87 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D6C52B55386A4600216066B5 /* PlannerWidgets.swift in Sources */,
+				94692D240F205E45DC5631A6 /* WidgetSchedule.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		77A03FEE20FE96AD9384861E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				52B66C0F5E869D612E6AFDA0 /* PlannerUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		949D493B91791558E87BC5D7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BC64D87B7B585C5A2A0650CB /* AIPlannerApp.swift in Sources */,
+				D518A63D9718D955905D2A2A /* AppConfiguration.swift in Sources */,
+				5BF6FE0B6DED4B4F507AE25D /* PlannerScreen.swift in Sources */,
+				D1E4E6F11FE11533500ED179 /* PlannerWebView.swift in Sources */,
+				6D899446BF30B531574A291C /* NativeAuthentication.swift in Sources */,
+				177F33768F3D4AB6A48C7A93 /* WidgetSchedule.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		933ADDA46E612C77A03585BB /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = PlannerWidgets;
+			target = D38143C02EAE0E92AB278B74 /* PlannerWidgets */;
+			targetProxy = 14D5C788CEBEC86EA837BD4E /* PBXContainerItemProxy */;
+		};
+		BAE932EF166B50AB877FDC6F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F75109BEB4DD8800DA6B45F8 /* AIPlanner */;
+			targetProxy = 7E85D4A68785761E1DBB22D8 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		00F209874A1F7309F6DCEAA7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		897FE722F603710D714CCAD0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = PlannerWidgets/PlannerWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PlannerWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.arinpace.aiplanner.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		8B31EF302F7876B50DDFB081 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = PlannerWidgets/PlannerWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PlannerWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.arinpace.aiplanner.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		C449802CFC00FE43A29E0F19 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.arinpace.aiplanner.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = AIPlanner;
+			};
+			name = Debug;
+		};
+		C4D458CFDB61996E24F4F16F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.arinpace.aiplanner.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = AIPlanner;
+			};
+			name = Release;
+		};
+		ED8772ADEC3A6C25161BC957 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		F72D4F08E84CA4C7F809A7CF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = AIPlanner/AIPlanner.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AIPlanner/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.arinpace.aiplanner;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		F8975E934DA2067E0E497395 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = AIPlanner/AIPlanner.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AIPlanner/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.arinpace.aiplanner;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		00945D8723C583E65F32D1A6 /* Build configuration list for PBXNativeTarget "PlannerWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8B31EF302F7876B50DDFB081 /* Release */,
+				897FE722F603710D714CCAD0 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		0B9C531D8D86E4E4E21E4B5A /* Build configuration list for PBXNativeTarget "AIPlannerUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C449802CFC00FE43A29E0F19 /* Debug */,
+				C4D458CFDB61996E24F4F16F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		277EF9D2908DE87D83B8FECE /* Build configuration list for PBXNativeTarget "AIPlanner" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F8975E934DA2067E0E497395 /* Debug */,
+				F72D4F08E84CA4C7F809A7CF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		96316AF13F45443E4E9C4BA0 /* Build configuration list for PBXProject "AIPlanner" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				ED8772ADEC3A6C25161BC957 /* Debug */,
+				00F209874A1F7309F6DCEAA7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 98F54143AB4E86B28C3AFEE0 /* Project object */;
+}

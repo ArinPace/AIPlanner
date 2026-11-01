@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import WidgetKit
 
 struct PlannerWebView: UIViewRepresentable {
     @ObservedObject var model: PlannerModel
@@ -12,7 +13,7 @@ struct PlannerWebView: UIViewRepresentable {
         config.userContentController.addUserScript(WKUserScript(source: "document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true'});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-UITestFixture"), ["127.0.0.1", "localhost"].contains(AppConfiguration.origin.host ?? ""), let url = Bundle.main.url(forResource: "UITestFixture", withExtension: "js"), let script = try? String(contentsOf: url, encoding: .utf8) {
-            let fixture = (ProcessInfo.processInfo.arguments.contains("-UITestSignedIn") ? "globalThis.__plannerFixtureSignedIn=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestResumeSync") ? "globalThis.__plannerFixtureResumeSync=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestFocusZoom") ? "globalThis.__plannerFixtureFocusZoom=true;" : "") + script
+            let fixture = (ProcessInfo.processInfo.arguments.contains("-UITestSignedIn") ? "globalThis.__plannerFixtureSignedIn=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestResumeSync") ? "globalThis.__plannerFixtureResumeSync=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestFocusZoom") ? "globalThis.__plannerFixtureFocusZoom=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestWidgets") ? "globalThis.__plannerFixtureWidgets=true;" : "") + script
             config.userContentController.addUserScript(WKUserScript(source: fixture, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         }
         #endif
@@ -57,6 +58,14 @@ struct PlannerWebView: UIViewRepresentable {
             Task { @MainActor in
                 do {
                     switch action {
+                    case "widgetSchedule":
+                        guard let payload = body["schedule"], JSONSerialization.isValidJSONObject(payload) else { throw NativeError("Missing widget schedule.") }
+                        let data = try JSONSerialization.data(withJSONObject: payload)
+                        guard data.count <= 2 * 1024 * 1024 else { throw NativeError("Widget schedule is too large.") }
+                        let schedule = try WidgetSchedule.decode(data)
+                        if try WidgetScheduleStore.save(schedule) { WidgetCenter.shared.reloadAllTimelines() }
+                    case "clearWidgetSchedule":
+                        if try WidgetScheduleStore.save(.empty) { WidgetCenter.shared.reloadAllTimelines() }
                     case "googleSignIn": try await authentication?.signIn()
                     case "googleConnection":
                         guard let raw = body["url"] as? String, let url = URL(string: raw) else { throw NativeError("Missing connection URL.") }

@@ -1,4 +1,5 @@
-import {isIPhoneApp} from './lib/platform'
+import {isIPhoneApp, nativeRequest} from './lib/platform'
+import {widgetSnapshot} from './lib/widgetSnapshot'
 import {ChatExperiment} from './components/ChatExperiment'
 import {RECOVERY_TAB} from './lib/attachmentRecovery'
 import { PlannerDate as Date } from './lib/timezone.js'
@@ -115,6 +116,10 @@ export default function App() {
       .catch(() => setUsername(null))
       .finally(() => setChecking(false))
   }, [])
+
+  useEffect(() => {
+    if (!checking && !username && isIPhoneApp()) void nativeRequest({action:'clearWidgetSchedule'}).catch(() => {})
+  }, [checking, username])
 
   if (checking) {
     return (
@@ -253,6 +258,15 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [tab])
+
+  useEffect(() => {
+    if (!loaded || loadError || !isIPhoneApp()) return
+    const sync = () => { void nativeRequest({action:'widgetSchedule',schedule:widgetSnapshot(events)}).catch(() => {}) }
+    sync()
+    const timer = window.setInterval(sync, 3600000)
+    window.addEventListener('focus', sync)
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', sync) }
+  }, [events, loaded, loadError])
 
   const hiddenSet = useMemo(() => new Set(hiddenTagIds), [hiddenTagIds])
   const visibleEvents = useMemo(() => events.filter(event => isEventVisible(event, hiddenSet)&&!hiddenTypes.includes(eventType(event,tags))), [events, hiddenSet,hiddenTypes,tags])

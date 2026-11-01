@@ -55,3 +55,15 @@ npx --yes tsx@4.21.0 --test server/native-auth.test.ts server/account-auth.test.
 ```
 
 Physical-device microphone/camera, Google consent and real student-site login require device/account testing. Simulator fixture tests do not establish that Brightspace or Duo login works.
+
+## Home Screen and Lock Screen widgets
+
+The embedded **PlannerWidgets** extension provides **Current Task** and **Time Remaining**. Both support small/medium Home Screen and rectangular/inline Lock Screen layouts; Time Remaining also has a circular Lock Screen layout. Add either widget through the iPhone's normal widget picker after installing the new native build.
+
+Both targets must enable App Groups with `group.com.arinpace.aiplanner`, using the same signing team. This capability needs the paid developer membership for physical-device provisioning; simulator builds need no membership. Signing details remain local.
+
+The signed-in app exports a seven-day, read-only schedule into the App Group. It uses the calendar's existing occurrence expansion, including recurring folder children and exclusions, and omits folder containers, all-day items and reminders. Widgets are independent of calendar visibility filters. Where timed activities overlap, the latest-starting activity wins, then the one ending first. The app clears the snapshot on sign-out. No login tokens or credentials are shared with the extension.
+
+Timeline entries switch activities at their start/end boundaries. SwiftUI's system countdown continues while the extension is asleep and stops at zero. iOS controls when widget timelines are displayed/refreshed. Changes from other devices require the iPhone app to sync; the widget does not poll the account backend independently. After seven days without opening Planner it asks to sync instead of showing an obsolete schedule. There is no background agent/VM requirement for the cached countdown.
+
+Verification: `npx tsx --test tests/widget-snapshot.test.ts`; native model checks: `swiftc ios/Shared/WidgetSchedule.swift ios/Shared/WidgetScheduleTests.swift -o /tmp/planner-widget-tests && /tmp/planner-widget-tests`. Build the AIPlanner scheme to compile and embed both widgets.

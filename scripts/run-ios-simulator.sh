@@ -9,7 +9,7 @@ if [[ -z "$planner_simulator_id" ]]; then
 fi
 xcrun simctl boot "$planner_simulator_id" 2>/dev/null || true
 xcrun simctl bootstatus "$planner_simulator_id" -b
-xcodebuild -project ios/AIPlanner.xcodeproj -scheme AIPlanner -destination "platform=iOS Simulator,id=$planner_simulator_id" -derivedDataPath ios/build CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project ios/AIPlanner.xcodeproj -scheme AIPlanner -destination "platform=iOS Simulator,id=$planner_simulator_id" -derivedDataPath ios/build CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM= build
 xcrun simctl install "$planner_simulator_id" ios/build/Build/Products/Debug-iphonesimulator/AIPlanner.app
 xcrun simctl launch "$planner_simulator_id" com.arinpace.aiplanner
 planner_developer_dir="$(xcode-select -p)"
