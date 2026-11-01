@@ -48,10 +48,10 @@ export function login(username: string, password: string) {
   })
 }
 
-export function register(username: string, password: string) {
+export function register(username: string, password: string, email?: string) {
   return request<{ token: string; username: string }>('/api/register', {
     method: 'POST',
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password, email }),
   })
 }
 
@@ -131,3 +131,12 @@ export async function downloadPdf(id: string, name: string) {
   link.remove()
   window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
+
+
+export type GoogleLoginResult={username:string;token:string;pending?:false}|{pending:true;email:string;existingAccount:boolean}
+export function authOptions(){return request<{googleEnabled:boolean;pendingGoogle:boolean}>('/api/auth/options')}
+export function startGoogleLogin(){return request<{url:string}>('/api/auth/google/start',{method:'POST',body:'{}'})}
+let googleFinish:Promise<GoogleLoginResult>|undefined
+export function finishGoogleLogin(){return googleFinish??=request<GoogleLoginResult>('/api/auth/google/finish',{method:'POST',body:'{}'}).finally(()=>{setTimeout(()=>{googleFinish=undefined},1000)})}
+export function linkGoogleLogin(identifier:string,password:string){return request<GoogleLoginResult>('/api/auth/google/link',{method:'POST',body:JSON.stringify({identifier,password})})}
+export function createGoogleLogin(){return request<GoogleLoginResult>('/api/auth/google/create',{method:'POST',body:'{}'})}

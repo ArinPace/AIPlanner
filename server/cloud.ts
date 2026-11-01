@@ -1,8 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { randomUUID } from 'node:crypto'
 import { validateFilesState, type FilesState, type PlannerDocument } from '../src/lib/files.js'
-import { createToken, hashPassword, normalizeUsername, tokenHash, verifyPassword } from './auth.js'
-import { DEFAULT_CALENDAR, EMPTY_FILES } from './defaults.js'
+import { createToken, normalizeUsername, tokenHash } from './auth.js'
 import { handleAgentRequest } from './agent.js'
 import { handleMcpRequest } from './mcp.js'
 import { handleChatLinks } from './chat-links.js'
@@ -14,7 +13,7 @@ import {calendarHistory,restoreCalendarEvent} from './calendar-history.js'
 import {fixedSyncStatus,requestFixedSync} from './google-fixed-sync.js'
 import {normalizeEventFolders,validateEventFolders} from '../src/lib/eventFolders.js'
 import {z} from 'zod'
-import { handleVmPool, queuePersonalVm, registerVmHost, touchVmActivity } from './vm-host.js'
+import { handleVmPool, registerVmHost, touchVmActivity } from './vm-host.js'
 import { handleFilesBin, preserveRemovedFiles } from './files-bin.js'
 
 const BUCKET = 'planner-pdfs'
@@ -69,7 +68,7 @@ async function sessionUser(request: Request): Promise<string | null> {
   const session = result(await db().from('planner_sessions').select('username').eq('token_hash', tokenHash(token)).gt('expires_at', new Date().toISOString()).maybeSingle())
   return session?.username ?? null
 }
-async function sessionToken(username: string) {
+export async function sessionToken(username: string) {
   const token = createToken()
   result(await db().from('planner_sessions').insert({ username, token_hash: tokenHash(token), expires_at: new Date(Date.now() + 30 * 86400000).toISOString() }))
   return token
@@ -104,6 +103,10 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
   const path = url.searchParams.get('route') ? `/api/${url.searchParams.get('route')}` : url.pathname.replace(/\/$/, '')
   const method = request.method
   try {
+    if(path.startsWith('/api/auth/') || (path==='/api/agent/oauth/callback/google' && url.searchParams.get('state')?.startsWith('login_'))){
+      const response=await (await import('./account-auth.js')).handleAccountAuth(request,path)
+      if(response)return response
+    }
     if (['/api/agent/vm/host/claim', '/api/agent/vm/host/finish', '/api/agent/vm/host/power', '/api/agent/vm/host/status'].includes(path)) return await handleVmPool(request, path)
     if (path.startsWith('/api/agent/vm/worker/')) return await handleVmWorker(request, path)
     if (path.startsWith('/api/mcp') || path.startsWith('/api/.well-known/')) return await handleMcpRequest(request, path)
@@ -118,30 +121,24 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
     }
     if ((path === '/api/login' || path === '/api/register') && method === 'POST') {
       const input = await body(request)
-      const username = typeof input.username === 'string' ? normalizeUsername(input.username) : null
-      const password = typeof input.password === 'string' ? input.password : ''
-      if (!username || password.length > 256) throw new ApiError(400, 'Enter a valid username and password.')
-      if (path === '/api/register') {
-        if (password.length < 8) throw new ApiError(400, 'New passwords must be at least 8 characters.')
-        const { error } = await db().from('planner_accounts').insert({ username, password_hash: hashPassword(password) })
-        if (error?.code === '23505') throw new ApiError(409, 'That username is already taken.')
-        result({ data: null, error })
-        try {
-          result(await db().from('planner_calendars').insert({ username, state: DEFAULT_CALENDAR }))
-          result(await db().from('planner_files').insert({ username, state: EMPTY_FILES }))
-          await queuePersonalVm(username)
-          await touchVmActivity(username)
-          return json({ username, token: await sessionToken(username) }, 201)
-        } catch (error) {
-          await db().from('planner_accounts').delete().eq('username', username)
-          throw error
-        }
+      const {passwordAccount,createLoginAccount,normalizeEmail}=await import('./account-auth.js')
+      const identifier=typeof input.username==='string'?input.username:''
+      const password=typeof input.password==='string'?input.password:''
+      if(password.length>256)throw new ApiError(400,'Enter a valid username or email and password.')
+      if(path==='/api/register'){
+        const username=normalizeUsername(identifier)
+        const email=input.email===undefined?null:normalizeEmail(input.email)
+        if(!username || (input.email!==undefined&&!email))throw new ApiError(400,'Enter a valid username and email.')
+        if(password.length<8)throw new ApiError(400,'New passwords must be at least 8 characters.')
+        await createLoginAccount(username,password,email)
+        return json({username,token:await sessionToken(username)},201)
       }
-      const account = result(await db().from('planner_accounts').select('password_hash').eq('username', username).maybeSingle())
-      if (!account || !verifyPassword(password, account.password_hash)) throw new ApiError(401, 'Wrong username or password.')
-      await touchVmActivity(username).catch(() => console.error('VM wake request will retry from the signed-in app.'))
-      return json({ username, token: await sessionToken(username) })
+      const account=await passwordAccount(identifier,password)
+      if(!account)throw new ApiError(401,'Wrong email/username or password.')
+      await touchVmActivity(account.username).catch(()=>console.error('VM wake request will retry from the signed-in app.'))
+      return json({username:account.username,token:await sessionToken(account.username)})
     }
+
     if (path === '/api/session' && method === 'GET') return json({ username: await sessionUser(request) })
     if (path === '/api/logout' && method === 'POST') {
       const token = bearer(request)
