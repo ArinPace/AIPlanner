@@ -12,6 +12,7 @@
 		24F88BC2A69FB22CE43C0D00 /* UITestFixture.js in Resources */ = {isa = PBXBuildFile; fileRef = 2537154DE24E02FEF8750CD9 /* UITestFixture.js */; };
 		529D71502D6AFB2969202948 /* PlannerWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 5D1F455AA1CC1C61166C41A3 /* PlannerWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		52B66C0F5E869D612E6AFDA0 /* PlannerUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1BCCE501AEDC0264BA39582 /* PlannerUITests.swift */; };
+		551CEF7953C7A21638C675B7 /* LocalReplicaStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F1B90C243E016C6DC7E4754 /* LocalReplicaStore.swift */; };
 		5BF6FE0B6DED4B4F507AE25D /* PlannerScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96F150B5D75FA26CF9EB8CFB /* PlannerScreen.swift */; };
 		6D899446BF30B531574A291C /* NativeAuthentication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 506DDB4FB555EC4D72A947D5 /* NativeAuthentication.swift */; };
 		76EB143C4340AA9F649A4F3C /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8828692B26B9612F431BE690 /* Foundation.framework */; };
@@ -61,6 +62,7 @@
 		4E783A9E10D2A8ABA38CD11C /* AIPlanner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AIPlanner.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		506DDB4FB555EC4D72A947D5 /* NativeAuthentication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeAuthentication.swift; sourceTree = "<group>"; };
 		5D1F455AA1CC1C61166C41A3 /* PlannerWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PlannerWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		5F1B90C243E016C6DC7E4754 /* LocalReplicaStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LocalReplicaStore.swift; sourceTree = "<group>"; };
 		6A173FAE6A6CE2B833F169D3 /* AppConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfiguration.swift; sourceTree = "<group>"; };
 		6C7CCDEB3609F1FAA874E941 /* AIPlannerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AIPlannerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		7B594B6DB375E1BF3F23CDD6 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -169,6 +171,7 @@
 				28AAD1477D5182D66D4B03B3 /* Assets.xcassets */,
 				2537154DE24E02FEF8750CD9 /* UITestFixture.js */,
 				BC4BD313A16E37449327877F /* AIPlanner.entitlements */,
+				5F1B90C243E016C6DC7E4754 /* LocalReplicaStore.swift */,
 			);
 			path = AIPlanner;
 			sourceTree = "<group>";
@@ -343,6 +346,7 @@
 				D1E4E6F11FE11533500ED179 /* PlannerWebView.swift in Sources */,
 				6D899446BF30B531574A291C /* NativeAuthentication.swift in Sources */,
 				177F33768F3D4AB6A48C7A93 /* WidgetSchedule.swift in Sources */,
+				551CEF7953C7A21638C675B7 /* LocalReplicaStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

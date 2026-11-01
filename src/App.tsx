@@ -1,5 +1,4 @@
-import {isIPhoneApp, nativeRequest} from './lib/platform'
-import {widgetSnapshot} from './lib/widgetSnapshot'
+import {isIPhoneApp} from './lib/platform'
 import {ChatExperiment} from './components/ChatExperiment'
 import {RECOVERY_TAB} from './lib/attachmentRecovery'
 import { PlannerDate as Date } from './lib/timezone.js'
@@ -13,7 +12,7 @@ import { MonthView } from './components/MonthView'
 import { Sidebar } from './components/Sidebar'
 import { TimeGridView } from './components/TimeGridView'
 import { YearView } from './components/YearView'
-import { adoptCalendarRevision, emptyCalendar, getSession, loadCalendar, logout, saveCalendar, setToken } from './lib/api'
+import { adoptCalendarRevision, emptyCalendar, getSession, loadCalendar, loadFiles, logout, saveCalendar, setToken } from './lib/api'
 import { isEventVisible } from './lib/colors'
 import {eventType,type ScheduleType} from './lib/eventType'
 import {saveEventGroup,removeEventSeries,detachEventOccurrence} from './lib/eventFolders'
@@ -117,10 +116,6 @@ export default function App() {
       .finally(() => setChecking(false))
   }, [])
 
-  useEffect(() => {
-    if (!checking && !username && isIPhoneApp()) void nativeRequest({action:'clearWidgetSchedule'}).catch(() => {})
-  }, [checking, username])
-
   if (checking) {
     return (
       <div className="login-screen">
@@ -207,7 +202,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   }, [events, tags, hiddenTagIds, zoom, loaded, loadError])
 
   useEffect(() => {
-    if (tab !== 'calendar' || !loaded || loadError || draft) return
+    if (!loaded || loadError || draft) return
     let cancelled = false, refreshing = false
     const fingerprint = calendarFingerprint({ events, tags, hiddenTagIds, zoom })
     async function refresh() {
@@ -226,7 +221,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
       finally { refreshing = false }
     }
     void refresh()
-    const timer = window.setInterval(() => void refresh(), 15000)
+    const timer = window.setInterval(() => void refresh(), tab==='calendar'?15000:60000)
     const resume=()=>{if(document.visibilityState==='visible')void refresh()}
     window.addEventListener('focus', refresh)
     document.addEventListener('visibilitychange',resume)
@@ -259,14 +254,19 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
     return () => window.removeEventListener('keydown', onKey)
   }, [tab])
 
-  useEffect(() => {
-    if (!loaded || loadError || !isIPhoneApp()) return
-    const sync = () => { void nativeRequest({action:'widgetSchedule',schedule:widgetSnapshot(events)}).catch(() => {}) }
-    sync()
-    const timer = window.setInterval(sync, 3600000)
-    window.addEventListener('focus', sync)
-    return () => { window.clearInterval(timer); window.removeEventListener('focus', sync) }
-  }, [events, loaded, loadError])
+  const lastLocalFilesSync=useRef(0)
+  useEffect(()=>{
+    if(!loaded||loadError||['files','todo','work'].includes(tab))return
+    let fetching=false
+    const sync=()=>{
+      if(document.visibilityState==='hidden'||fetching||globalThis.Date.now()-lastLocalFilesSync.current<300000)return
+      fetching=true
+      void loadFiles().then(()=>{lastLocalFilesSync.current=globalThis.Date.now()}).catch(()=>{}).finally(()=>{fetching=false})
+    }
+    sync();const timer=window.setInterval(sync,60000)
+    window.addEventListener('focus',sync)
+    return()=>{window.clearInterval(timer);window.removeEventListener('focus',sync)}
+  },[loaded,loadError,tab])
 
   const hiddenSet = useMemo(() => new Set(hiddenTagIds), [hiddenTagIds])
   const visibleEvents = useMemo(() => events.filter(event => isEventVisible(event, hiddenSet)&&!hiddenTypes.includes(eventType(event,tags))), [events, hiddenSet,hiddenTypes,tags])

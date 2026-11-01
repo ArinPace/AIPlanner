@@ -1,3 +1,4 @@
+import {activateReplica,recordReplica,replicaContext} from './localReplica'
 import {isIPhoneApp,nativeRequest} from './platform'
 import type { StoredState } from '../types'
 import { DEFAULT_TAGS } from './storage'
@@ -16,11 +17,12 @@ export function getToken(): string | null {
 
 export function setToken(token: string | null): void {
   if (token) localStorage.setItem(TOKEN_KEY, token)
-  else localStorage.removeItem(TOKEN_KEY)
+  else {localStorage.removeItem(TOKEN_KEY);activateReplica(null)}
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken()
+  const context=replicaContext()
   let response: Response
   try {
     response = await fetch(path, {
@@ -39,6 +41,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (!response.ok) {
     throw new Error(data.error || 'Request failed')
   }
+  if(['/api/session','/api/login','/api/register','/api/auth/google/finish','/api/auth/google/link','/api/auth/google/create'].includes(path)){
+    const identity=(data as unknown as {username?:unknown})?.username
+    if(typeof identity==='string'||identity===null)activateReplica(identity)
+  }
+  recordReplica(path,options.method||'GET',data,options.body,context)
   return data
 }
 
@@ -56,8 +63,8 @@ export function register(username: string, password: string, email?: string) {
   })
 }
 
-export function logout() {
-  return request<{ ok: boolean }>('/api/logout', { method: 'POST' })
+export async function logout() {
+  try{return await request<{ ok: boolean }>('/api/logout', { method: 'POST' })}finally{activateReplica(null)}
 }
 
 export function getSession() {

@@ -1,3 +1,4 @@
+import {LocalCopySettings} from './LocalCopySettings'
 import {downloadCalendarJson} from '../lib/api'
 import { useEffect, useState } from 'react'
 import { applyTheme, readTheme } from '../lib/theme'
@@ -50,6 +51,7 @@ export function SettingsPanel({ zoom, onZoomChange, onClose }: SettingsPanelProp
       <button type="button" className="today-btn" onClick={()=>void downloadCalendarJson().catch(e=>setDownloadError(e.message))}>Download calendar JSON</button>
       <button type="button" className="today-btn" onClick={()=>void downloadCalendarJson(true).catch(e=>setDownloadError(e.message))}>Download staging JSON</button>
       {downloadError&&<p className="form-error" role="alert">{downloadError}</p>}
+      <LocalCopySettings/>
       <label className="settings-field">
         <span>Display size</span>
         <div className="settings-zoom-row">

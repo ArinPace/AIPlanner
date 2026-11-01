@@ -10,10 +10,11 @@ struct PlannerEntry: TimelineEntry {
 struct PlannerProvider: TimelineProvider {
     func placeholder(in context: Context) -> PlannerEntry {
         let now = Date()
-        return PlannerEntry(date: now, schedule: WidgetSchedule(version: 1, generatedAt: now.timeIntervalSince1970, validUntil: now.addingTimeInterval(86400).timeIntervalSince1970, events: [WidgetTask(id: "preview", title: "Study for statistics", start: now.addingTimeInterval(-900).timeIntervalSince1970, end: now.addingTimeInterval(1800).timeIntervalSince1970)]))
+        return PlannerEntry(date: now, schedule: WidgetSchedule(version: 1, generatedAt: now.timeIntervalSince1970, validUntil: now.addingTimeInterval(86400).timeIntervalSince1970, events: [WidgetTask(id: "preview", title: "Example task", start: now.addingTimeInterval(-900).timeIntervalSince1970, end: now.addingTimeInterval(1800).timeIntervalSince1970)]))
     }
     func getSnapshot(in context: Context, completion: @escaping (PlannerEntry) -> Void) {
-        completion(context.isPreview ? placeholder(in: context) : PlannerEntry(date: Date(), schedule: WidgetScheduleStore.load()))
+        let schedule = WidgetScheduleStore.load()
+        completion(context.isPreview && schedule.validUntil <= Date().timeIntervalSince1970 ? placeholder(in: context) : PlannerEntry(date: Date(), schedule: schedule))
     }
     func getTimeline(in context: Context, completion: @escaping (Timeline<PlannerEntry>) -> Void) {
         let now = Date(), schedule = WidgetScheduleStore.load()
@@ -29,6 +30,17 @@ struct PlannerWidgetView: View {
     let entry: PlannerEntry
     let countdown: Bool
     private var isHome: Bool { family == .systemSmall || family == .systemMedium }
+    private var taskHex: String { entry.task?.color ?? "#1a73e8" }
+    private var taskColor: Color {
+        let value = UInt64(taskHex.trimmingCharacters(in: CharacterSet(charactersIn: "#")), radix: 16) ?? 0x1a73e8
+        return Color(red: Double((value >> 16) & 255) / 255, green: Double((value >> 8) & 255) / 255, blue: Double(value & 255) / 255)
+    }
+    private var colored: Bool { isHome && !countdown && entry.task != nil }
+    private var taskTextColor: Color {
+        let value = UInt64(taskHex.trimmingCharacters(in: CharacterSet(charactersIn: "#")), radix: 16) ?? 0x1a73e8
+        let luminance = (0.299 * Double((value >> 16) & 255) + 0.587 * Double((value >> 8) & 255) + 0.114 * Double(value & 255)) / 255
+        return luminance > 0.65 ? Color(red: 0.125, green: 0.13, blue: 0.14) : .white
+    }
     var body: some View {
         Group {
             if family == .accessoryInline {
@@ -46,7 +58,7 @@ struct PlannerWidgetView: View {
             } else {
                 VStack(alignment: .leading, spacing: isHome ? 8 : 2) {
                     Label(countdown ? "Time remaining" : "Current task", systemImage: countdown ? "hourglass" : "calendar")
-                        .font(isHome ? .caption : .caption2).foregroundStyle(.secondary)
+                        .font(isHome ? .caption : .caption2).foregroundStyle(colored ? taskTextColor.opacity(0.85) : Color.secondary)
                     if let task = entry.task {
                         if countdown {
                             Text(timerInterval: entry.date...task.endDate, countsDown: true)
@@ -55,7 +67,7 @@ struct PlannerWidgetView: View {
                             Text(task.title).font(.caption).lineLimit(isHome ? 2 : 1)
                         } else {
                             Text(task.title).font(isHome ? .headline : .body).lineLimit(isHome ? 4 : 2)
-                            if isHome { Text("\(task.startDate.formatted(date: .omitted, time: .shortened)) – \(task.endDate.formatted(date: .omitted, time: .shortened))").font(.caption).foregroundStyle(.secondary) }
+                            if isHome { Text("\(task.startDate.formatted(date: .omitted, time: .shortened)) – \(task.endDate.formatted(date: .omitted, time: .shortened))").font(.caption).foregroundStyle(colored ? taskTextColor.opacity(0.85) : Color.secondary) }
                         }
                     } else if entry.date.timeIntervalSince1970 >= entry.schedule.validUntil {
                         Text("Open Planner to sync").font(.headline)
@@ -70,8 +82,9 @@ struct PlannerWidgetView: View {
                 }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
+        .foregroundStyle(colored ? taskTextColor : Color.primary)
         .privacySensitive()
-        .containerBackground(for: .widget) { Color(.systemBackground) }
+        .containerBackground(for: .widget) { if colored { taskColor } else { Color(.systemBackground) } }
         .widgetURL(URL(string: "aiplanner://calendar"))
     }
 }

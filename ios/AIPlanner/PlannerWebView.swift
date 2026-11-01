@@ -58,6 +58,21 @@ struct PlannerWebView: UIViewRepresentable {
             Task { @MainActor in
                 do {
                     switch action {
+                    case "localReplicaAccount":
+                        let account = body["account"] as? String
+                        if try LocalReplicaStore.activate(account) {
+                            try WidgetScheduleStore.save(.empty)
+                            WidgetCenter.shared.reloadAllTimelines()
+                        }
+                    case "localReplica":
+                        guard let account = body["account"] as? String, let kind = body["kind"] as? String,
+                              let savedAt = body["savedAt"] as? Double, let payload = body["data"], JSONSerialization.isValidJSONObject(payload) else { throw NativeError("Missing local copy data.") }
+                        try LocalReplicaStore.save(account: account, kind: kind, savedAt: savedAt, payload: payload)
+                    case "widgetStatus":
+                        let schedule = WidgetScheduleStore.load()
+                        replyHandler(["available": WidgetScheduleStore.file != nil, "generatedAt": schedule.generatedAt, "validUntil": schedule.validUntil, "eventCount": schedule.events.count, "currentTask": schedule.current(at: Date())?.title ?? ""], nil)
+                        return
+                    case "reloadWidgets": WidgetCenter.shared.reloadAllTimelines()
                     case "widgetSchedule":
                         guard let payload = body["schedule"], JSONSerialization.isValidJSONObject(payload) else { throw NativeError("Missing widget schedule.") }
                         let data = try JSONSerialization.data(withJSONObject: payload)

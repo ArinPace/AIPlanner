@@ -5,6 +5,7 @@ struct WidgetTask: Codable, Equatable {
     let title: String
     let start: TimeInterval
     let end: TimeInterval
+    var color: String? = nil
     var startDate: Date { Date(timeIntervalSince1970: start) }
     var endDate: Date { Date(timeIntervalSince1970: end) }
 }
@@ -54,7 +55,10 @@ enum WidgetScheduleStore {
     }
     @discardableResult static func save(_ schedule: WidgetSchedule) throws -> Bool {
         guard let file else { throw NSError(domain: "PlannerWidgets", code: 2, userInfo: [NSLocalizedDescriptionKey: "Enable the Planner App Group for both targets."]) }
-        if load() == schedule { return false }
+        let previous = load()
+        if previous == schedule { return false }
+        // Repeated foreground reads need not request identical widget timelines.
+        if schedule.generatedAt > 0, previous.events == schedule.events, schedule.generatedAt - previous.generatedAt < 1800, previous.validUntil > Date().timeIntervalSince1970 + 3600 { return false }
         try JSONEncoder().encode(schedule).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         return true
     }
