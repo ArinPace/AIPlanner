@@ -2,9 +2,10 @@ import type {CalendarEvent,Tag} from '../types.js'
 import {detachEventOccurrence, saveEventGroup} from './eventFolders.js'
 import {expandEvents} from './recurrence.js'
 import {PlannerDate} from './timezone.js'
+import {widgetSnapshot} from './widgetSnapshot.js'
 import {eventType} from './eventType.js'
 
-export type TaskFeedback={id:string;task:{id:string;title:string;start:number;end:number;planningTaskId?:string};remainingMinutes:number;done:boolean;reportedAt:number;requestedEnd?:number}
+export type TaskFeedback={id:string;task:{id:string;title:string;start:number;end:number;planningTaskId?:string};remainingMinutes:number;done:boolean;reportedAt:number;requestedEnd?:number;kind?:'fillFreeTime'}
 export type TaskTimeResult={applied:boolean;eventId?:string;end?:string;note:string}
 export function resizeWidgetOccurrence(events:CalendarEvent[], feedback:TaskFeedback,tags:Tag[]=[]):{events:CalendarEvent[];result:TaskTimeResult} {
  const {task,reportedAt,remainingMinutes,done}=feedback
@@ -32,4 +33,15 @@ export function resizeWidgetOccurrence(events:CalendarEvent[], feedback:TaskFeed
  next=saveEventGroup(next,updated)
  const saved=next.find(e=>e.id===selected.id||e.mergedEventIds?.includes(selected.id))
  return {events:next,result:{applied:true,eventId:saved?.id||selected.id,end:saved?.end||target,note:'The selected occurrence end time has already been saved. Keep this duration, then reconcile later planned activities and task completion as requested. Other occurrences and fixed commitments were preserved.'}}
+}
+
+export function verifyFreeTimeRequest(events:CalendarEvent[],tags:Tag[],feedback:TaskFeedback,now=new Date()):TaskTimeResult {
+ if(now.getTime()>=feedback.task.end*1000||now.getTime()<feedback.reportedAt*1000-1000)throw new Error('That free-time slot has ended. Dismiss this request and use the widget during a new free slot.')
+ const snapshot=widgetSnapshot(events,now,tags),time=now.getTime()/1000
+ const active=snapshot.events.filter(e=>e.start<=time&&time<e.end)
+ if(active.some(e=>!e.isFreeTime))throw new Error('You have a scheduled activity now. This button only works during free time.')
+ const midnight=new PlannerDate(now);midnight.setHours(24,0,0,0)
+ const end=Math.min(feedback.task.end,midnight.getTime()/1000,...snapshot.events.filter(e=>!e.isFreeTime&&e.start>time).map(e=>e.start),...active.map(e=>e.end))
+ if(end<=time)throw new Error('There is no remaining free time in this slot.')
+ return {applied:false,end:new Date(end*1000).toISOString(),note:'Verified free time from '+now.toISOString()+' until '+new Date(end*1000).toISOString()+'. No event has been changed by the widget.'}
 }

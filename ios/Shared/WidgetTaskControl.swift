@@ -9,6 +9,7 @@ struct WidgetTaskFeedback: Codable {
     let done: Bool
     let reportedAt: Double
     var requestedEnd: Double? = nil
+    var kind: String? = nil
 }
 enum WidgetTaskControl {
     static var defaults: UserDefaults { UserDefaults(suiteName: WidgetScheduleStore.group)! }
@@ -76,5 +77,23 @@ struct SubmitTaskTimeIntent: AppIntent {
         guard let task = WidgetScheduleStore.load().current(at: Date()), task.id == taskID else { throw WidgetTaskControl.ControlError.stale }
         try WidgetTaskControl.submit(task, done: done)
         return .result()
+    }
+}
+
+struct FillFreeTimeIntent: AppIntent {
+    static var title: LocalizedStringResource = "Tell me what to do"
+    static var openAppWhenRun: Bool = true
+    @MainActor func perform() async throws -> some IntentResult {
+        guard let slot = WidgetScheduleStore.load().freeSlot(at: Date()) else { throw FreeTimeError.unavailable }
+        guard WidgetTaskControl.pending() == nil else { return .result() }
+        let now = Date().timeIntervalSince1970
+        let feedback = WidgetTaskFeedback(id: UUID().uuidString, task: slot, remainingMinutes: slot.remainingMinutes(at: Date()), done: false, reportedAt: now, kind: "fillFreeTime")
+        WidgetTaskControl.defaults.set(try JSONEncoder().encode(feedback), forKey: "task-feedback")
+        WidgetCenter.shared.reloadAllTimelines()
+        return .result()
+    }
+    enum FreeTimeError: Error, LocalizedError {
+        case unavailable
+        var errorDescription: String? { "This button is available only during free time. Open Planner to refresh your schedule." }
     }
 }

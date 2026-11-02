@@ -1,4 +1,4 @@
-import {resizeWidgetOccurrence, type TaskFeedback, type TaskTimeResult} from './lib/widgetTaskFeedback'
+import {resizeWidgetOccurrence, verifyFreeTimeRequest, type TaskFeedback, type TaskTimeResult} from './lib/widgetTaskFeedback'
 import {WidgetTaskFeedback} from './components/WidgetTaskFeedback'
 import {isIPhoneApp} from './lib/platform'
 import {ScreenTimePanel} from './components/ScreenTimePanel'
@@ -191,6 +191,11 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
         if(accountToken!==getToken())throw new Error('Your account changed.')
         const remote=await loadCalendar()
         if(accountToken!==getToken())throw new Error('Your account changed.')
+        if(feedback.kind==='fillFreeTime'){
+          const result=verifyFreeTimeRequest(remote.events,remote.tags,feedback)
+          applyState(remote)
+          return result
+        }
         const change=resizeWidgetOccurrence(remote.events,feedback,remote.tags)
         if(change.result.applied&&change.events!==remote.events)await saveCalendar({...remote,events:change.events})
         applyState({...remote,events:change.events})

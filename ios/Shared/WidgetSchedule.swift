@@ -7,6 +7,7 @@ struct WidgetTask: Codable, Equatable, Identifiable {
     let end: TimeInterval
     var color: String? = nil
     var planningTaskId: String? = nil
+    var isFreeTime: Bool? = nil
     var startDate: Date { Date(timeIntervalSince1970: start) }
     var endDate: Date { Date(timeIntervalSince1970: end) }
     func remainingMinutes(at now: Date, adjustedEnd: Double? = nil) -> Int {
@@ -32,6 +33,20 @@ struct WidgetSchedule: Codable, Equatable {
             if $0.end != $1.end { return $0.end < $1.end }
             return $0.id < $1.id
         }.first
+    }
+    func freeSlot(at date: Date) -> WidgetTask? {
+        let time = date.timeIntervalSince1970
+        guard generatedAt > 0, time >= generatedAt, time < validUntil else { return nil }
+        let active = events.filter { $0.start <= time && time < $0.end }
+        guard !active.contains(where: { $0.isFreeTime != true }) else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/New_York")!
+        let dayStart = calendar.startOfDay(for: date)
+        guard let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) else { return nil }
+        let start = max(generatedAt, dayStart.timeIntervalSince1970, events.filter { $0.end <= time }.map(\.end).max() ?? generatedAt, active.map(\.start).max() ?? generatedAt)
+        let end = min(validUntil, dayEnd.timeIntervalSince1970, events.filter { $0.isFreeTime != true && $0.start > time }.map(\.start).min() ?? validUntil, active.map(\.end).min() ?? validUntil)
+        guard end > time else { return nil }
+        return WidgetTask(id: "free-time:\(start):\(end)", title: "Free time", start: start, end: end, color: "#ffffff", isFreeTime: true)
     }
     func next(after date: Date) -> WidgetTask? {
         guard date.timeIntervalSince1970 < validUntil else { return nil }

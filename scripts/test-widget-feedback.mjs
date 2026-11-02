@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 const browser=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
 try {
- for(const mode of ['duration','done','failure']){
+ for(const mode of ['duration','done','failure','free','freeBusy']){
   const page=await browser.newPage({viewport:{width:393,height:852}});
   await page.addInitScript({content:`globalThis.__plannerFixtureSignedIn=true;${fs.readFileSync(new URL('../ios/AIPlanner/UITestFixture.js',import.meta.url),'utf8')}`});
   await page.addInitScript(({mode})=>{
@@ -11,6 +11,10 @@ try {
    const now=Date.now()/1000;
    window.pendingWidget={id:'test-'+mode,task:{id:'event@'+new Date(now*1000).toISOString(),title:'Test homework',start:now-300,end:now+1200,planningTaskId:'linked-homework'},remainingMinutes:mode==='duration'?30:0,done:mode==='done',reportedAt:now};
    window.widgetCalendar={revision:1,events:[{id:'event',title:'Test homework',start:new Date((now-300)*1000).toISOString(),end:new Date((now+1200)*1000).toISOString(),description:'',allDay:false,tagIds:[],scheduleType:'planned',recurrence:{frequency:'none',interval:1,until:null}}],tags:[],hiddenTagIds:[],zoom:1};
+   if(mode==='free'||mode==='freeBusy'){
+    window.pendingWidget.kind='fillFreeTime';window.pendingWidget.task.title='Free time';
+    if(mode==='free'){window.widgetCalendar.events[0].start=new Date((now+600)*1000).toISOString();window.widgetCalendar.events[0].end=new Date((now+3600)*1000).toISOString()}
+   }
    window.webkit={messageHandlers:{plannerNative:{postMessage:async b=>{
     if(b.action==='widgetSchedule')window.widgetSnapshots.push(b.schedule);
     if(b.action==='taskFeedback')return window.pendingWidget;
@@ -31,6 +35,11 @@ try {
    };
   },{mode});
   await page.goto(process.env.PLANNER_TEST_ORIGIN||'http://127.0.0.1:5174');
+  if(mode==='freeBusy'){
+   await page.getByText(/scheduled activity now/).waitFor();
+   assert.deepEqual(await page.evaluate(()=>[feedbackSends.length,calendarWrites.length,feedbackAcks.length]),[0,0,0]);
+   console.log('freeBusy passed: live calendar recheck blocks the request without sending or editing');await page.close();continue;
+  }
   if(mode==='failure'){
    await page.getByText(/Test offline/).waitFor();
    assert.equal(await page.evaluate(()=>feedbackSends.length),1);
@@ -41,6 +50,11 @@ try {
   }
   await page.getByText('Sent to your agent',{exact:false}).waitFor();
   const result=await page.evaluate(()=>({sends:feedbackSends,acks:feedbackAcks,writes:calendarWrites,snapshots:widgetSnapshots}));
+  if(mode==='free'){
+   assert.equal(result.writes.length,0);assert.equal(result.sends.length,1);assert.equal(result.acks.length,1);
+   assert.match(result.sends[0].message,/Free-time request/);assert.match(result.sends[0].message,/fill ONLY the remaining free-time window/);
+   console.log('free passed: request queued for a verified gap, calendar untouched');await page.close();continue;
+  }
   assert.equal(result.writes.length,1);
   const target=result.writes[0].events[0].end;assert.match(result.sends[0].message,/already been saved/);
   assert.ok(result.snapshots.some(s=>mode==='duration'?s.events.some(e=>Math.abs(e.end-Date.parse(target)/1000)<1):true));

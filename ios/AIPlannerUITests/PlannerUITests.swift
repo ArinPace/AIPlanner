@@ -82,6 +82,52 @@ final class PlannerUITests: XCTestCase {
         done.tap()
         XCTAssertTrue(app.webViews.staticTexts["Widget feedback received: done"].waitForExistence(timeout: 15))
     }
+    func testFillFreeTimeWidget() {
+        let app = XCUIApplication()
+        app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"
+        app.launchArguments = ["-UITestFixture", "-UITestSignedIn", "-UITestWidgets", "-UITestFreeTime"]
+        app.launch()
+        XCTAssertTrue(app.webViews.buttons["Agent"].waitForExistence(timeout: 15))
+        Thread.sleep(forTimeInterval: 3)
+        XCUIDevice.shared.press(.home)
+        let home = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        func visible() -> XCUIElement? { home.buttons.matching(identifier: "Fill my free time").allElementsBoundByIndex.first { $0.isHittable } }
+        func locate() -> Bool {
+            for _ in 0..<4 { if visible() != nil { return true }; home.swipeRight() }
+            for _ in 0..<5 { if visible() != nil { return true }; home.swipeLeft() }
+            return false
+        }
+        if !locate() {
+            let icons = home.icons.matching(identifier: "AI Planner").matching(NSPredicate(format: "NOT (value CONTAINS[c] 'Widget')"))
+            for _ in 0..<4 { home.swipeRight() }
+            for _ in 0..<5 { if icons.allElementsBoundByIndex.contains(where: { $0.isHittable }) { break }; home.swipeLeft() }
+            icons.allElementsBoundByIndex.first { $0.isHittable }!.press(forDuration: 1.5)
+            if home.buttons["Edit Home Screen"].exists { home.buttons["Edit Home Screen"].tap() }
+            home.buttons["Edit"].tap(); home.buttons["Add Widget"].tap()
+            let search = home.searchFields["Search Widgets"]
+            XCTAssertTrue(search.waitForExistence(timeout: 5));search.tap();search.typeText("AI Planner")
+            if home.buttons["AI Planner"].firstMatch.waitForExistence(timeout: 3) { home.buttons["AI Planner"].firstMatch.tap() }
+            else { home.staticTexts["AI Planner"].firstMatch.tap() }
+            let preview = home.buttons["AI Planner, Tell me what to do"]
+            for _ in 0..<8 { if preview.exists { break }; home.buttons.matching(NSPredicate(format: "label BEGINSWITH 'AI Planner,'")).firstMatch.swipeLeft() }
+            XCTAssertTrue(preview.waitForExistence(timeout: 5));home.buttons[" Add Widget"].tap()
+            if home.buttons["Done"].waitForExistence(timeout: 5) { home.buttons["Done"].tap() }
+        }
+        XCTAssertTrue(locate())
+        let button = visible()!
+        XCTAssertTrue(button.isEnabled)
+        let image = XCTAttachment(screenshot: XCUIScreen.main.screenshot());image.name = "Tell me what to do during free time";image.lifetime = .keepAlways;add(image)
+        button.tap()
+        XCTAssertTrue(app.webViews.staticTexts["Widget feedback received: free"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Sent to your agent to fill this free-time slot.'")).firstMatch.waitForExistence(timeout: 10))
+        app.terminate()
+        app.launchArguments = ["-UITestFixture", "-UITestSignedIn", "-UITestWidgets"]
+        app.launch()
+        XCTAssertTrue(app.webViews.buttons["Agent"].waitForExistence(timeout: 15));Thread.sleep(forTimeInterval: 3)
+        XCUIDevice.shared.press(.home)
+        XCTAssertTrue(home.staticTexts["Available during free time"].waitForExistence(timeout: 15))
+        XCTAssertFalse(home.buttons["Fill my free time"].exists)
+    }
     func testScreenTimeRealSystemPicker() {
         let app = launch()
         app.webViews.buttons["Screen Time"].tap()

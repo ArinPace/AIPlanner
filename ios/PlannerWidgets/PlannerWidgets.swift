@@ -236,6 +236,50 @@ struct DoneTaskView: View {
         .containerBackground(for: .widget) { if family == .systemSmall, task != nil { color } else { Color(.systemBackground) } }
     }
 }
+struct FillFreeTimeWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "PlannerFillFreeTime", provider: PlannerProvider()) { FillFreeTimeView(entry: $0) }
+            .configurationDisplayName("Tell me what to do")
+            .description("During free time, ask your agent to choose and schedule something useful before your next commitment.")
+            .supportedFamilies([.systemSmall, .accessoryRectangular, .accessoryCircular])
+    }
+}
+struct FillFreeTimeView: View {
+    @Environment(\.widgetFamily) var family
+    let entry: PlannerEntry
+    private var slot: WidgetTask? { entry.schedule.freeSlot(at: entry.date) }
+    @ViewBuilder private var actionLabel: some View {
+        if family == .accessoryCircular { Image(systemName: "sparkles").font(.title2) }
+        else {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                Text("Tell me what to do").font(.system(size: family == .systemSmall ? 15 : 12, weight: .semibold))
+                    .lineLimit(3).fixedSize(horizontal: false, vertical: true)
+            }.frame(maxWidth: .infinity, minHeight: family == .systemSmall ? 40 : 0)
+        }
+    }
+    var body: some View {
+        let pending = WidgetTaskControl.pending()
+        VStack(alignment: .leading, spacing: family == .systemSmall ? 8 : 2) {
+            if family == .systemSmall { Text("Free time").font(.headline) }
+            if slot != nil && pending == nil {
+                Button(intent: FillFreeTimeIntent()) { actionLabel }
+                    .buttonStyle(.bordered).controlSize(family == .systemSmall ? .regular : .mini).tint(.primary)
+                    .accessibilityLabel("Fill my free time")
+            } else {
+                actionLabel.foregroundStyle(.secondary).opacity(0.6)
+                    .accessibilityIdentifier("freeTimeUnavailable")
+            }
+            if family != .accessoryCircular {
+                if pending?.kind == "fillFreeTime" { Text("Request saved · sending…").font(.caption) }
+                else if let slot { Text("Free until \(slot.endDate.formatted(date: .omitted, time: .shortened))").font(.caption) }
+                else { Text(entry.schedule.validUntil <= entry.date.timeIntervalSince1970 ? "Open Planner to sync" : "Available during free time").font(.caption) }
+            }
+        }.foregroundStyle(.primary)
+        .containerBackground(for: .widget) { Color(.systemBackground) }
+    }
+}
+
 @main struct PlannerWidgetBundle: WidgetBundle {
-    var body: some Widget { TaskControlWidget(); DoneTaskWidget(); TaskAndTimeWidget(); CurrentTaskWidget(); TimeRemainingWidget() }
+    var body: some Widget { FillFreeTimeWidget(); TaskControlWidget(); DoneTaskWidget(); TaskAndTimeWidget(); CurrentTaskWidget(); TimeRemainingWidget() }
 }

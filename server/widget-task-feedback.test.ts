@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {resizeWidgetOccurrence,type TaskFeedback} from '../src/lib/widgetTaskFeedback.js'
+import {resizeWidgetOccurrence,verifyFreeTimeRequest,type TaskFeedback} from '../src/lib/widgetTaskFeedback.js'
 import {normalizeEventFolders} from '../src/lib/eventFolders.js'
 import {expandEvents} from '../src/lib/recurrence.js'
 import type {CalendarEvent} from '../src/types.js'
@@ -41,4 +41,16 @@ test('exact widget end time preserves seconds instead of rounding a five-minute 
  const work=event('homework'),report=Date.parse('2026-11-02T13:30Z')/1000
  const change=resizeWidgetOccurrence([work],feedback(work,{remainingMinutes:31,requestedEnd:report+30*60+15}))
  assert.equal(change.result.end,'2026-11-02T14:00:15.000Z')
+})
+
+test('free-time requests accept gaps and explicit planned Free time, bounded by the next activity',()=>{
+ const now=new Date('2026-11-02T13:30:00Z'),next=event('next',{start:'2026-11-02T14:00:00.000Z',end:'2026-11-02T15:00:00.000Z'})
+ const request=feedback(event('slot'),{kind:'fillFreeTime'})
+ assert.equal(verifyFreeTimeRequest([next],[],request,now).end,'2026-11-02T14:00:00.000Z')
+ const free=event('free',{title:'Free time'})
+ assert.equal(verifyFreeTimeRequest([free,next],[],request,now).end,'2026-11-02T14:00:00.000Z')
+ assert.throws(()=>verifyFreeTimeRequest([event('busy')],[],request,now),/scheduled activity/)
+ assert.throws(()=>verifyFreeTimeRequest([free,event('busy')],[],request,now),/scheduled activity/)
+ assert.throws(()=>verifyFreeTimeRequest([event('rest',{title:'Rest',planning:{kind:'break',locked:false}})],[],request,now),/scheduled activity/)
+ assert.throws(()=>verifyFreeTimeRequest([],[],request,new Date('2026-11-02T15:00Z')),/ended/)
 })
