@@ -161,9 +161,13 @@ struct TaskControlView: View {
                 let pending = feedback != nil || !WidgetTimeOverrides.load().isEmpty
                 let change = feedback ?? WidgetTimeOverrides.record(for: task)
                 let end = change.flatMap { $0.done ? $0.reportedAt : nil } ?? WidgetTaskControl.draftEnd(task)
+                let draftDelta = end - task.end
+                let editing = !pending && abs(draftDelta) > 0.01
+                let adjustment = Int(ceil(max(0, abs(draftDelta) - 0.01) / 60))
+                let adjustmentText = "\(draftDelta < 0 ? "−" : "+")\(adjustment) min"
                 Text(task.title).font(home ? .subheadline.weight(.semibold) : .caption).lineLimit(home ? 2 : 1)
                 if home {
-                    Text("\(task.startDate.formatted(date: .omitted, time: .shortened)) – \(Date(timeIntervalSince1970: end).formatted(date: .omitted, time: .shortened))")
+                    Text("\(task.startDate.formatted(date: .omitted, time: .shortened)) – \(Date(timeIntervalSince1970: editing ? task.end : end).formatted(date: .omitted, time: .shortened))")
                         .font(.caption2).lineLimit(1).minimumScaleFactor(0.7)
                 }
                 HStack(spacing: home ? 8 : 6) {
@@ -173,14 +177,16 @@ struct TaskControlView: View {
                     }.foregroundStyle(pending ? Color.gray : ink).opacity(pending ? 0.45 : 1)
                     .accessibilityLabel(combined ? "Decrease task time" : "Decrease remaining time")
                     Button(intent: SubmitTaskTimeIntent(task: task, done: false)) {
-                        if end > Date().timeIntervalSince1970 {
+                        if editing {
+                            Text(adjustmentText).monospacedDigit()
+                        } else if end > Date().timeIntervalSince1970 {
                             let timer = Text(timerInterval: Date(timeIntervalSince1970: min(task.start, entry.date.timeIntervalSince1970))...Date(timeIntervalSince1970: end), countsDown: true, showsHours: true)
                             Text("\(Text(task.timerLeadingZero(at: entry.date, adjustedEnd: end)))\(timer)")
                                 .monospacedDigit().multilineTextAlignment(.center)
                         } else { Text("00:00") }
                     }
                     .buttonStyle(.bordered).controlSize(.mini)
-                    .accessibilityLabel("Apply remaining time").accessibilityValue("\(WidgetTaskControl.remaining(task))")
+                    .accessibilityLabel(editing ? "Confirm \(adjustmentText)" : "Apply remaining time").accessibilityValue("\(WidgetTaskControl.remaining(task))")
                         .accessibilityIdentifier(combined ? "combinedTaskTimeValue" : "taskTimeValue")
                         .font(home ? .headline : .caption).lineLimit(1).minimumScaleFactor(0.6)
                         .frame(maxWidth: .infinity, minHeight: 30).layoutPriority(1)
@@ -191,11 +197,11 @@ struct TaskControlView: View {
                     .accessibilityLabel(combined ? "Increase task time" : "Increase remaining time")
 
                 }.buttonStyle(.plain) // Intents reject pending changes; keep taps from falling through to opening the app.
-                if home {
+                if home || editing {
                     if pending {
                         Text("Sending…").font(.caption2)
                     } else {
-                        Text("Tap time to apply").font(.caption2).opacity(0.85)
+                        Text(editing ? "Press to confirm" : "Tap time to apply").font(.caption2).opacity(0.85)
                     }
                 }
             } else {

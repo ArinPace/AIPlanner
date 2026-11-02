@@ -69,6 +69,8 @@ final class PlannerUITests: XCTestCase {
         }
         tapControl(minus)
         Thread.sleep(forTimeInterval: 2)
+        XCTAssertTrue(home.staticTexts["Press to confirm"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(value.label.hasPrefix("Confirm −"))
         let requested = Int(value.value as? String ?? "")
         XCTAssertNotNil(requested)
         tapControl(value)
@@ -76,6 +78,7 @@ final class PlannerUITests: XCTestCase {
         XCTAssertNotEqual(app.state, .runningForeground, "Submitting must not open Planner")
         XCTAssertTrue(value.waitForExistence(timeout: 10)); XCTAssertEqual(Int(value.value as? String ?? ""), requested)
         XCTAssertTrue(home.staticTexts["Sending…"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertEqual(value.label, "Apply remaining time")
         tapControl(value)
         tapControl(plus)
         Thread.sleep(forTimeInterval: 2)
