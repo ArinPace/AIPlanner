@@ -18,15 +18,18 @@ struct PlannerProvider: TimelineProvider {
         completion(context.isPreview && schedule.validUntil <= Date().timeIntervalSince1970 ? placeholder(in: context) : PlannerEntry(date: Date(), schedule: schedule))
     }
     func getTimeline(in context: Context, completion: @escaping (Timeline<PlannerEntry>) -> Void) {
-        let now = Date(), schedule = WidgetTaskControl.displaySchedule()
-        let draftTransitions = schedule.events.filter { abs(WidgetTaskControl.draftEnd($0) - $0.end) > 0.001 }.flatMap { task in
-            [600.0, 3600.0, 36000.0].map { Date(timeIntervalSince1970: WidgetTaskControl.draftEnd(task) - $0 + 0.001) }
-        }.filter { $0 > now && $0.timeIntervalSince1970 <= schedule.validUntil }
-        let dates = Array(Set([now] + schedule.transitions(after: now) + WidgetScheduleStore.load().transitions(after: now) + draftTransitions)).sorted()
-        let entries = dates.map { PlannerEntry(date: $0, schedule: schedule) }
-        // Entries switch at task boundaries; the countdown ticks without reloads.
-        let refresh = min(now.addingTimeInterval(3600), dates.last ?? now.addingTimeInterval(3600))
-        completion(Timeline(entries: entries, policy: .after(max(now.addingTimeInterval(900), refresh))))
+        Task {
+            await WidgetBackgroundDelivery.refresh()
+            let now = Date(), schedule = WidgetTaskControl.displaySchedule()
+            let draftTransitions = schedule.events.filter { abs(WidgetTaskControl.draftEnd($0) - $0.end) > 0.001 }.flatMap { task in
+                [600.0, 3600.0, 36000.0].map { Date(timeIntervalSince1970: WidgetTaskControl.draftEnd(task) - $0 + 0.001) }
+            }.filter { $0 > now && $0.timeIntervalSince1970 <= schedule.validUntil }
+            let dates = Array(Set([now] + schedule.transitions(after: now) + WidgetScheduleStore.load().transitions(after: now) + draftTransitions)).sorted()
+            let entries = dates.map { PlannerEntry(date: $0, schedule: schedule) }
+            // Entries switch at task boundaries; the countdown ticks without reloads.
+            let refresh = min(now.addingTimeInterval(WidgetTimeOverrides.load().isEmpty ? 3600 : 60), dates.last ?? now.addingTimeInterval(3600))
+            completion(Timeline(entries: entries, policy: .after(max(now.addingTimeInterval(WidgetTimeOverrides.load().isEmpty ? 900 : 60), refresh))))
+        }
     }
 }
 struct PlannerWidgetView: View {
@@ -187,7 +190,7 @@ struct TaskControlView: View {
                     }.foregroundStyle(pending ? Color.gray : ink).opacity(pending ? 0.45 : 1)
                     .accessibilityLabel(combined ? "Increase task time" : "Increase remaining time")
 
-                }.buttonStyle(.plain).disabled(pending)
+                }.buttonStyle(.plain) // Intents reject pending changes; keep taps from falling through to opening the app.
                 if home {
                     if pending {
                         Text("Sending…").font(.caption2)

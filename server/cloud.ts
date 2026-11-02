@@ -147,6 +147,7 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
     }
     const username = await sessionUser(request)
     if (!username) throw new ApiError(401, 'Please sign in.')
+    if (path === '/api/widget/feedback' || path === '/api/widget/snapshot') return await (await import('./widget-background.js')).handleWidgetBackground(request,path,username)
     if (path === '/api/planning') return await handlePlanning(request,username)
     if(path==='/api/agent/instructions'){
       if(method==='GET')return json(await readAgentInstructions(username))

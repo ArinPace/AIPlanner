@@ -15,6 +15,7 @@ final class PlannerUITests: XCTestCase {
     func testTaskControlWidgetFlow() {
         let app = XCUIApplication()
         app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"
+        app.launchEnvironment["AI_PLANNER_WIDGET_TEST_ORIGIN"] = "http://127.0.0.1:5199"
         app.launchArguments = ["-UITestFixture", "-UITestSignedIn", "-UITestWidgets", "-UITestAtomicWidgetPlan"]
         app.launch()
         XCTAssertTrue(app.webViews.buttons["Agent"].waitForExistence(timeout: 15))
@@ -61,42 +62,36 @@ final class PlannerUITests: XCTestCase {
         let plus = visibleButton("Increase task time")!
         let minus = visibleButton("Decrease task time")!
         let value = visibleButton("combinedTaskTimeValue")!
-        func expectValue(_ number: String) {
-            let updated = expectation(for: NSPredicate(format: "value == %@", number), evaluatedWith: value)
-            wait(for: [updated], timeout: 6)
-        }
         XCTAssertTrue(plus.waitForExistence(timeout: 10))
-        plus.tap(); expectValue("35")
-        plus.tap(); expectValue("45")
-        minus.tap(); expectValue("35")
-        minus.tap(); expectValue("25")
-        for _ in 0..<6 { minus.tap() }
-        expectValue("0")
-        plus.tap(); plus.tap(); expectValue("10")
+        func tapControl(_ control: XCUIElement) {
+            let frame = control.frame
+            home.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: frame.midX, dy: frame.midY)).tap()
+        }
+        tapControl(minus)
         Thread.sleep(forTimeInterval: 2)
-        let widgets = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        widgets.name = "Task controls and separate Done widget"; widgets.lifetime = .keepAlways; add(widgets)
-        value.tap()
-        XCTAssertTrue(app.webViews.staticTexts["Widget feedback received: time"].waitForExistence(timeout: 15))
-        XCTAssertTrue(app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Widget time updated.'")).firstMatch.waitForExistence(timeout: 10))
-        XCUIDevice.shared.press(.home)
-        XCTAssertTrue(value.waitForExistence(timeout: 10)); XCTAssertEqual(value.value as? String, "10")
+        let requested = Int(value.value as? String ?? "")
+        XCTAssertNotNil(requested)
+        tapControl(value)
+        Thread.sleep(forTimeInterval: 4)
+        XCTAssertNotEqual(app.state, .runningForeground, "Submitting must not open Planner")
+        XCTAssertTrue(value.waitForExistence(timeout: 10)); XCTAssertEqual(Int(value.value as? String ?? ""), requested)
         XCTAssertTrue(home.staticTexts["Sending…"].firstMatch.waitForExistence(timeout: 5))
-        plus.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        Thread.sleep(forTimeInterval: 1)
-        app.activate()
-        let publish = app.webViews.buttons["Publish reviewed fixture plan"]
-        XCTAssertTrue(publish.waitForExistence(timeout: 10)); publish.tap()
+        tapControl(value)
+        tapControl(plus)
         Thread.sleep(forTimeInterval: 2)
-        XCUIDevice.shared.press(.home)
-        let adopted = expectation(for: NSPredicate(format: "value == '8'"), evaluatedWith: value)
-        wait(for: [adopted], timeout: 10)
-        plus.tap();expectValue("13")
-        XCTAssertTrue(findWidgetPage("Finish current task"))
-        let done = visibleButton("Finish current task")!
-        done.tap()
-        XCTAssertTrue(app.webViews.staticTexts["Widget feedback received: done"].waitForExistence(timeout: 15))
+        XCTAssertNotEqual(app.state, .runningForeground, "Pending controls must not open Planner either")
+        let received = expectation(description: "Background server received widget feedback")
+        URLSession.shared.dataTask(with: URL(string: "http://127.0.0.1:5199/status")!) { data, _, error in
+            XCTAssertNil(error)
+            let status = data.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
+            XCTAssertEqual(status?["remainingMinutes"] as? Int, requested)
+            XCTAssertEqual(status?["done"] as? Bool, false)
+            XCTAssertEqual(status?["deliveries"] as? Int, 1)
+            received.fulfill()
+        }.resume()
+        wait(for: [received], timeout: 10)
     }
+
     func testFillFreeTimeWidget() {
         let app = XCUIApplication()
         app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"

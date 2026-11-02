@@ -103,6 +103,17 @@ struct PlannerWebView: UIViewRepresentable {
                               let web = self.webView else { throw NativeError("Screen Time layout is unavailable.") }
                         let rect = CGRect(x: x, y: y, width: width, height: height).intersection(web.bounds)
                         if rect.isNull || rect.isEmpty { hideScreenTime() } else { showScreenTime(in: rect) }
+                    case "widgetDeliverySession":
+                        guard let account = body["account"] as? String, account == WidgetTaskControl.defaults.string(forKey: "feedback-account"), let token = body["token"] as? String, !token.isEmpty else { throw NativeError("Sign in before enabling widget delivery.") }
+                        var deliveryOrigin = AppConfiguration.origin.absoluteString
+                        #if DEBUG
+                        if ProcessInfo.processInfo.arguments.contains("-UITestFixture"), let raw = ProcessInfo.processInfo.environment["AI_PLANNER_WIDGET_TEST_ORIGIN"], let url = URL(string: raw), url.scheme == "http", url.host == "127.0.0.1" { deliveryOrigin = raw }
+                        #endif
+                        try WidgetBackgroundDelivery.configure(token: token, account: account, origin: deliveryOrigin)
+                    case "taskFeedbackDelivery":
+                        guard let account = body["account"] as? String, account == WidgetTaskControl.defaults.string(forKey: "feedback-account"), let id = body["id"] as? String else { throw NativeError("Your account changed.") }
+                        replyHandler(WidgetTaskControl.defaults.string(forKey: "widget-delivery:" + id) as Any? ?? NSNull(), nil)
+                        return
                     case "taskFeedback":
                         guard let account = body["account"] as? String, account == WidgetTaskControl.defaults.string(forKey: "feedback-account") else { replyHandler(NSNull(), nil); return }
                         if let data = WidgetTaskControl.defaults.data(forKey: "task-feedback") {

@@ -1,6 +1,7 @@
 import Foundation
 import AppIntents
 import WidgetKit
+import Security
 
 enum WidgetTaskControl {
     static var defaults: UserDefaults { UserDefaults(suiteName: WidgetScheduleStore.group)! }
@@ -36,8 +37,9 @@ enum WidgetTaskControl {
         return WidgetTimeOverrides.preferred(in: schedule, at: date) ?? schedule.current(at: date)
     }
     static func clear() {
+        WidgetBackgroundDelivery.clear()
         WidgetTimeOverrides.clear()
-        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("task-time:") || key == "task-feedback" { defaults.removeObject(forKey: key) }
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("task-time:") || key == "task-feedback" || key.hasPrefix("widget-delivery:") { defaults.removeObject(forKey: key) }
     }
     enum ControlError: Error, LocalizedError {
         case stale
@@ -59,7 +61,7 @@ struct AdjustTaskTimeIntent: AppIntent {
 }
 struct SubmitTaskTimeIntent: AppIntent {
     static var title: LocalizedStringResource = "Send task feedback to Planner"
-    static var openAppWhenRun: Bool = true
+    static var openAppWhenRun: Bool = false
     @Parameter(title: "Task") var taskID: String
     @Parameter(title: "Done") var done: Bool
     init() {}
@@ -67,6 +69,7 @@ struct SubmitTaskTimeIntent: AppIntent {
     @MainActor func perform() async throws -> some IntentResult {
         guard let task = WidgetTaskControl.currentTask(at: Date()), task.id == taskID else { throw WidgetTaskControl.ControlError.stale }
         try WidgetTaskControl.submit(task, done: done)
+        try await WidgetBackgroundDelivery.sendPending()
         return .result()
     }
 }
@@ -87,4 +90,67 @@ struct FillFreeTimeIntent: AppIntent {
         case unavailable
         var errorDescription: String? { "This button is available only during free time. Open Planner to refresh your schedule." }
     }
+}
+
+// Both the app and widget can use this App Group keychain item. Never put the session in defaults.
+enum WidgetBackgroundDelivery {
+    struct Credentials: Codable, Equatable { let token: String; let account: String; let origin: String }
+    static var query: [String: Any] { [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "PlannerWidgetDelivery", kSecAttrAccount as String: "session", kSecAttrAccessGroup as String: WidgetScheduleStore.group] }
+    static func configure(token: String, account: String, origin: String) throws {
+        let value = Credentials(token: token, account: account, origin: origin)
+        if credentials() == value { return }
+        clear()
+        var item = query
+        item[kSecValueData as String] = try JSONEncoder().encode(value)
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        guard SecItemAdd(item as CFDictionary, nil) == errSecSuccess else { throw DeliveryError("Could not enable background widget delivery. Reopen Planner and try again.") }
+    }
+    static func credentials() -> Credentials? {
+        var item = query; item[kSecReturnData as String] = true; item[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(item as CFDictionary, &result) == errSecSuccess, let data = result as? Data else { return nil }
+        return try? JSONDecoder().decode(Credentials.self, from: data)
+    }
+    static func clear() { SecItemDelete(query as CFDictionary) }
+    static func request(_ path: String, credentials: Credentials, body: Data? = nil) async throws -> Data {
+        guard let origin = URL(string: credentials.origin) else { throw DeliveryError("Reopen Planner to sign in.") }
+        var request = URLRequest(url: origin.appendingPathComponent(path)); request.timeoutInterval = 20
+        request.setValue("Bearer " + credentials.token, forHTTPHeaderField: "Authorization")
+        if let body { request.httpMethod = "POST"; request.httpBody = body; request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode) else { throw DeliveryError("Could not confirm delivery. Your change is saved; check Main Chat in Planner before retrying.") }
+        return data
+    }
+    @MainActor static func sendPending() async throws {
+        guard let feedback = WidgetTaskControl.pending() else { return }
+        guard let auth = credentials(), auth.account == WidgetTaskControl.defaults.string(forKey: "feedback-account") else { throw DeliveryError("Open Planner once to enable background delivery for your account. Your change is saved.") }
+        let key = "widget-delivery:" + feedback.id
+        guard WidgetTaskControl.defaults.string(forKey: key) == nil else { return }
+        // Persist before POST. An ambiguous network response must never silently send a second job.
+        WidgetTaskControl.defaults.set("attempted", forKey: key)
+        _ = try await request("api/widget/feedback", credentials: auth, body: JSONEncoder().encode(feedback))
+        guard credentials() == auth else { return }
+        WidgetTaskControl.defaults.set("sent", forKey: key)
+        if WidgetTaskControl.pending()?.id == feedback.id {
+            WidgetTaskControl.defaults.removeObject(forKey: "task-feedback")
+            WidgetTaskControl.defaults.removeObject(forKey: WidgetTaskControl.key(feedback.task))
+        }
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+    @MainActor private static var refreshing = false
+    @MainActor private static var lastRefresh: (Credentials, Date)?
+    @MainActor static func refresh() async {
+        guard !refreshing else { return }
+        guard let auth = credentials(), auth.account == WidgetTaskControl.defaults.string(forKey: "feedback-account") else { return }
+        if let previous = lastRefresh, previous.0 == auth, Date().timeIntervalSince(previous.1) < 45 { return }
+        refreshing = true
+        defer { refreshing = false }
+        do {
+            let data = try await request("api/widget/snapshot", credentials: auth)
+            guard credentials() == auth else { return }
+            _ = try WidgetScheduleStore.save(WidgetSchedule.decode(data))
+            lastRefresh = (auth, Date())
+        } catch { /* Keep the offline schedule and pending preview. */ }
+    }
+    struct DeliveryError: LocalizedError { let message: String; init(_ message: String) { self.message = message }; var errorDescription: String? { message } }
 }
