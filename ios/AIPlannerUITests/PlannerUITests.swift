@@ -178,6 +178,52 @@ final class PlannerUITests: XCTestCase {
         XCTAssertFalse(calendar.staticTexts["Restricted"].exists, "The restriction must clear afterward.")
         XCTAssertTrue(openedAfterClear, "The same app must open after the block clears.")
     }
+    func testScreenTimePhotosOnlyEnforcement() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_VERIFY_PHOTOS_BLOCK"] == "1", "Enable PLANNER_VERIFY_PHOTOS_BLOCK for the Photos-only OS integration diagnostic.")
+        let app = XCUIApplication()
+        app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"
+        app.launchArguments = ["-UITestFixture", "-UITestSignedIn", "-UITestPolicyRecovery"]
+        app.launch(); app.webViews.buttons["Screen Time"].tap()
+        if app.buttons["End blocking"].exists { app.buttons["End blocking"].tap() }
+        app.buttons["Choose apps"].tap()
+        let done = app.buttons["Done"].firstMatch
+        XCTAssertTrue(done.waitForExistence(timeout: 15))
+        let creativity = app.staticTexts["Creativity"].firstMatch
+        XCTAssertTrue(creativity.waitForExistence(timeout: 10))
+        creativity.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: app.frame.width - creativity.frame.minX - 40, dy: creativity.frame.height / 2)).tap()
+        let photos = app.switches.matching(NSPredicate(format: "label BEGINSWITH %@", "Photos")).firstMatch
+        var offered = photos.waitForExistence(timeout: 5)
+        if !offered {
+            let search = app.searchFields.firstMatch
+            search.tap(); search.typeText("Photos")
+            offered = photos.waitForExistence(timeout: 5)
+        }
+        print("PHOTOS_PICKER_AVAILABLE", offered, app.debugDescription)
+        let pickerShot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        pickerShot.name = "Photos selection in Creativity"; pickerShot.lifetime = .keepAlways; add(pickerShot)
+        guard offered else {
+            if !done.exists && app.buttons["Cancel"].exists { app.buttons["Cancel"].tap() }
+            done.tap()
+            XCTFail("Photos is absent from Apple's picker. No blocking session was started.")
+            return
+        }
+        let all = app.descendants(matching: .any).matching(identifier: "All Apps & Categories").firstMatch
+        if !(all.isSelected || (all.value as? String) == "1") { all.tap() }
+        all.tap()
+        photos.tap(); done.tap()
+        XCTAssertTrue(app.staticTexts["1 apps · 0 categories · 0 websites"].waitForExistence(timeout: 5), "Only Photos may be selected.")
+        app.buttons["Start blocking"].tap()
+        XCTAssertTrue(app.buttons["End blocking"].waitForExistence(timeout: 5))
+        defer { app.activate(); app.webViews.buttons["Screen Time"].tap(); if app.buttons["End blocking"].exists { app.buttons["End blocking"].tap() } }
+        XCUIDevice.shared.press(.home); XCUIDevice.shared.press(.home)
+        let home = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let icon = home.icons.matching(identifier: "Photos").matching(NSPredicate(format: "NOT (value CONTAINS[c] 'Widget')")).firstMatch
+        XCTAssertTrue(icon.waitForExistence(timeout: 5)); icon.tap()
+        let photoApp = XCUIApplication(bundleIdentifier: "com.apple.mobileslideshow")
+        XCTAssertTrue(photoApp.staticTexts["Restricted"].waitForExistence(timeout: 5) || home.staticTexts["Restricted"].exists)
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "Photos actual iOS restriction"; shot.lifetime = .keepAlways; add(shot)
+    }
     func testScreenTimeAllAppsPolicyDiagnostic() { verifyScreenTimeHomeScreen(policy: "-UITestShieldAll") }
     func testScreenTimeHomeScreenEnforcement() { verifyScreenTimeHomeScreen(policy: "-UITestNormalPolicy") }
     func testScreenTimeSelectedCategoryEnforcement() { verifyScreenTimeHomeScreen(policy: "-UITestNormalPolicy", category: "Productivity & Finance") }
