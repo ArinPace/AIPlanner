@@ -1,4 +1,5 @@
 import {isIPhoneApp} from './lib/platform'
+import {ScreenTimePanel} from './components/ScreenTimePanel'
 import {ChatExperiment} from './components/ChatExperiment'
 import {RECOVERY_TAB} from './lib/attachmentRecovery'
 import { PlannerDate as Date } from './lib/timezone.js'
@@ -143,7 +144,7 @@ export default function App() {
 
 function CalendarApp({ username, onLogout }: { username: string; onLogout: () => void }) {
   useVmActivity(username)
-  const [tab, setTab] = useState<'calendar' | 'files' | 'todo' | 'work' | 'agent' | 'chat'>(()=>sessionStorage.getItem(RECOVERY_TAB)===username?'agent':'calendar')
+  const [tab, setTab] = useState<'calendar' | 'files' | 'todo' | 'work' | 'agent' | 'screentime' | 'chat'>(()=>sessionStorage.getItem(RECOVERY_TAB)===username?'agent':'calendar')
   const [todoRequest,setTodoRequest]=useState(0)
   const [filesUnsaved, setFilesUnsaved] = useState(false)
   const [cursor, setCursor] = useState(() => new Date())
@@ -383,6 +384,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
       />
 
       <div className="files-tab-panel" hidden={tab !== 'files' && tab !== 'todo' && tab !== 'work'}><FilesView standaloneTodo={tab==='todo'||tab==='work'} workMode={tab==='work'} sidebar={filesSidebar} setSidebar={setFilesSidebar} username={username} active={tab === 'files' || tab === 'todo' || tab === 'work'} todoRequest={todoRequest} onUnsavedChange={setFilesUnsaved} /></div>
+      {tab==='screentime' && <ScreenTimePanel/>}
       <div className="agent-tab-panel" hidden={tab !== 'agent'}><AgentView username={username} sidebar={agentSidebar} setSidebar={setAgentSidebar} active={tab === 'agent'} /></div>
       {username==='arin' && !isIPhoneApp() && <div className="chat-tab-panel" hidden={tab!=='chat'}><ChatExperiment active={tab==='chat'} username={username}/></div>}
       <div className="app-body" hidden={tab !== 'calendar'}>
