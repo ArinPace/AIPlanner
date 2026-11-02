@@ -43,12 +43,18 @@ import DeviceActivity
             if end != restored { end = restored }
         }
     }
-    func authorize() async {
-        guard !authorizing else { return }
+    @discardableResult
+    func authorize() async -> Bool {
+        guard !authorizing else { return false }
         authorizing = true
         defer { authorizing = false }
-        do { try await AuthorizationCenter.shared.requestAuthorization(for: .individual); error = nil; refresh() }
-        catch { self.error = error.localizedDescription }
+        do {
+            try await AuthorizationCenter.shared.requestAuthorization(for: .individual)
+            error = nil
+            refresh()
+            return authorized
+        }
+        catch { self.error = error.localizedDescription; return false }
     }
     func start(minutes: Int) {
         guard authorized else { error = "Allow Screen Time access first."; return }
@@ -112,7 +118,9 @@ struct ScreenTimeView: View {
                     Section { Button("Allow Screen Time access") { Task { await model.authorize() } }.disabled(model.authorizing) }
                 }
                 Section("Apps to block") {
-                    Button("Choose apps") { picker = true }.disabled(!model.authorized || model.end != nil)
+                    Button("Choose apps") {
+                        Task { if await model.authorize() { picker = true } }
+                    }.disabled(model.authorizing || model.end != nil)
                     Text("\(model.selection.applicationTokens.count) apps · \(model.selection.categoryTokens.count) categories · \(model.selection.webDomainTokens.count) websites").font(.footnote).foregroundStyle(.secondary)
                 }
                 if let end = model.end {
@@ -136,16 +144,11 @@ struct ScreenTimeView: View {
                 if let error = model.error { Section { Text(error).foregroundStyle(.red) } }
             }
             .navigationTitle("Screen Time")
-            .sheet(isPresented: $picker) {
-                NavigationStack {
-                    FamilyActivityPicker(selection: $model.selection)
-                        .navigationTitle("Choose Activities")
-                        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { picker = false } } }
-                }
-            }
+            .familyActivityPicker(isPresented: $picker, selection: $model.selection)
         }
         .onChange(of: model.selection) { _, _ in model.saveSelection() }
-        .task {
+        .task(id: picker) {
+            guard !picker else { return }
             while !Task.isCancelled {
                 model.refresh()
                 try? await Task.sleep(for: .seconds(1))
@@ -154,3 +157,26 @@ struct ScreenTimeView: View {
         .onChange(of: phase) { _, value in if value == .active { model.refresh() } }
     }
 }
+
+#if DEBUG && targetEnvironment(simulator)
+/// Minimal Apple API reproduction, without Planner's web view, storage or polling.
+struct StandaloneScreenTimePickerProbe: View {
+    @State private var selection = FamilyActivitySelection()
+    @State private var presented = false
+    @State private var error = ""
+    var body: some View {
+        VStack {
+            Button("Choose apps") {
+                Task {
+                    do {
+                        try await AuthorizationCenter.shared.requestAuthorization(for: .individual)
+                        presented = true
+                    } catch { self.error = error.localizedDescription }
+                }
+            }
+            Text(error)
+        }
+        .familyActivityPicker(isPresented: $presented, selection: $selection)
+    }
+}
+#endif

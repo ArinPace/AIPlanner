@@ -7,6 +7,9 @@ planner_screen_tests=(
   -only-testing:AIPlannerUITests/PlannerUITests/testScreenTimeRealSystemPicker
   -only-testing:AIPlannerUITests/PlannerUITests/testScreenTimeSessionPersistenceAndEarlyStop
 )
+if [[ "${PLANNER_VERIFY_PICKER_DIAGNOSTICS:-0}" == 1 ]]; then
+  planner_screen_tests+=(-only-testing:AIPlannerUITests/PlannerUITests/testStandaloneScreenTimePickerDiagnostics)
+fi
 if [[ "${PLANNER_VERIFY_BACKGROUND_EXPIRY:-0}" == 1 ]]; then
   export TEST_RUNNER_PLANNER_VERIFY_BACKGROUND_EXPIRY=1
   planner_screen_tests+=(-only-testing:AIPlannerUITests/PlannerUITests/testScreenTimeBackgroundExpiry)

@@ -42,6 +42,28 @@ final class PlannerUITests: XCTestCase {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = "Screen Time system picker"; attachment.lifetime = .keepAlways; add(attachment)
     }
+    func testStandaloneScreenTimePickerDiagnostics() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITestStandalonePicker"]
+        app.launch()
+        for pass in 1...2 {
+            app.buttons["Choose apps"].tap()
+            let done = app.buttons["Done"].firstMatch
+            XCTAssertTrue(done.waitForExistence(timeout: 15))
+            let other = app.staticTexts["Other"].firstMatch
+            for _ in 0..<4 {
+                if other.exists && other.isHittable { break }
+                app.swipeUp()
+            }
+            XCTAssertTrue(other.exists)
+            other.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0)).withOffset(CGVector(dx: 255, dy: 8)).tap()
+            app.swipeUp()
+            print("STANDALONE_PICKER_INVENTORY_PASS", pass, app.debugDescription)
+            let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            screenshot.name = "Standalone picker inventory pass \(pass)"; screenshot.lifetime = .keepAlways; add(screenshot)
+            done.tap()
+        }
+    }
     func testScreenTimeSessionPersistenceAndEarlyStop() {
         let app = launch()
         app.webViews.buttons["Screen Time"].tap()
