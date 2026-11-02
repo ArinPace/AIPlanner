@@ -10,7 +10,7 @@ struct PlannerWebView: UIViewRepresentable {
         config.websiteDataStore = .default()
         config.allowsInlineMediaPlayback = true
         config.userContentController.addScriptMessageHandler(context.coordinator, contentWorld: .page, name: "plannerNative")
-        config.userContentController.addUserScript(WKUserScript(source: "document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true'});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeScreenTime=true;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true'});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-UITestFixture"), ["127.0.0.1", "localhost"].contains(AppConfiguration.origin.host ?? ""), let url = Bundle.main.url(forResource: "UITestFixture", withExtension: "js"), let script = try? String(contentsOf: url, encoding: .utf8) {
             let fixture = (ProcessInfo.processInfo.arguments.contains("-UITestSignedIn") ? "globalThis.__plannerFixtureSignedIn=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestResumeSync") ? "globalThis.__plannerFixtureResumeSync=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestFocusZoom") ? "globalThis.__plannerFixtureFocusZoom=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestWidgets") ? "globalThis.__plannerFixtureWidgets=true;" : "") + script
@@ -44,12 +44,34 @@ struct PlannerWebView: UIViewRepresentable {
     func updateUIView(_ web: WKWebView, context: Context) {}
     static func dismantleUIView(_ web: WKWebView, coordinator: Coordinator) {
         web.configuration.userContentController.removeScriptMessageHandler(forName: "plannerNative", contentWorld: .page)
+        coordinator.hideScreenTime()
         web.stopLoading(); web.navigationDelegate = nil; web.uiDelegate = nil
     }
     @MainActor final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandlerWithReply, WKDownloadDelegate {
         let model: PlannerModel
         weak var webView: WKWebView?
         var authentication: NativeAuthentication?
+        var screenTimeHost: UIHostingController<ScreenTimeView>?
+        func hideScreenTime() {
+            if screenTimeHost?.presentedViewController != nil { screenTimeHost?.dismiss(animated: false) }
+            screenTimeHost?.willMove(toParent: nil)
+            screenTimeHost?.view.removeFromSuperview()
+            screenTimeHost?.removeFromParent()
+            screenTimeHost = nil
+        }
+        func showScreenTime(in rect: CGRect) {
+            guard let web = webView, let parent = web.window?.rootViewController else { return }
+            if screenTimeHost == nil {
+                let host = UIHostingController(rootView: ScreenTimeView())
+                host.view.backgroundColor = .systemGroupedBackground
+                parent.addChild(host)
+                web.addSubview(host.view)
+                host.didMove(toParent: parent)
+                screenTimeHost = host
+            }
+            screenTimeHost?.view.frame = rect
+            if let view = screenTimeHost?.view { web.bringSubviewToFront(view) }
+        }
         var downloads: [ObjectIdentifier: URL] = [:]
         init(model: PlannerModel) { self.model = model }
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage, replyHandler: @escaping (Any?, String?) -> Void) {
@@ -60,6 +82,7 @@ struct PlannerWebView: UIViewRepresentable {
                     switch action {
                     case "localReplicaAccount":
                         let account = body["account"] as? String
+                        if account == nil { hideScreenTime() }
                         if try LocalReplicaStore.activate(account) {
                             try WidgetScheduleStore.save(.empty)
                             WidgetCenter.shared.reloadAllTimelines()
@@ -68,6 +91,14 @@ struct PlannerWebView: UIViewRepresentable {
                         guard let account = body["account"] as? String, let kind = body["kind"] as? String,
                               let savedAt = body["savedAt"] as? Double, let payload = body["data"], JSONSerialization.isValidJSONObject(payload) else { throw NativeError("Missing local copy data.") }
                         try LocalReplicaStore.save(account: account, kind: kind, savedAt: savedAt, payload: payload)
+                    case "screenTimePanel":
+                        guard body["visible"] as? Bool == true else { hideScreenTime(); replyHandler(["ok": true], nil); return }
+                        guard let bounds = body["rect"] as? [String: Double],
+                              let x = bounds["x"], let y = bounds["y"], let width = bounds["width"], let height = bounds["height"],
+                              [x, y, width, height].allSatisfy({ $0.isFinite }), width > 0, height > 0,
+                              let web = self.webView else { throw NativeError("Screen Time layout is unavailable.") }
+                        let rect = CGRect(x: x, y: y, width: width, height: height).intersection(web.bounds)
+                        if rect.isNull || rect.isEmpty { hideScreenTime() } else { showScreenTime(in: rect) }
                     case "widgetStatus":
                         let schedule = WidgetScheduleStore.load()
                         replyHandler(["available": WidgetScheduleStore.file != nil, "generatedAt": schedule.generatedAt, "validUntil": schedule.validUntil, "eventCount": schedule.events.count, "currentTask": schedule.current(at: Date())?.title ?? ""], nil)
@@ -103,7 +134,7 @@ struct PlannerWebView: UIViewRepresentable {
             let safe = URL(fileURLWithPath: name).lastPathComponent
             return folder.appendingPathComponent(safe.isEmpty ? "Planner download" : safe)
         }
-        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) { model.loading = true; model.error = nil }
+        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) { model.loading = true; model.error = nil; hideScreenTime() }
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { model.loading = false; WidgetCenter.shared.reloadAllTimelines() }
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { failed(error) }
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { failed(error) }

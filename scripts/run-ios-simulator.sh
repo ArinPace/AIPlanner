@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "${0:A:h:h}"
 command -v xcodebuild >/dev/null || { print -u2 'Install Xcode before running the iPhone app.'; exit 1; }
-planner_simulator_id="${1:-$(xcrun simctl list devices available --json | python3 -c 'import sys,json; d=json.load(sys.stdin); print(next((x["udid"] for group in d["devices"].values() for x in group if x["name"].startswith("iPhone") and x.get("isAvailable")),""))')}"
+planner_simulator_id="${1:-$(xcrun simctl list devices available --json | python3 -c 'import sys,json; d=json.load(sys.stdin); preferred=[x for runtime,group in d["devices"].items() if runtime.endswith("iOS-18-5") for x in group if x["name"].startswith("iPhone") and x.get("isAvailable")]; candidates=preferred or [x for group in d["devices"].values() for x in group if x["name"].startswith("iPhone") and x.get("isAvailable")]; print(next((x["udid"] for x in candidates if x["state"]=="Booted"),candidates[0]["udid"] if candidates else ""))')}"
 if [[ -z "$planner_simulator_id" ]]; then
   print -u2 'No iPhone simulator is installed. In Xcode > Settings > Components, install an iOS runtime.'
   exit 1
