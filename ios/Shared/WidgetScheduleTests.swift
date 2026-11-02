@@ -40,11 +40,35 @@ import Foundation
         let overlapFree = WidgetSchedule(version: 1, generatedAt: 90, validUntil: 400, events: [free, tasks[0]])
         precondition(overlapFree.freeSlot(at: date(150)) == nil)
         precondition(WidgetSchedule.empty.freeSlot(at: Date()) == nil)
+        precondition(timed.timerLeadingZero(at: date(140)) == "0")
+        precondition(timed.timerLeadingZero(at: date(200)) == "0")
+        precondition(timed.timerLeadingZero(at: date(0), adjustedEnd: 599) == "0")
+        precondition(timed.timerLeadingZero(at: date(0), adjustedEnd: 600) == "")
+        precondition(timed.timerLeadingZero(at: date(0), adjustedEnd: 3599) == "")
+        precondition(timed.timerLeadingZero(at: date(0), adjustedEnd: 3600) == "0")
+        precondition(timed.timerLeadingZero(at: date(0), adjustedEnd: 36000) == "")
         let decoded = try WidgetSchedule.decode(JSONEncoder().encode(schedule))
         precondition(decoded == schedule)
         let invalid = WidgetSchedule(version: 1, generatedAt: 0, validUntil: 400, events: [WidgetTask(id: "bad", title: "Bad", start: 20, end: 10)])
         do { _ = try WidgetSchedule.decode(JSONEncoder().encode(invalid)); preconditionFailure("Invalid times accepted") } catch { }
         precondition(WidgetSchedule.empty.current(at: Date()) == nil)
+        let savedOverrides = WidgetTimeOverrides.defaults.data(forKey: WidgetTimeOverrides.key)
+        defer { WidgetTimeOverrides.defaults.set(savedOverrides, forKey: WidgetTimeOverrides.key) }
+        WidgetTimeOverrides.clear()
+        let preview = WidgetTaskFeedback(id: "preview-request", task: tasks[0], remainingMinutes: 3, done: false, reportedAt: 150, requestedEnd: 330)
+        WidgetTimeOverrides.store(preview)
+        let unchanged = WidgetSchedule(version: 1, generatedAt: 160, validUntil: 400, events: tasks)
+        precondition(!WidgetTimeOverrides.reconcile(with: unchanged))
+        precondition(unchanged.events[0].end == 200) // Live data stays intact.
+        precondition(WidgetTimeOverrides.preferred(in: unchanged, at: date(250))?.end == 330)
+        let missing = WidgetSchedule(version: 1, generatedAt: 210, validUntil: 400, events: [])
+        precondition(!WidgetTimeOverrides.reconcile(with: missing)) // Original slot passed while draft is pending.
+        precondition(WidgetTimeOverrides.applying(to: missing).current(at: date(250))?.end == 330)
+        precondition(WidgetTimeOverrides.preferred(in: unchanged, at: date(350))?.end == 330) // Zero remains editable until the plan is committed.
+        precondition(timed.adjustedEnd(at: date(350), previous: 330, delta: 5) == 650)
+        let published = WidgetSchedule(version: 1, generatedAt: 220, validUntil: 400, events: tasks, resolvedFeedbackIds: [preview.id])
+        precondition(WidgetTimeOverrides.reconcile(with: published)) // A full plan may choose another coherent allocation.
+        precondition(WidgetTimeOverrides.load().isEmpty)
         print("Widget schedule checks passed: boundaries, overlaps, expiry, next task, timeline and payload validation.")
     }
 }

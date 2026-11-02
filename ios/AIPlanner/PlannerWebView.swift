@@ -13,7 +13,8 @@ struct PlannerWebView: UIViewRepresentable {
         config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeScreenTime=true;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true'});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-UITestFixture"), ["127.0.0.1", "localhost"].contains(AppConfiguration.origin.host ?? ""), let url = Bundle.main.url(forResource: "UITestFixture", withExtension: "js"), let script = try? String(contentsOf: url, encoding: .utf8) {
-            let fixture = (ProcessInfo.processInfo.arguments.contains("-UITestSignedIn") ? "globalThis.__plannerFixtureSignedIn=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestResumeSync") ? "globalThis.__plannerFixtureResumeSync=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestFocusZoom") ? "globalThis.__plannerFixtureFocusZoom=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestWidgets") ? "globalThis.__plannerFixtureWidgets=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestFreeTime") ? "globalThis.__plannerFixtureFreeTime=true;" : "") + script
+            if ProcessInfo.processInfo.arguments.contains("-UITestWidgets") { WidgetTaskControl.clear() }
+            let fixture = (ProcessInfo.processInfo.arguments.contains("-UITestSignedIn") ? "globalThis.__plannerFixtureSignedIn=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestResumeSync") ? "globalThis.__plannerFixtureResumeSync=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestFocusZoom") ? "globalThis.__plannerFixtureFocusZoom=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestWidgets") ? "globalThis.__plannerFixtureWidgets=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestFreeTime") ? "globalThis.__plannerFixtureFreeTime=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestAtomicWidgetPlan") ? "globalThis.__plannerFixtureAtomicWidgetPlan=true;" : "") + script
             config.userContentController.addUserScript(WKUserScript(source: fixture, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         }
         #endif
@@ -118,6 +119,7 @@ struct PlannerWebView: UIViewRepresentable {
                         guard let account = body["account"] as? String, account == WidgetTaskControl.defaults.string(forKey: "feedback-account") else { throw NativeError("Your account changed.") }
                         if let data = WidgetTaskControl.defaults.data(forKey: "task-feedback"),
                            let feedback = try? JSONDecoder().decode(WidgetTaskFeedback.self, from: data), feedback.id == body["id"] as? String {
+                            if body["discard"] as? Bool == true { WidgetTimeOverrides.remove(feedback.id) }
                             WidgetTaskControl.defaults.removeObject(forKey: "task-feedback")
                             WidgetTaskControl.defaults.removeObject(forKey: WidgetTaskControl.key(feedback.task))
                             WidgetCenter.shared.reloadAllTimelines()

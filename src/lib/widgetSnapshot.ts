@@ -3,10 +3,10 @@ import {eventType} from './eventType.js'
 import {eventColor} from './colors.js'
 import { expandEvents } from './recurrence.js'
 import { PlannerDate } from './timezone.js'
-export function widgetSnapshot(events: CalendarEvent[], now = new Date(), tags: Tag[] = []) {
+export function widgetSnapshot(events: CalendarEvent[], now = new Date(), tags: Tag[] = [], resolvedFeedbackIds: string[] = []) {
   const until = new Date(now.getTime() + 7 * 86400000)
-  return { version: 1, generatedAt: now.getTime() / 1000, validUntil: until.getTime() / 1000,
+  return { resolvedFeedbackIds, version: 1, generatedAt: now.getTime() / 1000, validUntil: until.getTime() / 1000,
     events: expandEvents(events, new PlannerDate(now), new PlannerDate(until))
       .filter(({ event, start, end }) => !event.allDay && !event.reminder && event.eventKind !== 'folder' && end > start)
-      .map(({ event, start, end }) => ({ id: event.id + '@' + start.toISOString(), title: event.title.slice(0, 300), planningTaskId: event.planning?.taskId, isFreeTime: event.title.trim().toLowerCase()==='free time' && eventType(event,tags)==='planned', color: eventColor(event, tags), start: start.getTime() / 1000, end: end.getTime() / 1000 })) }
+      .map(({ event, start, end }) => ({ id: event.id + '@' + start.toISOString(), title: event.title.slice(0, 300), planningTaskId: event.planning?.taskId, sourceEventId: event.detachedFrom||event.id, isFreeTime: event.title.trim().toLowerCase()==='free time' && eventType(event,tags)==='planned', color: eventColor(event, tags), start: start.getTime() / 1000, end: end.getTime() / 1000 })) }
 }

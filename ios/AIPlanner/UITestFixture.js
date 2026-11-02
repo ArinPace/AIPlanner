@@ -36,6 +36,13 @@
   else if(path==='/api/agent/vm/send'&&globalThis.__plannerFixtureWidgets){
    const request=JSON.parse(options.body),output=document.getElementById('fixture-widget-feedback')||document.createElement('output');
    output.id='fixture-widget-feedback';output.setAttribute('role','status');output.style.cssText='position:fixed;bottom:0;left:0;background:white;color:black;z-index:10000';
+   if(globalThis.__plannerFixtureAtomicWidgetPlan&&!request.message.includes('finished this activity early')){
+    const match=request.message.match(/widgetFeedback=(\{.*\}) to apply this occurrence/);
+    if(match){
+     const feedback=JSON.parse(match[1]),button=document.createElement('button');button.textContent='Publish reviewed fixture plan';button.style.cssText='position:fixed;bottom:36px;left:0;z-index:10000';
+     button.onclick=()=>{calendar={...calendar,revision:calendar.revision+1,resolvedWidgetFeedbackIds:[feedback.id],events:calendar.events.map(e=>({...e,end:new Date(Date.now()+480000).toISOString()}))};button.remove();window.dispatchEvent(new Event('planner-calendar-refresh'))};document.body.append(button);
+    }
+   }
    output.textContent='Widget feedback received: '+(request.message.startsWith('Free-time request')?'free':request.message.includes('finished this activity early')?'done':'time');document.body.append(output);value={id:'fixture-accepted'};
   }
   else if(path==='/api/agent/vm')value={power:'offline',hosts:[],chats:[main],deletedChats:[],runs:[],settings:{ai_provider:'codex',sources:[],sites:{},schedule_enabled:false,schedule:{timezone:'America/New_York',times:[]}},accounts:[],google:{accounts:[],connected:false,configured:true,activeAccountId:null},queue:{active:null,queuedIds:[]},planning:{startedAt:now,ready:true,revision:1},provisioning:null,personalChatGptAvailable:true,hostedChatGptAvailable:false,recordings:false};

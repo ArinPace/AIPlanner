@@ -1,3 +1,7 @@
+import {resizeWidgetOccurrence,verifyFreeTimeRequest,type TaskFeedback} from '../src/lib/widgetTaskFeedback.js'
+import {widgetDraftProblems} from './widget-draft-review.js'
+import {isBreakEvent,removeCalendarItems} from './planner-control.js'
+import {eventRemovalIds} from '../src/lib/eventFolders.js'
 import {randomUUID,createHash} from 'node:crypto'
 import {z} from 'zod'
 import {ApiError,db} from './cloud.js'
@@ -11,7 +15,7 @@ import type {CalendarEvent,StoredState} from '../src/types.js'
 
 const base='https://www.googleapis.com/calendar/v3/calendars/primary/events'
 type Remote=Record<string,any>
-export type Stage={username:string;id:string;version:number;base_revision:number;account_id:string;status:string;approved_revision:number|null;review_summary?:string;payload:{calendar:StoredState;google:{events:Remote[];mappings:Remote[];timeMin:string;timeMax:string};issues:{id:string;message:string}[];resolutions:Record<string,string>}}
+export type Stage={username:string;id:string;version:number;base_revision:number;account_id:string;status:string;approved_revision:number|null;review_summary?:string;payload:{calendar:StoredState;google:{events:Remote[];mappings:Remote[];timeMin:string;timeMax:string};issues:{id:string;message:string}[];resolutions:Record<string,string>;widgetFeedback?:TaskFeedback[]}}
 export {STAGED_CALENDAR_RULES} from './calendar-staging-rules.js'
 export function sameGoogleEvent(a:Remote,b:Remote){
  const time=(v:any)=>v?.date|| (v?.dateTime?new Date(v.dateTime).toISOString():null)
@@ -69,17 +73,37 @@ export async function prepareCalendarStage(username:string,refresh=false){
  if(!storage(saved)?.length)throw new ApiError(409,'Staging changed while preparing. Read it again.')
  return stageSummary(stage)
 }
-function stageSummary(stage:Stage){return {id:stage.id,version:stage.version,status:stage.status,baseRevision:stage.base_revision,approvedRevision:stage.approved_revision,accountId:stage.account_id,issues:stage.payload.issues,resolutions:stage.payload.resolutions,calendarEvents:stage.payload.calendar.events.length,googleEvents:stage.payload.google.events.length,googleWindow:{timeMin:stage.payload.google.timeMin,timeMax:stage.payload.google.timeMax},coverage:'Google series/occurrences in the stated window plus every linked Google event; overlap hints cover base times only. Review recurrence and all sources explicitly.',download:'/api/calendar/staging.json'}}
+function stageSummary(stage:Stage){return {id:stage.id,version:stage.version,status:stage.status,baseRevision:stage.base_revision,approvedRevision:stage.approved_revision,accountId:stage.account_id,issues:stage.payload.issues,resolutions:stage.payload.resolutions,calendarEvents:stage.payload.calendar.events.length,googleEvents:stage.payload.google.events.length,widgetFeedback:stage.payload.widgetFeedback||[],googleWindow:{timeMin:stage.payload.google.timeMin,timeMax:stage.payload.google.timeMax},coverage:'Google series/occurrences in the stated window plus every linked Google event; overlap hints cover base times only. Review recurrence and all sources explicitly.',download:'/api/calendar/staging.json'}}
 export async function readCalendarStage(username:string,section='summary',offset=0,limit=100){
  const stage=await stagingRow(username);if(!stage)throw new ApiError(404,'Prepare a calendar draft first.')
  const items=section==='google'?stage.payload.google.events:stage.payload.calendar.events
  return section==='summary'?{...stageSummary(stage),tags:stage.payload.calendar.tags,mappings:stage.payload.google.mappings}:{...stageSummary(stage),items:items.slice(offset,offset+limit),total:items.length,offset,hasMore:offset+limit<items.length}
 }
+export const widgetFeedbackSchema=z.object({id:z.string().uuid(),task:z.object({id:z.string().min(1).max(500),title:z.string().max(300),start:z.number().finite(),end:z.number().finite(),planningTaskId:z.string().max(100).optional(),sourceEventId:z.string().max(100).optional()}),remainingMinutes:z.number().int().nonnegative(),done:z.boolean(),reportedAt:z.number().finite(),requestedEnd:z.number().finite().optional(),kind:z.literal('fillFreeTime').optional()})
 const draftPatch=z.object(eventPatch).omit({revision:true,activityType:true,bufferForEventId:true,planningLocked:true})
-export async function editCalendarStage(username:string,args:{id:string;version:number;events?:unknown[];resolutions?:{issueId:string;decision:string}[]}){
+export async function editCalendarStage(username:string,args:{id:string;version:number;events?:unknown[];widgetFeedback?:unknown;removeIds?:string[];removalScope?:'event'|'series'|'occurrence';occurrenceStart?:string;userConfirmed?:boolean;resolutions?:{issueId:string;decision:string}[]}){
  const stage=await stagingRow(username)
  if(!stage||stage.id!==args.id||stage.version!==args.version||stage.status!=='draft')throw new ApiError(409,'Read the current staging ID/version before editing.')
  if((await calendarRow(username)).revision!==stage.base_revision)throw new ApiError(409,'Live calendar changed. Prepare a fresh draft.')
+ if(args.widgetFeedback){
+  const feedback=widgetFeedbackSchema.parse(args.widgetFeedback)
+  if(!stage.payload.widgetFeedback?.some(f=>f.id===feedback.id)){
+   const change=feedback.kind==='fillFreeTime'?{events:stage.payload.calendar.events,result:verifyFreeTimeRequest(stage.payload.calendar.events,stage.payload.calendar.tags,feedback)}:resizeWidgetOccurrence(stage.payload.calendar.events,feedback,stage.payload.calendar.tags)
+   stage.payload.calendar.events=change.events
+   const completedTask=feedback.done?stage.payload.calendar.events.find(e=>e.id===change.result.eventId)?.planning?.taskId:undefined
+   if(completedTask&&completedTask===feedback.task.planningTaskId){
+    stage.payload.calendar.events=stage.payload.calendar.events.filter(e=>!(e.planning?.taskId===completedTask&&e.recurrence.frequency==='none'&&Date.parse(e.start)>=feedback.reportedAt*1000))
+   }
+   stage.payload.widgetFeedback=[...(stage.payload.widgetFeedback||[]),feedback].slice(-200)
+   stage.payload.calendar.resolvedWidgetFeedbackIds=[...new Set([...(stage.payload.calendar.resolvedWidgetFeedbackIds||[]),feedback.id])].slice(-200)
+   stage.payload.issues.push({id:'widget-feedback:'+feedback.id,message:'Review the complete schedule for this widget request, including its requested duration/completion, downstream work, travel, recovery and recurrence/folder membership. '+change.result.note})
+  }
+ }
+ if(args.removeIds?.length){
+  const affected=eventRemovalIds(stage.payload.calendar.events,args.removeIds,args.removalScope==='occurrence')
+  if(!args.userConfirmed&&stage.payload.calendar.events.some(e=>affected.has(e.id)&&!isBreakEvent(e,stage.payload.calendar)))throw new ApiError(400,'Draft removal of non-break commitments needs explicit user authorization. Move unfinished work instead of dropping it.')
+  stage.payload.calendar=removeCalendarItems(stage.payload.calendar,args.removeIds,'events',args.removalScope||'event',args.occurrenceStart)
+ }
  for(const input of args.events||[]){
   const patch=draftPatch.parse(input),old=patch.id?stage.payload.calendar.events.find(e=>e.id===patch.id):undefined
   if(patch.id&&!old)throw new ApiError(404,'Draft event not found. Omit id to add an event.')
@@ -105,6 +129,10 @@ export async function publishCalendarStage(username:string,args:{id:string;versi
  if(!stage||stage.id!==args.id||stage.version!==args.version||stage.status!=='draft')throw new ApiError(409,'Read the latest staging draft before publishing.')
  if(args.reviewSummary.trim().length<20)throw new ApiError(400,'Explain what you reviewed and reconciled.')
  if(stage.payload.issues.some(i=>!stage.payload.resolutions[i.id]))throw new ApiError(409,'Resolve every staging issue before publishing.')
+ const current=await calendarRow(username)
+ if(current.revision!==stage.base_revision)throw new ApiError(409,'Calendar changed. Prepare a fresh draft before publishing.')
+ const problems=widgetDraftProblems(current.state,stage.payload.calendar,stage.payload.widgetFeedback||[])
+ if(problems.length)throw new ApiError(409,'The revised plan is not ready. Fix draft conflicts before publishing: '+problems.join('; '))
  const fresh=await googleSnapshot(username,stage.payload.google)
  if(fresh.accountId!==stage.account_id||snapshotKey(fresh.google.events)!==snapshotKey(stage.payload.google.events)){
   storage(await db().from('planner_calendar_staging').update({status:'stale'}).eq('username',username).eq('id',stage.id).eq('version',stage.version))

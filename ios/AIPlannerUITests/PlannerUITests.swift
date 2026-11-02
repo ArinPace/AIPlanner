@@ -15,7 +15,7 @@ final class PlannerUITests: XCTestCase {
     func testTaskControlWidgetFlow() {
         let app = XCUIApplication()
         app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"
-        app.launchArguments = ["-UITestFixture", "-UITestSignedIn", "-UITestWidgets"]
+        app.launchArguments = ["-UITestFixture", "-UITestSignedIn", "-UITestWidgets", "-UITestAtomicWidgetPlan"]
         app.launch()
         XCTAssertTrue(app.webViews.buttons["Agent"].waitForExistence(timeout: 15))
         Thread.sleep(forTimeInterval: 3)
@@ -61,22 +61,33 @@ final class PlannerUITests: XCTestCase {
         let plus = visibleButton("Increase task time")!
         let minus = visibleButton("Decrease task time")!
         let value = visibleButton("combinedTaskTimeValue")!
+        func expectValue(_ number: String) {
+            let updated = expectation(for: NSPredicate(format: "value == %@", number), evaluatedWith: value)
+            wait(for: [updated], timeout: 6)
+        }
         XCTAssertTrue(plus.waitForExistence(timeout: 10))
-        plus.tap(); XCTAssertEqual(value.value as? String, "35")
-        plus.tap(); XCTAssertEqual(value.value as? String, "45")
-        minus.tap(); XCTAssertEqual(value.value as? String, "35")
-        minus.tap(); XCTAssertEqual(value.value as? String, "25")
+        plus.tap(); expectValue("35")
+        plus.tap(); expectValue("45")
+        minus.tap(); expectValue("35")
+        minus.tap(); expectValue("25")
         for _ in 0..<6 { minus.tap() }
-        XCTAssertEqual(value.value as? String, "0")
-        plus.tap(); plus.tap(); XCTAssertEqual(value.value as? String, "10")
+        expectValue("0")
+        plus.tap(); plus.tap(); expectValue("10")
         Thread.sleep(forTimeInterval: 2)
         let widgets = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         widgets.name = "Task controls and separate Done widget"; widgets.lifetime = .keepAlways; add(widgets)
         value.tap()
         XCTAssertTrue(app.webViews.staticTexts["Widget feedback received: time"].waitForExistence(timeout: 15))
-        XCTAssertTrue(app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Task time saved.'")).firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Widget time updated.'")).firstMatch.waitForExistence(timeout: 10))
         XCUIDevice.shared.press(.home)
         XCTAssertTrue(value.waitForExistence(timeout: 10)); XCTAssertEqual(value.value as? String, "10")
+        app.activate()
+        let publish = app.webViews.buttons["Publish reviewed fixture plan"]
+        XCTAssertTrue(publish.waitForExistence(timeout: 10)); publish.tap()
+        Thread.sleep(forTimeInterval: 2)
+        XCUIDevice.shared.press(.home)
+        let adopted = expectation(for: NSPredicate(format: "value == '8'"), evaluatedWith: value)
+        wait(for: [adopted], timeout: 10)
         XCTAssertTrue(findWidgetPage("Finish current task"))
         let done = visibleButton("Finish current task")!
         done.tap()

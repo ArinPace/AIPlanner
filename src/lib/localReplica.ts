@@ -48,7 +48,7 @@ export async function saveReplica(kind:Kind,data:Record<string,unknown>,context=
   if(isIPhoneApp()){
    const signature=typeof data.revision==='number'?String(data.revision):JSON.stringify(data)
    if(nativePublished.get(kind)!==signature)try{await nativeRequest({action:'localReplica',...part});nativePublished.set(kind,signature)}catch(e){failure=e instanceof Error?e.message:String(e)}
-   if(kind==='calendar')try{await nativeRequest({action:'widgetSchedule',schedule:widgetSnapshot((data as unknown as StoredState).events, undefined, (data as unknown as StoredState).tags||[])});widgetFailure=''}catch(e){widgetFailure=e instanceof Error?e.message:String(e)}
+   if(kind==='calendar')try{await nativeRequest({action:'widgetSchedule',schedule:widgetSnapshot((data as unknown as StoredState).events, undefined, (data as unknown as StoredState).tags||[], (data as unknown as StoredState).resolvedWidgetFeedbackIds||[])});widgetFailure=''}catch(e){widgetFailure=e instanceof Error?e.message:String(e)}
   }
   notify()
  })

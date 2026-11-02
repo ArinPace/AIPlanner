@@ -48,16 +48,16 @@ try {
    assert.equal(await page.evaluate(()=>feedbackSends.length),0);
    await page.evaluate(()=>window.failSend=false);await page.getByRole('button',{name:'Retry',exact:true}).click();
   }
-  await page.getByText('Sent to your agent',{exact:false}).waitFor();
+  await page.getByText(mode==='free'?'Sent to your agent':'Widget time updated.',{exact:false}).waitFor();
   const result=await page.evaluate(()=>({sends:feedbackSends,acks:feedbackAcks,writes:calendarWrites,snapshots:widgetSnapshots}));
   if(mode==='free'){
    assert.equal(result.writes.length,0);assert.equal(result.sends.length,1);assert.equal(result.acks.length,1);
    assert.match(result.sends[0].message,/Free-time request/);assert.match(result.sends[0].message,/fill ONLY the remaining free-time window/);
    console.log('free passed: request queued for a verified gap, calendar untouched');await page.close();continue;
   }
-  assert.equal(result.writes.length,1);
-  const target=result.writes[0].events[0].end;assert.match(result.sends[0].message,/already been saved/);
-  assert.ok(result.snapshots.some(s=>mode==='duration'?s.events.some(e=>Math.abs(e.end-Date.parse(target)/1000)<1):true));
+  assert.equal(result.writes.length,0,'Widget feedback must never write a partial live calendar');
+  assert.match(result.sends[0].message,/Do NOT change live events incrementally/);
+  assert.match(result.sends[0].message,/planner_calendar_stage_publish ONCE/);
   assert.equal(result.sends.length,1);assert.equal(result.acks.length,1);assert.equal(result.sends[0].queue,true);
   assert.match(result.sends[0].message,/linked-homework/);
   assert.match(result.sends[0].message,mode==='done'?/finished this activity early/:mode==='duration'?/30 minutes remaining/:/0 minutes remaining/);

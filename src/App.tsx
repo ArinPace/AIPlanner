@@ -1,4 +1,4 @@
-import {resizeWidgetOccurrence, verifyFreeTimeRequest, type TaskFeedback, type TaskTimeResult} from './lib/widgetTaskFeedback'
+import {verifyFreeTimeRequest, type TaskFeedback, type TaskTimeResult} from './lib/widgetTaskFeedback'
 import {WidgetTaskFeedback} from './components/WidgetTaskFeedback'
 import {isIPhoneApp} from './lib/platform'
 import {ScreenTimePanel} from './components/ScreenTimePanel'
@@ -196,10 +196,10 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
           applyState(remote)
           return result
         }
-        const change=resizeWidgetOccurrence(remote.events,feedback,remote.tags)
-        if(change.result.applied&&change.events!==remote.events)await saveCalendar({...remote,events:change.events})
-        applyState({...remote,events:change.events})
-        return change.result
+        applyState(remote)
+        const end=new globalThis.Date((feedback.done?feedback.reportedAt:feedback.requestedEnd??feedback.reportedAt+feedback.remainingMinutes*60)*1000).toISOString()
+        return {applied:false,end,note:'Widget-only preview. The live calendar has NOT been changed. Prepare the complete revised schedule in a draft and publish it atomically only after full review.'}
+
       })
       saveQueue.current=operation.then(()=>undefined,()=>undefined)
       return await operation

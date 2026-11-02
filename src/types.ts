@@ -48,6 +48,7 @@ export interface Occurrence {
 }
 
 export interface StoredState {
+  resolvedWidgetFeedbackIds?: string[]
   revision?: number
   events: CalendarEvent[]
   tags: Tag[]

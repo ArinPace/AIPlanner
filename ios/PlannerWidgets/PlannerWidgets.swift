@@ -5,7 +5,7 @@ import AppIntents
 struct PlannerEntry: TimelineEntry {
     let date: Date
     let schedule: WidgetSchedule
-    var task: WidgetTask? { schedule.current(at: date) }
+    var task: WidgetTask? { WidgetTimeOverrides.preferred(in: schedule, at: date) ?? schedule.current(at: date) }
     var next: WidgetTask? { schedule.next(after: date) }
 }
 struct PlannerProvider: TimelineProvider {
@@ -19,7 +19,10 @@ struct PlannerProvider: TimelineProvider {
     }
     func getTimeline(in context: Context, completion: @escaping (Timeline<PlannerEntry>) -> Void) {
         let now = Date(), schedule = WidgetTaskControl.displaySchedule()
-        let dates = [now] + schedule.transitions(after: now)
+        let draftTransitions = schedule.events.filter { abs(WidgetTaskControl.draftEnd($0) - $0.end) > 0.001 }.flatMap { task in
+            [600.0, 3600.0, 36000.0].map { Date(timeIntervalSince1970: WidgetTaskControl.draftEnd(task) - $0 + 0.001) }
+        }.filter { $0 > now && $0.timeIntervalSince1970 <= schedule.validUntil }
+        let dates = Array(Set([now] + schedule.transitions(after: now) + WidgetScheduleStore.load().transitions(after: now) + draftTransitions)).sorted()
         let entries = dates.map { PlannerEntry(date: $0, schedule: schedule) }
         // Entries switch at task boundaries; the countdown ticks without reloads.
         let refresh = min(now.addingTimeInterval(3600), dates.last ?? now.addingTimeInterval(3600))
@@ -166,9 +169,10 @@ struct TaskControlView: View {
                     }.accessibilityLabel(combined ? "Decrease task time" : "Decrease remaining time")
                     Button(intent: SubmitTaskTimeIntent(task: task, done: false)) {
                         if end > Date().timeIntervalSince1970 {
-                            Text(timerInterval: Date(timeIntervalSince1970: min(task.start, Date().timeIntervalSince1970))...Date(timeIntervalSince1970: end), countsDown: true, showsHours: true)
+                            let timer = Text(timerInterval: Date(timeIntervalSince1970: min(task.start, entry.date.timeIntervalSince1970))...Date(timeIntervalSince1970: end), countsDown: true, showsHours: true)
+                            Text("\(Text(task.timerLeadingZero(at: entry.date, adjustedEnd: end)))\(timer)")
                                 .monospacedDigit().multilineTextAlignment(.center)
-                        } else { Text("0:00") }
+                        } else { Text("00:00") }
                     }
                     .buttonStyle(.bordered).controlSize(.mini)
                     .accessibilityLabel("Apply remaining time").accessibilityValue("\(WidgetTaskControl.remaining(task))")
@@ -185,7 +189,7 @@ struct TaskControlView: View {
                     if pending {
                         Link(feedback?.done == true ? "Finished · syncing…" : "Sending… Open Planner", destination: URL(string: "aiplanner://calendar")!).font(.caption)
                     } else {
-                        Text("Tap time to apply").font(.caption2).opacity(0.85)
+                        Text(WidgetTimeOverrides.record(for: task) == nil ? "Tap time to apply" : "Revised plan pending").font(.caption2).opacity(0.85)
                     }
                 }
             } else {
@@ -247,7 +251,7 @@ struct FillFreeTimeWidget: Widget {
 struct FillFreeTimeView: View {
     @Environment(\.widgetFamily) var family
     let entry: PlannerEntry
-    private var slot: WidgetTask? { entry.schedule.freeSlot(at: entry.date) }
+    private var slot: WidgetTask? { WidgetScheduleStore.load().freeSlot(at: entry.date) }
     @ViewBuilder private var actionLabel: some View {
         if family == .accessoryCircular { Image(systemName: "sparkles").font(.title2) }
         else {

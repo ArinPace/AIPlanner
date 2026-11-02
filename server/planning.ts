@@ -1,3 +1,4 @@
+import {hasWidgetDraft,requireNoWidgetDraft} from './widget-draft-lock.js'
 import {readAutomationSettings} from './automation.js'
 import {scheduledReviewMessage} from './vm-power.js'
 import {completedTodoTasks,removeCompletedTodoBlocks,todoChecklist} from './todo-completion.js'
@@ -42,6 +43,7 @@ export async function syncTodoCompletion(username:string){
   // Checkbox completion clears linked work even when auto-replanning is off.
   // The initial calendar-start gate still applies to all automated writes.
   if(!row.startedAt)return
+  if(await hasWidgetDraft(username))return
   const calendar=await calendarRow(username)
   const events=removeCompletedTodoBlocks(calendar.state.events,ids)
   if(events.length===calendar.state.events.length)return
@@ -59,6 +61,7 @@ export async function planDays(username:string,input:{date:string;days:number;pr
  if(!row.profile.wake||!row.profile.sleep)throw new ApiError(409,'First learn and confirm wake/sleep times with this user in Main Chat; no universal routine is assumed.')
  if(!preview&&!row.profile.enabled)throw new ApiError(409,'Turn on automatic planning before publishing a plan. Preview is still available.')
  if(!preview&&!row.startedAt)throw new ApiError(409,'The user must click Start planning my calendar in Main Chat before any calendar is populated.')
+ if(!preview)await requireNoWidgetDraft(username)
  const calendar=await calendarRow(username)
  const result=buildDayPlan(row.profile,calendar.state.events,date,days)
  const tags=[...calendar.state.tags]
