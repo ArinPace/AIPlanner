@@ -277,6 +277,11 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
     return expandEvents(visibleEvents, range.start, range.end)
   }, [visibleEvents, view, range.end, range.start])
 
+  const busyOccurrences = useMemo(() => {
+    if (view === 'month' || view === 'year') return []
+    return expandEvents(events, range.start, range.end)
+  }, [events, view, range.end, range.start])
+
   function navigate(direction: -1 | 1) {
     if (view === 'year') setCursor(addYears(cursor, direction))
     else if (view === 'month') setCursor(addMonths(cursor, direction))
@@ -433,6 +438,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
               cursor={cursor}
               zoom={zoom}
               events={visibleEvents}
+              busyEvents={events}
               onMonthChange={setCursor}
               tags={tags}
               onDayClick={(date) => openCreate(date)}
@@ -449,6 +455,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
               view={view}
               zoom={zoom}
               occurrences={occurrences}
+              busyOccurrences={busyOccurrences}
               tags={tags}
               onSlotClick={(date, allDay) => openCreate(date, { timed: !allDay, allDay })}
               onEventClick={(event,start) => openEdit(event,start)}

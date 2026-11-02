@@ -1,3 +1,4 @@
+import { freeTimeAppearance, withFreeTime } from '../lib/freeTime'
 import { eventAppearance } from '../lib/eventAppearance'
 import {PlannerDate as Date} from '../lib/timezone'
 import { urgencyColor } from '../lib/urgencyColor'
@@ -22,6 +23,7 @@ const TARGET_WEEK_HEIGHT = 112
 type MonthViewProps = {
   cursor: Date
   zoom: number
+  busyEvents: CalendarEvent[]
   events: CalendarEvent[]
   onMonthChange: (date: Date) => void
   tags: Tag[]
@@ -30,7 +32,7 @@ type MonthViewProps = {
   onEventClick: (event: CalendarEvent, occurrenceStart: Date) => void
 }
 
-export function MonthView({ cursor, zoom, events, onMonthChange, tags, onDayClick, onDayOpen, onEventClick }: MonthViewProps) {
+export function MonthView({ cursor, zoom, events, busyEvents, onMonthChange, tags, onDayClick, onDayOpen, onEventClick }: MonthViewProps) {
   const [now,setNow]=useState(()=>new Date())
   useEffect(()=>{const timer=window.setInterval(()=>setNow(new Date()),60000);return()=>window.clearInterval(timer)},[])
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -39,10 +41,11 @@ export function MonthView({ cursor, zoom, events, onMonthChange, tags, onDayClic
   const days = useMemo(() => Array.from({ length: range.weeks * 7 }, (_, index) => addDays(range.start, index)), [range])
   const rows = range.weeks
   const occurrences = useMemo(() => occurrenceFolderGroups(expandEvents(events, range.start, endOfDay(addDays(range.start, range.weeks * 7 - 1)))).top, [events, range])
+  const busyOccurrences = useMemo(() => occurrenceFolderGroups(expandEvents(busyEvents, range.start, endOfDay(addDays(range.start, range.weeks * 7 - 1)))).top, [busyEvents, range])
   const dayItems = useMemo(() => days.map(day => {
     const start = startOfDay(day).getTime(), end = endOfDay(day).getTime()
-    return occurrences.filter(item => item.start.getTime() < end && item.end.getTime() > start).sort((a,b)=>a.start.getTime()-b.start.getTime() || a.end.getTime()-b.end.getTime())
-  }), [days, occurrences])
+    return withFreeTime(occurrences.filter(item => item.start.getTime() < end && item.end.getTime() > start), busyOccurrences, startOfDay(day), addDays(startOfDay(day),1))
+  }), [days, occurrences, busyOccurrences])
   const scrollFrame = useRef<number | null>(null)
   useEffect(() => () => { if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current) }, [])
   const reportedMonth = useRef<string | null>(null)
@@ -155,10 +158,11 @@ export function MonthView({ cursor, zoom, events, onMonthChange, tags, onDayClic
                     <button
                       type="button"
                       className={`event-chip ${item.event.reminder?'reminder-event':''}`}
-                      style={eventAppearance(color,item.event.reminder)}
+                      style={item.freeTime?freeTimeAppearance:eventAppearance(color,item.event.reminder)}
                       onClick={(event) => {
                         event.stopPropagation()
-                        onEventClick(item.event, item.start)
+                        if(item.freeTime)onDayClick(item.start)
+                        else onEventClick(item.event, item.start)
                       }}
                     >
                       {!item.event.allDay && <span className="event-time">{formatTimeCompact(item.start)}</span>}
