@@ -1,10 +1,11 @@
+import {resizeWidgetOccurrence, type TaskFeedback, type TaskTimeResult} from './lib/widgetTaskFeedback'
 import {WidgetTaskFeedback} from './components/WidgetTaskFeedback'
 import {isIPhoneApp} from './lib/platform'
 import {ScreenTimePanel} from './components/ScreenTimePanel'
 import {ChatExperiment} from './components/ChatExperiment'
 import {RECOVERY_TAB} from './lib/attachmentRecovery'
 import { PlannerDate as Date } from './lib/timezone.js'
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { FilesView } from './components/FilesView'
 import { AgentView } from './components/AgentView'
 import { EventModal } from './components/EventModal'
@@ -14,7 +15,7 @@ import { MonthView } from './components/MonthView'
 import { Sidebar } from './components/Sidebar'
 import { TimeGridView } from './components/TimeGridView'
 import { YearView } from './components/YearView'
-import { adoptCalendarRevision, emptyCalendar, getSession, loadCalendar, loadFiles, logout, saveCalendar, setToken } from './lib/api'
+import { adoptCalendarRevision, emptyCalendar, getSession, getToken, loadCalendar, loadFiles, logout, saveCalendar, setToken } from './lib/api'
 import { isEventVisible } from './lib/colors'
 import {eventType,type ScheduleType} from './lib/eventType'
 import {saveEventGroup,removeEventSeries,detachEventOccurrence} from './lib/eventFolders'
@@ -168,6 +169,9 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   const mainRef = useRef<HTMLElement>(null)
   const saveQueue = useRef<Promise<void>>(Promise.resolve())
   const persistedCalendar = useRef('')
+  const [widgetSaving,setWidgetSaving]=useState(false)
+  const latestCalendar=useRef({events,tags,hiddenTagIds,zoom,loaded,draft})
+  useLayoutEffect(()=>{latestCalendar.current={events,tags,hiddenTagIds,zoom,loaded,draft}},[events,tags,hiddenTagIds,zoom,loaded,draft])
 
   const applyState = useCallback((state: StoredState) => {
     persistedCalendar.current = calendarFingerprint(state)
@@ -176,6 +180,26 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
     setHiddenTagIds(state.hiddenTagIds)
     setZoom(clampZoom(state.zoom ?? DEFAULT_ZOOM))
   }, [])
+
+  const applyWidgetTime=useCallback(async(feedback:TaskFeedback):Promise<TaskTimeResult>=>{
+    const accountToken=getToken()
+    setWidgetSaving(true)
+    try {
+      const operation=saveQueue.current.then(async()=>{
+        const local=latestCalendar.current
+        if(!local.loaded||local.draft||calendarFingerprint(local)!==persistedCalendar.current)throw new Error('Finish editing or saving your calendar, then retry this request.')
+        if(accountToken!==getToken())throw new Error('Your account changed.')
+        const remote=await loadCalendar()
+        if(accountToken!==getToken())throw new Error('Your account changed.')
+        const change=resizeWidgetOccurrence(remote.events,feedback,remote.tags)
+        if(change.result.applied&&change.events!==remote.events)await saveCalendar({...remote,events:change.events})
+        applyState({...remote,events:change.events})
+        return change.result
+      })
+      saveQueue.current=operation.then(()=>undefined,()=>undefined)
+      return await operation
+    }finally{setWidgetSaving(false)}
+  },[applyState])
 
   useEffect(() => {
     loadCalendar()
@@ -366,8 +390,8 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   }
 
   return (
-    <div className="app-shell">
-      <WidgetTaskFeedback username={username}/>
+    <div className="app-shell" inert={widgetSaving}>
+      <WidgetTaskFeedback username={username} onApply={applyWidgetTime}/>
       <Header
         tab={tab}
         onTabChange={next=>{if(next==='todo'||next==='work')setTodoRequest(n=>n+1);setTab(next)}}

@@ -1,6 +1,6 @@
 import Foundation
 
-struct WidgetTask: Codable, Equatable {
+struct WidgetTask: Codable, Equatable, Identifiable {
     let id: String
     let title: String
     let start: TimeInterval
@@ -12,8 +12,9 @@ struct WidgetTask: Codable, Equatable {
     func remainingMinutes(at now: Date, adjustedEnd: Double? = nil) -> Int {
         max(0, Int(ceil(((adjustedEnd ?? end) - now.timeIntervalSince1970) / 60)))
     }
+    func adjustmentStep(remaining: Int) -> Int { remaining <= 30 ? 5 : 10 }
     func adjustedEnd(at now: Date, previous: Double?, delta: Int) -> Double {
-        now.timeIntervalSince1970 + Double(max(0, remainingMinutes(at: now, adjustedEnd: previous) + delta) * 60)
+        max(now.timeIntervalSince1970, (previous ?? end) + Double(delta * 60))
     }
 }
 struct WidgetSchedule: Codable, Equatable {

@@ -5,7 +5,7 @@
  if(signedIn)localStorage.setItem('ai-planner-token','fixture-session');
  const now=new Date().toISOString();
  let calendar={revision:1,events:[],tags:[{id:'school',name:'Classes',color:'#1a73e8'}],hiddenTagIds:[],zoom:1};
- if(globalThis.__plannerFixtureWidgets){const start=new Date(Date.now()-300000),end=new Date(Date.now()+1800000);calendar.events=[{id:'widget-test',title:'Widget current activity',start:start.toISOString(),end:end.toISOString(),description:'',allDay:false,tagIds:[],recurrence:{frequency:'none',interval:1,until:null}}]}
+ if(globalThis.__plannerFixtureWidgets){calendar.revision=Date.now();const start=new Date(Date.now()-300000),end=new Date(Date.now()+1800000);calendar.events=[{id:'widget-test',title:'Widget current activity',start:start.toISOString(),end:end.toISOString(),description:'',allDay:false,tagIds:[],recurrence:{frequency:'none',interval:1,until:null}}]}
  let files={revision:1,folders:[{id:'school-folder',parentId:null,name:'Subjects',color:'#1a73e8',labels:[],updatedAt:now}],documents:[],files:[{id:'todo',name:'To do',systemRole:'todo',format:'note',folderId:null,content:'- [ ] [urgency:80] Prepare for statistics quiz',updatedAt:now},{id:'work',name:'Work',format:'note',folderId:null,content:'- [ ] [urgency:85] Homework due Friday',updatedAt:now},{id:'note',name:'iPhone test note',format:'note',folderId:null,content:'Your notes stay in the same Planner account.',updatedAt:now}]};
  const main={id:'00000000-0000-4000-8000-000000000001',title:'Main Chat',is_main:true,pinned:true,updated_at:now};
  // Simulate a change saved by another device while this test app is away.

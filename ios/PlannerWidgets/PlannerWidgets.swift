@@ -14,11 +14,11 @@ struct PlannerProvider: TimelineProvider {
         return PlannerEntry(date: now, schedule: WidgetSchedule(version: 1, generatedAt: now.timeIntervalSince1970, validUntil: now.addingTimeInterval(86400).timeIntervalSince1970, events: [WidgetTask(id: "preview", title: "Example task", start: now.addingTimeInterval(-900).timeIntervalSince1970, end: now.addingTimeInterval(1800).timeIntervalSince1970)]))
     }
     func getSnapshot(in context: Context, completion: @escaping (PlannerEntry) -> Void) {
-        let schedule = WidgetScheduleStore.load()
+        let schedule = WidgetTaskControl.displaySchedule()
         completion(context.isPreview && schedule.validUntil <= Date().timeIntervalSince1970 ? placeholder(in: context) : PlannerEntry(date: Date(), schedule: schedule))
     }
     func getTimeline(in context: Context, completion: @escaping (Timeline<PlannerEntry>) -> Void) {
-        let now = Date(), schedule = WidgetScheduleStore.load()
+        let now = Date(), schedule = WidgetTaskControl.displaySchedule()
         let dates = [now] + schedule.transitions(after: now)
         let entries = dates.map { PlannerEntry(date: $0, schedule: schedule) }
         // Entries switch at task boundaries; the countdown ticks without reloads.
@@ -119,9 +119,9 @@ struct TimeRemainingWidget: Widget {
 }
 struct TaskAndTimeWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "PlannerTaskAndTime", provider: PlannerProvider()) { PlannerWidgetView(entry: $0, countdown: true, combined: true) }
+        StaticConfiguration(kind: "PlannerTaskAndTime", provider: PlannerProvider()) { TaskControlView(combined: true, entry: $0) }
             .configurationDisplayName("Task & Time")
-            .description("Your current activity and live countdown in one small widget.")
+            .description("Current activity, start/end time and live countdown. Adjust with plus/minus, then tap the countdown to apply.")
             .supportedFamilies([.systemSmall, .accessoryRectangular])
     }
 }
@@ -129,46 +129,113 @@ struct TaskControlWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "PlannerTaskControl", provider: PlannerProvider()) { TaskControlView(entry: $0) }
         .configurationDisplayName("Adjust Task")
-        .description("Change remaining time in five-minute steps, or report that you finished early. Enter and Done open Planner to send to your agent.")
+        .description("Use plus/minus to adjust time in 5- or 10-minute steps, then tap the countdown to apply. Use the separate Done widget to finish.")
         .supportedFamilies([.systemSmall, .systemMedium, .accessoryRectangular])
     }
 }
 struct TaskControlView: View {
+    var combined = false
     @Environment(\.widgetFamily) var family
     let entry: PlannerEntry
+    private var home: Bool { family == .systemSmall || family == .systemMedium }
+    private var task: WidgetTask? {
+        let pending = WidgetTaskControl.pending()
+        return pending?.done == true ? pending?.task : entry.task ?? pending?.task
+    }
+    private var hex: UInt64 { UInt64((task?.color ?? "#1a73e8").trimmingCharacters(in: CharacterSet(charactersIn: "#")), radix: 16) ?? 0x1a73e8 }
+    private var background: Color { Color(red: Double((hex >> 16) & 255) / 255, green: Double((hex >> 8) & 255) / 255, blue: Double(hex & 255) / 255) }
+    private var ink: Color {
+        guard home, task != nil else { return .primary }
+        return (0.299 * Double((hex >> 16) & 255) + 0.587 * Double((hex >> 8) & 255) + 0.114 * Double(hex & 255)) / 255 > 0.65 ? .black : .white
+    }
     var body: some View {
-            VStack(alignment: .leading, spacing: 6) {
-                if WidgetTaskControl.defaults.data(forKey: "task-feedback") != nil {
-                    Text("Request saved").font(.headline)
-                    Text("Open Planner to send or retry.").font(.caption)
-                    Link("Open Planner", destination: URL(string: "aiplanner://calendar")!)
-                } else if let task = entry.task {
-                    if family == .accessoryRectangular {
-                        Text(task.title).font(.caption).lineLimit(1)
-                        HStack(spacing: 6) {
-                            Button(intent: AdjustTaskTimeIntent(task: task, minutes: -5)) { Image(systemName: "minus") }.accessibilityLabel("Remove five minutes")
-                            Text("\(WidgetTaskControl.remaining(task))m").monospacedDigit()
-                            Button(intent: AdjustTaskTimeIntent(task: task, minutes: 5)) { Image(systemName: "plus") }.accessibilityLabel("Add five minutes")
-                            Button(intent: SubmitTaskTimeIntent(task: task, done: false)) { Image(systemName: "return") }.accessibilityLabel("Send time adjustment")
-                            Button(intent: SubmitTaskTimeIntent(task: task, done: true)) { Image(systemName: "checkmark") }.accessibilityLabel("Done early")
-                        }.font(.caption).buttonStyle(.plain)
-                    } else {
-                    Text(task.title).font(.subheadline.weight(.semibold)).lineLimit(2)
-                    Text("\(task.startDate.formatted(date: .omitted, time: .shortened)) – \(task.endDate.formatted(date: .omitted, time: .shortened))").font(.caption2)
-                    HStack {
-                        Button(intent: AdjustTaskTimeIntent(task: task, minutes: -5)) { Image(systemName: "minus") }.accessibilityLabel("Remove five minutes")
-                        Text("\(WidgetTaskControl.remaining(task)) min").font(.headline).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7).layoutPriority(1)
-                        Button(intent: AdjustTaskTimeIntent(task: task, minutes: 5)) { Image(systemName: "plus") }.accessibilityLabel("Add five minutes")
-                    }.buttonStyle(.bordered).controlSize(.small)
-                    HStack {
-                        Button("Enter", intent: SubmitTaskTimeIntent(task: task, done: false))
-                        Button("Done", intent: SubmitTaskTimeIntent(task: task, done: true))
-                    }.buttonStyle(.borderedProminent).font(.caption)
+        VStack(alignment: .leading, spacing: home ? 6 : 2) {
+            if let task {
+                let feedback = WidgetTaskControl.pending()
+                let pending = feedback != nil
+                let end = feedback.flatMap { $0.done ? $0.reportedAt : nil } ?? WidgetTaskControl.draftEnd(task)
+                Text(task.title).font(home ? .subheadline.weight(.semibold) : .caption).lineLimit(home ? 2 : 1)
+                if home {
+                    Text("\(task.startDate.formatted(date: .omitted, time: .shortened)) – \(Date(timeIntervalSince1970: end).formatted(date: .omitted, time: .shortened))")
+                        .font(.caption2).lineLimit(1).minimumScaleFactor(0.7)
+                }
+                HStack(spacing: home ? 8 : 6) {
+                    Button(intent: AdjustTaskTimeIntent(task: task, minutes: -1)) {
+                        Image(systemName: "minus").frame(width: home ? 24 : 20, height: 30)
+                            .background(ink.opacity(0.16), in: RoundedRectangle(cornerRadius: 9))
+                    }.accessibilityLabel(combined ? "Decrease task time" : "Decrease remaining time")
+                    Button(intent: SubmitTaskTimeIntent(task: task, done: false)) {
+                        if end > Date().timeIntervalSince1970 {
+                            Text(timerInterval: Date(timeIntervalSince1970: min(task.start, Date().timeIntervalSince1970))...Date(timeIntervalSince1970: end), countsDown: true, showsHours: true)
+                                .monospacedDigit().multilineTextAlignment(.center)
+                        } else { Text("0:00") }
                     }
-                } else { Text("No current task"); Text("Open Planner to sync").font(.caption) }
-            }.containerBackground(for: .widget) { Color(.systemBackground) }
+                    .buttonStyle(.bordered).controlSize(.mini)
+                    .accessibilityLabel("Apply remaining time").accessibilityValue("\(WidgetTaskControl.remaining(task))")
+                        .accessibilityIdentifier(combined ? "combinedTaskTimeValue" : "taskTimeValue")
+                        .font(home ? .headline : .caption).lineLimit(1).minimumScaleFactor(0.6)
+                        .frame(maxWidth: .infinity, minHeight: 30).layoutPriority(1)
+                    Button(intent: AdjustTaskTimeIntent(task: task, minutes: 1)) {
+                        Image(systemName: "plus").frame(width: home ? 24 : 20, height: 30)
+                            .background(ink.opacity(0.16), in: RoundedRectangle(cornerRadius: 9))
+                    }.accessibilityLabel(combined ? "Increase task time" : "Increase remaining time")
+
+                }.buttonStyle(.plain).disabled(pending)
+                if home {
+                    if pending {
+                        Link(feedback?.done == true ? "Finished · syncing…" : "Sending… Open Planner", destination: URL(string: "aiplanner://calendar")!).font(.caption)
+                    } else {
+                        Text("Tap time to apply").font(.caption2).opacity(0.85)
+                    }
+                }
+            } else {
+                Text("No current task").font(.headline)
+                Link("Open Planner to sync", destination: URL(string: "aiplanner://calendar")!).font(.caption)
+            }
+        }
+        .foregroundStyle(ink).tint(ink)
+        .containerBackground(for: .widget) { if home, task != nil { background } else { Color(.systemBackground) } }
+    }
+}
+struct DoneTaskWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "PlannerDoneTask", provider: PlannerProvider()) { DoneTaskView(entry: $0) }
+            .configurationDisplayName("Done")
+            .description("End your current activity immediately and ask the agent to adjust the remaining schedule.")
+            .supportedFamilies([.systemSmall, .accessoryCircular, .accessoryRectangular])
+    }
+}
+struct DoneTaskView: View {
+    @Environment(\.widgetFamily) var family
+    let entry: PlannerEntry
+    private var pending: WidgetTaskFeedback? { WidgetTaskControl.pending() }
+    private var task: WidgetTask? { pending?.done == true ? pending?.task : entry.task }
+    private var hex: UInt64 { UInt64((task?.color ?? "#1a73e8").trimmingCharacters(in: CharacterSet(charactersIn: "#")), radix: 16) ?? 0x1a73e8 }
+    private var color: Color { Color(red: Double((hex >> 16) & 255) / 255, green: Double((hex >> 8) & 255) / 255, blue: Double(hex & 255) / 255) }
+    private var ink: Color { family != .systemSmall ? .primary : (0.299 * Double((hex >> 16) & 255) + 0.587 * Double((hex >> 8) & 255) + 0.114 * Double(hex & 255)) / 255 > 0.65 ? .black : .white }
+    var body: some View {
+        VStack(spacing: 8) {
+            if let task {
+                if family != .accessoryCircular { Text(task.title).font(.headline).lineLimit(2) }
+                if pending?.done == true {
+                    Label("Finished · syncing", systemImage: "checkmark.circle.fill").font(.caption)
+                } else {
+                    Button(intent: SubmitTaskTimeIntent(task: task, done: true)) {
+                        if family == .accessoryCircular {
+                            Image(systemName: "checkmark.circle.fill").font(.title2)
+                        } else {
+                            Label("Done", systemImage: "checkmark.circle.fill")
+                                .font(family == .systemSmall ? .title2.weight(.semibold) : .caption)
+                        }
+                    }.buttonStyle(.bordered).disabled(pending != nil).accessibilityLabel("Finish current task")
+                }
+            } else {
+                Label("No current task", systemImage: "checkmark.circle").font(.caption)
+            }
+        }.foregroundStyle(ink).tint(ink)
+        .containerBackground(for: .widget) { if family == .systemSmall, task != nil { color } else { Color(.systemBackground) } }
     }
 }
 @main struct PlannerWidgetBundle: WidgetBundle {
-    var body: some Widget { TaskControlWidget(); TaskAndTimeWidget(); CurrentTaskWidget(); TimeRemainingWidget() }
+    var body: some Widget { TaskControlWidget(); DoneTaskWidget(); TaskAndTimeWidget(); CurrentTaskWidget(); TimeRemainingWidget() }
 }

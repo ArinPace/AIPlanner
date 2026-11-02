@@ -8,6 +8,7 @@ struct WidgetTaskFeedback: Codable {
     let remainingMinutes: Int
     let done: Bool
     let reportedAt: Double
+    var requestedEnd: Double? = nil
 }
 enum WidgetTaskControl {
     static var defaults: UserDefaults { UserDefaults(suiteName: WidgetScheduleStore.group)! }
@@ -15,15 +16,33 @@ enum WidgetTaskControl {
     static func remaining(_ task: WidgetTask, now: Date = Date()) -> Int {
         task.remainingMinutes(at: now, adjustedEnd: defaults.object(forKey: key(task)) as? Double)
     }
+    static func draftEnd(_ task: WidgetTask) -> Double {
+        defaults.object(forKey: key(task)) as? Double ?? task.end
+    }
+    static func pending() -> WidgetTaskFeedback? {
+        guard let data = defaults.data(forKey: "task-feedback") else { return nil }
+        return try? JSONDecoder().decode(WidgetTaskFeedback.self, from: data)
+    }
     static func adjust(_ task: WidgetTask, minutes: Int) {
         defaults.set(task.adjustedEnd(at: Date(), previous: defaults.object(forKey: key(task)) as? Double, delta: minutes), forKey: key(task))
     }
     static func submit(_ task: WidgetTask, done: Bool) throws {
         guard WidgetScheduleStore.load().current(at: Date())?.id == task.id else { throw ControlError.stale }
         guard defaults.data(forKey: "task-feedback") == nil else { return }
-        let feedback = WidgetTaskFeedback(id: UUID().uuidString, task: task, remainingMinutes: done ? 0 : remaining(task), done: done, reportedAt: Date().timeIntervalSince1970)
+        let now = Date().timeIntervalSince1970
+        let feedback = WidgetTaskFeedback(id: UUID().uuidString, task: task, remainingMinutes: done ? 0 : remaining(task), done: done, reportedAt: now, requestedEnd: done ? now : max(now, draftEnd(task)))
         defaults.set(try JSONEncoder().encode(feedback), forKey: "task-feedback")
         WidgetCenter.shared.reloadAllTimelines()
+    }
+    static func displaySchedule() -> WidgetSchedule {
+        let schedule = WidgetScheduleStore.load()
+        guard let pending = pending(), pending.done else { return schedule }
+        return WidgetSchedule(version: schedule.version, generatedAt: schedule.generatedAt, validUntil: schedule.validUntil,
+            events: schedule.events.compactMap { task in
+                guard task.id == pending.task.id else { return task }
+                guard pending.reportedAt > task.start else { return nil }
+                return WidgetTask(id: task.id, title: task.title, start: task.start, end: min(task.end, pending.reportedAt), color: task.color, planningTaskId: task.planningTaskId)
+            })
     }
     static func clear() {
         for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("task-time:") || key == "task-feedback" { defaults.removeObject(forKey: key) }
@@ -41,7 +60,8 @@ struct AdjustTaskTimeIntent: AppIntent {
     init(task: WidgetTask, minutes: Int) { self.taskID = task.id; self.minutes = minutes }
     func perform() async throws -> some IntentResult {
         guard let task = WidgetScheduleStore.load().current(at: Date()), task.id == taskID else { throw WidgetTaskControl.ControlError.stale }
-        WidgetTaskControl.adjust(task, minutes: minutes < 0 ? -5 : 5)
+        let step = task.adjustmentStep(remaining: WidgetTaskControl.remaining(task))
+        WidgetTaskControl.adjust(task, minutes: minutes < 0 ? -step : step)
         return .result()
     }
 }

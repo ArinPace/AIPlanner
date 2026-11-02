@@ -21,37 +21,65 @@ final class PlannerUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 3)
         XCUIDevice.shared.press(.home)
         let home = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        if !home.buttons["Add five minutes"].firstMatch.exists {
-        let icon = home.icons.matching(identifier: "AI Planner").firstMatch
-        XCTAssertTrue(icon.waitForExistence(timeout: 5))
-        icon.press(forDuration: 1.5)
-        if home.buttons["Edit Home Screen"].exists { home.buttons["Edit Home Screen"].tap() }
-        if home.buttons["Edit"].exists { home.buttons["Edit"].tap() }
-        if home.buttons["Add Widget"].exists { home.buttons["Add Widget"].tap() }
-        let search = home.searchFields["Search Widgets"]
-        XCTAssertTrue(search.waitForExistence(timeout: 5))
-        search.tap(); search.typeText("AI Planner")
-        let result = home.buttons["AI Planner"].firstMatch
-        if result.waitForExistence(timeout: 3) { result.tap() }
-        else if home.staticTexts["AI Planner"].firstMatch.exists { home.staticTexts["AI Planner"].firstMatch.tap() }
-        let add = home.buttons[" Add Widget"]
-        XCTAssertTrue(add.waitForExistence(timeout: 5)); add.tap()
-        if home.buttons["Done"].waitForExistence(timeout: 5) { home.buttons["Done"].tap() }
+        func visibleButton(_ name: String) -> XCUIElement? {
+            home.buttons.matching(identifier: name).allElementsBoundByIndex.first { $0.exists && $0.isHittable }
         }
-        let plus = home.buttons["Add five minutes"].firstMatch
-        XCTAssertTrue(plus.waitForExistence(timeout: 10)); plus.tap()
-        XCTAssertTrue(home.staticTexts["35 min"].firstMatch.waitForExistence(timeout: 5))
-        let minus = home.buttons["Remove five minutes"].firstMatch
-        for _ in 0..<8 { minus.tap() }
-        XCTAssertTrue(home.staticTexts["0 min"].firstMatch.waitForExistence(timeout: 5))
-        plus.tap(); plus.tap()
-        XCTAssertTrue(home.staticTexts["10 min"].firstMatch.waitForExistence(timeout: 5))
-        home.buttons["Enter"].firstMatch.tap()
+        func findWidgetPage(_ name: String) -> Bool {
+            for _ in 0..<4 { if visibleButton(name) != nil { return true }; home.swipeRight() }
+            for _ in 0..<5 { if visibleButton(name) != nil { return true }; home.swipeLeft() }
+            return false
+        }
+        func addWidget(_ name: String) {
+            let icons = home.icons.matching(identifier: "AI Planner").matching(NSPredicate(format: "NOT (value CONTAINS[c] 'Widget')"))
+            for _ in 0..<4 { home.swipeRight() }
+            for _ in 0..<5 {
+                if icons.allElementsBoundByIndex.contains(where: { $0.isHittable }) { break }
+                home.swipeLeft()
+            }
+            let icon = icons.allElementsBoundByIndex.first { $0.isHittable }!
+            icon.press(forDuration: 1.5)
+            if home.buttons["Edit Home Screen"].exists { home.buttons["Edit Home Screen"].tap() }
+            if home.buttons["Edit"].exists { home.buttons["Edit"].tap() }
+            if home.buttons["Add Widget"].exists { home.buttons["Add Widget"].tap() }
+            let search = home.searchFields["Search Widgets"]
+            XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText("AI Planner")
+            let result = home.buttons["AI Planner"].firstMatch
+            if result.waitForExistence(timeout: 3) { result.tap() }
+            else { home.staticTexts["AI Planner"].firstMatch.tap() }
+            let preview = home.buttons["AI Planner, " + name]
+            for _ in 0..<8 {
+                if preview.exists { break }
+                home.buttons.matching(NSPredicate(format: "label BEGINSWITH 'AI Planner,'")).firstMatch.swipeLeft()
+            }
+            XCTAssertTrue(preview.waitForExistence(timeout: 5))
+            home.buttons[" Add Widget"].tap()
+            if home.buttons["Done"].waitForExistence(timeout: 5) { home.buttons["Done"].tap() }
+        }
+        if !findWidgetPage("Increase task time") { addWidget("Task & Time") }
+        if !findWidgetPage("Finish current task") { addWidget("Done") }
+        XCTAssertTrue(findWidgetPage("Increase task time"))
+        let plus = visibleButton("Increase task time")!
+        let minus = visibleButton("Decrease task time")!
+        let value = visibleButton("combinedTaskTimeValue")!
+        XCTAssertTrue(plus.waitForExistence(timeout: 10))
+        plus.tap(); XCTAssertEqual(value.value as? String, "35")
+        plus.tap(); XCTAssertEqual(value.value as? String, "45")
+        minus.tap(); XCTAssertEqual(value.value as? String, "35")
+        minus.tap(); XCTAssertEqual(value.value as? String, "25")
+        for _ in 0..<6 { minus.tap() }
+        XCTAssertEqual(value.value as? String, "0")
+        plus.tap(); plus.tap(); XCTAssertEqual(value.value as? String, "10")
+        Thread.sleep(forTimeInterval: 2)
+        let widgets = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        widgets.name = "Task controls and separate Done widget"; widgets.lifetime = .keepAlways; add(widgets)
+        value.tap()
         XCTAssertTrue(app.webViews.staticTexts["Widget feedback received: time"].waitForExistence(timeout: 15))
-        XCTAssertTrue(app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Sent to your agent.'")).firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Task time saved.'")).firstMatch.waitForExistence(timeout: 10))
         XCUIDevice.shared.press(.home)
-        let done = home.buttons["Done"].firstMatch
-        XCTAssertTrue(done.waitForExistence(timeout: 10)); done.tap()
+        XCTAssertTrue(value.waitForExistence(timeout: 10)); XCTAssertEqual(value.value as? String, "10")
+        XCTAssertTrue(findWidgetPage("Finish current task"))
+        let done = visibleButton("Finish current task")!
+        done.tap()
         XCTAssertTrue(app.webViews.staticTexts["Widget feedback received: done"].waitForExistence(timeout: 15))
     }
     func testScreenTimeRealSystemPicker() {

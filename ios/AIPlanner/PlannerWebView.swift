@@ -108,6 +108,12 @@ struct PlannerWebView: UIViewRepresentable {
                             replyHandler(try JSONSerialization.jsonObject(with: data), nil)
                         } else { replyHandler(NSNull(), nil) }
                         return
+                    case "taskFeedbackApplied":
+                        guard let account = body["account"] as? String, account == WidgetTaskControl.defaults.string(forKey: "feedback-account") else { throw NativeError("Your account changed.") }
+                        if let feedback = WidgetTaskControl.pending(), feedback.id == body["id"] as? String {
+                            WidgetTaskControl.defaults.removeObject(forKey: WidgetTaskControl.key(feedback.task))
+                            WidgetCenter.shared.reloadAllTimelines()
+                        }
                     case "ackTaskFeedback":
                         guard let account = body["account"] as? String, account == WidgetTaskControl.defaults.string(forKey: "feedback-account") else { throw NativeError("Your account changed.") }
                         if let data = WidgetTaskControl.defaults.data(forKey: "task-feedback"),
