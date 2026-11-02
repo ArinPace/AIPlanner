@@ -12,6 +12,48 @@ final class PlannerUITests: XCTestCase {
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = name; screenshot.lifetime = .keepAlways; add(screenshot)
     }
+    func testTaskControlWidgetFlow() {
+        let app = XCUIApplication()
+        app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"
+        app.launchArguments = ["-UITestFixture", "-UITestSignedIn", "-UITestWidgets"]
+        app.launch()
+        XCTAssertTrue(app.webViews.buttons["Agent"].waitForExistence(timeout: 15))
+        Thread.sleep(forTimeInterval: 3)
+        XCUIDevice.shared.press(.home)
+        let home = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        if !home.buttons["Add five minutes"].firstMatch.exists {
+        let icon = home.icons.matching(identifier: "AI Planner").firstMatch
+        XCTAssertTrue(icon.waitForExistence(timeout: 5))
+        icon.press(forDuration: 1.5)
+        if home.buttons["Edit Home Screen"].exists { home.buttons["Edit Home Screen"].tap() }
+        if home.buttons["Edit"].exists { home.buttons["Edit"].tap() }
+        if home.buttons["Add Widget"].exists { home.buttons["Add Widget"].tap() }
+        let search = home.searchFields["Search Widgets"]
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.tap(); search.typeText("AI Planner")
+        let result = home.buttons["AI Planner"].firstMatch
+        if result.waitForExistence(timeout: 3) { result.tap() }
+        else if home.staticTexts["AI Planner"].firstMatch.exists { home.staticTexts["AI Planner"].firstMatch.tap() }
+        let add = home.buttons[" Add Widget"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5)); add.tap()
+        if home.buttons["Done"].waitForExistence(timeout: 5) { home.buttons["Done"].tap() }
+        }
+        let plus = home.buttons["Add five minutes"].firstMatch
+        XCTAssertTrue(plus.waitForExistence(timeout: 10)); plus.tap()
+        XCTAssertTrue(home.staticTexts["35 min"].firstMatch.waitForExistence(timeout: 5))
+        let minus = home.buttons["Remove five minutes"].firstMatch
+        for _ in 0..<8 { minus.tap() }
+        XCTAssertTrue(home.staticTexts["0 min"].firstMatch.waitForExistence(timeout: 5))
+        plus.tap(); plus.tap()
+        XCTAssertTrue(home.staticTexts["10 min"].firstMatch.waitForExistence(timeout: 5))
+        home.buttons["Enter"].firstMatch.tap()
+        XCTAssertTrue(app.webViews.staticTexts["Widget feedback received: time"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Sent to your agent.'")).firstMatch.waitForExistence(timeout: 10))
+        XCUIDevice.shared.press(.home)
+        let done = home.buttons["Done"].firstMatch
+        XCTAssertTrue(done.waitForExistence(timeout: 10)); done.tap()
+        XCTAssertTrue(app.webViews.staticTexts["Widget feedback received: done"].waitForExistence(timeout: 15))
+    }
     func testScreenTimeRealSystemPicker() {
         let app = launch()
         app.webViews.buttons["Screen Time"].tap()

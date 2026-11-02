@@ -6,8 +6,15 @@ struct WidgetTask: Codable, Equatable {
     let start: TimeInterval
     let end: TimeInterval
     var color: String? = nil
+    var planningTaskId: String? = nil
     var startDate: Date { Date(timeIntervalSince1970: start) }
     var endDate: Date { Date(timeIntervalSince1970: end) }
+    func remainingMinutes(at now: Date, adjustedEnd: Double? = nil) -> Int {
+        max(0, Int(ceil(((adjustedEnd ?? end) - now.timeIntervalSince1970) / 60)))
+    }
+    func adjustedEnd(at now: Date, previous: Double?, delta: Int) -> Double {
+        now.timeIntervalSince1970 + Double(max(0, remainingMinutes(at: now, adjustedEnd: previous) + delta) * 60)
+    }
 }
 struct WidgetSchedule: Codable, Equatable {
     let version: Int

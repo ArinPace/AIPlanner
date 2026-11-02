@@ -21,6 +21,7 @@
 		6D899446BF30B531574A291C /* NativeAuthentication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 506DDB4FB555EC4D72A947D5 /* NativeAuthentication.swift */; };
 		769A9CF149F4487FD8AE8A1B /* FocusShieldRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8487BFC7B4A638C382E408DC /* FocusShieldRules.swift */; };
 		76EB143C4340AA9F649A4F3C /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8828692B26B9612F431BE690 /* Foundation.framework */; };
+		83D58607E3E4A457929E5693 /* WidgetTaskControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27E5E89C300960C3784C4BCC /* WidgetTaskControl.swift */; };
 		91B087F5D835BC0977CAE6E9 /* ScreenTimeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3E25921DBE8EA34D1D37124 /* ScreenTimeView.swift */; };
 		94692D240F205E45DC5631A6 /* WidgetSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4444D16B97D810016A359AEB /* WidgetSchedule.swift */; };
 		A51880CF2998248D5127601A /* FocusMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D60E59DEF4C812D07F808129 /* FocusMonitor.swift */; };
@@ -28,6 +29,7 @@
 		D1E4E6F11FE11533500ED179 /* PlannerWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0635749205FA9D608621B53 /* PlannerWebView.swift */; };
 		D518A63D9718D955905D2A2A /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A173FAE6A6CE2B833F169D3 /* AppConfiguration.swift */; };
 		D6C52B55386A4600216066B5 /* PlannerWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11C8F5F7EBA96DCB0171195 /* PlannerWidgets.swift */; };
+		DD9E7CE3912341C3B99268D9 /* WidgetTaskControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27E5E89C300960C3784C4BCC /* WidgetTaskControl.swift */; };
 		FA20C1EFA0C0D4D4D8130FC4 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8828692B26B9612F431BE690 /* Foundation.framework */; };
 /* End PBXBuildFile section */
 
@@ -72,6 +74,7 @@
 
 /* Begin PBXFileReference section */
 		2537154DE24E02FEF8750CD9 /* UITestFixture.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = UITestFixture.js; sourceTree = "<group>"; };
+		27E5E89C300960C3784C4BCC /* WidgetTaskControl.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetTaskControl.swift; sourceTree = "<group>"; };
 		28AAD1477D5182D66D4B03B3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		4444D16B97D810016A359AEB /* WidgetSchedule.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetSchedule.swift; sourceTree = "<group>"; };
 		468E1EFC485461A13F772A9B /* AIPlannerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIPlannerApp.swift; sourceTree = "<group>"; };
@@ -229,6 +232,7 @@
 			isa = PBXGroup;
 			children = (
 				4444D16B97D810016A359AEB /* WidgetSchedule.swift */,
+				27E5E89C300960C3784C4BCC /* WidgetTaskControl.swift */,
 			);
 			name = Shared;
 			path = Shared;
@@ -400,6 +404,7 @@
 			files = (
 				D6C52B55386A4600216066B5 /* PlannerWidgets.swift in Sources */,
 				94692D240F205E45DC5631A6 /* WidgetSchedule.swift in Sources */,
+				DD9E7CE3912341C3B99268D9 /* WidgetTaskControl.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -426,6 +431,7 @@
 				089CD32B2D58C9771510695F /* FocusLocationController.swift in Sources */,
 				4C37C716CE063329BD7481C4 /* FocusLocationPicker.swift in Sources */,
 				769A9CF149F4487FD8AE8A1B /* FocusShieldRules.swift in Sources */,
+				83D58607E3E4A457929E5693 /* WidgetTaskControl.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

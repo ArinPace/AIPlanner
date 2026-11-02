@@ -1,3 +1,4 @@
+import {WidgetTaskFeedback} from './components/WidgetTaskFeedback'
 import {isIPhoneApp} from './lib/platform'
 import {ScreenTimePanel} from './components/ScreenTimePanel'
 import {ChatExperiment} from './components/ChatExperiment'
@@ -366,6 +367,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
 
   return (
     <div className="app-shell">
+      <WidgetTaskFeedback username={username}/>
       <Header
         tab={tab}
         onTabChange={next=>{if(next==='todo'||next==='work')setTodoRequest(n=>n+1);setTab(next)}}

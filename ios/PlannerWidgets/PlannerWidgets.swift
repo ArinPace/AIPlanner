@@ -1,5 +1,6 @@
 import SwiftUI
 import WidgetKit
+import AppIntents
 
 struct PlannerEntry: TimelineEntry {
     let date: Date
@@ -124,6 +125,50 @@ struct TaskAndTimeWidget: Widget {
             .supportedFamilies([.systemSmall, .accessoryRectangular])
     }
 }
+struct TaskControlWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "PlannerTaskControl", provider: PlannerProvider()) { TaskControlView(entry: $0) }
+        .configurationDisplayName("Adjust Task")
+        .description("Change remaining time in five-minute steps, or report that you finished early. Enter and Done open Planner to send to your agent.")
+        .supportedFamilies([.systemSmall, .systemMedium, .accessoryRectangular])
+    }
+}
+struct TaskControlView: View {
+    @Environment(\.widgetFamily) var family
+    let entry: PlannerEntry
+    var body: some View {
+            VStack(alignment: .leading, spacing: 6) {
+                if WidgetTaskControl.defaults.data(forKey: "task-feedback") != nil {
+                    Text("Request saved").font(.headline)
+                    Text("Open Planner to send or retry.").font(.caption)
+                    Link("Open Planner", destination: URL(string: "aiplanner://calendar")!)
+                } else if let task = entry.task {
+                    if family == .accessoryRectangular {
+                        Text(task.title).font(.caption).lineLimit(1)
+                        HStack(spacing: 6) {
+                            Button(intent: AdjustTaskTimeIntent(task: task, minutes: -5)) { Image(systemName: "minus") }.accessibilityLabel("Remove five minutes")
+                            Text("\(WidgetTaskControl.remaining(task))m").monospacedDigit()
+                            Button(intent: AdjustTaskTimeIntent(task: task, minutes: 5)) { Image(systemName: "plus") }.accessibilityLabel("Add five minutes")
+                            Button(intent: SubmitTaskTimeIntent(task: task, done: false)) { Image(systemName: "return") }.accessibilityLabel("Send time adjustment")
+                            Button(intent: SubmitTaskTimeIntent(task: task, done: true)) { Image(systemName: "checkmark") }.accessibilityLabel("Done early")
+                        }.font(.caption).buttonStyle(.plain)
+                    } else {
+                    Text(task.title).font(.subheadline.weight(.semibold)).lineLimit(2)
+                    Text("\(task.startDate.formatted(date: .omitted, time: .shortened)) – \(task.endDate.formatted(date: .omitted, time: .shortened))").font(.caption2)
+                    HStack {
+                        Button(intent: AdjustTaskTimeIntent(task: task, minutes: -5)) { Image(systemName: "minus") }.accessibilityLabel("Remove five minutes")
+                        Text("\(WidgetTaskControl.remaining(task)) min").font(.headline).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7).layoutPriority(1)
+                        Button(intent: AdjustTaskTimeIntent(task: task, minutes: 5)) { Image(systemName: "plus") }.accessibilityLabel("Add five minutes")
+                    }.buttonStyle(.bordered).controlSize(.small)
+                    HStack {
+                        Button("Enter", intent: SubmitTaskTimeIntent(task: task, done: false))
+                        Button("Done", intent: SubmitTaskTimeIntent(task: task, done: true))
+                    }.buttonStyle(.borderedProminent).font(.caption)
+                    }
+                } else { Text("No current task"); Text("Open Planner to sync").font(.caption) }
+            }.containerBackground(for: .widget) { Color(.systemBackground) }
+    }
+}
 @main struct PlannerWidgetBundle: WidgetBundle {
-    var body: some Widget { TaskAndTimeWidget(); CurrentTaskWidget(); TimeRemainingWidget() }
+    var body: some Widget { TaskControlWidget(); TaskAndTimeWidget(); CurrentTaskWidget(); TimeRemainingWidget() }
 }

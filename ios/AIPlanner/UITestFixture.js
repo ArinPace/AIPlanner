@@ -33,6 +33,11 @@
   else if(path==='/api/calendar/google-sync')value={connected:true,reviewRequired:true,pending:true,error:null,identity:'fixture@example.com'};
   else if(path==='/api/calendar/export.json')value={format:'ai-planner-calendar',formatVersion:1,calendar};
   else if(path==='/api/calendar/staging.json')value={format:'ai-planner-calendar-stage',formatVersion:1,status:'draft',payload:{calendar}};
+  else if(path==='/api/agent/vm/send'&&globalThis.__plannerFixtureWidgets){
+   const request=JSON.parse(options.body),output=document.getElementById('fixture-widget-feedback')||document.createElement('output');
+   output.id='fixture-widget-feedback';output.setAttribute('role','status');output.style.cssText='position:fixed;bottom:0;left:0;background:white;color:black;z-index:10000';
+   output.textContent='Widget feedback received: '+(request.message.includes('finished this activity early')?'done':'time');document.body.append(output);value={id:'fixture-accepted'};
+  }
   else if(path==='/api/agent/vm')value={power:'offline',hosts:[],chats:[main],deletedChats:[],runs:[],settings:{ai_provider:'codex',sources:[],sites:{},schedule_enabled:false,schedule:{timezone:'America/New_York',times:[]}},accounts:[],google:{accounts:[],connected:false,configured:true,activeAccountId:null},queue:{active:null,queuedIds:[]},planning:{startedAt:now,ready:true,revision:1},provisioning:null,personalChatGptAvailable:true,hostedChatGptAvailable:false,recordings:false};
   else if(path.includes('/jobs'))value={jobs:[],hasMore:false};
   else if(path==='/api/planning')value={preferences:{intensity:20},tasks:[]};

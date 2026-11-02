@@ -82,8 +82,11 @@ struct PlannerWebView: UIViewRepresentable {
                     switch action {
                     case "localReplicaAccount":
                         let account = body["account"] as? String
+                        if account != WidgetTaskControl.defaults.string(forKey: "feedback-account") { WidgetTaskControl.clear() }
+                        WidgetTaskControl.defaults.set(account, forKey: "feedback-account")
                         if account == nil { hideScreenTime() }
                         if try LocalReplicaStore.activate(account) {
+                            WidgetTaskControl.clear()
                             try WidgetScheduleStore.save(.empty)
                             WidgetCenter.shared.reloadAllTimelines()
                         }
@@ -99,6 +102,20 @@ struct PlannerWebView: UIViewRepresentable {
                               let web = self.webView else { throw NativeError("Screen Time layout is unavailable.") }
                         let rect = CGRect(x: x, y: y, width: width, height: height).intersection(web.bounds)
                         if rect.isNull || rect.isEmpty { hideScreenTime() } else { showScreenTime(in: rect) }
+                    case "taskFeedback":
+                        guard let account = body["account"] as? String, account == WidgetTaskControl.defaults.string(forKey: "feedback-account") else { replyHandler(NSNull(), nil); return }
+                        if let data = WidgetTaskControl.defaults.data(forKey: "task-feedback") {
+                            replyHandler(try JSONSerialization.jsonObject(with: data), nil)
+                        } else { replyHandler(NSNull(), nil) }
+                        return
+                    case "ackTaskFeedback":
+                        guard let account = body["account"] as? String, account == WidgetTaskControl.defaults.string(forKey: "feedback-account") else { throw NativeError("Your account changed.") }
+                        if let data = WidgetTaskControl.defaults.data(forKey: "task-feedback"),
+                           let feedback = try? JSONDecoder().decode(WidgetTaskFeedback.self, from: data), feedback.id == body["id"] as? String {
+                            WidgetTaskControl.defaults.removeObject(forKey: "task-feedback")
+                            WidgetTaskControl.defaults.removeObject(forKey: WidgetTaskControl.key(feedback.task))
+                            WidgetCenter.shared.reloadAllTimelines()
+                        }
                     case "widgetStatus":
                         let schedule = WidgetScheduleStore.load()
                         replyHandler(["available": WidgetScheduleStore.file != nil, "generatedAt": schedule.generatedAt, "validUntil": schedule.validUntil, "eventCount": schedule.events.count, "currentTask": schedule.current(at: Date())?.title ?? ""], nil)
