@@ -126,7 +126,7 @@ enum WidgetTimeOverrides {
     static func preferred(in schedule: WidgetSchedule, at date: Date) -> WidgetTask? {
         let now = date.timeIntervalSince1970
         guard now < schedule.validUntil else { return nil }
-        guard let change = load().values.filter({ !$0.done && $0.task.start <= now && now - $0.reportedAt < 86400 }).max(by: { $0.reportedAt < $1.reportedAt }) else { return nil }
+        guard let change = load().values.filter({ !$0.done && $0.task.start <= now }).max(by: { $0.reportedAt < $1.reportedAt }) else { return nil }
         return task(change.task, end: end(change))
     }
     @discardableResult static func reconcile(with schedule: WidgetSchedule) -> Bool {
@@ -135,9 +135,10 @@ enum WidgetTimeOverrides {
         for (key, change) in records {
             let matching = schedule.events.first { matches($0, change.task) }
             let changed = matching.map { abs($0.end - change.task.end) > 0.01 || abs($0.end - end(change)) < 0.01 } ?? false
-            let expired = schedule.generatedAt - change.reportedAt >= 86400
             let completed = change.done && matching == nil && schedule.generatedAt < change.task.end
-            if schedule.generatedAt >= change.reportedAt && (changed || expired || completed || (schedule.resolvedFeedbackIds ?? []).contains(change.id)) { records.removeValue(forKey: key) }
+            let merged = (schedule.resolvedFeedbackIds ?? []).contains(change.id)
+            let legacyUpdate = schedule.resolvedFeedbackIds == nil && (changed || completed)
+            if schedule.generatedAt >= change.reportedAt && (merged || legacyUpdate) { records.removeValue(forKey: key) }
         }
         if records.count != count { save(records); return true }
         return false

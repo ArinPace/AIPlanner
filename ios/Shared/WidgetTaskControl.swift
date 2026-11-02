@@ -16,11 +16,13 @@ enum WidgetTaskControl {
         return try? JSONDecoder().decode(WidgetTaskFeedback.self, from: data)
     }
     static func adjust(_ task: WidgetTask, minutes: Int) {
+        guard pending() == nil, WidgetTimeOverrides.load().isEmpty else { return }
         defaults.set(task.adjustedEnd(at: Date(), previous: draftEnd(task), delta: minutes), forKey: key(task))
     }
     static func submit(_ task: WidgetTask, done: Bool) throws {
         guard currentTask(at: Date())?.id == task.id else { throw ControlError.stale }
         guard defaults.data(forKey: "task-feedback") == nil else { return }
+        if !done && !WidgetTimeOverrides.load().isEmpty { return }
         let now = Date().timeIntervalSince1970
         let canonical = WidgetScheduleStore.load().events.first { $0.id == task.id } ?? WidgetTimeOverrides.record(for: task)?.task ?? task
         let feedback = WidgetTaskFeedback(id: UUID().uuidString, task: canonical, remainingMinutes: done ? 0 : remaining(task), done: done, reportedAt: now, requestedEnd: done ? now : max(now, draftEnd(task)))
@@ -48,7 +50,7 @@ struct AdjustTaskTimeIntent: AppIntent {
     @Parameter(title: "Minutes") var minutes: Int
     init() {}
     init(task: WidgetTask, minutes: Int) { self.taskID = task.id; self.minutes = minutes }
-    func perform() async throws -> some IntentResult {
+    @MainActor func perform() async throws -> some IntentResult {
         guard let task = WidgetTaskControl.currentTask(at: Date()), task.id == taskID else { throw WidgetTaskControl.ControlError.stale }
         let step = task.adjustmentStep(remaining: WidgetTaskControl.remaining(task))
         WidgetTaskControl.adjust(task, minutes: minutes < 0 ? -step : step)

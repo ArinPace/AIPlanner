@@ -143,7 +143,7 @@ struct TaskControlView: View {
     private var home: Bool { family == .systemSmall || family == .systemMedium }
     private var task: WidgetTask? {
         let pending = WidgetTaskControl.pending()
-        return pending?.done == true ? pending?.task : entry.task ?? pending?.task
+        return pending?.done == true ? pending?.task : entry.task ?? pending?.task ?? WidgetTimeOverrides.load().values.max(by: { $0.reportedAt < $1.reportedAt })?.task
     }
     private var hex: UInt64 { UInt64((task?.color ?? "#1a73e8").trimmingCharacters(in: CharacterSet(charactersIn: "#")), radix: 16) ?? 0x1a73e8 }
     private var background: Color { Color(red: Double((hex >> 16) & 255) / 255, green: Double((hex >> 8) & 255) / 255, blue: Double(hex & 255) / 255) }
@@ -155,8 +155,9 @@ struct TaskControlView: View {
         VStack(alignment: .leading, spacing: home ? 6 : 2) {
             if let task {
                 let feedback = WidgetTaskControl.pending()
-                let pending = feedback != nil
-                let end = feedback.flatMap { $0.done ? $0.reportedAt : nil } ?? WidgetTaskControl.draftEnd(task)
+                let pending = feedback != nil || !WidgetTimeOverrides.load().isEmpty
+                let change = feedback ?? WidgetTimeOverrides.record(for: task)
+                let end = change.flatMap { $0.done ? $0.reportedAt : nil } ?? WidgetTaskControl.draftEnd(task)
                 Text(task.title).font(home ? .subheadline.weight(.semibold) : .caption).lineLimit(home ? 2 : 1)
                 if home {
                     Text("\(task.startDate.formatted(date: .omitted, time: .shortened)) – \(Date(timeIntervalSince1970: end).formatted(date: .omitted, time: .shortened))")
@@ -166,7 +167,8 @@ struct TaskControlView: View {
                     Button(intent: AdjustTaskTimeIntent(task: task, minutes: -1)) {
                         Image(systemName: "minus").frame(width: home ? 24 : 20, height: 30)
                             .background(ink.opacity(0.16), in: RoundedRectangle(cornerRadius: 9))
-                    }.accessibilityLabel(combined ? "Decrease task time" : "Decrease remaining time")
+                    }.foregroundStyle(pending ? Color.gray : ink).opacity(pending ? 0.45 : 1)
+                    .accessibilityLabel(combined ? "Decrease task time" : "Decrease remaining time")
                     Button(intent: SubmitTaskTimeIntent(task: task, done: false)) {
                         if end > Date().timeIntervalSince1970 {
                             let timer = Text(timerInterval: Date(timeIntervalSince1970: min(task.start, entry.date.timeIntervalSince1970))...Date(timeIntervalSince1970: end), countsDown: true, showsHours: true)
@@ -182,14 +184,15 @@ struct TaskControlView: View {
                     Button(intent: AdjustTaskTimeIntent(task: task, minutes: 1)) {
                         Image(systemName: "plus").frame(width: home ? 24 : 20, height: 30)
                             .background(ink.opacity(0.16), in: RoundedRectangle(cornerRadius: 9))
-                    }.accessibilityLabel(combined ? "Increase task time" : "Increase remaining time")
+                    }.foregroundStyle(pending ? Color.gray : ink).opacity(pending ? 0.45 : 1)
+                    .accessibilityLabel(combined ? "Increase task time" : "Increase remaining time")
 
                 }.buttonStyle(.plain).disabled(pending)
                 if home {
                     if pending {
-                        Link(feedback?.done == true ? "Finished · syncing…" : "Sending… Open Planner", destination: URL(string: "aiplanner://calendar")!).font(.caption)
+                        Text("Sending…").font(.caption2)
                     } else {
-                        Text(WidgetTimeOverrides.record(for: task) == nil ? "Tap time to apply" : "Revised plan pending").font(.caption2).opacity(0.85)
+                        Text("Tap time to apply").font(.caption2).opacity(0.85)
                     }
                 }
             } else {

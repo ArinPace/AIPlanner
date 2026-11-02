@@ -66,6 +66,9 @@ import Foundation
         precondition(WidgetTimeOverrides.applying(to: missing).current(at: date(250))?.end == 330)
         precondition(WidgetTimeOverrides.preferred(in: unchanged, at: date(350))?.end == 330) // Zero remains editable until the plan is committed.
         precondition(timed.adjustedEnd(at: date(350), previous: 330, delta: 5) == 650)
+        let partial = WidgetSchedule(version: 1, generatedAt: 215, validUntil: 400, events: [WidgetTimeOverrides.task(tasks[0], end: 330)], resolvedFeedbackIds: [])
+        precondition(!WidgetTimeOverrides.reconcile(with: partial)) // A single event edit is not a merged full plan.
+        precondition(!WidgetTimeOverrides.load().isEmpty)
         let published = WidgetSchedule(version: 1, generatedAt: 220, validUntil: 400, events: tasks, resolvedFeedbackIds: [preview.id])
         precondition(WidgetTimeOverrides.reconcile(with: published)) // A full plan may choose another coherent allocation.
         precondition(WidgetTimeOverrides.load().isEmpty)

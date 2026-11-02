@@ -81,6 +81,9 @@ final class PlannerUITests: XCTestCase {
         XCTAssertTrue(app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Widget time updated.'")).firstMatch.waitForExistence(timeout: 10))
         XCUIDevice.shared.press(.home)
         XCTAssertTrue(value.waitForExistence(timeout: 10)); XCTAssertEqual(value.value as? String, "10")
+        XCTAssertTrue(home.staticTexts["Sending…"].firstMatch.waitForExistence(timeout: 5))
+        plus.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        Thread.sleep(forTimeInterval: 1)
         app.activate()
         let publish = app.webViews.buttons["Publish reviewed fixture plan"]
         XCTAssertTrue(publish.waitForExistence(timeout: 10)); publish.tap()
@@ -88,6 +91,7 @@ final class PlannerUITests: XCTestCase {
         XCUIDevice.shared.press(.home)
         let adopted = expectation(for: NSPredicate(format: "value == '8'"), evaluatedWith: value)
         wait(for: [adopted], timeout: 10)
+        plus.tap();expectValue("13")
         XCTAssertTrue(findWidgetPage("Finish current task"))
         let done = visibleButton("Finish current task")!
         done.tap()
