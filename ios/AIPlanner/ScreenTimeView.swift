@@ -128,17 +128,28 @@ struct ScreenTimeView: View {
                     Text("\(model.selection.applicationTokens.count) apps · \(model.selection.categoryTokens.count) categories · \(model.selection.webDomainTokens.count) websites").font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("Location (optional)") {
-                    Toggle("Only block at a location", isOn: Binding(get: { location.enabled }, set: { location.setEnabled($0) }))
+                    Toggle("Use location rules", isOn: Binding(get: { location.enabled }, set: { location.setEnabled($0) }))
                         .disabled(model.end != nil)
                     if location.enabled {
+                        Picker("Location rule", selection: Binding(get: { location.rule }, set: { location.setRule($0) })) {
+                            ForEach(FocusLocationRule.allCases, id: \.self) { rule in Text(rule.title).tag(rule) }
+                        }.pickerStyle(.segmented).disabled(model.end != nil)
+                        Text(location.rule == .allowInside ? "Selected apps are blocked everywhere else. Access at this place expires unless your precise location is reverified." : "Selected apps are blocked only at this place.").font(.footnote).foregroundStyle(.secondary)
                         Button(location.place?.name ?? "Choose location") { choosingLocation = true }.accessibilityIdentifier("chooseFocusLocation").disabled(model.end != nil)
                         if let place = location.place {
                             Text(String(format: "Saved location: %.4f, %.4f", place.latitude, place.longitude)).font(.caption).foregroundStyle(.secondary)
                             Picker("Radius", selection: Binding(get: { place.radius }, set: { location.setRadius($0) })) {
                                 ForEach([50.0, 100, 200, 500, 1000], id: \.self) { radius in Text("\(Int(radius)) m").tag(radius) }
                             }.disabled(model.end != nil)
-                            Toggle("Precise updates during session", isOn: Binding(get: { location.preciseTracking }, set: { location.setPreciseTracking($0) })).disabled(model.end != nil)
-                            Text(location.preciseTracking ? "Uses high-accuracy location updates during the session, including in the background. Uses more battery." : "Uses low-power area monitoring. Entry and exit notifications may be less precise and delayed.").font(.footnote).foregroundStyle(.secondary)
+                            Toggle("Periodic precise checks", isOn: Binding(get: { location.preciseTracking }, set: { location.setPreciseTracking($0) })).disabled(model.end != nil || location.rule == .allowInside)
+                            if location.preciseTracking {
+                                Picker("Verify location", selection: Binding(get: { location.checkInterval }, set: { location.setCheckInterval($0) })) {
+                                    ForEach([120.0,180,300,600], id: \.self) { seconds in Text("Every \(Int(seconds / 60)) minutes").tag(seconds) }
+                                }.disabled(model.end != nil)
+                            }
+                            Text(location.preciseTracking ? "Brief high-accuracy checks with lower-power monitoring between them. iOS may delay background checks; expired location access is restricted." : "Low-power area monitoring; notifications may be less precise and delayed.").font(.footnote).foregroundStyle(.secondary)
+                            if location.checking { Text("Verifying precise location…").font(.footnote) }
+                            if let date = location.lastVerifiedAt { Text("Last precise check: \(date.formatted(date: .omitted, time: .standard))").font(.footnote).accessibilityIdentifier("focusLastVerified") }
                             if let accuracy = location.reportedAccuracy {
                                 Text("Last reported accuracy: ±\(Int(ceil(accuracy))) m").font(.footnote).foregroundStyle(.secondary)
                             }
@@ -150,7 +161,7 @@ struct ScreenTimeView: View {
                             Button("Open location settings") { if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) } }
                         }
                         if model.end != nil {
-                            Text(location.inside == true ? "Blocking at selected location" : location.inside == false ? "Outside selected location · apps unblocked" : "Checking location · apps unblocked")
+                            Text(location.statusText)
                                 .accessibilityIdentifier("focusLocationStatus")
                             Text("The session timer keeps running while you are away. Location changes may take a little time to register.").font(.footnote).foregroundStyle(.secondary)
                         }
@@ -173,6 +184,12 @@ struct ScreenTimeView: View {
                     }
                 }
                 #if DEBUG
+                if ProcessInfo.processInfo.arguments.contains("-UITestPeriodicLocation") {
+                    Text(String(FocusShieldRules.defaults.double(forKey: "focusBackgroundVerificationAt"))).accessibilityIdentifier("focusBackgroundVerification")
+                }
+                if ProcessInfo.processInfo.arguments.contains("-UITestShortLocationLease") {
+                    Text(String(FocusShieldRules.defaults.double(forKey: "focusLocationLeaseExpiredAt"))).accessibilityIdentifier("focusLeaseExpiry")
+                }
                 if ProcessInfo.processInfo.arguments.contains("-UITestFocusExpiry") {
                     Text(String(model.monitorEndedAt))
                         .accessibilityIdentifier("focusMonitorExpiry")

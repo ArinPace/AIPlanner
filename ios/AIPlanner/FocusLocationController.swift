@@ -26,6 +26,10 @@ struct FocusPlace: Codable, Equatable {
     @Published private(set) var place: FocusPlace?
     @Published private(set) var inside: Bool?
     @Published private(set) var preciseTracking = true
+    @Published private(set) var rule: FocusLocationRule = .allowInside
+    @Published private(set) var checkInterval: Double = 180
+    @Published private(set) var checking = false
+    @Published private(set) var lastVerifiedAt: Date?
     @Published private(set) var reportedAccuracy: Double?
     @Published private(set) var authorization: CLAuthorizationStatus = .notDetermined
     @Published private(set) var precise = true
@@ -37,18 +41,24 @@ struct FocusPlace: Codable, Equatable {
         #endif
     }
     private var armed = false
-    private var latestGPSObservation = Date.distantPast
     private var expiryTask: Task<Void, Never>?
     private var familyAuthorization: AnyCancellable?
+    private var checkTask: Task<Void, Never>?
+    private var burstTask: Task<Void, Never>?
+    private var burstStartedAt: Date?
     private var currentPlaceRequest: ((FocusPlace?) -> Void)?
     var activeSession: Bool { defaults.double(forKey: "focusEnd") > Date().timeIntervalSince1970 }
-    var backgroundAuthorized: Bool { manager.authorizationStatus == .authorizedAlways && CLLocationManager.locationServicesEnabled() }
+    var backgroundAuthorized: Bool { authorization == .authorizedAlways }
 
     private override init() {
         super.init()
         enabled = defaults.bool(forKey: "focusLocationEnabled")
         preciseTracking = defaults.object(forKey: "focusPreciseTracking") == nil || defaults.bool(forKey: "focusPreciseTracking")
         if let data = defaults.data(forKey: "focusPlace"), let saved = try? JSONDecoder().decode(FocusPlace.self, from: data), saved.isValid { place = saved }
+        rule = FocusLocationRule(rawValue: defaults.string(forKey: "focusLocationRule") ?? "") ?? (place == nil ? .allowInside : .blockInside)
+        defaults.set(rule.rawValue, forKey: "focusLocationRule")
+        if [120.0,180,300,600].contains(defaults.double(forKey: "focusLocationCheckInterval")) { checkInterval = defaults.double(forKey: "focusLocationCheckInterval") }
+        if rule == .allowInside { preciseTracking = true }
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyBest
         manager.distanceFilter = 10
@@ -65,8 +75,23 @@ struct FocusPlace: Codable, Equatable {
         guard !activeSession else { return }
         enabled = value; defaults.set(value, forKey: "focusLocationEnabled"); error = nil
     }
-    func setPreciseTracking(_ value: Bool) {
+    func setRule(_ value: FocusLocationRule) {
         guard !activeSession else { return }
+        rule = value; defaults.set(value.rawValue, forKey: "focusLocationRule")
+        if value == .allowInside { setPreciseTracking(true) }
+    }
+    func setCheckInterval(_ value: Double) {
+        guard !activeSession, [120.0,180,300,600].contains(value) else { return }
+        checkInterval = value; defaults.set(value, forKey: "focusLocationCheckInterval")
+    }
+    private var verificationInterval: Double {
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-UITestShortLocationLease") { return 30 }
+        #endif
+        return checkInterval
+    }
+    func setPreciseTracking(_ value: Bool) {
+        guard !activeSession, value || rule != .allowInside else { return }
         preciseTracking = value; defaults.set(value, forKey: "focusPreciseTracking")
     }
     func setPlace(_ value: FocusPlace) {
@@ -111,7 +136,7 @@ struct FocusPlace: Codable, Equatable {
         guard enabled else { return nil }
         guard place?.isValid == true else { return "Choose a location first." }
         guard backgroundAuthorized else { return "Allow Always location access before starting a location-based session." }
-        guard manager.accuracyAuthorization == .fullAccuracy else { return "Turn on Precise Location in Settings before starting a location-based session." }
+        guard precise else { return "Turn on Precise Location in Settings before starting a location-based session." }
         guard UIApplication.shared.backgroundRefreshStatus == .available else { return "Enable Background App Refresh in Settings for location-based blocking." }
         guard region != nil else { return "Location boundaries are unavailable on this device." }
         return nil
@@ -128,7 +153,6 @@ struct FocusPlace: Codable, Equatable {
             return
         }
         armed = true; error = nil
-        latestGPSObservation = .distantPast
         expiryTask?.cancel()
         let remaining = max(0, defaults.double(forKey: "focusEnd") - Date().timeIntervalSince1970)
         expiryTask = Task { [weak self] in
@@ -143,8 +167,8 @@ struct FocusPlace: Codable, Equatable {
             manager.allowsBackgroundLocationUpdates = true
             manager.showsBackgroundLocationIndicator = true
             manager.pausesLocationUpdatesAutomatically = false
-            manager.startUpdatingLocation()
-        } else { manager.requestLocation() } // Also resolves sessions started while already inside.
+            beginPreciseCheck()
+        } else { manager.requestLocation() }
     }
     func refreshPosition() {
         authorization = manager.authorizationStatus
@@ -154,14 +178,82 @@ struct FocusPlace: Codable, Equatable {
         if !armed { arm() }
         else if let region {
             manager.requestState(for: region)
-            if preciseTracking { manager.startUpdatingLocation() } else { manager.requestLocation() }
+            if preciseTracking { beginPreciseCheck() } else { manager.requestLocation() }
         }
     }
     func finishIfExpired() {
         if armed && !activeSession { finishMonitoring() }
+        else if armed && preciseTracking && inside != nil && defaults.double(forKey: "focusLocationVerifiedUntil") <= Date().timeIntervalSince1970 {
+            setInside(nil, force: true)
+        }
+    }
+    var effectiveInside: Bool? {
+        guard validationError() == nil else { return nil }
+        if preciseTracking && defaults.double(forKey: "focusLocationVerifiedUntil") <= Date().timeIntervalSince1970 { return nil }
+        return inside
+    }
+    var statusText: String {
+        if rule == .allowInside {
+            return effectiveInside == true ? "At allowed location · apps available" : effectiveInside == false ? "Outside allowed location · apps blocked" : "Verifying location · apps blocked"
+        }
+        return effectiveInside == true ? "Blocking at selected location" : effectiveInside == false ? "Outside selected location · apps unblocked" : "Checking location · apps unblocked"
+    }
+    private func scheduleNextCheck(after seconds: Double) {
+        checkTask?.cancel()
+        checkTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(max(1,seconds))) } catch { return }
+            guard !Task.isCancelled, let self, self.armed, self.activeSession else { return }
+            self.beginPreciseCheck()
+        }
+    }
+    private func beginPreciseCheck() {
+        guard armed, activeSession, preciseTracking, !checking else { return }
+        checking = true; error = nil; burstStartedAt = Date()
+        manager.desiredAccuracy = kCLLocationAccuracyBest
+        manager.distanceFilter = kCLDistanceFilterNone
+        manager.startUpdatingLocation()
+        burstTask?.cancel()
+        burstTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(20)) } catch { return }
+            guard !Task.isCancelled, let self, self.checking else { return }
+            self.setInside(nil, force: true)
+            self.error = self.rule == .allowInside ? "Could not verify your location. Apps remain blocked." : "Could not verify your location. Apps are unblocked until the location is confirmed."
+            self.endPreciseCheck()
+        }
+    }
+    private func endPreciseCheck() {
+        burstTask?.cancel(); burstTask = nil
+        checking = false; burstStartedAt = nil
+        guard armed, activeSession, preciseTracking else { return }
+        manager.desiredAccuracy = kCLLocationAccuracyKilometer
+        manager.distanceFilter = 50
+        manager.startUpdatingLocation()
+        scheduleNextCheck(after: max(10,verificationInterval - 20))
+    }
+    private func confirmLocation(_ value: Bool) {
+        let end = Date(timeIntervalSince1970: min(defaults.double(forKey: "focusEnd"), floor(Date().timeIntervalSince1970) + verificationInterval))
+        do {
+            try FocusShieldRules.registerVerification(until: end)
+            lastVerifiedAt = Date()
+            #if DEBUG && targetEnvironment(simulator)
+            if ProcessInfo.processInfo.arguments.contains("-UITestPeriodicLocation"), UIApplication.shared.applicationState == .background {
+                defaults.set(Date().timeIntervalSince1970, forKey: "focusBackgroundVerificationAt")
+            }
+            #endif
+            setInside(value, force: true)
+            endPreciseCheck()
+        } catch {
+            self.error = self.rule == .allowInside ? "Could not schedule verification. Apps remain blocked." : "Could not schedule location verification. Try again."
+            setInside(nil, force: true)
+            endPreciseCheck()
+        }
     }
     func finishMonitoring() {
         expiryTask?.cancel(); expiryTask = nil
+        checkTask?.cancel(); checkTask = nil
+        burstTask?.cancel(); burstTask = nil
+        checking = false; burstStartedAt = nil
+        FocusShieldRules.cancelVerification()
         manager.stopUpdatingLocation()
         manager.allowsBackgroundLocationUpdates = false
         manager.showsBackgroundLocationIndicator = false
@@ -177,19 +269,9 @@ struct FocusPlace: Codable, Equatable {
         reconcileShields()
     }
     func reconcileShields() {
-        let store = ManagedSettingsStore(named: .init("plannerFocus"))
-        record("Focus eligibility: active=\(activeSession), enabled=\(enabled), validation=\(validationError() ?? "ok"), inside=\(String(describing: inside))")
-        guard activeSession, (!enabled || (validationError() == nil && inside == true)),
-              AuthorizationCenter.shared.authorizationStatus == .approved,
-              let data = defaults.data(forKey: "focusSelection"),
-              let selection = try? JSONDecoder().decode(FamilyActivitySelection.self, from: data) else {
-            store.clearAllSettings(); return
-        }
-        store.shield.applications = selection.applicationTokens.isEmpty ? nil : selection.applicationTokens
-        store.shield.applicationCategories = selection.categoryTokens.isEmpty ? nil : .specific(selection.categoryTokens)
-        store.shield.webDomains = selection.webDomainTokens.isEmpty ? nil : selection.webDomainTokens
-        // The monitor extension can expire the session concurrently.
-        if !activeSession { store.clearAllSettings() }
+        let blocked = !enabled || rule.shouldBlock(inside: effectiveInside)
+        record("Focus policy: active=\(activeSession), blocked=\(blocked)")
+        FocusShieldRules.apply(blocked: blocked)
     }
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         authorization = manager.authorizationStatus
@@ -215,40 +297,55 @@ struct FocusPlace: Codable, Equatable {
         guard matchesCurrentPlace(region) else { return }
         guard activeSession else { finishMonitoring(); reconcileShields(); return }
         record("Region state callback: \(state.rawValue)")
-        if (!preciseTracking || Date().timeIntervalSince(latestGPSObservation) > 30) && (state != .unknown || inside == nil) { setInside(state == .unknown ? nil : state == .inside) }
+        if preciseTracking {
+            if lastVerifiedAt == nil || Date().timeIntervalSince(lastVerifiedAt!) > 15 { beginPreciseCheck() }
+        }
+        else if state != .unknown || inside == nil { setInside(state == .unknown ? nil : state == .inside) }
     }
     func locationManager(_ manager: CLLocationManager, didEnterRegion region: CLRegion) {
         guard matchesCurrentPlace(region) else { return }
         guard activeSession else { finishMonitoring(); reconcileShields(); return }
-        if !preciseTracking || Date().timeIntervalSince(latestGPSObservation) > 30 { error = nil; setInside(true) }
+        if preciseTracking { beginPreciseCheck() } else { error = nil; setInside(true) }
     }
     func locationManager(_ manager: CLLocationManager, didExitRegion region: CLRegion) {
         guard matchesCurrentPlace(region) else { return }
-        if !preciseTracking || Date().timeIntervalSince(latestGPSObservation) > 30 { error = nil; setInside(false) }; finishIfExpired()
+        if preciseTracking { setInside(nil, force: true); beginPreciseCheck() } else { error = nil; setInside(false) }; finishIfExpired()
     }
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last, location.horizontalAccuracy >= 0,
               abs(location.timestamp.timeIntervalSinceNow) < 60 else { return }
-        let accuracy = ceil(location.horizontalAccuracy)
-        if reportedAccuracy != accuracy { reportedAccuracy = accuracy }
-        latestGPSObservation = location.timestamp
         if armed && !activeSession { finishMonitoring(); reconcileShields(); return }
         if locating {
+            reportedAccuracy = ceil(location.horizontalAccuracy)
             completeCurrentPlace(FocusPlace(name: "Current location", latitude: location.coordinate.latitude, longitude: location.coordinate.longitude, radius: 100))
         }
         guard armed, activeSession, enabled, let place else { return }
         let distance = location.distance(from: CLLocation(latitude: place.latitude, longitude: place.longitude))
-        // A coarse fix must not mark the phone inside a small boundary.
-        if distance + location.horizontalAccuracy <= place.radius { error = nil; setInside(true) }
-        else if distance - location.horizontalAccuracy > place.radius { error = nil; setInside(false) }
-        else { error = nil; setInside(nil) }
+        if preciseTracking {
+            if checking {
+                guard let began = burstStartedAt, location.timestamp >= began.addingTimeInterval(-2), location.horizontalAccuracy <= min(50, place.radius / 2) else { return }
+                reportedAccuracy = ceil(location.horizontalAccuracy)
+                if distance + location.horizontalAccuracy <= place.radius { confirmLocation(true) }
+                else if distance - location.horizontalAccuracy > place.radius { confirmLocation(false) }
+            } else if distance - location.horizontalAccuracy > place.radius && inside != false {
+                setInside(false, force: true)
+                beginPreciseCheck()
+            }
+        } else {
+            reportedAccuracy = ceil(location.horizontalAccuracy)
+            if distance + location.horizontalAccuracy <= place.radius { error = nil; setInside(true) }
+            else if distance - location.horizontalAccuracy > place.radius { error = nil; setInside(false) }
+            else { setInside(nil) }
+        }
     }
+
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         guard locating || (enabled && activeSession) else { return }
+        if let failure = error as? CLError, failure.code == .locationUnknown, armed, preciseTracking { return }
         if locating { completeCurrentPlace(nil) }
         record("Location lookup failed: \((error as NSError).code)")
         self.error = "Could not determine your location. Try again with Location Services enabled."
-        if enabled && activeSession { setInside(nil, force: true) }
+        if enabled && activeSession { setInside(nil, force: true); if preciseTracking { endPreciseCheck() } }
     }
     func locationManager(_ manager: CLLocationManager, monitoringDidFailFor region: CLRegion?, withError error: Error) {
         guard region == nil || region?.identifier == Self.regionID else { return }

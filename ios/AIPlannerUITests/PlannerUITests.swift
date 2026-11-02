@@ -68,7 +68,7 @@ final class PlannerUITests: XCTestCase {
         let app = launch()
         app.webViews.buttons["Screen Time"].tap()
         if app.buttons["End blocking"].exists { app.buttons["End blocking"].tap() }
-        let locationToggle = app.switches["Only block at a location"]
+        let locationToggle = app.switches["Use location rules"]
         if locationToggle.exists && (locationToggle.value as? String) == "1" { locationToggle.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap() }
         let start = app.buttons["Start blocking"]
         XCTAssertTrue(start.waitForExistence(timeout: 10)); XCTAssertTrue(start.isEnabled)
@@ -230,16 +230,18 @@ final class PlannerUITests: XCTestCase {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_VERIFY_LOCATION_BLOCK"] == "1" || ProcessInfo.processInfo.environment["PLANNER_VERIFY_LOCATION_SETTINGS"] == "1", "Run after configuring a sample location on the test simulator.")
         let app = launch()
         app.webViews.buttons["Screen Time"].tap()
-        let toggle = app.switches["Only block at a location"]
+        let toggle = app.switches["Use location rules"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 5))
         if (toggle.value as? String) != "1" { toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap() }
         XCTAssertTrue(app.buttons["chooseFocusLocation"].exists)
-        let precise = app.switches["Precise updates during session"]
+        app.buttons["Allow only here"].tap()
+        let precise = app.switches["Periodic precise checks"]
         for _ in 0..<4 { if precise.exists && precise.isHittable { break }; app.swipeUp() }
         XCTAssertTrue(precise.exists)
         if (precise.value as? String) != "1" { precise.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap() }
         app.terminate(); app.launch(); app.webViews.buttons["Screen Time"].tap()
         XCTAssertEqual(toggle.value as? String, "1")
+        XCTAssertTrue(app.buttons["Allow only here"].isSelected)
         XCTAssertTrue(app.buttons["chooseFocusLocation"].exists)
         for _ in 0..<4 { if precise.exists && precise.isHittable { break }; app.swipeUp() }
         XCTAssertEqual(precise.value as? String, "1")
@@ -250,7 +252,7 @@ final class PlannerUITests: XCTestCase {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_VERIFY_LOCATION_SEARCH"] == "1", "This test uses Apple's live place search.")
         let app = launch()
         app.webViews.buttons["Screen Time"].tap()
-        let toggle = app.switches["Only block at a location"]
+        let toggle = app.switches["Use location rules"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 5))
         if (toggle.value as? String) != "1" { toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap() }
         app.buttons["chooseFocusLocation"].tap()
@@ -266,10 +268,11 @@ final class PlannerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["chooseFocusLocation"].label.localizedCaseInsensitiveContains("Washington"))
         if (toggle.value as? String) == "1" { toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap() }
     }
-    func testScreenTimeLocationBoundaryEnforcement() throws {
-        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_VERIFY_LOCATION_BLOCK"] == "1", "Run with the host simulator-location driver.")
-        continueAfterFailure = true
-        let app = launch()
+    private func startLocationSession(allowOnly: Bool, shortLease: Bool = false, periodic: Bool = false) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"
+        app.launchArguments = ["-UITestFixture", "-UITestSignedIn"] + (shortLease ? ["-UITestShortLocationLease"] : []) + (periodic ? ["-UITestPeriodicLocation"] : [])
+        app.launch()
         app.webViews.buttons["Screen Time"].tap()
         let existingStop = app.buttons["End blocking"]
         for _ in 0..<3 { if existingStop.exists { break }; app.swipeUp() }
@@ -280,32 +283,41 @@ final class PlannerUITests: XCTestCase {
         XCTAssertTrue(all.waitForExistence(timeout: 10))
         if !(all.isSelected || (all.value as? String) == "1") { all.tap() }
         app.buttons["Done"].tap()
-        let toggle = app.switches["Only block at a location"]
+        let toggle = app.switches["Use location rules"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 5))
         if (toggle.value as? String) != "1" { toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap() }
+        app.buttons[allowOnly ? "Allow only here" : "Block only here"].tap()
         let choose = app.buttons["chooseFocusLocation"]
         XCTAssertTrue(choose.waitForExistence(timeout: 5)); choose.tap()
         app.buttons["Use current location"].tap()
         let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.buttons["Use current location"])
         XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 15), .completed)
-        let precise = app.switches["Precise updates during session"]
+        let precise = app.switches["Periodic precise checks"]
         for _ in 0..<4 { if precise.exists && precise.isHittable { break }; app.swipeUp() }
-        let wantPrecise = ProcessInfo.processInfo.environment["PLANNER_VERIFY_LOW_POWER"] != "1"
+        let wantPrecise = allowOnly || ProcessInfo.processInfo.environment["PLANNER_VERIFY_LOW_POWER"] != "1"
         if ((precise.value as? String) == "1") != wantPrecise { precise.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap() }
         let start = app.buttons["Start blocking"]
         for _ in 0..<5 { if start.exists && start.isHittable { break }; app.swipeUp() }
         XCTAssertTrue(start.exists); start.tap()
         let status = app.staticTexts["focusLocationStatus"]
         XCTAssertTrue(status.waitForExistence(timeout: 10))
-        defer {
-            app.activate(); app.webViews.buttons["Screen Time"].tap()
-            let stop = app.buttons["End blocking"]
-            for _ in 0..<4 { if stop.exists && stop.isHittable { break }; app.swipeUp() }
-            if stop.exists { stop.tap() }
-            app.swipeDown(); app.swipeDown()
-            let toggle = app.switches["Only block at a location"]
-            if toggle.exists && (toggle.value as? String) == "1" { toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap() }
-        }
+        return app
+    }
+    private func endLocationSession(_ app: XCUIApplication) {
+        app.activate(); app.webViews.buttons["Screen Time"].tap()
+        let stop = app.buttons["End blocking"]
+        for _ in 0..<5 { if stop.exists && stop.isHittable { break }; app.swipeUp() }
+        if stop.exists { stop.tap() }
+        app.swipeDown(); app.swipeDown()
+        let toggle = app.switches["Use location rules"]
+        if toggle.exists && (toggle.value as? String) == "1" { toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap() }
+    }
+    func testScreenTimeLocationBoundaryEnforcement() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_VERIFY_LOCATION_BLOCK"] == "1", "Run with the host simulator-location driver.")
+        continueAfterFailure = true
+        let app = startLocationSession(allowOnly: false)
+        let status = app.staticTexts["focusLocationStatus"]
+        defer { endLocationSession(app) }
         let inside = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Blocking at selected location"), object: status)
         XCTAssertEqual(XCTWaiter.wait(for: [inside], timeout: 15), .completed, app.debugDescription)
         XCUIDevice.shared.press(.home); XCUIDevice.shared.press(.home)
@@ -327,6 +339,84 @@ final class PlannerUITests: XCTestCase {
         let reblocked = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS[c] 'Timed out'"), object: icon)
         XCTAssertEqual(XCTWaiter.wait(for: [reblocked], timeout: 45), .completed, "Location entry must reapply shields in the background.")
         icon.tap(); XCTAssertTrue(calendar.staticTexts["Restricted"].waitForExistence(timeout: 5) || home.staticTexts["Restricted"].exists)
+    }
+    func testScreenTimeLibraryOnlyEnforcement() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_VERIFY_LOCATION_BLOCK"] == "1", "Use the host location driver.")
+        continueAfterFailure = true
+        let app = startLocationSession(allowOnly: true)
+        defer { endLocationSession(app) }
+        let status = app.staticTexts["focusLocationStatus"]
+        let allowed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "At allowed location · apps available"), object: status)
+        XCTAssertEqual(XCTWaiter.wait(for: [allowed], timeout: 20), .completed, app.debugDescription)
+        XCUIDevice.shared.press(.home); XCUIDevice.shared.press(.home)
+        let home = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let icon = home.icons.matching(identifier: "Calendar").matching(NSPredicate(format: "NOT (value CONTAINS[c] 'Widget')")).firstMatch
+        XCTAssertTrue(icon.waitForExistence(timeout: 5)); icon.tap()
+        let calendar = XCUIApplication(bundleIdentifier: "com.apple.mobilecal")
+        XCTAssertFalse(calendar.staticTexts["Restricted"].waitForExistence(timeout: 2) || home.staticTexts["Restricted"].exists)
+        XCUIDevice.shared.press(.home); XCUIDevice.shared.press(.home)
+        print("LOCATION_TEST_MOVE_OUTSIDE")
+        let blocked = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS[c] 'Timed out'"), object: icon)
+        XCTAssertEqual(XCTWaiter.wait(for: [blocked], timeout: 45), .completed)
+        icon.tap(); XCTAssertTrue(calendar.staticTexts["Restricted"].waitForExistence(timeout: 5) || home.staticTexts["Restricted"].exists)
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); shot.name = "Library rule — blocked outside"; shot.lifetime = .keepAlways; add(shot)
+        XCUIDevice.shared.press(.home); XCUIDevice.shared.press(.home)
+        print("LOCATION_TEST_MOVE_INSIDE")
+        let restored = XCTNSPredicateExpectation(predicate: NSPredicate(format: "NOT (value CONTAINS[c] 'Timed out')"), object: icon)
+        XCTAssertEqual(XCTWaiter.wait(for: [restored], timeout: 45), .completed)
+        icon.tap(); XCTAssertFalse(calendar.staticTexts["Restricted"].waitForExistence(timeout: 2) || home.staticTexts["Restricted"].exists)
+    }
+    func testScreenTimeLocationLeaseExpiresWithoutPlanner() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_VERIFY_LOCATION_LEASE"] == "1", "Enable the system verification-expiry diagnostic.")
+        continueAfterFailure = true
+        let began = Date().timeIntervalSince1970
+        let app = startLocationSession(allowOnly: true, shortLease: true)
+        defer { endLocationSession(app) }
+        let status = app.staticTexts["focusLocationStatus"]
+        let allowed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "At allowed location · apps available"), object: status)
+        XCTAssertEqual(XCTWaiter.wait(for: [allowed], timeout: 20), .completed, app.debugDescription)
+        app.terminate()
+        XCUIDevice.shared.press(.home); XCUIDevice.shared.press(.home)
+        let home = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let icon = home.icons.matching(identifier: "Calendar").matching(NSPredicate(format: "NOT (value CONTAINS[c] 'Widget')")).firstMatch
+        XCTAssertTrue(icon.waitForExistence(timeout: 5))
+        let expired = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS[c] 'Timed out'"), object: icon)
+        XCTAssertEqual(XCTWaiter.wait(for: [expired], timeout: 65), .completed, "Access must expire without a running Planner process.")
+        XCTAssertEqual(app.state, .notRunning)
+        icon.tap()
+        let calendar = XCUIApplication(bundleIdentifier: "com.apple.mobilecal")
+        XCTAssertTrue(calendar.staticTexts["Restricted"].waitForExistence(timeout: 5) || home.staticTexts["Restricted"].exists)
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); shot.name = "Expired library access — Planner terminated"; shot.lifetime = .keepAlways; add(shot)
+        app.launch(); app.webViews.buttons["Screen Time"].tap()
+        let marker = app.staticTexts["focusLeaseExpiry"]
+        for _ in 0..<5 { if marker.exists { break }; app.swipeUp() }
+        XCTAssertGreaterThan(Double(marker.label) ?? 0, began, "Only the DeviceActivity extension writes this expiry marker.")
+    }
+    func testScreenTimePeriodicBackgroundVerification() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_VERIFY_LOCATION_PERIODIC"] == "1", "This real background check takes over three minutes.")
+        continueAfterFailure = true
+        let app = startLocationSession(allowOnly: true, periodic: true)
+        defer { endLocationSession(app) }
+        let status = app.staticTexts["focusLocationStatus"]
+        let allowed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "At allowed location · apps available"), object: status)
+        XCTAssertEqual(XCTWaiter.wait(for: [allowed], timeout: 20), .completed)
+        let began = Date().timeIntervalSince1970
+        XCUIDevice.shared.press(.home); XCUIDevice.shared.press(.home)
+        print("LOCATION_TEST_WAITING_FOR_PERIODIC_CHECK")
+        let elapsed = expectation(description: "Actual three-minute background verification")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 190) { elapsed.fulfill() }
+        wait(for: [elapsed], timeout: 200)
+        let home = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let icon = home.icons.matching(identifier: "Calendar").matching(NSPredicate(format: "NOT (value CONTAINS[c] 'Widget')")).firstMatch
+        XCTAssertTrue(icon.waitForExistence(timeout: 5))
+        XCTAssertFalse((icon.value as? String)?.contains("Timed out") ?? true, "Access should remain available after automatic re-verification, beyond the original lease.")
+        icon.tap()
+        let calendar = XCUIApplication(bundleIdentifier: "com.apple.mobilecal")
+        XCTAssertFalse(calendar.staticTexts["Restricted"].waitForExistence(timeout: 2) || home.staticTexts["Restricted"].exists)
+        app.activate(); app.webViews.buttons["Screen Time"].tap()
+        let marker = app.staticTexts["focusBackgroundVerification"]
+        for _ in 0..<5 { if marker.exists { break }; app.swipeUp() }
+        XCTAssertGreaterThan(Double(marker.label) ?? 0, began + 120, "A fresh validated GPS fix must have completed while Planner was still backgrounded.")
     }
     func testScreenTimeAllAppsPolicyDiagnostic() { verifyScreenTimeHomeScreen(policy: "-UITestShieldAll") }
     func testScreenTimeHomeScreenEnforcement() { verifyScreenTimeHomeScreen(policy: "-UITestNormalPolicy") }
