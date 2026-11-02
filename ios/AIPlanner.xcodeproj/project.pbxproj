@@ -7,9 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		089CD32B2D58C9771510695F /* FocusLocationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B1945220DC23A2D2B1F14E7 /* FocusLocationController.swift */; };
 		177F33768F3D4AB6A48C7A93 /* WidgetSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4444D16B97D810016A359AEB /* WidgetSchedule.swift */; };
 		222F0DBFFE5EB23DCD3FD16F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 28AAD1477D5182D66D4B03B3 /* Assets.xcassets */; };
 		24F88BC2A69FB22CE43C0D00 /* UITestFixture.js in Resources */ = {isa = PBXBuildFile; fileRef = 2537154DE24E02FEF8750CD9 /* UITestFixture.js */; };
+		4C37C716CE063329BD7481C4 /* FocusLocationPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0029ABB98B3B98BBED11F27 /* FocusLocationPicker.swift */; };
 		529D71502D6AFB2969202948 /* PlannerWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 5D1F455AA1CC1C61166C41A3 /* PlannerWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		52B66C0F5E869D612E6AFDA0 /* PlannerUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1BCCE501AEDC0264BA39582 /* PlannerUITests.swift */; };
 		551CEF7953C7A21638C675B7 /* LocalReplicaStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F1B90C243E016C6DC7E4754 /* LocalReplicaStore.swift */; };
@@ -81,9 +83,11 @@
 		8165333B95BD5E023F6F5DE0 /* FocusMonitor.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = FocusMonitor.entitlements; sourceTree = "<group>"; };
 		8828692B26B9612F431BE690 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		96F150B5D75FA26CF9EB8CFB /* PlannerScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlannerScreen.swift; sourceTree = "<group>"; };
+		9B1945220DC23A2D2B1F14E7 /* FocusLocationController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FocusLocationController.swift; sourceTree = "<group>"; };
 		ADA1EEFA5F9698A3B39FB6AB /* FocusMonitor.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FocusMonitor.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B11C8F5F7EBA96DCB0171195 /* PlannerWidgets.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlannerWidgets.swift; sourceTree = "<group>"; };
 		BC4BD313A16E37449327877F /* AIPlanner.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = AIPlanner.entitlements; sourceTree = "<group>"; };
+		C0029ABB98B3B98BBED11F27 /* FocusLocationPicker.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FocusLocationPicker.swift; sourceTree = "<group>"; };
 		C0635749205FA9D608621B53 /* PlannerWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlannerWebView.swift; sourceTree = "<group>"; };
 		C1BCCE501AEDC0264BA39582 /* PlannerUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlannerUITests.swift; sourceTree = "<group>"; };
 		D60E59DEF4C812D07F808129 /* FocusMonitor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FocusMonitor.swift; sourceTree = "<group>"; };
@@ -211,6 +215,8 @@
 				BC4BD313A16E37449327877F /* AIPlanner.entitlements */,
 				5F1B90C243E016C6DC7E4754 /* LocalReplicaStore.swift */,
 				E3E25921DBE8EA34D1D37124 /* ScreenTimeView.swift */,
+				9B1945220DC23A2D2B1F14E7 /* FocusLocationController.swift */,
+				C0029ABB98B3B98BBED11F27 /* FocusLocationPicker.swift */,
 			);
 			path = AIPlanner;
 			sourceTree = "<group>";
@@ -413,6 +419,8 @@
 				177F33768F3D4AB6A48C7A93 /* WidgetSchedule.swift in Sources */,
 				551CEF7953C7A21638C675B7 /* LocalReplicaStore.swift in Sources */,
 				91B087F5D835BC0977CAE6E9 /* ScreenTimeView.swift in Sources */,
+				089CD32B2D58C9771510695F /* FocusLocationController.swift in Sources */,
+				4C37C716CE063329BD7481C4 /* FocusLocationPicker.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

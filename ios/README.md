@@ -125,3 +125,20 @@ A DEBUG simulator-only reproduction (`-UITestStandalonePicker`) removes the web 
 At 08:50 on November 2 the isolated picker logged `Failed to open usage store ... Store.plist ... no such file`; FamilyControlsAgent separately logged error 4099 looking up `com.apple.coreduetd.knowledge`, with `No such process`. Read-only inspection found no launch job registering that service in the installed 18.5, 26.1, 26.3, 26.5 or 27.2 runtime LaunchDaemons. This is evidence about these local runtimes, not a claim that all Screen Time functionality is unsupported in every simulator. No services were fabricated, no Apple binaries were patched, and no mock app list was substituted for actual enforcement.
 
 References: [Apple picker documentation](https://developer.apple.com/documentation/familycontrols/familyactivitypicker), [Apple's individual authorization walkthrough](https://developer.apple.com/videos/play/wwdc2022/110336/), and a [developer's reproduction of the same simulator-only empty app list](https://stackoverflow.com/questions/78335574/familyactivitypicker-on-ios-simulator-not-populating-apps). The last report's physical-device workaround is user-reported, not an Apple guarantee. A real iPhone provisioned with Family Controls is still needed to verify individual-app selection and scoped enforcement for this app.
+
+### Location-based Screen Time sessions
+
+Inside Screen Time, enable **Only block at a location**, search for an address/place or use the phone's current location, and choose a 50–1,000 metre radius. Start the timed session as usual. The timer continues outside the place; restrictions apply only when location indicates the phone is inside, clear on exit, and return on re-entry before expiry. Unknown location leaves apps unblocked. Settings and the saved place stay in the on-device App Group; no Planner server stores a location history.
+
+**Precise updates during session** requests `kCLLocationAccuracyBest`, with a 10-metre movement filter and background updates during an active session. It uses more battery than the optional low-power region mode. A high-accuracy fix can identify a building in good conditions; the app displays the last reported accuracy, which is not a guarantee of building, floor or room identification. Indoors, adjacent buildings and small boundaries need real-device testing. Low-power region notifications may be coarser and delayed. Bluetooth beacon detection is not implemented by this GPS feature.
+
+Always location access, Precise Location and Background App Refresh must remain enabled. Permission descriptions and the `location` background mode are included. An app-wide Core Location delegate is initialized at launch so region wakeups work after leaving the Screen Time tab. Continuous updates are stopped on session end, expiry, or loss of required authorization. DeviceActivity's existing extension still clears restrictions at the deadline independently of the location UI. Saved region monitoring is cleaned up on the next app wake if the app was not running when expiry occurred.
+
+Tests use the dedicated 18.5 simulator and live system APIs, with fixture Planner data and known NYC coordinates. Start the fixture server (`npm run dev -- --host 127.0.0.1 --port 5174`) and run:
+
+```
+python3 scripts/test-ios-location.py SIMULATOR_UDID
+python3 scripts/test-ios-location.py SIMULATOR_UDID --low-power
+```
+
+The driver grants **simulator-only** Always location permission, so permission prompts are not verified by this test. It verifies Apple's Restricted screen inside, restored Calendar access outside while Planner is backgrounded, and re-blocking on re-entry. This uses All Apps & Categories because the simulator's individual-app inventory remains empty. The independent `testScreenTimeLocationAddressSearch` test uses Apple's live MapKit place search when `TEST_RUNNER_PLANNER_VERIFY_LOCATION_SEARCH=1` is passed to xcodebuild. Physical-device precision, battery consumption, room detection and force-quit recovery remain unverified.

@@ -12,6 +12,9 @@
 <key>UIApplicationSceneManifest</key><dict><key>UIApplicationSupportsMultipleScenes</key><false/></dict>
 <key>UILaunchScreen</key><dict><key>UIColorName</key><string>LaunchBackground</string></dict>
 <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
+<key>UIBackgroundModes</key><array><string>location</string></array>
+<key>NSLocationWhenInUseUsageDescription</key><string>Choose your current location for a place-based app blocking session.</string>
+<key>NSLocationAlwaysAndWhenInUseUsageDescription</key><string>Apply app blocking only at your chosen place, and unblock apps when you leave, even while Planner is closed.</string>
 <key>NSCameraUsageDescription</key><string>Attach a photo to your Planner conversation or files.</string>
 <key>NSMicrophoneUsageDescription</key><string>Dictate a message to your Planner agent.</string>
 <key>NSPhotoLibraryUsageDescription</key><string>Choose photos to attach to Planner.</string>

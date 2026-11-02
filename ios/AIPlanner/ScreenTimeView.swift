@@ -33,6 +33,7 @@ import DeviceActivity
         let status = AuthorizationCenter.shared.authorizationStatus
         let approved = status == .approved
         if authorized != approved { authorized = approved }
+        FocusLocationController.shared.finishIfExpired()
         let saved = defaults.double(forKey: "focusEnd")
         // Authorization initially loads as notDetermined on app launch.
         // Do not treat that transient value as revoked permission.
@@ -61,6 +62,7 @@ import DeviceActivity
         guard !selection.applicationTokens.isEmpty || !selection.categoryTokens.isEmpty || !selection.webDomainTokens.isEmpty else { error = "Choose apps to block first."; return }
         guard end == nil else { error = "End the current session before starting another."; return }
         guard (15...720).contains(minutes) else { error = "Choose between 15 minutes and 12 hours."; return }
+        if let locationError = FocusLocationController.shared.validationError() { error = locationError; return }
         // Align the persisted deadline with DeviceActivity's whole-second schedule.
         let now = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970))
         let until = now.addingTimeInterval(Double(minutes) * 60 + 1)
@@ -70,9 +72,10 @@ import DeviceActivity
             let encodedSelection = try JSONEncoder().encode(selection)
             let schedule = DeviceActivitySchedule(intervalStart: calendar.dateComponents(fields, from: now), intervalEnd: calendar.dateComponents(fields, from: until), repeats: false)
             try DeviceActivityCenter().startMonitoring(activity, during: schedule)
-            store.shield.applications = selection.applicationTokens.isEmpty ? nil : selection.applicationTokens
-            store.shield.applicationCategories = selection.categoryTokens.isEmpty ? nil : .specific(selection.categoryTokens)
-            store.shield.webDomains = selection.webDomainTokens.isEmpty ? nil : selection.webDomainTokens
+            defaults.set(encodedSelection, forKey: "focusSelection")
+            defaults.set(until.timeIntervalSince1970, forKey: "focusEnd")
+            if FocusLocationController.shared.enabled { FocusLocationController.shared.arm() }
+            else { FocusLocationController.shared.reconcileShields() }
             #if DEBUG && targetEnvironment(simulator)
             if ProcessInfo.processInfo.arguments.contains("-UITestShieldAll") {
                 store.shield.applicationCategories = .all(except: [])
@@ -86,8 +89,6 @@ import DeviceActivity
                 }
             }
             #endif
-            defaults.set(encodedSelection, forKey: "focusSelection")
-            defaults.set(until.timeIntervalSince1970, forKey: "focusEnd")
             end = until; error = nil
         } catch { self.error = error.localizedDescription }
     }
@@ -96,6 +97,7 @@ import DeviceActivity
         error = nil
     }
     func stop() {
+        FocusLocationController.shared.finishMonitoring()
         store.clearAllSettings()
         defaults.removeObject(forKey: "focusEnd")
         DeviceActivityCenter().stopMonitoring([activity])
@@ -105,6 +107,8 @@ import DeviceActivity
 
 struct ScreenTimeView: View {
     @StateObject private var model = ScreenTimeModel()
+    @ObservedObject private var location = FocusLocationController.shared
+    @State private var choosingLocation = false
     @Environment(\.scenePhase) private var phase
     @State private var picker = false
     @State private var minutes = 30
@@ -122,6 +126,39 @@ struct ScreenTimeView: View {
                         Task { if await model.authorize() { picker = true } }
                     }.disabled(model.authorizing || model.end != nil)
                     Text("\(model.selection.applicationTokens.count) apps · \(model.selection.categoryTokens.count) categories · \(model.selection.webDomainTokens.count) websites").font(.footnote).foregroundStyle(.secondary)
+                }
+                Section("Location (optional)") {
+                    Toggle("Only block at a location", isOn: Binding(get: { location.enabled }, set: { location.setEnabled($0) }))
+                        .disabled(model.end != nil)
+                    if location.enabled {
+                        Button(location.place?.name ?? "Choose location") { choosingLocation = true }.accessibilityIdentifier("chooseFocusLocation").disabled(model.end != nil)
+                        if let place = location.place {
+                            Text(String(format: "Saved location: %.4f, %.4f", place.latitude, place.longitude)).font(.caption).foregroundStyle(.secondary)
+                            Picker("Radius", selection: Binding(get: { place.radius }, set: { location.setRadius($0) })) {
+                                ForEach([50.0, 100, 200, 500, 1000], id: \.self) { radius in Text("\(Int(radius)) m").tag(radius) }
+                            }.disabled(model.end != nil)
+                            Toggle("Precise updates during session", isOn: Binding(get: { location.preciseTracking }, set: { location.setPreciseTracking($0) })).disabled(model.end != nil)
+                            Text(location.preciseTracking ? "Uses high-accuracy location updates during the session, including in the background. Uses more battery." : "Uses low-power area monitoring. Entry and exit notifications may be less precise and delayed.").font(.footnote).foregroundStyle(.secondary)
+                            if let accuracy = location.reportedAccuracy {
+                                Text("Last reported accuracy: ±\(Int(ceil(accuracy))) m").font(.footnote).foregroundStyle(.secondary)
+                            }
+                            Text("Saved place stays on this device. Location boundaries are approximate.").font(.footnote).foregroundStyle(.secondary)
+                        }
+                        if !location.backgroundAuthorized || !location.precise {
+                            if !location.backgroundAuthorized { Button("Allow location in background") { location.requestBackgroundAccess() } }
+                            Text("Keep Always access, Precise Location and Background App Refresh enabled so blocking can turn off when you leave with Planner closed.").font(.footnote).foregroundStyle(.secondary)
+                            Button("Open location settings") { if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) } }
+                        }
+                        if model.end != nil {
+                            Text(location.inside == true ? "Blocking at selected location" : location.inside == false ? "Outside selected location · apps unblocked" : "Checking location · apps unblocked")
+                                .accessibilityIdentifier("focusLocationStatus")
+                            Text("The session timer keeps running while you are away. Location changes may take a little time to register.").font(.footnote).foregroundStyle(.secondary)
+                        }
+                        if let error = location.error {
+                            Text(error).foregroundStyle(.red)
+                            if model.end != nil { Button("Check location again") { location.refreshPosition() } }
+                        }
+                    }
                 }
                 if let end = model.end {
                     Section("Focus session") {
@@ -145,6 +182,7 @@ struct ScreenTimeView: View {
             }
             .navigationTitle("Screen Time")
             .familyActivityPicker(isPresented: $picker, selection: $model.selection)
+            .sheet(isPresented: $choosingLocation) { FocusLocationPicker(location: location) }
         }
         .onChange(of: model.selection) { _, _ in model.saveSelection() }
         .task(id: picker) {
@@ -154,7 +192,7 @@ struct ScreenTimeView: View {
                 try? await Task.sleep(for: .seconds(1))
             }
         }
-        .onChange(of: phase) { _, value in if value == .active { model.refresh() } }
+        .onChange(of: phase) { _, value in if value == .active { model.refresh(); location.refreshPosition() } }
     }
 }
 
