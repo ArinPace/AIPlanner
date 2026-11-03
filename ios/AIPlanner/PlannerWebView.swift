@@ -10,6 +10,7 @@ struct PlannerWebView: UIViewRepresentable {
         let previous = WidgetTaskControl.defaults.string(forKey: "widget-data-source")
         let legacyFixture = LocalReplicaStore.containsLegacyFixture || WidgetTimeOverrides.load().values.contains { $0.task.sourceEventId == "widget-test" || $0.task.id.hasPrefix("widget-test@") }
         if previous != nil && previous != source || legacyFixture {
+            TaskFocusRules.clearAll()
             WidgetTaskControl.clear()
             WidgetTaskControl.defaults.removeObject(forKey: "feedback-account")
             if legacyFixture { _ = try? LocalReplicaStore.activate(nil) }
@@ -25,7 +26,7 @@ struct PlannerWebView: UIViewRepresentable {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-UITestFixture"), ["127.0.0.1", "localhost"].contains(AppConfiguration.origin.host ?? ""), let url = Bundle.main.url(forResource: "UITestFixture", withExtension: "js"), let script = try? String(contentsOf: url, encoding: .utf8) {
             if ProcessInfo.processInfo.arguments.contains("-UITestWidgets") { WidgetTaskControl.clear() }
-            let fixture = (ProcessInfo.processInfo.arguments.contains("-UITestSignedIn") ? "globalThis.__plannerFixtureSignedIn=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestResumeSync") ? "globalThis.__plannerFixtureResumeSync=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestFocusZoom") ? "globalThis.__plannerFixtureFocusZoom=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestWidgets") ? "globalThis.__plannerFixtureWidgets=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestFreeTime") ? "globalThis.__plannerFixtureFreeTime=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestNextWidgetTask") ? "globalThis.__plannerFixtureNextWidgetTask=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestAtomicWidgetPlan") ? "globalThis.__plannerFixtureAtomicWidgetPlan=true;" : "") + script
+            let fixture = (ProcessInfo.processInfo.arguments.contains("-UITestSignedIn") ? "globalThis.__plannerFixtureSignedIn=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestResumeSync") ? "globalThis.__plannerFixtureResumeSync=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestFocusZoom") ? "globalThis.__plannerFixtureFocusZoom=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestWidgets") ? "globalThis.__plannerFixtureWidgets=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestTaskFocusAll") ? "globalThis.__plannerFixtureTaskFocus=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestTaskFocusFuture") ? "globalThis.__plannerFixtureTaskFocusFuture=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestFreeTime") ? "globalThis.__plannerFixtureFreeTime=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestNextWidgetTask") ? "globalThis.__plannerFixtureNextWidgetTask=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestAtomicWidgetPlan") ? "globalThis.__plannerFixtureAtomicWidgetPlan=true;" : "") + script
             config.userContentController.addUserScript(WKUserScript(source: fixture, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         }
         #endif
@@ -64,6 +65,7 @@ struct PlannerWebView: UIViewRepresentable {
         weak var webView: WKWebView?
         var authentication: NativeAuthentication?
         var screenTimeHost: UIHostingController<ScreenTimeView>?
+        weak var taskScreenTimeHost: UIViewController?
         func hideScreenTime() {
             if screenTimeHost?.presentedViewController != nil { screenTimeHost?.dismiss(animated: false) }
             screenTimeHost?.willMove(toParent: nil)
@@ -95,7 +97,7 @@ struct PlannerWebView: UIViewRepresentable {
                     case "localReplicaAccount":
                         let account = body["account"] as? String
                         let changed = account != WidgetTaskControl.defaults.string(forKey: "feedback-account")
-                        if changed { WidgetTaskControl.clear() }
+                        if changed { TaskFocusRules.clearAll(); taskScreenTimeHost?.dismiss(animated: false); WidgetTaskControl.clear() }
                         WidgetTaskControl.defaults.set(account, forKey: "feedback-account")
                         if account == nil { hideScreenTime() }
                         let replicaChanged = try LocalReplicaStore.activate(account)
@@ -108,6 +110,14 @@ struct PlannerWebView: UIViewRepresentable {
                         guard let account = body["account"] as? String, let kind = body["kind"] as? String,
                               let savedAt = body["savedAt"] as? Double, let payload = body["data"], JSONSerialization.isValidJSONObject(payload) else { throw NativeError("Missing local copy data.") }
                         try LocalReplicaStore.save(account: account, kind: kind, savedAt: savedAt, payload: payload)
+                    case "taskScreenTime":
+                        guard let account = body["account"] as? String, account == WidgetTaskControl.defaults.string(forKey: "feedback-account"), let payload = body["task"], JSONSerialization.isValidJSONObject(payload), let parent = webView?.window?.rootViewController else { throw NativeError("Sign in to open task blocking.") }
+                        let task = try JSONDecoder().decode(TaskFocusWindow.self, from: JSONSerialization.data(withJSONObject: payload))
+                        guard task.valid else { throw NativeError("This task has invalid times. Refresh the calendar.") }
+                        guard parent.presentedViewController == nil else { throw NativeError("Close the current menu before opening task blocking.") }
+                        let host = UIHostingController(rootView: TaskScreenTimeView(account: account, task: task))
+                        taskScreenTimeHost = host
+                        parent.present(host, animated: true)
                     case "screenTimePanel":
                         guard body["visible"] as? Bool == true else { hideScreenTime(); replyHandler(["ok": true], nil); return }
                         guard let bounds = body["rect"] as? [String: Double],
@@ -159,6 +169,7 @@ struct PlannerWebView: UIViewRepresentable {
                         let data = try JSONSerialization.data(withJSONObject: payload)
                         guard data.count <= 2 * 1024 * 1024 else { throw NativeError("Widget schedule is too large.") }
                         let schedule = try WidgetSchedule.decode(data)
+                        TaskFocusRules.sync(windows: schedule.events.map { TaskFocusWindow(id: $0.id, sourceEventId: $0.sourceEventId ?? $0.id, title: $0.title, start: $0.start, end: $0.end) }, from: schedule.generatedAt, until: schedule.validUntil, account: account)
                         if try WidgetScheduleStore.save(schedule) { WidgetCenter.shared.reloadAllTimelines() }
                     case "clearWidgetSchedule":
                         if try WidgetScheduleStore.save(.empty) { WidgetCenter.shared.reloadAllTimelines() }

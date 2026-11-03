@@ -715,6 +715,46 @@ final class PlannerUITests: XCTestCase {
         XCTAssertLessThanOrEqual(identifier.frame.maxX, app.windows.firstMatch.frame.maxX)
     }
 
+    func testTaskScreenTimeOpensAppPicker() {
+        let app = XCUIApplication()
+        app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"
+        app.launchArguments = ["-UITestFixture", "-UITestSignedIn", "-UITestWidgets"]
+        app.launch()
+        let shortcut = app.webViews.buttons["Screen Time for Widget current activity"]
+        XCTAssertTrue(shortcut.waitForExistence(timeout: 15)); shortcut.tap()
+        XCTAssertTrue(app.navigationBars["Task Screen Time"].waitForExistence(timeout: 5))
+        app.buttons["Choose apps"].tap()
+        let all = app.descendants(matching: .any).matching(identifier: "All Apps & Categories").firstMatch
+        XCTAssertTrue(all.waitForExistence(timeout: 10))
+    }
+
+    func testTaskScreenTimeBlocksAndExpires() {
+        let app = XCUIApplication()
+        app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"
+        app.launchArguments = ["-UITestFixture", "-UITestSignedIn", "-UITestWidgets", "-UITestTaskFocusAll", "-UITestTaskFocusFuture"]
+        app.launch()
+        let shortcut = app.webViews.buttons["Screen Time for Widget current activity"]
+        XCTAssertTrue(shortcut.waitForExistence(timeout: 15)); shortcut.tap()
+        XCTAssertTrue(app.navigationBars["Task Screen Time"].waitForExistence(timeout: 5))
+        if app.buttons["Allow Screen Time access"].exists {
+            app.buttons["Allow Screen Time access"].tap()
+            if app.alerts.buttons["Continue"].waitForExistence(timeout: 2) { app.alerts.buttons["Continue"].tap() }
+        }
+        app.buttons["Schedule task blocking"].tap()
+        XCTAssertTrue(app.staticTexts["Scheduled for this task"].waitForExistence(timeout: 5), app.debugDescription)
+        app.terminate()
+        XCUIDevice.shared.press(.home); XCUIDevice.shared.press(.home)
+        let home = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let icon = home.icons.matching(identifier: "Calendar").matching(NSPredicate(format: "NOT (value CONTAINS[c] 'Widget')")).firstMatch
+        XCTAssertTrue(icon.waitForExistence(timeout: 5))
+        XCTAssertFalse((icon.value as? String)?.contains("Timed out") ?? false)
+        let blocked = expectation(for: NSPredicate(format: "value CONTAINS[c] 'Timed out'"), evaluatedWith: icon)
+        wait(for: [blocked], timeout: 45)
+        let released = expectation(for: NSPredicate(format: "NOT (value CONTAINS[c] 'Timed out')"), evaluatedWith: icon)
+        wait(for: [released], timeout: 45)
+        XCTAssertEqual(app.state, .notRunning)
+    }
+
     func testEventEditorFitsPhoneWithKeyboard() {
         let app = launch(focusZoom: true)
         let create = app.webViews.buttons["Create"]

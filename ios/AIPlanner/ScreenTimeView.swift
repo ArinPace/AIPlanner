@@ -235,3 +235,73 @@ struct StandaloneScreenTimePickerProbe: View {
     }
 }
 #endif
+
+struct TaskScreenTimeView: View {
+    let account: String
+    let task: TaskFocusWindow
+    @StateObject private var authorization = ScreenTimeModel()
+    @State private var selection: FamilyActivitySelection
+    @State private var picker = false
+    @State private var error: String?
+    @State private var now = Date()
+    @Environment(\.dismiss) private var dismiss
+    init(account: String, task: TaskFocusWindow) {
+        self.account = account; self.task = task
+        var saved = FamilyActivitySelection(includeEntireCategory: true)
+        if let record = TaskFocusRules.record(account: account, window: task) {
+            saved.applicationTokens = record.selection.applicationTokens
+            saved.categoryTokens = record.selection.categoryTokens
+            saved.webDomainTokens = record.selection.webDomainTokens
+        }
+        _selection = State(initialValue: saved)
+    }
+    private var configured: TaskFocusRecord? { TaskFocusRules.record(account: account, window: task) }
+    private var ended: Bool { task.end <= now.timeIntervalSince1970 }
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Task") {
+                    Text(task.title).font(.headline)
+                    LabeledContent("Starts", value: Date(timeIntervalSince1970: task.start).formatted(date: .abbreviated, time: .shortened))
+                    LabeledContent("Ends", value: Date(timeIntervalSince1970: task.end).formatted(date: .abbreviated, time: .shortened))
+                    Text(ended ? "This task has ended." : task.start > now.timeIntervalSince1970 ? "Blocking starts automatically when this task begins." : "Blocking starts now and ends with this task.").font(.footnote).foregroundStyle(.secondary)
+                }
+                if !authorization.authorized {
+                    Section { Button("Allow Screen Time access") { Task { await authorization.authorize() } }.disabled(authorization.authorizing) }
+                }
+                Section("Apps to block for this task") {
+                    Button("Choose apps") { Task { if await authorization.authorize() { picker = true } } }.disabled(authorization.authorizing || ended)
+                    Text("\(selection.applicationTokens.count) apps · \(selection.categoryTokens.count) categories · \(selection.webDomainTokens.count) websites").font(.footnote).foregroundStyle(.secondary)
+                }
+                Section {
+                    Button(configured == nil ? (task.start > now.timeIntervalSince1970 ? "Schedule task blocking" : "Block for this task") : "Update task blocking") {
+                        do {
+                            var testAll = false
+                            #if DEBUG && targetEnvironment(simulator)
+                            testAll = ProcessInfo.processInfo.arguments.contains("-UITestTaskFocusAll")
+                            #endif
+                            try TaskFocusRules.save(account: account, window: task, selection: selection, testAllApps: testAll)
+                            error = nil; now = Date()
+                        } catch { self.error = error.localizedDescription }
+                    }.disabled(!authorization.authorized || ended)
+                    if let record = configured {
+                        Text(record.window.start > now.timeIntervalSince1970 ? "Scheduled for this task" : "Task blocking is active").accessibilityIdentifier("taskBlockingStatus")
+                        Button("Remove task blocking", role: .destructive) { TaskFocusRules.remove(record.name); now = Date() }
+                    }
+                    Text("Applies to this occurrence only. Timing changes follow your calendar when Planner syncs. App choices stay on this device.").font(.footnote).foregroundStyle(.secondary)
+                }
+                if let message = error ?? authorization.error { Section { Text(message).foregroundStyle(.red) } }
+            }
+            .navigationTitle("Task Screen Time")
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+            .familyActivityPicker(isPresented: $picker, selection: $selection)
+        }
+        .task(id: picker) {
+            guard !picker else { return }
+            while !Task.isCancelled {
+                authorization.refresh(); TaskFocusRules.refreshAll(); now = Date()
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+    }
+}

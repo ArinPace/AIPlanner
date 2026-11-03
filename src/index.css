@@ -2306,3 +2306,11 @@ html, body { touch-action: pan-x pan-y; }
 @media (max-width: 600px) {
   :root[data-iphone-app="true"] .workspace-tabs button { padding: 8px 6px; font-size: 13px; }
 }
+
+.calendar-task-with-actions { display:flex; gap:4px; align-items:stretch; min-width:0; }
+.calendar-task-with-actions > .event-chip { flex:1; min-width:0; }
+.task-screen-time-action { display:inline-flex; flex-direction:column; justify-content:center; flex-shrink:0; max-width:100%; }
+.task-screen-time-button { border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--text); padding:6px 8px; cursor:pointer; font:inherit; }
+.calendar-task-with-actions .task-screen-time-button { font-size:11px; max-width:72px; min-height:36px; }
+.task-screen-time-button:disabled { opacity:.5; cursor:default; }
+.task-screen-time-action .form-error { max-width:260px; font-size:12px; overflow-wrap:anywhere; }

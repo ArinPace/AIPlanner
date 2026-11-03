@@ -1,3 +1,5 @@
+import {TaskScreenTimeButton} from './TaskScreenTimeButton'
+import type {TaskScreenTimeWindow} from '../lib/taskScreenTime'
 import { urgencyColor } from '../lib/urgencyColor'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { EventDraft, RecurrenceFrequency, Tag } from '../types'
@@ -16,6 +18,7 @@ type EventModalProps = {
   onSave: () => void
   onDeleteOccurrence?: () => void
   onDelete?: () => void
+  screenTimeTask?:TaskScreenTimeWindow
   nested?:boolean
   existingId?:string
 }
@@ -37,7 +40,7 @@ const INTERVAL_UNITS: Record<Exclude<RecurrenceFrequency, 'none'>, [string, stri
   yearly: ['year', 'years'],
 }
 
-export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDelete,onDeleteOccurrence,nested=false,existingId }: EventModalProps) {
+export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDelete,onDeleteOccurrence,nested=false,existingId,screenTimeTask }: EventModalProps) {
   const titleRef = useRef<HTMLInputElement>(null)
   const backdropRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState('')
@@ -287,6 +290,7 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
 
         {error && <p className="form-error">{error}</p>}
 
+        {screenTimeTask&&!folder&&<TaskScreenTimeButton task={screenTimeTask}/>}
         <div className="modal-actions">
           {onDeleteOccurrence && <button type="button" className="danger-btn" onClick={onDeleteOccurrence}>Remove occurrence from series</button>}
           {mode === 'edit' && onDelete && (

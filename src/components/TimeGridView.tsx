@@ -1,3 +1,6 @@
+import {TaskScreenTimeButton} from './TaskScreenTimeButton'
+import {taskScreenTimeWindow} from '../lib/taskScreenTime'
+import {supportsScreenTime} from '../lib/platform'
 import { freeTimeAppearance, withFreeTime, type ScheduleRow } from '../lib/freeTime'
 import { eventAppearance } from '../lib/eventAppearance'
 import { PlannerDate as Date } from '../lib/timezone.js'
@@ -115,7 +118,7 @@ export function TimeGridView({ active=true,cursor, view, zoom, occurrences, busy
         <span className="event-title">{folder&&(open?'▾ ▣ ':'▸ ▣ ')}{item.event.urgency!=null&&<span className="event-urgency-badge" style={urgencyColor(item.event.urgency)}>{item.event.urgency}</span>}{item.event.title||'(No title)'}</span>
         {folder&&<small className="folder-event-count">{children.length} {children.length===1?'item':'items'}</small>}
       </button>
-      return <Fragment key={item.event.id+item.start.toISOString()}>{showNow&&!currentFolder&&index===next&&marker}{folder?<div className="agenda-event-folder"><div className="folder-event-header">{chip}<button type="button" className="folder-edit-button" aria-label={'Edit folder '+item.event.title} onClick={()=>onEventClick(item.event,item.start)}>Edit</button></div>{open&&<div className="folder-agenda-children">{children.length?agendaRows(folderChildren(item,day),day,showNow&&currentFolder===item,true):<><p className="quiet">No visible events in this folder.</p>{showNow&&currentFolder===item&&marker}</>}</div>}</div>:chip}</Fragment>
+      return <Fragment key={item.event.id+item.start.toISOString()}>{showNow&&!currentFolder&&index===next&&marker}{folder?<div className="agenda-event-folder"><div className="folder-event-header">{chip}<button type="button" className="folder-edit-button" aria-label={'Edit folder '+item.event.title} onClick={()=>onEventClick(item.event,item.start)}>Edit</button></div>{open&&<div className="folder-agenda-children">{children.length?agendaRows(folderChildren(item,day),day,showNow&&currentFolder===item,true):<><p className="quiet">No visible events in this folder.</p>{showNow&&currentFolder===item&&marker}</>}</div>}</div>:!item.freeTime&&!item.event.reminder&&!item.event.allDay&&supportsScreenTime()?<div className="calendar-task-with-actions">{chip}<TaskScreenTimeButton task={taskScreenTimeWindow(item.event,item.start,item.end)}/></div>:chip}</Fragment>
     })}{showNow&&!currentFolder&&next===-1&&marker}</>
   }
 

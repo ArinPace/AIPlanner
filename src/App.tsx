@@ -1,3 +1,4 @@
+import {taskScreenTimeWindow} from './lib/taskScreenTime'
 import {verifyFreeTimeRequest, type TaskFeedback, type TaskTimeResult} from './lib/widgetTaskFeedback'
 import {WidgetTaskFeedback} from './components/WidgetTaskFeedback'
 import {isIPhoneApp} from './lib/platform'
@@ -498,6 +499,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
 
       {draft && (
         <EventModal
+          screenTimeTask={(()=>{const event=events.find(event=>event.id===editingId);if(!event||event.allDay||event.reminder||!editingOccurrence)return undefined;const start=new Date(editingOccurrence);return taskScreenTimeWindow(event,start,new Date(start.getTime()+new Date(event.end).getTime()-new Date(event.start).getTime()))})()}
           existingId={editingId||undefined}
           nested={Boolean(editingId&&events.find(event=>event.id===editingId)?.folderId)}
           mode={editingId ? 'edit' : 'create'}

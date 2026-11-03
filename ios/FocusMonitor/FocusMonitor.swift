@@ -3,8 +3,17 @@ import ManagedSettings
 import Foundation
 
 class FocusMonitor: DeviceActivityMonitor {
+    override func intervalDidStart(for activity: DeviceActivityName) {
+        super.intervalDidStart(for: activity)
+        if activity.rawValue.hasPrefix(TaskFocusRules.prefix) { TaskFocusRules.apply(activity.rawValue) }
+    }
+    override func intervalWillEndWarning(for activity: DeviceActivityName) {
+        super.intervalWillEndWarning(for: activity)
+        if activity.rawValue.hasPrefix(TaskFocusRules.prefix) { TaskFocusRules.apply(activity.rawValue) }
+    }
     override func intervalDidEnd(for activity: DeviceActivityName) {
         super.intervalDidEnd(for: activity)
+        if activity.rawValue.hasPrefix(TaskFocusRules.prefix) { TaskFocusRules.apply(activity.rawValue); return }
         if activity == FocusShieldRules.leaseActivity { FocusShieldRules.verificationExpired(); return }
         guard activity.rawValue == "plannerFocus" else { return }
         let defaults = UserDefaults(suiteName: "group.com.arinpace.aiplanner")
