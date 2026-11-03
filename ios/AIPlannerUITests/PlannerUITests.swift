@@ -12,6 +12,20 @@ final class PlannerUITests: XCTestCase {
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = name; screenshot.lifetime = .keepAlways; add(screenshot)
     }
+    func testBlankPlannerRecoversOnResume() {
+        let app = XCUIApplication()
+        app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"
+        app.launchArguments = ["-UITestFixture", "-UITestSignedIn", "-UITestBlankPageOnce"]
+        app.launch()
+        XCTAssertTrue(app.webViews.buttons["Agent"].waitForExistence(timeout: 15))
+        Thread.sleep(forTimeInterval: 3)
+        app.webViews.buttons["Simulate blank page"].tap()
+        XCTAssertFalse(app.webViews.buttons["Agent"].exists)
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(app.webViews.buttons["Agent"].waitForExistence(timeout: 15), "Foregrounding must recover an empty page without logging out")
+        XCTAssertTrue(app.webViews.buttons["Log out"].exists)
+    }
     func testAccountLogoutClearsWidgets() {
         let app = XCUIApplication()
         app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"

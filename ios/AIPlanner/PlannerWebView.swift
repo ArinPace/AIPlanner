@@ -27,6 +27,9 @@ struct PlannerWebView: UIViewRepresentable {
         if ProcessInfo.processInfo.arguments.contains("-UITestFixture"), ["127.0.0.1", "localhost"].contains(AppConfiguration.origin.host ?? ""), let url = Bundle.main.url(forResource: "UITestFixture", withExtension: "js"), let script = try? String(contentsOf: url, encoding: .utf8) {
             if ProcessInfo.processInfo.arguments.contains("-UITestWidgets") { WidgetTaskControl.clear() }
             let fixture = (ProcessInfo.processInfo.arguments.contains("-UITestSignedIn") ? "globalThis.__plannerFixtureSignedIn=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestResumeSync") ? "globalThis.__plannerFixtureResumeSync=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestFocusZoom") ? "globalThis.__plannerFixtureFocusZoom=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestWidgets") ? "globalThis.__plannerFixtureWidgets=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestTaskFocusAll") ? "globalThis.__plannerFixtureTaskFocus=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestTaskFocusFuture") ? "globalThis.__plannerFixtureTaskFocusFuture=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestFreeTime") ? "globalThis.__plannerFixtureFreeTime=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestNextWidgetTask") ? "globalThis.__plannerFixtureNextWidgetTask=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestAtomicWidgetPlan") ? "globalThis.__plannerFixtureAtomicWidgetPlan=true;" : "") + script
+            if ProcessInfo.processInfo.arguments.contains("-UITestBlankPageOnce") {
+                config.userContentController.addUserScript(WKUserScript(source: "globalThis.__plannerFixtureBlankToken='" + UUID().uuidString + "';", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+            }
             config.userContentController.addUserScript(WKUserScript(source: fixture, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         }
         #endif
@@ -40,15 +43,15 @@ struct PlannerWebView: UIViewRepresentable {
         web.isOpaque = false; web.backgroundColor = .systemBackground
         context.coordinator.webView = web
         context.coordinator.authentication = NativeAuthentication(webView: web)
-        model.reload = { [weak web] in
+        model.reload = { [weak web, weak coordinator = context.coordinator] in
             guard let web else { return }
-            if web.url == nil { web.load(URLRequest(url: AppConfiguration.origin)) } else { web.reload() }
+            coordinator?.lastRecovery = nil
+            web.load(URLRequest(url: AppConfiguration.origin, cachePolicy: .reloadIgnoringLocalCacheData))
         }
-        model.resume = { [weak web] in
-            // Wait for WebKit to become visible, then reuse the frontend's
-            // guarded refresh listeners. Do not reload or erase local drafts.
+        model.resume = { [weak web, weak coordinator = context.coordinator] in
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                web?.evaluateJavaScript("window.dispatchEvent(new Event('focus'));") { _, _ in }
+                guard let web else { return }
+                coordinator?.checkPage(web, notifyFocus: true)
             }
         }
         web.load(URLRequest(url: AppConfiguration.origin))
@@ -85,6 +88,23 @@ struct PlannerWebView: UIViewRepresentable {
             }
             screenTimeHost?.view.frame = rect
             if let view = screenTimeHost?.view { web.bringSubviewToFront(view) }
+        }
+        var lastRecovery: Date?
+        func checkPage(_ web: WKWebView, notifyFocus: Bool = false) {
+            let script = "(() => { if (\(notifyFocus ? "true" : "false")) window.dispatchEvent(new Event('focus')); return location.pathname !== '/' || document.readyState === 'loading' || Boolean(document.getElementById('root')?.childElementCount); })()"
+            web.evaluateJavaScript(script) { [weak self, weak web] value, error in
+                guard let self, let web else { return }
+                if error != nil || value as? Bool != true { self.recover(web) }
+            }
+        }
+        func recover(_ web: WKWebView) {
+            if let lastRecovery, Date().timeIntervalSince(lastRecovery) < 30 {
+                model.loading = false
+                model.error = "Planner couldn't finish loading. Try again to reload your saved plan."
+                return
+            }
+            lastRecovery = Date(); model.error = nil; model.loading = true
+            web.load(URLRequest(url: AppConfiguration.origin, cachePolicy: .reloadIgnoringLocalCacheData))
         }
         var downloads: [ObjectIdentifier: URL] = [:]
         init(model: PlannerModel) { self.model = model }
@@ -196,14 +216,20 @@ struct PlannerWebView: UIViewRepresentable {
             return folder.appendingPathComponent(safe.isEmpty ? "Planner download" : safe)
         }
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) { model.loading = true; model.error = nil; hideScreenTime() }
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { model.loading = false; WidgetCenter.shared.reloadAllTimelines() }
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            model.loading = false; WidgetCenter.shared.reloadAllTimelines()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self, weak webView] in
+                guard let webView, !webView.isLoading else { return }
+                self?.checkPage(webView)
+            }
+        }
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { failed(error) }
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { failed(error) }
         private func failed(_ error: Error) {
             guard (error as NSError).code != NSURLErrorCancelled else { return }
             model.loading = false; model.error = "Check your connection and try again. Your saved Planner data stays in your account."
         }
-        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { model.loading = false; model.error = "Planner needs to reload. Your saved data is still available." }
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { recover(webView) }
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
             if AppConfiguration.isPlanner(url) || url.scheme == "about" || url.scheme == "blob" {

@@ -31,6 +31,9 @@
   };
   update();window.visualViewport?.addEventListener('resize',()=>setTimeout(update,50));window.visualViewport?.addEventListener('scroll',()=>setTimeout(update,50));document.addEventListener('focusin',()=>setTimeout(update,350));document.addEventListener('focusout',()=>setTimeout(update,350));
  });
+ if(globalThis.__plannerFixtureBlankToken){
+  document.addEventListener('DOMContentLoaded',()=>{const button=document.createElement('button');button.textContent='Simulate blank page';button.style.cssText='position:fixed;bottom:0;right:0;z-index:10000';button.onclick=()=>{document.getElementById('root')?.replaceChildren();button.remove()};document.body.append(button)});
+ }
  const fetchReal=window.fetch.bind(window);
  window.fetch=async(input,options={})=>{
   const raw=typeof input==='string'?input:input.url;const url=new URL(raw,location.href);
