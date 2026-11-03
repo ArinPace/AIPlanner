@@ -112,6 +112,43 @@ final class PlannerUITests: XCTestCase {
         wait(for: [received], timeout: 10)
     }
 
+    func testDoneImmediatelyPreviewsNextTask() {
+        let app = XCUIApplication()
+        app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"
+        app.launchEnvironment["AI_PLANNER_WIDGET_TEST_ORIGIN"] = "http://127.0.0.1:5199"
+        app.launchArguments = ["-UITestFixture", "-UITestSignedIn", "-UITestWidgets", "-UITestNextWidgetTask"]
+        app.launch()
+        XCTAssertTrue(app.webViews.buttons["Agent"].waitForExistence(timeout: 15))
+        Thread.sleep(forTimeInterval: 3)
+        XCUIDevice.shared.press(.home)
+        let home = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        func doneButton() -> XCUIElement? { home.buttons.matching(identifier: "Finish current task").allElementsBoundByIndex.first { $0.exists && $0.isHittable } }
+        for _ in 0..<4 { if doneButton() != nil { break }; home.swipeRight() }
+        for _ in 0..<5 { if doneButton() != nil { break }; home.swipeLeft() }
+        let done = try! XCTUnwrap(doneButton())
+        func tapDone() {
+            let frame = done.frame
+            home.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: frame.midX, dy: frame.midY)).tap()
+        }
+        tapDone()
+        XCTAssertTrue(home.staticTexts["Widget next activity"].firstMatch.waitForExistence(timeout: 6))
+        let waiting = expectation(for: NSPredicate(format: "value == %@", "Waiting for schedule"), evaluatedWith: done)
+        wait(for: [waiting], timeout: 5)
+        Thread.sleep(forTimeInterval: 3) // The transport can finish; the plan is still unpublished.
+        XCTAssertEqual(done.value as? String, "Waiting for schedule")
+        tapDone()
+        XCTAssertNotEqual(app.state, .runningForeground)
+        let received = expectation(description: "Single completion queued")
+        URLSession.shared.dataTask(with: URL(string: "http://127.0.0.1:5199/status")!) { data, _, error in
+            XCTAssertNil(error)
+            let status = data.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
+            XCTAssertEqual(status?["done"] as? Bool, true)
+            XCTAssertEqual(status?["deliveries"] as? Int, 1)
+            received.fulfill()
+        }.resume()
+        wait(for: [received], timeout: 10)
+    }
+
     func testFillFreeTimeWidget() {
         let app = XCUIApplication()
         app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"

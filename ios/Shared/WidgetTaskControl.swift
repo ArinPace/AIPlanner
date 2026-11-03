@@ -25,7 +25,7 @@ enum WidgetTaskControl {
     }
     static func submit(_ task: WidgetTask, done: Bool) throws {
         guard currentTask(at: Date())?.id == task.id else { throw ControlError.stale }
-        guard defaults.data(forKey: "task-feedback") == nil else { return }
+        guard defaults.data(forKey: "task-feedback") == nil, !WidgetTimeOverrides.load().values.contains(where: \.done) else { return }
         if !done && !WidgetTimeOverrides.load().isEmpty { return }
         let now = Date().timeIntervalSince1970
         let canonical = WidgetScheduleStore.load().events.first { $0.id == task.id } ?? WidgetTimeOverrides.record(for: task)?.task ?? task

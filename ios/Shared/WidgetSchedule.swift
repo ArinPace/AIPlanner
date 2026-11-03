@@ -126,7 +126,14 @@ enum WidgetTimeOverrides {
     static func preferred(in schedule: WidgetSchedule, at date: Date) -> WidgetTask? {
         let now = date.timeIntervalSince1970
         guard now < schedule.validUntil else { return nil }
-        guard let change = load().values.filter({ !$0.done && $0.task.start <= now }).max(by: { $0.reportedAt < $1.reportedAt }) else { return nil }
+        let records = load().values
+        guard let change = records.filter({ $0.task.start <= now }).max(by: { $0.reportedAt < $1.reportedAt }) else { return nil }
+        if change.done {
+            let completed = records.filter(\.done)
+            let remaining = WidgetSchedule(version: schedule.version, generatedAt: schedule.generatedAt, validUntil: schedule.validUntil,
+                events: schedule.events.filter { event in !completed.contains(where: { matches($0.task, event) }) })
+            return remaining.current(at: date) ?? remaining.next(after: date)
+        }
         return task(change.task, end: end(change))
     }
     @discardableResult static func reconcile(with schedule: WidgetSchedule) -> Bool {

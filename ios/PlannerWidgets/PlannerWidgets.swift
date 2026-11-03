@@ -6,7 +6,7 @@ struct PlannerEntry: TimelineEntry {
     let date: Date
     let schedule: WidgetSchedule
     var task: WidgetTask? { WidgetTimeOverrides.preferred(in: schedule, at: date) ?? schedule.current(at: date) }
-    var next: WidgetTask? { schedule.next(after: date) }
+    var next: WidgetTask? { schedule.next(after: max(date, task?.startDate ?? date)) }
 }
 struct PlannerProvider: TimelineProvider {
     func placeholder(in context: Context) -> PlannerEntry {
@@ -152,7 +152,7 @@ struct TaskControlView: View {
     private var home: Bool { family == .systemSmall || family == .systemMedium }
     private var task: WidgetTask? {
         let pending = WidgetTaskControl.pending()
-        return pending?.done == true ? pending?.task : entry.task ?? pending?.task ?? WidgetTimeOverrides.load().values.max(by: { $0.reportedAt < $1.reportedAt })?.task
+        return entry.task ?? (pending?.done == false ? pending?.task : nil) ?? WidgetTimeOverrides.load().values.filter { !$0.done }.max(by: { $0.reportedAt < $1.reportedAt })?.task
     }
     private var hex: UInt64 { UInt64((task?.color ?? "#1a73e8").trimmingCharacters(in: CharacterSet(charactersIn: "#")), radix: 16) ?? 0x1a73e8 }
     private var background: Color { Color(red: Double((hex >> 16) & 255) / 255, green: Double((hex >> 8) & 255) / 255, blue: Double(hex & 255) / 255) }
@@ -234,7 +234,8 @@ struct DoneTaskView: View {
     @Environment(\.widgetFamily) var family
     let entry: PlannerEntry
     private var pending: WidgetTaskFeedback? { WidgetTaskControl.pending() }
-    private var task: WidgetTask? { pending?.done == true ? pending?.task : entry.task }
+    private var awaitingPlan: Bool { pending != nil || WidgetTimeOverrides.load().values.contains(where: \.done) }
+    private var task: WidgetTask? { entry.task }
     private var hex: UInt64 { UInt64((task?.color ?? "#1a73e8").trimmingCharacters(in: CharacterSet(charactersIn: "#")), radix: 16) ?? 0x1a73e8 }
     private var color: Color { Color(red: Double((hex >> 16) & 255) / 255, green: Double((hex >> 8) & 255) / 255, blue: Double(hex & 255) / 255) }
     private var ink: Color { family != .systemSmall ? .primary : (0.299 * Double((hex >> 16) & 255) + 0.587 * Double((hex >> 8) & 255) + 0.114 * Double(hex & 255)) / 255 > 0.65 ? .black : .white }
@@ -242,18 +243,17 @@ struct DoneTaskView: View {
         VStack(spacing: 8) {
             if let task {
                 if family != .accessoryCircular { Text(task.title).font(.headline).lineLimit(2) }
-                if pending?.done == true {
-                    Label("Finished · syncing", systemImage: "checkmark.circle.fill").font(.caption)
-                } else {
-                    Button(intent: SubmitTaskTimeIntent(task: task, done: true)) {
-                        if family == .accessoryCircular {
-                            Image(systemName: "checkmark.circle.fill").font(.title2)
-                        } else {
-                            Label("Done", systemImage: "checkmark.circle.fill")
-                                .font(family == .systemSmall ? .title2.weight(.semibold) : .caption)
-                        }
-                    }.buttonStyle(.bordered).disabled(pending != nil).accessibilityLabel("Finish current task")
-                }
+                Button(intent: SubmitTaskTimeIntent(task: task, done: true)) {
+                    if family == .accessoryCircular {
+                        Image(systemName: "checkmark.circle.fill").font(.title2)
+                    } else {
+                        Label("Done", systemImage: "checkmark.circle.fill")
+                            .font(family == .systemSmall ? .title2.weight(.semibold) : .caption)
+                    }
+                }.buttonStyle(.bordered)
+                    .foregroundStyle(awaitingPlan ? Color.gray : ink).opacity(awaitingPlan ? 0.45 : 1)
+                    .accessibilityLabel("Finish current task").accessibilityValue(awaitingPlan ? "Waiting for schedule" : "Ready")
+                if awaitingPlan && family != .accessoryCircular { Text("Sending…").font(.caption2) }
             } else {
                 Label("No current task", systemImage: "checkmark.circle").font(.caption)
             }

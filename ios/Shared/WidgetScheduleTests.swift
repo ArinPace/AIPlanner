@@ -72,6 +72,15 @@ import Foundation
         let published = WidgetSchedule(version: 1, generatedAt: 220, validUntil: 400, events: tasks, resolvedFeedbackIds: [preview.id])
         precondition(WidgetTimeOverrides.reconcile(with: published)) // A full plan may choose another coherent allocation.
         precondition(WidgetTimeOverrides.load().isEmpty)
+        let finished = WidgetTaskFeedback(id: "done-request", task: tasks[0], remainingMinutes: 0, done: true, reportedAt: 150, requestedEnd: 150)
+        WidgetTimeOverrides.store(finished)
+        precondition(WidgetTimeOverrides.preferred(in: unchanged, at: date(160))?.id == "second") // Immediately preview the next scheduled activity.
+        precondition(WidgetTimeOverrides.preferred(in: unchanged, at: date(230))?.id == "overlap") // Prefer an already active overlapping activity.
+        precondition(WidgetTimeOverrides.preferred(in: unchanged, at: date(350)) == nil)
+        precondition(!WidgetTimeOverrides.reconcile(with: WidgetSchedule(version: 1, generatedAt: 170, validUntil: 400, events: tasks, resolvedFeedbackIds: [])))
+        precondition(WidgetTimeOverrides.load().values.contains(where: \.done)) // Delivery alone never unlocks Done.
+        precondition(WidgetTimeOverrides.reconcile(with: WidgetSchedule(version: 1, generatedAt: 180, validUntil: 400, events: tasks, resolvedFeedbackIds: [finished.id])))
+        precondition(!WidgetTimeOverrides.load().values.contains(where: \.done))
         print("Widget schedule checks passed: boundaries, overlaps, expiry, next task, timeline and payload validation.")
     }
 }
