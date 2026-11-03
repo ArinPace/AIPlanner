@@ -79,14 +79,18 @@ final class PlannerUITests: XCTestCase {
             let frame = control.frame
             home.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: frame.midX, dy: frame.midY)).tap()
         }
+        let adjustStarted = Date()
         tapControl(minus)
-        Thread.sleep(forTimeInterval: 2)
         XCTAssertTrue(home.staticTexts["Press to confirm"].firstMatch.waitForExistence(timeout: 5))
         XCTAssertTrue(value.label.hasPrefix("Confirm −"))
+        print("Widget adjustment appeared after \(Date().timeIntervalSince(adjustStarted)) seconds")
         let requested = Int(value.value as? String ?? "")
         XCTAssertNotNil(requested)
+        let confirmStarted = Date()
         tapControl(value)
-        Thread.sleep(forTimeInterval: 4)
+        let confirmed = expectation(for: NSPredicate(format: "label == %@", "Apply remaining time"), evaluatedWith: value)
+        wait(for: [confirmed], timeout: 5)
+        print("Widget confirmation appeared after \(Date().timeIntervalSince(confirmStarted)) seconds")
         XCTAssertNotEqual(app.state, .runningForeground, "Submitting must not open Planner")
         XCTAssertTrue(value.waitForExistence(timeout: 10)); XCTAssertEqual(Int(value.value as? String ?? ""), requested)
         XCTAssertTrue(home.staticTexts["Sending…"].firstMatch.waitForExistence(timeout: 5))
@@ -102,6 +106,7 @@ final class PlannerUITests: XCTestCase {
             XCTAssertEqual(status?["remainingMinutes"] as? Int, requested)
             XCTAssertEqual(status?["done"] as? Bool, false)
             XCTAssertEqual(status?["deliveries"] as? Int, 1)
+            if (status?["delayMs"] as? Int ?? 0) >= 20000 { XCTAssertEqual(status?["accepted"] as? Bool, false, "The widget must update before the server accepts the request") }
             received.fulfill()
         }.resume()
         wait(for: [received], timeout: 10)

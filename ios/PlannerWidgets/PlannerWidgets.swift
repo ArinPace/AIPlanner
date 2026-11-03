@@ -19,7 +19,7 @@ struct PlannerProvider: TimelineProvider {
     }
     func getTimeline(in context: Context, completion: @escaping (Timeline<PlannerEntry>) -> Void) {
         Task {
-            await WidgetBackgroundDelivery.refresh()
+            if !WidgetTaskControl.needsLocalRender { await WidgetBackgroundDelivery.refresh() }
             let now = Date(), schedule = WidgetTaskControl.displaySchedule()
             let draftTransitions = schedule.events.filter { abs(WidgetTaskControl.draftEnd($0) - $0.end) > 0.001 }.flatMap { task in
                 [600.0, 3600.0, 36000.0].map { Date(timeIntervalSince1970: WidgetTaskControl.draftEnd(task) - $0 + 0.001) }
@@ -126,6 +126,9 @@ struct TimeRemainingWidget: Widget {
 struct TaskAndTimeWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "PlannerTaskAndTime", provider: PlannerProvider()) { TaskControlView(combined: true, entry: $0) }
+            .onBackgroundURLSessionEvents(matching: WidgetFeedbackUpload.identifier) { _, completion in
+                WidgetFeedbackUpload.shared.handleEvents(completion: completion)
+            }
             .configurationDisplayName("Task & Time")
             .description("Current activity, start/end time and live countdown. Adjust with plus/minus, then tap the countdown to apply.")
             .supportedFamilies([.systemSmall, .accessoryRectangular])
@@ -134,6 +137,9 @@ struct TaskAndTimeWidget: Widget {
 struct TaskControlWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "PlannerTaskControl", provider: PlannerProvider()) { TaskControlView(entry: $0) }
+            .onBackgroundURLSessionEvents(matching: WidgetFeedbackUpload.identifier) { _, completion in
+                WidgetFeedbackUpload.shared.handleEvents(completion: completion)
+            }
         .configurationDisplayName("Adjust Task")
         .description("Use plus/minus to adjust time in 5- or 10-minute steps, then tap the countdown to apply. Use the separate Done widget to finish.")
         .supportedFamilies([.systemSmall, .systemMedium, .accessoryRectangular])
@@ -216,6 +222,9 @@ struct TaskControlView: View {
 struct DoneTaskWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "PlannerDoneTask", provider: PlannerProvider()) { DoneTaskView(entry: $0) }
+            .onBackgroundURLSessionEvents(matching: WidgetFeedbackUpload.identifier) { _, completion in
+                WidgetFeedbackUpload.shared.handleEvents(completion: completion)
+            }
             .configurationDisplayName("Done")
             .description("End your current activity immediately and ask the agent to adjust the remaining schedule.")
             .supportedFamilies([.systemSmall, .accessoryCircular, .accessoryRectangular])

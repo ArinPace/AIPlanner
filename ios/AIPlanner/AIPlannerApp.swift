@@ -21,4 +21,9 @@ final class PlannerAppDelegate: NSObject, UIApplicationDelegate {
         FocusLocationController.shared.resume()
         return true
     }
+    func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String, completionHandler: @escaping () -> Void) {
+        guard identifier == WidgetFeedbackUpload.identifier else { completionHandler(); return }
+        WidgetFeedbackUpload.shared.handleEvents(completion: completionHandler)
+    }
+
 }
