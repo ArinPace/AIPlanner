@@ -17,8 +17,17 @@
  });
  if(globalThis.__plannerFixtureFocusZoom)document.addEventListener('DOMContentLoaded',()=>{
   const probe=document.createElement('output');probe.id='fixture-viewport-scale';probe.setAttribute('role','status');probe.style.cssText='position:fixed;top:0;left:0;z-index:10000;font-size:10px;pointer-events:none;background:white;color:black';document.body.append(probe);
-  const update=()=>{probe.textContent='Viewport scale '+(window.visualViewport?.scale||1).toFixed(2)};
-  update();window.visualViewport?.addEventListener('resize',update);window.visualViewport?.addEventListener('scroll',update);document.addEventListener('focusin',()=>setTimeout(update,350));document.addEventListener('focusout',()=>setTimeout(update,350));
+  const layout=document.createElement('output');layout.setAttribute('role','status');layout.style.cssText='position:fixed;top:14px;left:0;z-index:10000;font-size:9px;pointer-events:none;background:white';document.body.append(layout);
+  const update=()=>{
+   probe.textContent='Viewport scale '+(window.visualViewport?.scale||1).toFixed(2);
+   const form=document.querySelector('.modal-backdrop:not([inert]) .event-modal'),v=window.visualViewport;
+   const host=form||document.body;if(probe.parentNode!==host){host.append(probe,layout)}
+   if(!form||!v){layout.textContent='No event editor';return}
+   const r=form.getBoundingClientRect();
+   const fits=r.left>=v.offsetLeft-1&&r.right<=v.offsetLeft+v.width+1&&r.top>=v.offsetTop-1&&r.bottom<=v.offsetTop+v.height+1&&form.scrollWidth<=form.clientWidth+1;
+   layout.textContent=fits?'Event editor fits viewport':`Event editor overflow: ${Math.round(r.left)},${Math.round(r.right)},${Math.round(r.bottom)} / ${Math.round(v.width)},${Math.round(v.height)}`;
+  };
+  update();window.visualViewport?.addEventListener('resize',()=>setTimeout(update,50));window.visualViewport?.addEventListener('scroll',()=>setTimeout(update,50));document.addEventListener('focusin',()=>setTimeout(update,350));document.addEventListener('focusout',()=>setTimeout(update,350));
  });
  const fetchReal=window.fetch.bind(window);
  window.fetch=async(input,options={})=>{

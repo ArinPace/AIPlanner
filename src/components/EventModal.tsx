@@ -39,6 +39,7 @@ const INTERVAL_UNITS: Record<Exclude<RecurrenceFrequency, 'none'>, [string, stri
 
 export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDelete,onDeleteOccurrence,nested=false,existingId }: EventModalProps) {
   const titleRef = useRef<HTMLInputElement>(null)
+  const backdropRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState('')
   const [child,setChild]=useState<{id:string;draft:EventDraft}|null>(null)
   const folder=draft.eventKind==='folder'
@@ -56,6 +57,18 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
   }
   const accent = tags.find((tag) => draft.tagIds.includes(tag.id))?.color ?? '#1a73e8'
 
+  useEffect(() => {
+    const viewport = window.visualViewport, backdrop = backdropRef.current
+    if (!viewport || !backdrop) return
+    const resize = () => {
+      backdrop.style.setProperty('--event-viewport-height', `${viewport.height}px`)
+      backdrop.style.setProperty('--event-viewport-top', `${viewport.offsetTop}px`)
+    }
+    resize()
+    viewport.addEventListener('resize', resize)
+    viewport.addEventListener('scroll', resize)
+    return () => { viewport.removeEventListener('resize', resize); viewport.removeEventListener('scroll', resize) }
+  }, [])
   useEffect(()=>{titleRef.current?.focus()},[])
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -101,7 +114,7 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
   const unit = frequency==='custom'&&draft.recurrence.customMode==='monthdates'?['month','months']:frequency === 'none' ? ['day', 'days'] : INTERVAL_UNITS[frequency]
 
   return (
-    <><div className="modal-backdrop" inert={Boolean(child)} aria-hidden={child?true:undefined} onMouseDown={onClose}>
+    <><div ref={backdropRef} className="modal-backdrop" inert={Boolean(child)} aria-hidden={child?true:undefined} onMouseDown={onClose}>
       <form className="event-modal" role="dialog" aria-modal="true" aria-label={folder?'Event folder':nested?'Event inside folder':'Calendar event'} onMouseDown={(event) => event.stopPropagation()} onSubmit={handleSubmit}>
         <div className="modal-accent" style={{ background: accent }} />
         <div className="modal-top">
@@ -128,9 +141,10 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
         </label>
         <label className="field">
           <span>Date</span>
-          <div className="field-row">
+          <div className="field-row event-time-range">
             <input
               type="date"
+              aria-label="Start date"
               value={draft.date}
               onChange={(event) => {
                 const date = event.target.value
@@ -143,7 +157,7 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
               required
             />
             {!draft.reminder && <><span className="field-sep">to</span>
-            <input type="date" value={draft.endDate} onChange={(event) => update('endDate', event.target.value)} required /></>}
+            <input type="date" aria-label="End date" value={draft.endDate} onChange={(event) => update('endDate', event.target.value)} required /></>}
           </div>
         </label>
 
@@ -155,17 +169,17 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
         {!draft.allDay && (
           <label className="field">
             <span>Time (New York)</span>
-            <div className="field-row">
-              <input type="time" value={draft.startTime} onChange={(event) => update('startTime', event.target.value)} />
+            <div className="field-row event-time-range">
+              <input type="time" aria-label="Start time" value={draft.startTime} onChange={(event) => update('startTime', event.target.value)} />
               {!draft.reminder && <><span className="field-sep">to</span>
-              <input type="time" value={draft.endTime} onChange={(event) => update('endTime', event.target.value)} /></>}
+              <input type="time" aria-label="End time" value={draft.endTime} onChange={(event) => update('endTime', event.target.value)} /></>}
             </div>
           </label>
         )}
 
         <label className="field">
           <span>Repeats</span>
-          <select
+          <select aria-label="Repeats"
             disabled={nested}
             value={draft.recurrence.frequency}
             onChange={(event) =>

@@ -715,6 +715,25 @@ final class PlannerUITests: XCTestCase {
         XCTAssertLessThanOrEqual(identifier.frame.maxX, app.windows.firstMatch.frame.maxX)
     }
 
+    func testEventEditorFitsPhoneWithKeyboard() {
+        let app = launch(focusZoom: true)
+        let create = app.webViews.buttons["Create"]
+        XCTAssertTrue(create.waitForExistence(timeout: 15)); create.tap()
+        let title = app.webViews.textFields["Add title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        title.tap(); title.typeText("Walk from basement laundry room to dorm — long event title")
+        XCTAssertTrue(app.staticTexts["Event editor fits viewport"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Viewport scale 1.00"].exists)
+        let close = app.webViews.buttons["Close"]
+        XCTAssertGreaterThanOrEqual(title.frame.minX, app.frame.minX)
+        XCTAssertLessThanOrEqual(close.frame.maxX, app.frame.maxX)
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Event editor with phone keyboard"; shot.lifetime = .keepAlways; add(shot)
+        let done = app.buttons["Done"].firstMatch
+        if done.exists { done.tap() }
+        XCTAssertTrue(app.staticTexts["Event editor fits viewport"].waitForExistence(timeout: 5))
+        close.tap()
+    }
+
     func testEditableFieldsKeepViewportScaleAfterFocusAndDismissal() {
         let app = launch(focusZoom: true)
         XCTAssertTrue(app.buttons["Calendar"].waitForExistence(timeout: 40))
