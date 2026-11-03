@@ -24,9 +24,9 @@
   const raw=typeof input==='string'?input:input.url;const url=new URL(raw,location.href);
   if(!url.pathname.startsWith('/api/'))return fetchReal(input,options);
   const path=url.pathname,method=options.method||'GET';let value={};
-  if(path==='/api/session')value={username:signedIn?'arin':null};
+  if(path==='/api/session')value={username:signedIn?'planner_test':null};
   else if(path==='/api/auth/options')value={googleEnabled:true,pendingGoogle:false};
-  else if(path==='/api/login'||path==='/api/register'){signedIn=true;value={username:'arin',token:'fixture-session'}}
+  else if(path==='/api/login'||path==='/api/register'){signedIn=true;value={username:'planner_test',token:'fixture-session'}}
   else if(path==='/api/logout'){signedIn=false;value={ok:true}}
   else if(path==='/api/calendar'){if(method==='PUT'){calendar={...JSON.parse(options.body),revision:calendar.revision+1};value={ok:true,revision:calendar.revision}}else value=calendar}
   else if(path==='/api/files'){if(method==='PUT'){files={...JSON.parse(options.body),revision:files.revision+1};value={ok:true,revision:files.revision}}else value=files}

@@ -16,6 +16,7 @@ export function getToken(): string | null {
 }
 
 export function setToken(token: string | null): void {
+  if(token!==getToken())calendarRevision=undefined
   if (token) localStorage.setItem(TOKEN_KEY, token)
   else {localStorage.removeItem(TOKEN_KEY);activateReplica(null)}
 }
@@ -37,6 +38,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw new Error('Could not reach the server. Check your connection and try again.')
   }
 
+  if(token!==getToken())throw new Error('Your account changed. Reload your current plan.')
   const data = (await response.json().catch(() => ({}))) as T & { error?: string }
   if (!response.ok) {
     throw new Error(data.error || 'Request failed')

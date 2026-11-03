@@ -133,6 +133,7 @@ export default function App() {
 
   return (
     <CalendarApp
+      key={username}
       username={username}
       onLogout={() => {
         void logout().finally(() => {

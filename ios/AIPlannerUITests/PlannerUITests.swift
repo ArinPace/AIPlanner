@@ -12,6 +12,18 @@ final class PlannerUITests: XCTestCase {
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = name; screenshot.lifetime = .keepAlways; add(screenshot)
     }
+    func testAccountLogoutClearsWidgets() {
+        let app = XCUIApplication()
+        app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"
+        app.launchArguments = ["-UITestFixture", "-UITestSignedIn", "-UITestWidgets"]
+        app.launch()
+        XCTAssertTrue(app.webViews.buttons["Agent"].waitForExistence(timeout: 15))
+        Thread.sleep(forTimeInterval: 3)
+        let logout = app.webViews.buttons["Log out"]
+        XCTAssertTrue(logout.waitForExistence(timeout: 5)); logout.tap()
+        XCTAssertTrue(app.webViews.textFields["Username or email"].waitForExistence(timeout: 10))
+        Thread.sleep(forTimeInterval: 2)
+    }
     func testTaskControlWidgetFlow() {
         let app = XCUIApplication()
         app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"

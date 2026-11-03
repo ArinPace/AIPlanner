@@ -2,12 +2,23 @@ import Foundation
 
 enum LocalReplicaStore {
     private static var file: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Planner Local Copy", isDirectory: true).appendingPathComponent("replica.json")
+        var directory = "Planner Local Copy"
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-UITestFixture") { directory = "Planner Test Copy" }
+        #endif
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(directory, isDirectory: true).appendingPathComponent("replica.json")
     }
     private static func load() -> [String: Any] {
         guard let data = try? Data(contentsOf: file), let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
         return value
+    }
+    static var containsLegacyFixture: Bool {
+        let parts = load()["parts"] as? [String: Any]
+        let calendar = parts?["calendar"] as? [String: Any]
+        let state = calendar?["data"] as? [String: Any]
+        let events = state?["events"] as? [[String: Any]] ?? []
+        return events.contains { $0["id"] as? String == "widget-test" }
     }
     @discardableResult static func activate(_ account: String?) throws -> Bool {
         let previous = load()["account"] as? String

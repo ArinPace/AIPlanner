@@ -6,6 +6,17 @@ struct PlannerWebView: UIViewRepresentable {
     @ObservedObject var model: PlannerModel
     func makeCoordinator() -> Coordinator { Coordinator(model: model) }
     func makeUIView(context: Context) -> WKWebView {
+        let source = AppConfiguration.origin.absoluteString
+        let previous = WidgetTaskControl.defaults.string(forKey: "widget-data-source")
+        let legacyFixture = LocalReplicaStore.containsLegacyFixture || WidgetTimeOverrides.load().values.contains { $0.task.sourceEventId == "widget-test" || $0.task.id.hasPrefix("widget-test@") }
+        if previous != nil && previous != source || legacyFixture {
+            WidgetTaskControl.clear()
+            WidgetTaskControl.defaults.removeObject(forKey: "feedback-account")
+            if legacyFixture { _ = try? LocalReplicaStore.activate(nil) }
+            _ = try? WidgetScheduleStore.save(.empty)
+            WidgetCenter.shared.reloadAllTimelines()
+        }
+        WidgetTaskControl.defaults.set(source, forKey: "widget-data-source")
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
         config.allowsInlineMediaPlayback = true
@@ -83,10 +94,12 @@ struct PlannerWebView: UIViewRepresentable {
                     switch action {
                     case "localReplicaAccount":
                         let account = body["account"] as? String
-                        if account != WidgetTaskControl.defaults.string(forKey: "feedback-account") { WidgetTaskControl.clear() }
+                        let changed = account != WidgetTaskControl.defaults.string(forKey: "feedback-account")
+                        if changed { WidgetTaskControl.clear() }
                         WidgetTaskControl.defaults.set(account, forKey: "feedback-account")
                         if account == nil { hideScreenTime() }
-                        if try LocalReplicaStore.activate(account) {
+                        let replicaChanged = try LocalReplicaStore.activate(account)
+                        if changed || replicaChanged {
                             WidgetTaskControl.clear()
                             try WidgetScheduleStore.save(.empty)
                             WidgetCenter.shared.reloadAllTimelines()
@@ -141,6 +154,7 @@ struct PlannerWebView: UIViewRepresentable {
                         return
                     case "reloadWidgets": WidgetCenter.shared.reloadAllTimelines()
                     case "widgetSchedule":
+                        guard let account = body["account"] as? String, account == WidgetTaskControl.defaults.string(forKey: "feedback-account") else { throw NativeError("Widget account changed. Refresh your current plan.") }
                         guard let payload = body["schedule"], JSONSerialization.isValidJSONObject(payload) else { throw NativeError("Missing widget schedule.") }
                         let data = try JSONSerialization.data(withJSONObject: payload)
                         guard data.count <= 2 * 1024 * 1024 else { throw NativeError("Widget schedule is too large.") }
