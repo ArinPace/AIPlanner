@@ -80,7 +80,7 @@ Environment=HOME=/var/lib/planner
 Environment=DISPLAY=:99
 Environment=PLAYWRIGHT_BROWSERS_PATH=/var/lib/planner/browsers
 Environment=PLANNER_DATA_DIR=/var/lib/planner
-ExecStart=/usr/bin/node /opt/planner/main.mjs
+ExecStart=/usr/bin/node /opt/planner/update-launcher.mjs
 Restart=on-failure
 RestartSec=10
 UMask=0077
