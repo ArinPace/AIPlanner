@@ -2,7 +2,7 @@ import {z} from 'zod'
 import {ApiError,body,db,json} from './cloud.js'
 import {storage} from './mcp-auth.js'
 import {googleCalendarStatus} from './agent.js'
-const fields='id,title,is_main,pinned,archived,deleted_at,created_at,updated_at'
+const fields='id,provider_url,title,is_main,pinned,archived,deleted_at,created_at,updated_at'
 async function owned(username:string,id:string){const chat=storage(await db().from('planner_subscription_chats').select(fields).eq('username',username).eq('id',id).maybeSingle());if(!chat)throw new ApiError(404,'Chat not found.');return chat}
 async function mainChat(username:string){
  const find=()=>db().from('planner_subscription_chats').select(fields).eq('username',username).eq('is_main',true).maybeSingle()
@@ -31,6 +31,12 @@ export async function handleSubscriptionChat(request:Request,username:string){
  if(typeof input.action==='string'&&['file_start','file_finish','file_download'].includes(input.action))return await (await import('./subscription-files.js')).subscriptionFileAction(username,input)
  // Never fall back to API-key billing, the Agent VM, or a browser extension.
  if(input.action==='send'||input.action==='connect')throw new ApiError(409,'ChatGPT subscription sign-in is not configured yet. Hosted access requires an approved Sign in with ChatGPT integration. Your draft has been kept.')
+ if(input.action==='relay_bind'){
+  const args=z.object({chatId:z.string().uuid(),url:z.string().regex(/^https:\/\/chatgpt\.com\/(?:g\/[A-Za-z0-9_-]+\/)?c\/[A-Za-z0-9_-]+$/)}).parse(input)
+  await owned(username,args.chatId)
+  storage(await db().from('planner_subscription_chats').update({provider_url:args.url}).eq('username',username).eq('id',args.chatId))
+  return json({ok:true})
+ }
  if(input.action==='relay_save'){
   const args=z.object({chatId:z.string().uuid(),turnId:z.string().uuid(),prompt:z.string().min(1).max(12000),reply:z.string().min(1).max(80000)}).parse(input)
   const chat=await owned(username,args.chatId)

@@ -31,6 +31,78 @@ final class PlannerUITests: XCTestCase {
         XCTAssertTrue(app.webViews.buttons["ChatGPT session"].waitForExistence(timeout: 5))
         app.terminate()
     }
+    func testPersistentMainLikeConversation() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
+        let app = XCUIApplication(); app.launch()
+        var planner = app.webViews["plannerWebView"]
+        XCTAssertTrue(planner.buttons["Chat"].waitForExistence(timeout: 20)); planner.buttons["Chat"].tap()
+        XCTAssertTrue(planner.buttons["New chat"].firstMatch.waitForExistence(timeout: 15)); planner.buttons["New chat"].firstMatch.tap()
+        let firstPrompt = "Remember code PERSIST-8821. Reply only ACK."
+        func send(_ text: String) {
+            let box = planner.textViews["Message ChatGPT"]
+            XCTAssertTrue(box.waitForExistence(timeout: 15))
+            expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: box); waitForExpectations(timeout: 30)
+            box.tap(); box.typeText(text)
+            let button = planner.buttons["Send message"]
+            expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: button); waitForExpectations(timeout: 15); button.tap()
+        }
+        func saved(_ count: Int) {
+            let copies = planner.buttons.matching(identifier: "Copy")
+            expectation(for: NSPredicate { _, _ in copies.count >= count }, evaluatedWith: app); waitForExpectations(timeout: 90)
+        }
+        send(firstPrompt); saved(2)
+        send("Which code did I ask you to remember? Reply with only that code."); saved(4)
+        let replies = planner.otherElements.matching(identifier: "Assistant message")
+        XCTAssertTrue(replies.element(boundBy: 1).staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "PERSIST-8821")).firstMatch.exists)
+        app.terminate(); app.launch(); planner = app.webViews["plannerWebView"]
+        XCTAssertTrue(planner.buttons["Chat"].waitForExistence(timeout: 20)); planner.buttons["Chat"].tap()
+        let show = planner.buttons["Show chat sidebar"]; if show.exists { show.tap() }
+        let existing = planner.buttons[firstPrompt]
+        XCTAssertTrue(existing.waitForExistence(timeout: 15)); existing.tap()
+        saved(4); send("Repeat the remembered code."); saved(6)
+        XCTAssertTrue(planner.otherElements.matching(identifier: "Assistant message").element(boundBy: 2).staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "PERSIST-8821")).firstMatch.exists)
+    }
+    func testNormalSessionDraftRecoveryAndReply() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
+        let app = XCUIApplication(); app.launch()
+        let planner = app.webViews["plannerWebView"]
+        XCTAssertTrue(planner.buttons["Chat"].waitForExistence(timeout: 20)); planner.buttons["Chat"].tap()
+        XCTAssertTrue(planner.buttons["ChatGPT session"].waitForExistence(timeout: 15)); planner.buttons["ChatGPT session"].tap()
+        XCTAssertTrue(app.webViews["chatGPTPortalWebView"].buttons["Log in"].waitForExistence(timeout: 30))
+        app.navigationBars.buttons["Planner"].tap()
+        planner.buttons["New chat"].firstMatch.tap()
+        let box = planner.textViews["Message ChatGPT"]
+        XCTAssertTrue(box.waitForExistence(timeout: 15))
+        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: box); waitForExpectations(timeout: 15)
+        box.tap(); box.typeText("Reply with exactly: NORMAL-RELAY-OK.")
+        let send = planner.buttons["Send message"]
+        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: send); waitForExpectations(timeout: 20)
+        send.tap()
+        let review = planner.buttons["Review ChatGPT draft"]
+        if review.waitForExistence(timeout: 5) {
+            review.tap()
+            XCTAssertTrue(planner.staticTexts["Reply with exactly: Planner relay works."].exists, "Never clear an unrelated draft")
+            planner.buttons["Clear ChatGPT draft"].tap(); send.tap()
+        }
+        XCTAssertTrue(planner.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "NORMAL-RELAY-OK")).firstMatch.waitForExistence(timeout: 90))
+        let copies = planner.buttons.matching(identifier: "Copy")
+        expectation(for: NSPredicate { _, _ in copies.count >= 2 }, evaluatedWith: app); waitForExpectations(timeout: 30)
+    }
+    func testRealGuestCSVFileRelay() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
+        let app = XCUIApplication(); app.launchArguments = ["-UITestGuestRelay", "-UITestRelayCSV"]; app.launch()
+        let planner = app.webViews["plannerWebView"]
+        XCTAssertTrue(planner.buttons["Chat"].waitForExistence(timeout: 20)); planner.buttons["Chat"].tap()
+        XCTAssertTrue(planner.buttons["ChatGPT session"].waitForExistence(timeout: 15)); planner.buttons["ChatGPT session"].tap()
+        XCTAssertTrue(app.webViews["chatGPTPortalWebView"].buttons["Log in"].waitForExistence(timeout: 30))
+        app.navigationBars.buttons["Planner"].tap(); planner.buttons["New chat"].firstMatch.tap()
+        planner.buttons["Attach CSV test"].tap()
+        XCTAssertTrue(planner.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "relay-check.csv")).firstMatch.waitForExistence(timeout: 15))
+        let box = planner.textViews["Message ChatGPT"]; box.tap(); box.typeText("Read the attached CSV and reply with the value in the relay row. Also provide a downloadable CSV copy.")
+        let send = planner.buttons["Send message"]
+        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: send); waitForExpectations(timeout: 20); send.tap()
+        XCTAssertTrue(planner.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "INPUT-7319")).firstMatch.waitForExistence(timeout: 120), "Website must read the bytes, not just accept a file selection")
+    }
     func testRealGuestChatGPTMessageRelay() throws {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1", "Opt in explicitly to a real website message test.")
         let app = XCUIApplication()
