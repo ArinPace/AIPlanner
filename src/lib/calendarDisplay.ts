@@ -1,4 +1,4 @@
-import type {Occurrence} from '../types'
+import type {Occurrence} from '../types.js'
 export type CalendarDisplay={week:boolean;month:boolean}
 export const defaultCalendarDisplay:CalendarDisplay={week:false,month:false}
 export function durationHeight(item:Occurrence,view:'week'|'month',zoom:number,dayStart:number,dayEnd:number):number|undefined{
