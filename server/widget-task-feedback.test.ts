@@ -80,3 +80,20 @@ test('shortening a class in a nested recurring folder preserves its commute, fol
  assert.equal(future.end.getTime(),Date.parse('2026-11-03T20:15:00Z'))
  assert.equal(resizeWidgetOccurrence(change.events,request).events,change.events)
 })
+
+
+test('widget gap adjustments become one real planned free-time event in the draft, with idempotent retries',()=>{
+ const future=event('next',{start:'2026-11-02T14:00:00.000Z',end:'2026-11-02T15:00:00.000Z'})
+ const request=feedback(event('gap'),{task:{id:'free-time:gap',title:'Free time',start:Date.parse('2026-11-02T13:00Z')/1000,end:Date.parse('2026-11-02T14:00Z')/1000},remainingMinutes:40})
+ const change=resizeWidgetOccurrence([future],request)
+ const free=change.events.find(e=>e.title==='Free time')!
+ assert.equal(change.result.applied,true)
+ assert.equal(free.end,'2026-11-02T14:10:00.000Z')
+ assert.equal(free.scheduleType,'planned')
+ assert.deepEqual(change.events.find(e=>e.id===future.id),future)
+ assert.equal(resizeWidgetOccurrence(change.events,request).events,change.events)
+ assert.equal(resizeWidgetOccurrence([event('busy')],request).result.applied,false)
+ assert.equal(resizeWidgetOccurrence([{...future,scheduleType:'fixed'}],request).result.applied,false)
+ const done=resizeWidgetOccurrence([], {...request,done:true,remainingMinutes:0})
+ assert.equal(done.events[0].end,'2026-11-02T13:30:00.000Z')
+})

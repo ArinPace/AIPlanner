@@ -36,16 +36,21 @@ struct WidgetSchedule: Codable, Equatable {
         guard time < validUntil else { return nil }
         // A later, shorter activity takes precedence when fixed events overlap.
         return events.filter { $0.start <= time && time < $0.end }.sorted {
+            if ($0.isFreeTime == true) != ($1.isFreeTime == true) { return $0.isFreeTime != true }
             if $0.start != $1.start { return $0.start > $1.start }
             if $0.end != $1.end { return $0.end < $1.end }
             return $0.id < $1.id
         }.first
+    }
+    func currentActivity(at date: Date) -> WidgetTask? {
+        current(at: date) ?? freeSlot(at: date)
     }
     func freeSlot(at date: Date) -> WidgetTask? {
         let time = date.timeIntervalSince1970
         guard generatedAt > 0, time >= generatedAt, time < validUntil else { return nil }
         let active = events.filter { $0.start <= time && time < $0.end }
         guard !active.contains(where: { $0.isFreeTime != true }) else { return nil }
+        if let explicit = current(at: date), explicit.isFreeTime == true { return explicit }
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "America/New_York")!
         let dayStart = calendar.startOfDay(for: date)
@@ -63,6 +68,12 @@ struct WidgetSchedule: Codable, Equatable {
         let time = now.timeIntervalSince1970
         let limit = min(validUntil, time + 86400)
         var times: [Double] = [validUntil]
+        // Empty days also have boundaries and countdown-format transitions.
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/New_York")!
+        if let midnight = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) {
+            times.append(contentsOf: [midnight.timeIntervalSince1970, midnight.timeIntervalSince1970 - 600 + 0.001, midnight.timeIntervalSince1970 - 3600 + 0.001, midnight.timeIntervalSince1970 - 36000 + 0.001])
+        }
         for event in events { times.append(contentsOf: [event.start, event.end, event.end - 600 + 0.001, event.end - 3600 + 0.001, event.end - 36000 + 0.001]) }
         let selected = Set(times).filter { $0 > time && $0 <= limit }.sorted().prefix(96)
         return selected.map { Date(timeIntervalSince1970: $0) }

@@ -62,7 +62,7 @@ test('staging is private to the owner, edits are isolated, conflicts require res
   assert(stage!.payload.calendar.resolvedWidgetFeedbackIds!.includes(widgetId))
   assert.equal((calendar.state as any).resolvedWidgetFeedbackIds,undefined)
   await assert.rejects(()=>requireNoWidgetDraft('owner'),/Keep live calendars unchanged/)
-  await assert.rejects(()=>editCalendarStage('owner',{id:fresh.id,version:fixed.version,removeIds:['class']}),/authorization/)
+  await assert.rejects(()=>editCalendarStage('owner',{id:fresh.id,version:fixed.version,removeIds:['class']}),/recurring event/)
   const result=await publishCalendarStage('owner',{id:fresh.id,version:fixed.version,reviewSummary:'Reviewed both calendars, recurring exceptions, and imported the verified location update.'})
   await assert.doesNotReject(()=>requireNoWidgetDraft('owner'))
   assert(calendar.state.resolvedWidgetFeedbackIds!.includes(widgetId));assert(!calendar.state.events.some(e=>e.id==='rest'))
@@ -71,6 +71,11 @@ test('staging is private to the owner, edits are isolated, conflicts require res
   assert.doesNotThrow(()=>assertStageEvent(stage!,'remote',remote))
   assert.throws(()=>assertStageEvent(stage!,'remote',{...remote,etag:'newer'}),/changed since review/)
   assert.throws(()=>assertStageEvent(stage!,'new-remote',{id:'new-remote',etag:'new'}),/changed since review/)
+  stage!.status='published' // Simulate the reviewed Google batch finishing before a new draft.
+  const cleanup=await prepareCalendarStage('owner',true)
+  await editCalendarStage('owner',{id:cleanup.id,version:cleanup.version,removeIds:['study'],removalScope:'series'})
+  assert(!stage!.payload.calendar.events.some(e=>e.id==='study'),'Non-break draft removal needs no userConfirmed flag')
+  assert(calendar.state.events.some(e=>e.id==='study'),'Draft cleanup still leaves the live calendar intact until publication')
  }finally{globalThis.fetch=original}
 })
 

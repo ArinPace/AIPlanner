@@ -38,7 +38,7 @@ enum WidgetTaskControl {
     static func displaySchedule() -> WidgetSchedule { WidgetTimeOverrides.applying(to: WidgetScheduleStore.load()) }
     static func currentTask(at date: Date) -> WidgetTask? {
         let schedule = displaySchedule()
-        return WidgetTimeOverrides.preferred(in: schedule, at: date) ?? schedule.current(at: date)
+        return WidgetTimeOverrides.preferred(in: schedule, at: date) ?? schedule.currentActivity(at: date)
     }
     static func clear() {
         WidgetFeedbackUpload.shared.cancelPending()

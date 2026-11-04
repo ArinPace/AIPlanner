@@ -38,11 +38,13 @@ final class PlannerUITests: XCTestCase {
         XCTAssertTrue(app.webViews.textFields["Username or email"].waitForExistence(timeout: 10))
         Thread.sleep(forTimeInterval: 2)
     }
-    func testTaskControlWidgetFlow() {
+    func testTaskControlWidgetFlow() { checkTaskControlWidgetFlow() }
+    func testFreeTimeControlWidgetFlow() { checkTaskControlWidgetFlow(freeTime: true) }
+    private func checkTaskControlWidgetFlow(freeTime: Bool = false) {
         let app = XCUIApplication()
         app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"
         app.launchEnvironment["AI_PLANNER_WIDGET_TEST_ORIGIN"] = "http://127.0.0.1:5199"
-        app.launchArguments = ["-UITestFixture", "-UITestSignedIn", "-UITestWidgets", "-UITestAtomicWidgetPlan"]
+        app.launchArguments = ["-UITestFixture", "-UITestSignedIn", "-UITestWidgets", "-UITestAtomicWidgetPlan"] + (freeTime ? ["-UITestFreeTime"] : [])
         app.launch()
         XCTAssertTrue(app.webViews.buttons["Agent"].waitForExistence(timeout: 15))
         Thread.sleep(forTimeInterval: 3)
@@ -85,6 +87,7 @@ final class PlannerUITests: XCTestCase {
         if !findWidgetPage("Increase task time") { addWidget("Task & Time") }
         if !findWidgetPage("Finish current task") { addWidget("Done") }
         XCTAssertTrue(findWidgetPage("Increase task time"))
+        if freeTime { XCTAssertTrue(home.staticTexts["Free time"].firstMatch.waitForExistence(timeout: 10)) }
         let plus = visibleButton("Increase task time")!
         let minus = visibleButton("Decrease task time")!
         let value = visibleButton("combinedTaskTimeValue")!
@@ -119,6 +122,11 @@ final class PlannerUITests: XCTestCase {
             let status = data.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
             XCTAssertEqual(status?["remainingMinutes"] as? Int, requested)
             XCTAssertEqual(status?["done"] as? Bool, false)
+            if freeTime {
+                let task = status?["task"] as? [String: Any]
+                XCTAssertEqual(task?["title"] as? String, "Free time")
+                XCTAssertTrue((task?["id"] as? String ?? "").hasPrefix("free-time:"))
+            }
             XCTAssertEqual(status?["deliveries"] as? Int, 1)
             if (status?["delayMs"] as? Int ?? 0) >= 20000 { XCTAssertEqual(status?["accepted"] as? Bool, false, "The widget must update before the server accepts the request") }
             received.fulfill()

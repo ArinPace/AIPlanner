@@ -5,7 +5,7 @@ import AppIntents
 struct PlannerEntry: TimelineEntry {
     let date: Date
     let schedule: WidgetSchedule
-    var task: WidgetTask? { WidgetTimeOverrides.preferred(in: schedule, at: date) ?? schedule.current(at: date) }
+    var task: WidgetTask? { WidgetTimeOverrides.preferred(in: schedule, at: date) ?? schedule.currentActivity(at: date) }
     var next: WidgetTask? { schedule.next(after: max(date, task?.startDate ?? date)) }
 }
 struct PlannerProvider: TimelineProvider {

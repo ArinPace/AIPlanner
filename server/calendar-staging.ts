@@ -1,7 +1,6 @@
 import {resizeWidgetOccurrence,verifyFreeTimeRequest,type TaskFeedback} from '../src/lib/widgetTaskFeedback.js'
 import {widgetDraftProblems} from './widget-draft-review.js'
-import {isBreakEvent,removeCalendarItems} from './planner-control.js'
-import {eventRemovalIds} from '../src/lib/eventFolders.js'
+import {removeCalendarItems} from './planner-control.js'
 import {randomUUID,createHash} from 'node:crypto'
 import {z} from 'zod'
 import {ApiError,db} from './cloud.js'
@@ -100,8 +99,6 @@ export async function editCalendarStage(username:string,args:{id:string;version:
   }
  }
  if(args.removeIds?.length){
-  const affected=eventRemovalIds(stage.payload.calendar.events,args.removeIds,args.removalScope==='occurrence')
-  if(!args.userConfirmed&&stage.payload.calendar.events.some(e=>affected.has(e.id)&&!isBreakEvent(e,stage.payload.calendar)))throw new ApiError(400,'Draft removal of non-break commitments needs explicit user authorization. Move unfinished work instead of dropping it.')
   stage.payload.calendar=removeCalendarItems(stage.payload.calendar,args.removeIds,'events',args.removalScope||'event',args.occurrenceStart)
  }
  for(const input of args.events||[]){

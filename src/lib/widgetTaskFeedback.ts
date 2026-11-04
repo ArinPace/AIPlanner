@@ -18,6 +18,18 @@ export function resizeWidgetOccurrence(events:CalendarEvent[], feedback:TaskFeed
  const deferred=(note:string)=>({events,result:{applied:false,note}})
  // A retry after a successful, but unacknowledged, recurring edit reuses its standalone occurrence.
  const source=events.find(e=>e.detachedFrom===id&&Date.parse(e.start)===startMs)||events.find(e=>e.id===id)
+ // Unscheduled free time has no saved source yet. Materialize it in the draft
+ // only after checking the original gap against the current calendar.
+ if(!source && task.id.startsWith('free-time:') && task.title === 'Free time'){
+  const existing=events.find(e=>e.id==='widget-free-time:'+feedback.id)
+  if(existing)return {events,result:{applied:true,eventId:existing.id,end:existing.end,note:'This free-time adjustment is already in the draft.'}}
+  const occupied=expandEvents(events,new PlannerDate(startMs),new PlannerDate(endMs)).some(o=>!o.event.allDay&&!o.event.reminder&&o.event.eventKind!=='folder'&&o.start.getTime()<endMs&&o.end.getTime()>startMs)
+  if(reportedAt*1000<startMs||reportedAt*1000>=endMs||occupied)return deferred('The free-time gap changed or ended. Reconcile against the latest schedule before reserving free time.')
+  const fixedConflict=expandEvents(events,new PlannerDate(startMs),new PlannerDate(Date.parse(target)+1)).some(o=>!o.event.allDay&&!o.event.reminder&&o.event.eventKind!=='folder'&&eventType(o.event,tags)==='fixed'&&o.start.getTime()<Date.parse(target)&&o.end.getTime()>startMs)
+  if(fixedConflict)return deferred('The requested free time overlaps a fixed commitment. Preserve it and reconcile the free-time request in the draft.')
+  const free:CalendarEvent={id:'widget-free-time:'+feedback.id,title:'Free time',description:'',start:new Date(startMs).toISOString(),end:target,allDay:false,scheduleType:'planned',tagIds:tags.filter(t=>/^breaks?$/i.test(t.name)).slice(0,1).map(t=>t.id),recurrence:{frequency:'none',interval:1,until:null}}
+  return {events:saveEventGroup(events,free),result:{applied:true,eventId:free.id,end:target,note:'Reserved the adjusted free-time gap as one planned Free time event in this draft. Reconcile downstream planned activities before publishing; do not check off any to-do item for free time.'}}
+ }
  if(!source||source.allDay||source.reminder||source.eventKind==='folder')return deferred('The original occurrence is no longer available. Reconcile this feedback against current calendar/history without guessing or changing the series.')
  const occurrences=expandEvents(events,new PlannerDate(startMs-1),new PlannerDate(Math.max(endMs,Date.parse(target))+1))
  const occurrence=occurrences.find(o=>o.event.id===source.id&&o.start.getTime()===startMs)

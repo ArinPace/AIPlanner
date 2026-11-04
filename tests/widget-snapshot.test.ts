@@ -26,3 +26,10 @@ test('task colours match the first calendar tag and update when that tag changes
  assert.equal(widgetSnapshot([task],now,[{id:'tag',name:'School',color:'#0b8043'}]).events[0].color,'#0b8043')
  assert.equal(widgetSnapshot([event('default')],now).events[0].color,'#1a73e8')
 })
+
+test('saved planned free time retains its occurrence identity and uses the same white widget appearance as a gap',()=>{
+ const snapshot=widgetSnapshot([event('free',{title:'Free time',scheduleType:'planned',tagIds:['break']})],now,[{id:'break',name:'Breaks',color:'#a78bfa'}])
+ assert.equal(snapshot.events[0].isFreeTime,true)
+ assert.equal(snapshot.events[0].color,'#ffffff')
+ assert.equal(snapshot.events[0].sourceEventId,'free')
+})

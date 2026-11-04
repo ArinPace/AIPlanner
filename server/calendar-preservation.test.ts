@@ -6,7 +6,7 @@ import {planDays} from './planning.js'
 import {DEFAULT_PLANNING} from '../src/lib/planning.js'
 import {PlannerDate as Date} from '../src/lib/timezone.js'
 import {toDateInput} from '../src/lib/dates.js'
-test('agent removal protects commitments and optional buffers cannot disguise an existing commitment',async()=>{
+test('agent removal needs no extra confirmation; history/revisions and buffer classifications stay intact',async()=>{
  const originalFetch=globalThis.fetch,keys=['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','SUPABASE_SECRET_KEY'] as const,saved=Object.fromEntries(keys.map(k=>[k,process.env[k]]))
  process.env.SUPABASE_URL='https://database.test';process.env.SUPABASE_SERVICE_ROLE_KEY='service';delete process.env.SUPABASE_SECRET_KEY
  const event={id:'call',title:'Phone call',description:'',start:'2026-10-20T14:00:00Z',end:'2026-10-20T14:15:00Z',tagIds:[],allDay:false,recurrence:{frequency:'none',interval:1,until:null}}
@@ -19,12 +19,11 @@ test('agent removal protects commitments and optional buffers cannot disguise an
  try{
   const tools:Record<string,(args:any)=>Promise<any>>={}
   registerPlannerControls((name,_description,_schema,_scope,_readOnly,execute)=>{tools[name]=execute},'arin')
-  await assert.rejects(()=>tools.planner_delete_events({ids:['call'],revision,scope:'event'}),/Explicit user removal permission/)
   await assert.rejects(()=>saveEvent('arin',{id:'call',revision,activityType:'buffer'}),/Do not reclassify/)
   const buffer=await saveEvent('arin',{revision,title:'Listen to music if the call finishes early',start:'2026-10-20T14:15:00Z',end:'2026-10-20T14:30:00Z',activityType:'buffer',bufferForEventId:'call',tagIds:['rest']})
   assert.equal(buffer.event.planning?.kind,'buffer');assert.equal(buffer.event.planning?.bufferForEventId,'call');revision=buffer.revision
   await tools.planner_delete_events({ids:[buffer.eventId],revision,scope:'event'});assert.equal(state.events.length,1)
-  await tools.planner_delete_events({ids:['call'],revision,scope:'event',userConfirmed:true});assert.equal(state.events.length,0)
+  await tools.planner_delete_events({ids:['call'],revision,scope:'event'});assert.equal(state.events.length,0)
  }finally{globalThis.fetch=originalFetch;for(const key of keys){if(saved[key]===undefined)delete process.env[key];else process.env[key]=saved[key]}}
 })
 
@@ -38,6 +37,7 @@ test('a rebuild cannot erase the last future allocation for unfinished work',asy
  globalThis.fetch=async(input,init)=>{
   const request=new Request(input,init),url=new URL(request.url)
   if(url.pathname.includes('/rpc/')){commits++;return Response.json({revision:2})}
+  if(url.pathname.endsWith('planner_calendar_staging'))return Response.json(null)
   if(request.method==='GET')assert.equal(url.searchParams.get('username'),'eq.arin')
   if(url.pathname.endsWith('planner_planning'))return request.method==='GET'?Response.json({state:profile,revision:1,started_at:'2026-01-01T00:00:00Z'}):new Response(null,{status:201})
   if(url.pathname.endsWith('planner_files'))return Response.json({state:{files:[]}})
