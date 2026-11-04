@@ -2,6 +2,7 @@ import SwiftUI
 import FamilyControls
 import ManagedSettings
 import DeviceActivity
+import Security
 
 @MainActor final class ScreenTimeModel: ObservableObject {
     @Published var selection = FamilyActivitySelection(includeEntireCategory: true)
@@ -121,6 +122,7 @@ struct ScreenTimeView: View {
                 if !model.authorized {
                     Section { Button("Allow Screen Time access") { Task { await model.authorize() } }.disabled(model.authorizing) }
                 }
+                NextDNSSection(account: WidgetTaskControl.defaults.string(forKey: "feedback-account") ?? "")
                 Section("Apps to block") {
                     Button("Choose apps") {
                         Task { if await model.authorize() { picker = true } }
@@ -269,6 +271,7 @@ struct TaskScreenTimeView: View {
                 if !authorization.authorized {
                     Section { Button("Allow Screen Time access") { Task { await authorization.authorize() } }.disabled(authorization.authorizing) }
                 }
+                NextDNSSection(account: account)
                 Section("Apps to block for this task") {
                     Button("Choose apps") { Task { if await authorization.authorize() { picker = true } } }.disabled(authorization.authorizing || ended)
                     Text("\(selection.applicationTokens.count) apps · \(selection.categoryTokens.count) categories · \(selection.webDomainTokens.count) websites").font(.footnote).foregroundStyle(.secondary)
@@ -303,5 +306,112 @@ struct TaskScreenTimeView: View {
                 try? await Task.sleep(for: .seconds(1))
             }
         }
+    }
+}
+
+// Keys stay in the device Keychain, isolated by Planner account. No cloud proxy.
+private enum NextDNSCredentials {
+    static func query(_ account: String) -> [String: Any] {
+        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "com.arinpace.aiplanner.nextdns", kSecAttrAccount as String: account]
+    }
+    static func load(_ account: String) -> String {
+        var q = query(account); q[kSecReturnData as String] = true
+        var value: CFTypeRef?
+        guard SecItemCopyMatching(q as CFDictionary, &value) == errSecSuccess, let data = value as? Data else { return "" }
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+    static func save(_ key: String, account: String) throws {
+        let q = query(account)
+        if key.isEmpty { SecItemDelete(q as CFDictionary); return }
+        let attributes: [String: Any] = [kSecValueData as String: Data(key.utf8), kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly]
+        var status = SecItemUpdate(q as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound { status = SecItemAdd(q.merging(attributes) { _, new in new } as CFDictionary, nil) }
+        guard status == errSecSuccess else { throw NSError(domain: "NextDNS Keychain", code: Int(status), userInfo: [NSLocalizedDescriptionKey: "Could not save the NextDNS key securely."]) }
+    }
+}
+private struct NextDNSSection: View {
+    let account: String
+    @State private var showing = false
+    var body: some View {
+        Section("Website blocking (optional)") {
+            Button("NextDNS website blocking") { showing = true }.disabled(account.isEmpty)
+            Text("Block domains using your NextDNS profile, alongside Apple Screen Time.").font(.footnote).foregroundStyle(.secondary)
+        }.sheet(isPresented: $showing) { NextDNSSettings(account: account).id(account) }
+    }
+}
+private struct NextDNSSettings: View {
+    let account: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var profile = ""
+    @State private var key = ""
+    @State private var domain = ""
+    @State private var domains: [String] = []
+    @State private var busy = false
+    @State private var message: String?
+    private var profileKey: String { "nextdns-profile:" + account }
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Connect NextDNS") {
+                    TextField("Configuration ID (6 characters)", text: $profile).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    SecureField("NextDNS API key", text: $key).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    Link("Find your API key", destination: URL(string: "https://my.nextdns.io/account")!)
+                    Button("Save and check connection") { run { _ = try await call(); try NextDNSCredentials.save(key, account: account); UserDefaults.standard.set(profile, forKey: profileKey); message = "API connected. Check device DNS separately below." } }
+                    Button("Forget connection", role: .destructive) { run { try NextDNSCredentials.save("", account: account); UserDefaults.standard.removeObject(forKey: profileKey); key = ""; profile = ""; domains = []; message = "Forgot connection. Existing NextDNS rules and installed DNS profile remain unchanged." } }
+                }
+                Section("Set up this iPhone") {
+                    Link("Install a NextDNS DNS profile", destination: URL(string: "https://apple.nextdns.io")!)
+                    Link("Check which DNS this device uses", destination: URL(string: "https://test.nextdns.io")!)
+                    Text("Install a profile with the same configuration ID. An API connection alone does not enable filtering. VPNs or other DNS settings can affect coverage.").font(.footnote)
+                }
+                Section("Blocked domains") {
+                    TextField("example.com", text: $domain).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
+                    Button("Block domain") { run {
+                        let value = domain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                        guard value.range(of: #"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$"#, options: .regularExpression) != nil else { throw failure("Enter a domain such as example.com, without a URL path.") }
+                        _ = try await call(method: "POST", payload: ["id": value, "active": true]); domain = ""; try await refresh()
+                    } }
+                    Button("Refresh blocked domains") { run { try await refresh() } }
+                    ForEach(domains, id: \.self) { name in
+                        HStack { Text(name); Spacer(); Button("Unblock") { run { _ = try await call(suffix: "/" + name, method: "DELETE"); try await refresh() } } }
+                    }
+                    Text("Changes affect every device using this configuration. Use a dedicated profile for this iPhone. These rules persist until unblocked; task timers and location rules do not automatically change NextDNS. DNS blocks domains, not individual pages, and cached connections may take time to stop.").font(.footnote).foregroundStyle(.secondary)
+                }
+                if busy { ProgressView() }
+                if let message { Section { Text(message).textSelection(.enabled) } }
+            }.disabled(busy)
+            .navigationTitle("NextDNS")
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() }.disabled(busy) } }
+        }.onAppear { profile = UserDefaults.standard.string(forKey: profileKey) ?? ""; key = NextDNSCredentials.load(account) }
+    }
+    private func failure(_ text: String) -> NSError { NSError(domain: "NextDNS", code: 1, userInfo: [NSLocalizedDescriptionKey: text]) }
+    private func run(_ operation: @escaping @MainActor () async throws -> Void) {
+        guard !busy else { return }; busy = true; message = nil
+        Task { defer { busy = false }; do { try await operation() } catch { message = error.localizedDescription } }
+    }
+    private func call(suffix: String = "", cursor: String? = nil, method: String = "GET", payload: [String: Any]? = nil) async throws -> [String: Any] {
+        guard profile.range(of: #"^[a-fA-F0-9]{6}$"#, options: .regularExpression) != nil, !key.isEmpty else { throw failure("Enter a valid configuration ID and API key.") }
+        var components = URLComponents(string: "https://api.nextdns.io/profiles/" + profile + "/denylist" + suffix)!
+        if let cursor { components.queryItems = [URLQueryItem(name: "cursor", value: cursor)] }
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = method; request.timeoutInterval = 25
+        request.setValue(key, forHTTPHeaderField: "X-Api-Key")
+        if let payload { request.httpBody = try JSONSerialization.data(withJSONObject: payload); request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else { throw failure("NextDNS request failed. Check the key, configuration ID and connection.") }
+        let result = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+        if let errors = result["errors"] as? [Any], !errors.isEmpty { throw failure("NextDNS rejected the change. Check the domain and profile permissions.") }
+        return result
+    }
+    private func refresh() async throws {
+        var cursor: String?; var loaded: [String] = []; var seen = Set<String>()
+        repeat {
+            let result = try await call(cursor: cursor)
+            loaded += ((result["data"] as? [[String: Any]]) ?? []).filter { $0["active"] as? Bool != false }.compactMap { $0["id"] as? String }
+            cursor = ((result["meta"] as? [String: Any])?["pagination"] as? [String: Any])?["cursor"] as? String
+            if let cursor, !seen.insert(cursor).inserted { throw failure("NextDNS pagination failed. Try refreshing again.") }
+        } while cursor != nil
+        domains = Array(Set(loaded)).sorted()
+        message = "Loaded blocked domains. Device filtering must be checked separately."
     }
 }
