@@ -41,3 +41,11 @@ test('one-item reads enforce owner, revision, collection and index without selec
   assert.equal(queries,2)
  }finally{globalThis.fetch=before;for(const key of keys){if(env[key]===undefined)delete process.env[key];else process.env[key]=env[key]}}
 })
+
+
+test('deployed API entry point forwards PATCH into authenticated handling',async()=>{
+ const {PATCH}=await import('../api/index.js')
+ const response=await PATCH(new Request('https://planner.test/api/files',{method:'PATCH',body:'{}'}))
+ assert.equal(response.status,401)
+ assert.match((await response.json()).error,/sign in/)
+})
