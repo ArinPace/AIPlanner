@@ -14,7 +14,7 @@ import type {CalendarEvent,StoredState} from '../src/types.js'
 
 const base='https://www.googleapis.com/calendar/v3/calendars/primary/events'
 type Remote=Record<string,any>
-export type Stage={username:string;id:string;version:number;base_revision:number;account_id:string;status:string;approved_revision:number|null;review_summary?:string;payload:{calendar:StoredState;google:{events:Remote[];mappings:Remote[];timeMin:string;timeMax:string};issues:{id:string;message:string}[];resolutions:Record<string,string>;widgetFeedback?:TaskFeedback[]}}
+export type Stage={username:string;id:string;version:number;base_revision:number;account_id:string;status:string;approved_revision:number|null;review_summary?:string;payload:{calendar:StoredState;google:{events:Remote[];mappings:Remote[];timeMin:string;timeMax:string};issues:{id:string;message:string}[];resolutions:Record<string,string>;googleDecisions?:Record<string,'restore'|'preserve_cancelled'>;widgetFeedback?:TaskFeedback[]}}
 export {STAGED_CALENDAR_RULES} from './calendar-staging-rules.js'
 export function sameGoogleEvent(a:Remote,b:Remote){
  const time=(v:any)=>v?.date|| (v?.dateTime?new Date(v.dateTime).toISOString():null)
@@ -72,7 +72,7 @@ export async function prepareCalendarStage(username:string,refresh=false){
  if(!storage(saved)?.length)throw new ApiError(409,'Staging changed while preparing. Read it again.')
  return stageSummary(stage)
 }
-function stageSummary(stage:Stage){return {id:stage.id,version:stage.version,status:stage.status,baseRevision:stage.base_revision,approvedRevision:stage.approved_revision,accountId:stage.account_id,issues:stage.payload.issues,resolutions:stage.payload.resolutions,calendarEvents:stage.payload.calendar.events.length,googleEvents:stage.payload.google.events.length,widgetFeedback:stage.payload.widgetFeedback||[],googleWindow:{timeMin:stage.payload.google.timeMin,timeMax:stage.payload.google.timeMax},coverage:'Google series/occurrences in the stated window plus every linked Google event; overlap hints cover base times only. Review recurrence and all sources explicitly.',download:'/api/calendar/staging.json'}}
+function stageSummary(stage:Stage){return {id:stage.id,version:stage.version,status:stage.status,baseRevision:stage.base_revision,approvedRevision:stage.approved_revision,accountId:stage.account_id,issues:stage.payload.issues,resolutions:stage.payload.resolutions,calendarEvents:stage.payload.calendar.events.length,googleEvents:stage.payload.google.events.length,widgetFeedback:stage.payload.widgetFeedback||[],googleDecisions:stage.payload.googleDecisions||{},googleWindow:{timeMin:stage.payload.google.timeMin,timeMax:stage.payload.google.timeMax},coverage:'Google series/occurrences in the stated window plus every linked Google event; overlap hints cover base times only. Review recurrence and all sources explicitly.',download:'/api/calendar/staging.json'}}
 export async function readCalendarStage(username:string,section='summary',offset=0,limit=100){
  const stage=await stagingRow(username);if(!stage)throw new ApiError(404,'Prepare a calendar draft first.')
  const items=section==='google'?stage.payload.google.events:stage.payload.calendar.events
@@ -80,7 +80,7 @@ export async function readCalendarStage(username:string,section='summary',offset
 }
 export const widgetFeedbackSchema=z.object({id:z.string().uuid(),task:z.object({id:z.string().min(1).max(500),title:z.string().max(300),start:z.number().finite(),end:z.number().finite(),planningTaskId:z.string().max(100).optional(),sourceEventId:z.string().max(100).optional()}),remainingMinutes:z.number().int().nonnegative(),done:z.boolean(),reportedAt:z.number().finite(),requestedEnd:z.number().finite().optional(),kind:z.literal('fillFreeTime').optional()})
 const draftPatch=z.object(eventPatch).omit({revision:true,activityType:true,bufferForEventId:true,planningLocked:true})
-export async function editCalendarStage(username:string,args:{id:string;version:number;events?:unknown[];widgetFeedback?:unknown;removeIds?:string[];removalScope?:'event'|'series'|'occurrence';occurrenceStart?:string;userConfirmed?:boolean;resolutions?:{issueId:string;decision:string}[]}){
+export async function editCalendarStage(username:string,args:{id:string;version:number;events?:unknown[];widgetFeedback?:unknown;removeIds?:string[];removalScope?:'event'|'series'|'occurrence';occurrenceStart?:string;userConfirmed?:boolean;resolutions?:{issueId:string;decision:string;googleAction?:'restore'|'preserve_cancelled'}[]}){
  const stage=await stagingRow(username)
  if(!stage||stage.id!==args.id||stage.version!==args.version||stage.status!=='draft')throw new ApiError(409,'Read the current staging ID/version before editing.')
  if((await calendarRow(username)).revision!==stage.base_revision)throw new ApiError(409,'Live calendar changed. Prepare a fresh draft.')
@@ -115,6 +115,11 @@ export async function editCalendarStage(username:string,args:{id:string;version:
  for(const issue of stageIssues(stage.payload.calendar,stage.payload.google))if(!stage.payload.issues.some(i=>i.id===issue.id))stage.payload.issues.push(issue)
  for(const resolution of args.resolutions||[]){
   if(!stage.payload.issues.some(i=>i.id===resolution.issueId)||resolution.decision.trim().length<10)throw new ApiError(400,'Provide a specific resolution for an existing issue.')
+  if(resolution.googleAction){
+   if(!resolution.issueId.startsWith('missing:'))throw new ApiError(400,'Google cancellation actions apply only to missing linked Google events.')
+   const decisions=stage.payload.googleDecisions||={}
+   decisions[resolution.issueId.slice('missing:'.length)]=resolution.googleAction
+  }
   stage.payload.resolutions[resolution.issueId]=resolution.decision.trim()
  }
  const saved=storage(await db().from('planner_calendar_staging').update({payload:stage.payload,version:stage.version+1,updated_at:new Date().toISOString()}).eq('username',username).eq('id',stage.id).eq('version',stage.version).eq('status','draft').select('id'))
@@ -126,6 +131,7 @@ export async function publishCalendarStage(username:string,args:{id:string;versi
  if(!stage||stage.id!==args.id||stage.version!==args.version||stage.status!=='draft')throw new ApiError(409,'Read the latest staging draft before publishing.')
  if(args.reviewSummary.trim().length<20)throw new ApiError(400,'Explain what you reviewed and reconciled.')
  if(stage.payload.issues.some(i=>!stage.payload.resolutions[i.id]))throw new ApiError(409,'Resolve every staging issue before publishing.')
+ for(const issue of stageIssues(stage.payload.calendar,stage.payload.google).filter(i=>i.id.startsWith('missing:')))if(!stage.payload.googleDecisions?.[issue.id.slice('missing:'.length)])throw new ApiError(409,'Choose resolutions.googleAction restore or preserve_cancelled for '+issue.id+' before publishing.')
  const current=await calendarRow(username)
  if(current.revision!==stage.base_revision)throw new ApiError(409,'Calendar changed. Prepare a fresh draft before publishing.')
  const problems=widgetDraftProblems(current.state,stage.payload.calendar,stage.payload.widgetFeedback||[])

@@ -22,7 +22,7 @@ test('queued Google export excludes planned work, deduplicates originals, retrie
  const keys=['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','SUPABASE_SECRET_KEY','CONNECTION_ENCRYPTION_KEY'] as const,env=Object.fromEntries(keys.map(k=>[k,process.env[k]])),originalFetch=globalThis.fetch
  process.env.SUPABASE_URL='https://fixed-sync.test';process.env.SUPABASE_SERVICE_ROLE_KEY='service';delete process.env.SUPABASE_SECRET_KEY;process.env.CONNECTION_ENCRYPTION_KEY='ab'.repeat(32)
  const accountId='ee34ba25-54bc-44df-8515-f7e6784dfed1',mappings:any[]=[],audits:any[]=[],remote=new Map<string,any>()
- let stageId=0
+ let stageId=0,cancellationDecisions:Record<string,string>={},staleStageWrites=0
  const reviewed=()=>{stageId++;return processFixedSync('owner')}
  let events=[event('class'),event('homework',{scheduleType:'planned'}),event('existing'),event('visual-folder',{eventKind:'folder'})],writes=0,deletes=0,canEdit=true,uncertain=false,lastQueue:any
  remote.set('original',{id:'original',etag:'v1',...fixedEventPayload(event('existing')),recurringEventId:'original-series',attendees:[{email:'friend@example.com'}]})
@@ -41,7 +41,7 @@ test('queued Google export excludes planned work, deduplicates originals, retrie
     if(method==='DELETE'){mappings.splice(mappings.findIndex(m=>'eq.'+m.local_id===url.searchParams.get('local_id')),1);return new Response(null,{status:204})}
    }
    if(url.pathname.endsWith('/planner_calendar_history')){const body=await request.json() as any;if(method==='POST'){audits.push(body);return reply({id:audits.length})}return new Response(null,{status:204})}
-   if(url.pathname.endsWith('/planner_calendar_staging')){if(method==='GET')return reply({id:'stage-'+stageId,status:'approved',approved_revision:10,account_id:accountId,payload:{google:{events:[...remote.values()]}}});return new Response(null,{status:204})}
+   if(url.pathname.endsWith('/planner_calendar_staging')){if(method==='GET')return reply({id:'stage-'+stageId,status:'approved',approved_revision:10,account_id:accountId,payload:{google:{events:[...remote.values()]},googleDecisions:cancellationDecisions,resolutions:Object.fromEntries(Object.keys(cancellationDecisions).map(id=>['missing:'+id,'Reviewed the cancellation and its intended disposition.']))}});const update=await request.json() as any;if(update.status==='stale')staleStageWrites++;return new Response(null,{status:204})}
    if(url.pathname.endsWith('/planner_google_fixed_sync')&&method==='GET')return reply([])
    if(url.pathname.endsWith('/planner_google_fixed_sync')){lastQueue=await request.json();return new Response(null,{status:204})}
   }
@@ -66,6 +66,16 @@ test('queued Google export excludes planned work, deduplicates originals, retrie
   await reviewed();assert.equal(writes,1);assert.equal(lastQueue.completed_revision,10)
   events=events.map(e=>e.id==='existing'?{...e,title:'Updated appointment'}:e)
   await reviewed();assert.equal(writes,2);assert.deepEqual(remote.get('original').attendees,[{email:'friend@example.com'}])
+  const ownId=fixedGoogleId('owner','class'),beforeCancellation=writes
+  remote.set(ownId,{...remote.get(ownId),status:'cancelled',etag:'cancelled-v1'})
+  const blocked=await reviewed()
+  assert.match(blocked.error!,/explicitly choose restore or preserve_cancelled/)
+  assert.equal(writes,beforeCancellation);assert.equal(lastQueue.reviewed_revision,-1);assert.equal(staleStageWrites,1,'A blocked cancellation must release the approved-stage deadlock for fresh review')
+  cancellationDecisions={class:'preserve_cancelled'}
+  await reviewed();assert.equal(writes,beforeCancellation);assert.equal(remote.get(ownId).status,'cancelled');assert.equal(lastQueue.completed_revision,10)
+  cancellationDecisions={class:'restore'}
+  await reviewed();assert.equal(writes,beforeCancellation+1);assert.equal(remote.get(ownId).status,'confirmed');assert.equal(remote.get(ownId).extendedProperties.private.aipLocalId,'class')
+  assert.equal(mappings.find(m=>m.local_id==='class').remote_id,ownId,'Restoration reuses the reviewed remote ID')
   events=events.map(e=>({...e,scheduleType:'planned'}))
   await reviewed();assert.equal(deletes,1);assert(remote.has('original'));assert.equal(mappings.length,0)
   canEdit=false;const before=writes;assert.match((await reviewed()).error!,/approve event editing/);assert.equal(writes,before)

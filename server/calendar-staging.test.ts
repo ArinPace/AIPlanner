@@ -76,6 +76,14 @@ test('staging is private to the owner, edits are isolated, conflicts require res
   await editCalendarStage('owner',{id:cleanup.id,version:cleanup.version,removeIds:['study'],removalScope:'series'})
   assert(!stage!.payload.calendar.events.some(e=>e.id==='study'),'Non-break draft removal needs no userConfirmed flag')
   assert(calendar.state.events.some(e=>e.id==='study'),'Draft cleanup still leaves the live calendar intact until publication')
+  ;(remote as Record<string,unknown>).status='cancelled'
+  const cancelled=await prepareCalendarStage('owner',true)
+  const acknowledged=await editCalendarStage('owner',{id:cancelled.id,version:cancelled.version,resolutions:[{issueId:'missing:class',decision:'Keep the historical remote cancellation and retain local history.'}]})
+  await assert.rejects(()=>publishCalendarStage('owner',{id:cancelled.id,version:acknowledged.version,reviewSummary:'Reviewed the historical cancellation without choosing resurrection.'}),/googleAction/)
+  const resolved=await editCalendarStage('owner',{id:cancelled.id,version:acknowledged.version,resolutions:[{issueId:'missing:class',decision:'Preserve the remote cancellation and retain this local event as history.',googleAction:'preserve_cancelled'}]})
+  assert.equal(stage!.payload.googleDecisions?.class,'preserve_cancelled')
+  await publishCalendarStage('owner',{id:cancelled.id,version:resolved.version,reviewSummary:'Reviewed the cancelled Google copy; preserve its cancellation without deleting local history.'})
+
  }finally{globalThis.fetch=original}
 })
 

@@ -8,9 +8,9 @@ import {fixedEventPayload,fixedEventPatch,fixedFingerprint,fixedGoogleId} from '
 
 const base='https://www.googleapis.com/calendar/v3/calendars/primary/events'
 export async function fixedSyncStatus(username:string){
- const [queue,accounts]=await Promise.all([db().from('planner_google_fixed_sync').select('requested_revision,completed_revision,reviewed_revision,error,synced_at').eq('username',username).maybeSingle(),googleCalendarStatus(username)])
+ const [queue,accounts,decisions]=await Promise.all([db().from('planner_google_fixed_sync').select('requested_revision,completed_revision,reviewed_revision,error,synced_at').eq('username',username).maybeSingle(),googleCalendarStatus(username),db().from('planner_calendar_staging').select('decisions:payload->googleDecisions').eq('username',username).maybeSingle()])
  const selected=accounts.accounts.find(a=>a.id===accounts.activeAccountId),state=storage(queue)
- return {reviewRequired:Boolean(state&&state.requested_revision!==state.reviewed_revision),connected:Boolean(selected?.canEdit),identity:selected?.identity||null,accountId:selected?.id||null,pending:Boolean(state&&state.requested_revision>state.completed_revision),error:state?.error||(!selected?'Connect Google Calendar in Add sites.':!selected.canEdit?'Reconnect Google Calendar and approve event editing.':null),syncedAt:state?.synced_at||null}
+ return {reviewRequired:Boolean(state&&state.requested_revision!==state.reviewed_revision),connected:Boolean(selected?.canEdit),identity:selected?.identity||null,accountId:selected?.id||null,pending:Boolean(state&&state.requested_revision>state.completed_revision),error:state?.error||(!selected?'Connect Google Calendar in Add sites.':!selected.canEdit?'Reconnect Google Calendar and approve event editing.':null),syncedAt:state?.synced_at||null,preservedCancelled:Object.entries((storage(decisions) as any)?.decisions||{}).filter(([,action])=>action==='preserve_cancelled').map(([id])=>id)}
 }
 export async function enqueueFixedSync(username:string){
  const row=await calendarRow(username)
@@ -27,7 +27,7 @@ export async function processFixedSync(onlyUsername?:string){
   const session=await googleCalendarSession(username,undefined,true),row=await calendarRow(username)
   const stage=await stagingRow(username)
   if(!stage||stage.status!=='approved'||stage.approved_revision!==row.revision||stage.account_id!==session.accountId)throw new ApiError(409,'A fresh agent-reviewed calendar draft is required before Google writes.')
-  const ensureCurrent=async()=>{if((await calendarRow(username)).revision!==stage.approved_revision)throw new ApiError(409,'Planner changed during publishing. Review a fresh draft before continuing.')}
+  const ensureCurrent=async()=>{if(storage(await db().from('planner_calendars').select('revision').eq('username',username).single()).revision!==stage.approved_revision)throw new ApiError(409,'Planner changed during publishing. Review a fresh draft before continuing.')}
   const mappings=storage(await db().from('planner_google_fixed_events').select('*').eq('username',username).eq('account_id',session.accountId))
   const fixed=row.state.events.filter(e=>e.eventKind!=='folder'&&eventType(e,row.state.tags)==='fixed'),ids=new Set(fixed.map(e=>e.id))
   const headers={Authorization:'Bearer '+session.tokens.access_token,'Content-Type':'application/json'}
@@ -54,20 +54,27 @@ export async function processFixedSync(onlyUsername?:string){
    assertStageEvent(stage,before?.id||id,before)
    await ensureCurrent()
    if(before&&before.status!=='cancelled'&&sameGoogleEvent(payload,before)){await persist(event.id,before.id,managed,fingerprint,before.etag);processed++;continue}
-   if(before?.status==='cancelled')throw Error('A linked Google event was cancelled. Review the fixed event before restoring it.')
-   if(before&&managed&&before.extendedProperties?.private?.aipLocalId!==event.id)throw Error('Google event ownership could not be verified; no event was overwritten.')
+   const cancelled=before?.status==='cancelled'||Boolean(mapping&&!before)
+   const cancellationAction=stage.payload.googleDecisions?.[event.id]
+   if(cancelled){
+    if(!cancellationAction||!stage.payload.resolutions?.['missing:'+event.id])throw new ApiError(409,'A linked Google event is missing/cancelled. Prepare a fresh draft and explicitly choose restore or preserve_cancelled for missing:'+event.id+'.')
+    if(cancellationAction==='preserve_cancelled'){
+     await persist(event.id,mapping?.remote_id||id,managed,fingerprint,before?.etag);processed++;continue
+    }
+   }
+   if(before&&!cancelled&&managed&&before.extendedProperties?.private?.aipLocalId!==event.id)throw new ApiError(409,'Google event ownership could not be verified; prepare a fresh review. No event was overwritten.')
    if(mapping&&!before){managed=true;/* Recreate under the stable app-owned ID, never another account's event ID. */}
    const remoteId=before?.id||fixedGoogleId(username,event.id)
-   const body:Record<string,any>={...fixedEventPatch(payload,before),...(!before?{id:remoteId,extendedProperties:{private:{aipLocalId:event.id}}}:{})}
+   const body:Record<string,any>={...fixedEventPatch(payload,before),...(before?.status==='cancelled'?{status:'confirmed',...(managed?{extendedProperties:{...(before.extendedProperties||{}),private:{...(before.extendedProperties?.private||{}),aipLocalId:event.id}}}:{})}:{}),...(!before?{id:remoteId,extendedProperties:{private:{aipLocalId:event.id}}}:{})}
    if(before?.recurringEventId){
-    if(payload.recurrence.length)throw Error('This Google event is one occurrence of a series. Review series scope before turning it into a new recurring event.')
+    if(payload.recurrence.length)throw new ApiError(409,'This Google event is one occurrence of a series. Review series scope before turning it into a new recurring event.')
     delete body.recurrence // Google occurrence edits must preserve the parent series.
    }
    const audit=await backup(remoteId,before,body,'google-sync-pending')
    const response=await call(base+(before?'/'+encodeURIComponent(remoteId):'')+'?sendUpdates=none',{method:before?'PATCH':'POST',headers:before?{'If-Match':before.etag}:{},body:JSON.stringify(body)})
    if(!response.ok)throw Error('Google event is no longer available; sync will retry.')
    const after=await read(remoteId)
-   if(!after)throw Error('Google write could not be verified; sync will reconcile by its stable ID.')
+   if(!after||after.status==='cancelled')throw Error('Google write could not be verified; sync will reconcile by its stable ID.')
    storage(await db().from('planner_calendar_history').update({kind:'google-synced',after}).eq('username',username).eq('id',audit.id))
    await persist(event.id,remoteId,managed,fingerprint,after.etag);processed++
   }
@@ -75,7 +82,7 @@ export async function processFixedSync(onlyUsername?:string){
    if(processed>=12||Date.now()>deadline-3000){unfinished=true;break}
    // Never delete an original Google event adopted during deduplication.
    if(mapping.managed){const before=await read(mapping.remote_id);assertStageEvent(stage,mapping.remote_id,before);await ensureCurrent();if(before&&before.status!=='cancelled'){
-    if(before.extendedProperties?.private?.aipLocalId!==mapping.local_id)throw Error('Google mirror ownership changed; review it before removing.')
+    if(before.extendedProperties?.private?.aipLocalId!==mapping.local_id)throw new ApiError(409,'Google mirror ownership changed; review it before removing.')
     const audit=await backup(mapping.remote_id,before,null,'google-sync-removal-pending')
     await call(base+'/'+encodeURIComponent(mapping.remote_id)+'?sendUpdates=none',{method:'DELETE',headers:{'If-Match':before.etag}})
     storage(await db().from('planner_calendar_history').update({kind:'google-sync-removed'}).eq('username',username).eq('id',audit.id))
