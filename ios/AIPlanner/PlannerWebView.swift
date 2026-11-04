@@ -118,6 +118,7 @@ struct PlannerWebView: UIViewRepresentable {
             controller?.view.layoutIfNeeded()
             (controller as? PlannerChatGPTPortal)?.setInteractive(false)
         }
+        var relayOperationActive = false
         var screenTimeHost: UIHostingController<ScreenTimeView>?
         weak var taskScreenTimeHost: UIViewController?
         func hideScreenTime() {
@@ -179,22 +180,23 @@ struct PlannerWebView: UIViewRepresentable {
                         if action == "chatGPTRelayStatus" {
                             if !controller.documentCommitted && controller.pendingChat == nil && chatGPTPortal?.presentingViewController == nil { attachRelayForRun() }
                             var state = try await controller.relayStatus(); state["chatId"] = controller.loadedChat
-                            if (state["ready"] as? Bool == true && controller.pendingChat == nil) || state["phase"] as? String == "completed" || state["phase"] as? String == "attention" { parkRelay() }
+                            if !relayOperationActive && ((state["ready"] as? Bool == true && controller.pendingChat == nil) || state["phase"] as? String == "completed" || state["phase"] as? String == "attention") { parkRelay() }
                             replyHandler(state, nil); return
                         }
                         if action == "chatGPTRelayDraft" { replyHandler(try await controller.inspectDraft(), nil); return }
                         if action == "chatGPTRelayClearDraft" {
                             guard let expected = body["expected"] as? String else { throw NativeError("Read the draft before clearing it.") }
-                            attachRelayForRun(); defer { parkRelay() }
+                            relayOperationActive = true; attachRelayForRun(); defer { relayOperationActive = false; parkRelay() }
                             try await controller.clearDraft(expected: expected); replyHandler(["ok": true], nil); return
                         }
                         if action == "chatGPTRelayDownload" {
                             guard let key = body["key"] as? String, UUID(uuidString: key) != nil else { throw NativeError("Choose a response file.") }
-                            attachRelayForRun(); defer { parkRelay() }
+                            relayOperationActive = true; attachRelayForRun(); defer { relayOperationActive = false; parkRelay() }
                             replyHandler(try await controller.downloadResponse(key: key), nil); return
                         }
                         if action == "chatGPTRelaySend" {
                             guard let text = body["text"] as? String, let chatId = body["chatId"] as? String, UUID(uuidString: chatId) != nil, !text.isEmpty, text.count <= 40000 else { throw NativeError("Choose a chat and enter a message.") }
+                            relayOperationActive = true; defer { relayOperationActive = false }
                             attachRelayForRun()
                             do { try await controller.send(text: text, chatId: chatId, files: body["files"] as? [[String: Any]] ?? [], providerURL: body["url"] as? String, context: body["context"] as? String ?? "") } catch { parkRelay(); throw error }
                             replyHandler(["ok": true], nil); return
