@@ -1,3 +1,4 @@
+import {eventType} from './eventType.js'
 import type { CalendarEvent, Tag } from '../types.js'
 
 export const TAG_COLORS = [
@@ -29,6 +30,7 @@ export function nextTagColor(existing: Tag[]): string {
 }
 
 export function eventColor(event: CalendarEvent, tags: Tag[]): string {
+  if(event.title.trim().toLowerCase()==='free time'&&eventType(event,tags)==='planned')return '#ffffff'
   for (const tagId of event.tagIds) {
     const tag = tags.find((item) => item.id === tagId)
     if (tag) return tag.color
