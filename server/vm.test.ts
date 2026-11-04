@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto'
 import { hostOnline, safeWorkerStatus, safeDeviceAuthorization, uuid, vmMessage } from './vm-validation.js'
 import { sealVmCredential, openVmCredential } from './vm-vault.js'
 import { handleCloudRequest } from './cloud.js'
-import { scheduleSlot, shouldRunVm, validateSchedule } from './vm-power.js'
+import { scheduleSlot, shouldRunVm, validateSchedule, scheduledReviewMessage } from './vm-power.js'
 
 test('offline-user schedules wake only around New York slots, then stop after the slot completes', () => {
   const now = new Date('2026-10-15T10:59:00Z')
@@ -80,4 +80,15 @@ test('queued messages wake the VM, but a paused task holds its own queue',()=>{
  assert.equal(shouldRunVm({scheduled:false,jobs:[waiting]}),true)
  assert.equal(shouldRunVm({scheduled:false,jobs:[waiting,{kind:'chat',status:'paused',chat_id:'chat'}]}),false)
  assert.equal(shouldRunVm({scheduled:false,jobs:[waiting,{kind:'chat',status:'paused',chat_id:'other'}]}),true)
+})
+
+
+test('scheduled review is an execute-now request around saved instructions and requires evidence of work',()=>{
+ const message=scheduledReviewMessage({timezone:'America/New_York',times:['07:00'],instructions:'Review my enabled course sources.'})
+ assert(message.startsWith('RUN THE SCHEDULED PLANNER REVIEW NOW.'))
+ assert(message.includes('Saved review instructions:\nReview my enabled course sources.'))
+ assert(message.lastIndexOf('Execute this review now.')>message.indexOf('Saved review instructions:'))
+ assert(message.includes('sources actually checked and coverage'))
+ assert(message.includes('An acknowledgement or promise of future action is not a completed review.'))
+ assert(message.includes('never imply unperformed checks succeeded'))
 })
