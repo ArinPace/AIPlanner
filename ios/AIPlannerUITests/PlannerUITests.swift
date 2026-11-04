@@ -96,6 +96,9 @@ final class PlannerUITests: XCTestCase {
         XCTAssertTrue(planner.buttons["ChatGPT session"].waitForExistence(timeout: 15)); planner.buttons["ChatGPT session"].tap()
         XCTAssertTrue(app.webViews["chatGPTPortalWebView"].buttons["Log in"].waitForExistence(timeout: 30))
         app.navigationBars.buttons["Planner"].tap(); planner.buttons["New chat"].firstMatch.tap()
+        let attach = planner.buttons["Add images or files"]
+        XCTAssertTrue(attach.waitForExistence(timeout: 15))
+        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: attach); waitForExpectations(timeout: 15)
         planner.buttons["Attach CSV test"].tap()
         XCTAssertTrue(planner.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "relay-check.csv")).firstMatch.waitForExistence(timeout: 15))
         let box = planner.textViews["Message ChatGPT"]; box.tap(); box.typeText("Read the attached CSV and reply with the value in the relay row. Also provide a downloadable CSV copy.")
