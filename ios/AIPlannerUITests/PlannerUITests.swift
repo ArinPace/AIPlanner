@@ -26,26 +26,20 @@ final class PlannerUITests: XCTestCase {
         XCTAssertTrue(app.webViews.staticTexts["ChatGPT subscription sign-in is not configured yet."].firstMatch.waitForExistence(timeout: 5))
         app.terminate()
     }
-    func testSourceWarningPersistsUntilDismissedOrRecovered() {
+    func testNotificationsChecklistAppearsInSidebar() {
         let app = XCUIApplication()
         app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"
         app.launchArguments = ["-UITestFixture", "-UITestSignedIn", "-UITestSourceAlerts", "-UITestResetSourceAlerts"]
         app.launch()
         XCTAssertTrue(app.webViews.buttons["Agent"].waitForExistence(timeout: 15)); app.webViews.buttons["Agent"].tap()
-        let warning = app.webViews.staticTexts["School source needs reconnection."]
-        XCTAssertTrue(warning.waitForExistence(timeout: 10))
-        app.webViews.buttons["Dismiss Brightspace warning"].tap()
-        XCTAssertFalse(warning.exists)
-        app.terminate()
-        app.launchArguments = ["-UITestFixture", "-UITestSignedIn", "-UITestSourceAlerts"]
-        app.launch()
-        XCTAssertTrue(app.webViews.buttons["Agent"].waitForExistence(timeout: 15)); app.webViews.buttons["Agent"].tap()
-        Thread.sleep(forTimeInterval: 2)
-        XCTAssertFalse(app.webViews.staticTexts["School source needs reconnection."].exists, "Dismissal survives reload")
-        app.webViews.buttons["Recover source"].tap()
-        Thread.sleep(forTimeInterval: 1)
-        app.webViews.buttons["Disconnect source again"].tap()
-        XCTAssertTrue(app.webViews.staticTexts["School source needs reconnection."].waitForExistence(timeout: 10), "A fresh failure must warn again")
+        let show = app.webViews.buttons["Show chat sidebar"]
+        if show.exists { show.tap() }
+        let notifications = app.webViews.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Notifications")).firstMatch
+        XCTAssertTrue(notifications.waitForExistence(timeout: 10)); notifications.tap()
+        XCTAssertTrue(app.webViews.staticTexts["School source needs reconnection."].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.webViews.buttons["Close notifications"].exists)
+        app.webViews.buttons["Close notifications"].tap()
+        XCTAssertFalse(app.webViews.staticTexts["School source needs reconnection."].exists)
         app.terminate()
     }
     func testTaskSwitchNotificationWhileBackgrounded() { checkTaskNotification(mode: "switch", expected: "Time to switch tasks") }

@@ -54,7 +54,7 @@
   }
  });
  let sourceIssues=globalThis.__plannerFixtureSourceAlerts?[{id:'fixture-source-1',source:'brightspace',title:'Brightspace',message:'School source needs reconnection.'}]:[];
- if(globalThis.__plannerFixtureResetSourceAlerts)localStorage.removeItem('planner-dismissed-source-issues:planner_test');
+ if(globalThis.__plannerFixtureResetSourceAlerts){localStorage.removeItem('planner-dismissed-source-issues:planner_test');localStorage.removeItem('fixture-notifications')}
  if(globalThis.__plannerFixtureSourceAlerts)document.addEventListener('DOMContentLoaded',()=>{
   for(const [name,id] of [['Recover source',null],['Disconnect source again','fixture-source-2']]){
    const button=document.createElement('button');button.textContent=name;button.style.cssText='position:fixed;bottom:'+(id?80:120)+'px;right:0;background:white;color:black;z-index:10000';
@@ -81,7 +81,7 @@
    }else value={chat:subscriptionChats.find(c=>c.id===url.searchParams.get('chat'))||subscriptionMain,chats:subscriptionChats,messages:[],hasOlder:false,sources:[],google:{accounts:[],connected:false,activeAccountId:null},connection:{provider:'chatgpt-subscription',connected:false,state:'setup_required',message:'ChatGPT subscription sign-in is not configured yet.'}};
   }
   else if(path==='/api/agent/instructions')value={content:'',revision:0,updatedAt:now};
-  else if(path==='/api/agent/notifications'){const stored=JSON.parse(localStorage.getItem('fixture-notifications')||'null')||[{id:'fixture-source',title:'Brightspace',message:'Reconnect this source.',kind:'source',active:true,checked:false,created_at:new Date().toISOString()}];if(method==='PATCH'){const input=JSON.parse(options.body);stored.forEach(item=>{if(item.id===input.id)item.checked=input.checked});localStorage.setItem('fixture-notifications',JSON.stringify(stored));value={ok:true}}else value={items:stored}}
+  else if(path==='/api/agent/notifications'){const stored=JSON.parse(localStorage.getItem('fixture-notifications')||'null')||[{id:'fixture-source',title:'Brightspace',message:'Reconnect this source.',kind:'source',active:true,checked:false,created_at:new Date().toISOString()}];if(method==='PATCH'){const input=JSON.parse(options.body);stored.forEach(item=>{if(item.id===input.id)item.checked=input.checked});localStorage.setItem('fixture-notifications',JSON.stringify(stored));value={ok:true}}else {if(globalThis.__plannerFixtureSourceAlerts){for(const issue of sourceIssues)if(!stored.some(item=>item.id===issue.id))stored.push({...issue,kind:'source',checked:false,created_at:new Date().toISOString()});stored.forEach(item=>{item.active=sourceIssues.some(issue=>issue.id===item.id)});localStorage.setItem('fixture-notifications',JSON.stringify(stored))}value={items:stored}}}
   else if(path==='/api/calendar/google-accounts')value={connected:true,activeAccountId:'fixture-google',accounts:[{id:'fixture-google',identity:'arin@example.com',connected:true,canEdit:true,readEnabled:true}]}
   else if(path==='/api/sources/status')value={issues:sourceIssues,checkedAt:new Date().toISOString()};
   else if(path==='/api/notifications'){if(method==='PUT')notificationSettings=JSON.parse(options.body);value=notificationSettings}
