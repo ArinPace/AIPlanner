@@ -1,3 +1,4 @@
+import {prepareRelayFile,storeRelayFile,relayFileLink,downloadRelayFile,RELAY_BATCH_MAX,type RelayFile} from '../lib/relayFiles'
 import {nativeRequest} from '../lib/platform'
 import {useCallback,useEffect,useRef,useState} from 'react'
 import {subscriptionChatRequest} from '../lib/api'
@@ -6,9 +7,7 @@ import {VM_SOURCES} from '../lib/vm'
 import type {SubscriptionChat,SubscriptionWorkspace} from '../lib/subscriptionChat'
 import {CloseIcon,MenuIcon,PlusIcon,SettingsIcon} from './Icons'
 import {ChatMarkdown} from './ChatMarkdown'
-import {AttachButton,ChatAttachments} from './ChatAttachments'
-import {prepareAttachment} from '../lib/prepareAttachments'
-import {ATTACHMENT_LIMIT,type ChatAttachment} from '../lib/chatAttachments'
+import {AttachButton} from './ChatAttachments'
 import {DictationButton} from './DictationButton'
 import {RenameDialog} from './RenameDialog'
 import {AgentInstructions} from './AgentInstructions'
@@ -18,8 +17,8 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
  const [workspace,setWorkspace]=useState<SubscriptionWorkspace|null>(null),[chatId,setChatId]=useState<string|null>(null)
  const selected=useRef<string|null>(null),epoch=useRef(0),alive=useRef(true)
  const native=Boolean(window.plannerNativeChatGPTPortal)
- const [relayReady,setRelayReady]=useState(false),[relayPrompt,setRelayPrompt]=useState(''),[relayText,setRelayText]=useState(''),[relayPhase,setRelayPhase]=useState('')
- type Recovery={chatId:string;turnId:string;prompt:string;reply:string}
+ const [relayReady,setRelayReady]=useState(false),[relayPrompt,setRelayPrompt]=useState(''),[relayText,setRelayText]=useState(''),[relayPhase,setRelayPhase]=useState(''),[remoteDraft,setRemoteDraft]=useState<string|null>(null)
+ type Recovery={chatId:string;turnId:string;prompt:string;reply:string;outputs?:{key:string;name:string}[]}
  const recoveryKey='planner-relay-recovery:'+username
  const [recovery,setRecovery]=useState<Recovery|null>(()=>{try{return JSON.parse(localStorage.getItem(recoveryKey)||'null')}catch{return null}})
  const cancelRelay=useRef(false)
@@ -27,7 +26,7 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
  const {message,setMessage,selectDraft}=useChatDraft('subscription:'+username)
  const [error,setError]=useState(''),[busy,setBusy]=useState(false),[loading,setLoading]=useState(false),[older,setOlder]=useState(false)
  const [panel,setPanel]=useState<'connections'|'settings'|null>(null),[filter,setFilter]=useState<'active'|'archived'|'bin'>('active')
- const [rename,setRename]=useState<SubscriptionChat|null>(null),[attachments,setAttachments]=useState<ChatAttachment[]>([]),[preparing,setPreparing]=useState(false),[dictating,setDictating]=useState(false)
+ const [rename,setRename]=useState<SubscriptionChat|null>(null),[attachments,setAttachments]=useState<RelayFile[]>([]),[preparing,setPreparing]=useState(false),[dictating,setDictating]=useState(false)
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;epoch.current++}},[])
  useEffect(()=>{if(!panel)return;const key=(e:KeyboardEvent)=>{if(e.key==='Escape')setPanel(null)};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)},[panel])
  const refresh=useCallback(async(id=selected.current)=>{
@@ -60,38 +59,54 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
  }
  async function connect(){setError('');try{if(window.plannerNativeChatGPTPortal){await nativeRequest({action:'chatGPTPortal',account:username});return}await subscriptionChatRequest(undefined,{action:'connect'})}catch(e){setError(e instanceof Error?e.message:'Could not connect ChatGPT.')}}
  async function saveReply(value:Recovery){
-  await subscriptionChatRequest(undefined,{action:'relay_save',...value})
-  localStorage.removeItem(recoveryKey);setRecovery(null);if(selected.current===value.chatId)setMessage(current=>current.trim()===value.prompt?'':current);await refresh(value.chatId)
+  while(value.outputs?.length){
+   const output=value.outputs[0];setRelayPhase('Downloading '+output.name+'…')
+   const file=await nativeRequest<Omit<RelayFile,'id'>>({action:'chatGPTRelayDownload',account:username,key:output.key})
+   const received={...file,id:crypto.randomUUID()},id=await storeRelayFile(value.chatId,received)
+   value={...value,reply:value.reply+'\n\n'+relayFileLink(received.name,id),outputs:value.outputs.slice(1)}
+   setRecovery(value);try{localStorage.setItem(recoveryKey,JSON.stringify(value))}catch{/* Keep in-memory recovery. */}
+  }
+  if(!value.reply.trim())throw Error('No readable response or completed file download was received.')
+  await subscriptionChatRequest(undefined,{action:'relay_save',chatId:value.chatId,turnId:value.turnId,prompt:value.prompt,reply:value.reply})
+  localStorage.removeItem(recoveryKey);setRecovery(null);if(selected.current===value.chatId)setMessage('');setAttachments([]);await refresh(value.chatId)
  }
  async function send(){
   if(!native){await connect();return}
-  const prompt=message.trim(),id=chatId
+  const prompt=message.trim()||(attachments.length?'Please review the attached files.':''),id=chatId
   if(!prompt||!id||busy||recovery)return
-  if(attachments.length){setError('File forwarding is not verified yet. Remove attachments before testing text.');return}
+  if(attachments.length&&(window.plannerNativeChatGPTRelayVersion||0)<2){setError('Update the iPhone app to enable file forwarding.');return}
   setBusy(true);setError('');setRelayPrompt(prompt);setRelayText('');setRelayPhase('Connecting…');cancelRelay.current=false
   const turnId=crypto.randomUUID(),scope=epoch.current
   try{
-   await nativeRequest({action:'chatGPTRelaySend',account:username,chatId:id,text:prompt})
+   const inputLinks:string[]=[]
+   for(const file of attachments){setRelayPhase('Uploading '+file.name+'…');inputLinks.push(relayFileLink(file.name,await storeRelayFile(id,file)))}
+   const savedPrompt=prompt+(inputLinks.length?'\n\n'+inputLinks.join('\n'):'')
+   setRelayPhase('Sending to ChatGPT…')
+   const context=(workspace?.messages||[]).slice(-10).map(item=>item.role+': '+item.content.slice(0,2000)).join('\n\n')
+   const forwarded=context?'Conversation context for this Planner chat (previous files may need reattaching if this is a fresh website session):\n'+context+'\n\nCurrent user message:\n'+prompt:prompt
+   await nativeRequest({action:'chatGPTRelaySend',account:username,chatId:id,text:forwarded,files:attachments.map(({name,mime,size,data})=>({name,mime,size,data}))})
    setRelayPhase('Working… Keep Planner open.')
    while(!cancelRelay.current&&alive.current&&scope===epoch.current){
     await new Promise(resolve=>setTimeout(resolve,1500))
-    const result=await nativeRequest<{phase:string;text?:string;message?:string;needsLogin?:boolean}>({action:'chatGPTRelayStatus',account:username})
+    const result=await nativeRequest<{phase:string;text?:string;message?:string;needsLogin?:boolean;files?:{key:string;name:string}[]}>({action:'chatGPTRelayStatus',account:username})
     if(scope!==epoch.current||!alive.current)return
     setRelayText(result.text||'')
     if(result.phase==='completed'){
-     if(!result.text)throw new Error('ChatGPT returned no readable reply.')
-     const value={chatId:id,turnId,prompt,reply:result.text};setRecovery(value);try{localStorage.setItem(recoveryKey,JSON.stringify(value))}catch{setError('Reply received. Keep this page open until it is saved.')}
-     setRelayPhase('Saving reply…');await saveReply(value);setMessage('');setRelayPrompt('');setRelayText('');return
+     const value:Recovery={chatId:id,turnId,prompt:savedPrompt,reply:result.text||'',outputs:result.files||[]}
+     setRecovery(value);try{localStorage.setItem(recoveryKey,JSON.stringify(value))}catch{setError('Reply received. Keep this page open until it is saved.')}
+     setRelayPhase('Saving reply…');await saveReply(value);setMessage('');setRelayPrompt('');setRelayText('');setAttachments([]);return
     }
     if(result.phase==='attention'||result.needsLogin)throw new Error(result.message||'ChatGPT needs attention. Open its session; do not resend until you check it.')
    }
   }catch(e){setError(e instanceof Error?e.message:'Relay failed. Open the session before retrying.')}finally{setBusy(false);setRelayPhase('');setRelayPrompt('');setRelayText('')}
  }
  async function stop(){cancelRelay.current=true;try{await nativeRequest({action:'chatGPTRelayStop',account:username});setRelayPhase('Stopping…')}catch(e){setError(e instanceof Error?e.message:'Open the session to stop this response.')}}
+ async function inspectRemoteDraft(){try{const result=await nativeRequest<{text:string}>({action:'chatGPTRelayDraft',account:username});setRemoteDraft(result.text)}catch(e){setError(e instanceof Error?e.message:'Could not inspect draft.')}}
+ async function clearRemoteDraft(){if(remoteDraft===null)return;try{await nativeRequest({action:'chatGPTRelayClearDraft',account:username,expected:remoteDraft});setRemoteDraft(null);setError('')}catch(e){setError(e instanceof Error?e.message:'Could not clear draft.')}}
  async function addFiles(files:File[]){
   if(preparing)return
   const scope=epoch.current;setPreparing(true);setError('')
-  try{let next=[...attachments];for(const file of files){const item=await prepareAttachment(file);if(next.length>=4||next.reduce((sum,a)=>sum+a.size,0)+item.size>ATTACHMENT_LIMIT)throw new Error('Attach up to four files within the message size limit.');next.push(item)}if(scope===epoch.current)setAttachments(next)}catch(e){setError(e instanceof Error?e.message:'Could not prepare attachments.')}finally{setPreparing(false)}
+  try{let next=[...attachments];for(const file of files){const item=await prepareRelayFile(file);if(next.length>=4||next.reduce((sum,a)=>sum+a.size,0)+item.size>RELAY_BATCH_MAX)throw new Error('Attach up to four files, 25 MB each and 50 MB total.');next.push(item)}if(scope===epoch.current)setAttachments(next)}catch(e){setError(e instanceof Error?e.message:'Could not prepare attachments.')}finally{setPreparing(false)}
  }
  const chat=workspace?.chats.find(c=>c.id===chatId)||workspace?.chat
  const visible=workspace?.chats.filter(c=>filter==='bin'?Boolean(c.deleted_at):!c.deleted_at&&Boolean(c.archived)===(filter==='archived'))||[]
@@ -105,14 +120,15 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
 </aside>}
  {sidebar&&<button type="button" className="assistant-sidebar-scrim" aria-label="Close chat sidebar" onClick={()=>setSidebar(false)}/>}
  <section className="assistant-chat" aria-label="Subscription conversation" inert={Boolean(panel||rename)}><header className="assistant-chat-header"><div>{!sidebar&&<button type="button" className="icon-btn" aria-label="Show chat sidebar" onClick={()=>setSidebar(true)}><MenuIcon/></button>}<button type="button" className="icon-btn" aria-label="New chat" disabled={busy} onClick={()=>void create()}><PlusIcon/></button><div className="assistant-chat-title"><strong>{chat?.title||'Main Chat'}</strong><span>ChatGPT subscription</span><span role="status">{window.plannerNativeChatGPTPortal?relayReady?'ChatGPT session ready':'Sign in to ChatGPT':'Not connected'}</span></div></div><div>{native&&<button type="button" className="assistant-sites-button" onClick={()=>void connect()}>ChatGPT session</button>}<button type="button" className="assistant-sites-button" onClick={()=>setPanel('connections')}>Add sites</button><button type="button" className="icon-btn" aria-label="Chat settings" onClick={()=>setPanel('settings')}><SettingsIcon/></button></div></header>
- {error&&<p role="alert" className="assistant-error">{error}<button type="button" className="icon-btn" aria-label="Dismiss chat error" onClick={()=>setError('')}>×</button></p>}
+ {error&&<p role="alert" className="assistant-error">{error}{native&&/unsent draft/i.test(error)&&<button type="button" disabled={busy} onClick={()=>void inspectRemoteDraft()}>Review ChatGPT draft</button>}<button type="button" className="icon-btn" aria-label="Dismiss chat error" onClick={()=>setError('')}>×</button></p>}
  {(chat?.archived||chat?.deleted_at)&&<p className="agent-banner">This chat is {chat.deleted_at?'in Bin':'archived'}. Restore it from the sidebar to continue.</p>}
  <div className="assistant-thread"><div className="assistant-thread-content">{workspace?.hasOlder&&<button type="button" disabled={older} onClick={()=>{const first=workspace.messages[0];if(!first)return;setOlder(true);void subscriptionChatRequest<SubscriptionWorkspace>(chatId||undefined,undefined,first.id).then(result=>setWorkspace(current=>current?.chat.id===result.chat.id?{...current,hasOlder:result.hasOlder,messages:[...result.messages,...current.messages.filter(item=>!result.messages.some(older=>older.id===item.id))]}:current)).catch(e=>setError(e.message)).finally(()=>setOlder(false))}}>Load earlier messages</button>}
  {!workspace?.messages.length&&<div className="assistant-welcome"><span className="assistant-spark">✦</span><h1>{loading?'Opening your chat…':'What can I help with?'}</h1><p>Plan your day, work with your files, and keep your tasks organized.</p><button type="button" className="assistant-primary" onClick={()=>{if(!window.plannerNativeChatGPTPortal)setPanel('settings');void connect()}}>{window.plannerNativeChatGPTPortal?'Connect ChatGPT session':'Connect ChatGPT'}</button><p className="quiet">{window.plannerNativeChatGPTPortal?'Load the session once, then send messages here. You can test basic chat as a guest. Keep Planner open while working.':'Subscription connection setup is still required. Your drafts stay saved here.'}</p></div>}
- {workspace?.messages.map(item=><article className="assistant-turn" key={item.id}><div className={item.role==='user'?'assistant-user-message':'assistant-reply'}><ChatMarkdown text={item.content}/><time className="assistant-message-time" dateTime={item.created_at}>{new Date(item.created_at).toLocaleString()}</time><button type="button" className="assistant-copy" onClick={()=>void navigator.clipboard.writeText(item.content).catch(()=>setError('Could not copy this message.'))}>Copy</button></div></article>)}{relayPrompt&&<article className="assistant-turn"><div className="assistant-user-message"><ChatMarkdown text={relayPrompt}/></div>{relayText&&<div className="assistant-reply"><ChatMarkdown text={relayText}/></div>}<div role="status" className="assistant-working">{relayPhase}<button type="button" disabled={relayPhase==='Connecting…'} onClick={()=>void stop()}>Stop</button></div></article>}{recovery&&<p role="alert">A completed reply is saved on this device but still needs cloud saving. <button type="button" onClick={()=>void saveReply(recovery).catch(e=>setError(e.message))}>Save reply</button></p>}</div></div>
- <div className="assistant-compose-wrap"><form className="assistant-compose" onSubmit={e=>{e.preventDefault();void send()}}>{Boolean(attachments.length)&&<ChatAttachments items={attachments} onRemove={id=>setAttachments(items=>items.filter(a=>a.id!==id))}/>}<label className="sr-only" htmlFor="subscription-message">Message ChatGPT</label><textarea id="subscription-message" disabled={loading||busy||!chat||Boolean(chat.archived||chat.deleted_at)} rows={2} maxLength={12000} placeholder="Message your assistant…" value={message} onChange={e=>setMessage(e.target.value)} onPaste={e=>{if(e.clipboardData.files.length){e.preventDefault();void addFiles(Array.from(e.clipboardData.files))}}} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();void send()}}}/><div className="assistant-compose-toolbar"><div className="compose-left-actions"><AttachButton disabled={preparing||busy} onFiles={files=>void addFiles(files)}/><button type="button" className="assistant-compose-connect" onClick={()=>setPanel('connections')}>+ Add sites</button></div><div className="assistant-compose-actions"><button type="button" className="planning-icon-button" aria-label="Begin Planning" title="Connect ChatGPT to begin planning" disabled>▣</button><DictationButton key={chatId||'subscription-new'} enabled={active&&!preparing&&!busy&&!loading&&Boolean(chat)&&!chat?.archived&&!chat?.deleted_at} onBusy={setDictating} onText={text=>setMessage(old=>(old+(old?' ':'')+text).slice(0,12000))}/><button type="submit" className="assistant-send" aria-label="Send message" title={native?'Send through your ChatGPT website session':'ChatGPT subscription setup is required'} disabled={!native||!relayReady||busy||!message.trim()||Boolean(recovery)||attachments.length>0}>↑</button></div></div></form><p className="assistant-compose-note">{relayPhase|| (native&&attachments.length?'File forwarding is not connected yet. Remove attachments to test text.':preparing?'Preparing files…':dictating?'Listening…':window.plannerNativeChatGPTPortal?'Uses your ChatGPT website session. Keep Planner open while working.':'Connect your ChatGPT subscription to send messages. Shift+Enter for a new line.')}</p></div>
+ {workspace?.messages.map(item=><article className="assistant-turn" key={item.id}><div className={item.role==='user'?'assistant-user-message':'assistant-reply'} onClickCapture={event=>{const link=(event.target as Element).closest('a');const id=link?.getAttribute('href')?.match(/^#planner-chat-file\/([a-f0-9-]{36})$/i)?.[1];if(id){event.preventDefault();event.stopPropagation();void downloadRelayFile(id).catch(e=>setError(e.message))}}}><ChatMarkdown text={item.content}/><time className="assistant-message-time" dateTime={item.created_at}>{new Date(item.created_at).toLocaleString()}</time><button type="button" className="assistant-copy" onClick={()=>void navigator.clipboard.writeText(item.content).catch(()=>setError('Could not copy this message.'))}>Copy</button></div></article>)}{relayPrompt&&<article className="assistant-turn"><div className="assistant-user-message"><ChatMarkdown text={relayPrompt}/></div>{relayText&&<div className="assistant-reply"><ChatMarkdown text={relayText}/></div>}<div role="status" className="assistant-working">{relayPhase}<button type="button" disabled={relayPhase==='Connecting…'} onClick={()=>void stop()}>Stop</button></div></article>}{recovery&&<p role="alert">A reply was received. File transfer or cloud saving still needs to finish. <button type="button" onClick={()=>void saveReply(recovery).catch(e=>setError(e.message))}>{recovery.outputs?.length?'Retry file transfer':'Save reply'}</button></p>}</div></div>
+ <div className="assistant-compose-wrap"><form className="assistant-compose" onSubmit={e=>{e.preventDefault();void send()}}>{Boolean(attachments.length)&&<div className="chat-attachment-list">{attachments.map(file=><div className="chat-attachment" key={file.id}><span>{file.name} · {(file.size/1024).toFixed(0)} KB</span><button type="button" disabled={busy} aria-label={'Remove attachment '+file.name} onClick={()=>setAttachments(items=>items.filter(item=>item.id!==file.id))}>×</button></div>)}</div>}<label className="sr-only" htmlFor="subscription-message">Message ChatGPT</label><textarea id="subscription-message" disabled={loading||busy||!chat||Boolean(chat.archived||chat.deleted_at)} rows={2} maxLength={10000} placeholder="Message your assistant…" value={message} onChange={e=>setMessage(e.target.value)} onPaste={e=>{if(e.clipboardData.files.length){e.preventDefault();void addFiles(Array.from(e.clipboardData.files))}}} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();void send()}}}/><div className="assistant-compose-toolbar"><div className="compose-left-actions"><AttachButton accept="*/*" description="Original files: up to four, 25 MB each and 50 MB total. ChatGPT may reject unsupported formats." disabled={preparing||busy} onFiles={files=>void addFiles(files)}/><button type="button" className="assistant-compose-connect" onClick={()=>setPanel('connections')}>+ Add sites</button></div><div className="assistant-compose-actions"><button type="button" className="planning-icon-button" aria-label="Begin Planning" title="Connect ChatGPT to begin planning" disabled>▣</button><DictationButton key={chatId||'subscription-new'} enabled={active&&!preparing&&!busy&&!loading&&Boolean(chat)&&!chat?.archived&&!chat?.deleted_at} onBusy={setDictating} onText={text=>setMessage(old=>(old+(old?' ':'')+text).slice(0,10000))}/><button type="submit" className="assistant-send" aria-label="Send message" title={native?'Send through your ChatGPT website session':'ChatGPT subscription setup is required'} disabled={!native||!relayReady||busy||(!message.trim()&&!attachments.length)||Boolean(recovery)}>↑</button></div></div></form><p className="assistant-compose-note">{relayPhase|| (preparing?'Preparing files…':dictating?'Listening…':window.plannerNativeChatGPTPortal?'Uses your ChatGPT website session. Keep Planner open while working.':'Connect your ChatGPT subscription to send messages. Shift+Enter for a new line.')}</p></div>
  </section>
  {panel&&<div className="modal-backdrop" onMouseDown={()=>setPanel(null)}><section role="dialog" aria-modal="true" aria-label={panel==='settings'?'Chat settings':'Chat connected sites'} className="event-modal device-settings" onMouseDown={e=>e.stopPropagation()}><div className="files-dialog-head"><h2>{panel==='settings'?'Chat settings':'Connected sites'}</h2><button type="button" className="icon-btn" aria-label="Close chat settings" onClick={()=>setPanel(null)}><CloseIcon/></button></div>{error&&<p role="alert" className="form-error">{error}</p>}<section className="assistant-settings-section"><h3>ChatGPT subscription</h3><p>{window.plannerNativeChatGPTPortal?'Load or sign in to the ChatGPT session, then return to Planner. Text messages and replies are forwarded through that session. Basic guest chat has been tested; Planner tools, file forwarding and unattended runs are not connected yet.':'Subscription sign-in is not configured for Planner yet. Chats and drafts are saved separately from Agent.'}</p><button type="button" onClick={()=>void connect()}>{window.plannerNativeChatGPTPortal?'Connect ChatGPT session':'Connect ChatGPT'}</button>{!native&&<p><a href="https://developers.openai.com/siwc/request-client-id" target="_blank" rel="noreferrer">Subscription connection requirements</a></p>}<p>Browser access and scheduled runs are not connected for this workspace yet.</p></section>{panel==='settings'?<><p className="quiet">These personal instructions are shared across your Planner agents.</p><AgentInstructions/></>:<><GoogleCalendarAccounts google={workspace?.google} refresh={async()=>{await refresh()}}/><section className="assistant-settings-section"><h3>Sources</h3>{workspace?.sources.map(source=><p key={source}>{VM_SOURCES[source].name}</p>)}<p className="quiet">Connected account data belongs to your Planner account. Chat will need its own browsing integration for websites.</p></section></>}</section></div>}
+ {remoteDraft!==null&&<div className="modal-backdrop"><section role="dialog" aria-modal="true" aria-label="ChatGPT unsent draft" className="event-modal"><h2>ChatGPT unsent draft</h2><p>This text is still in the website’s composer. Your Planner draft stays unchanged.</p><pre style={{whiteSpace:'pre-wrap',maxHeight:'40vh',overflow:'auto'}}>{remoteDraft||'(empty)'}</pre><button type="button" onClick={()=>setRemoteDraft(null)}>Keep draft</button><button type="button" onClick={()=>void clearRemoteDraft()}>Clear ChatGPT draft</button></section></div>}
  {rename&&<RenameDialog initialValue={rename.title} kind="chat" busy={busy} error={error} onClose={()=>setRename(null)} onSave={title=>update(rename,{title})}/>}
  </main>
 }

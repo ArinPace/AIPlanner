@@ -61,7 +61,7 @@
    button.onclick=()=>{sourceIssues=id?[{id,source:'brightspace',title:'Brightspace',message:'School source needs reconnection.'}]:[];window.dispatchEvent(new Event('focus'))};document.body.append(button);
   }
  });
- const subscriptionMessages=[];
+ const subscriptionMessages=[]; const subscriptionFiles=new Map(); globalThis.__plannerRelayFixtureFiles=subscriptionFiles;
  const subscriptionMain={id:'00000000-0000-4000-8000-000000000101',title:'Main Chat',is_main:true,pinned:true,archived:false,deleted_at:null,created_at:now,updated_at:now};
  let subscriptionChats=[subscriptionMain];
  const fetchReal=window.fetch.bind(window);
@@ -69,14 +69,18 @@
   const raw=typeof input==='string'?input:input.url;const url=new URL(raw,location.href);
   if(!url.pathname.startsWith('/api/'))return fetchReal(input,options);
   const path=url.pathname,method=options.method||'GET';let value={};
-  if(path==='/api/session')value={username:signedIn?'planner_test':null};
+  if(path.startsWith('/api/test-relay-files/')){const row=subscriptionFiles.get(path.split('/').pop());if(method==='PUT'){row.bytes=new Uint8Array(await options.body.arrayBuffer());return new Response('{}',{status:200})}return new Response(row.bytes,{headers:{'Content-Type':row.mime}})}
+  else if(path==='/api/session')value={username:signedIn?'planner_test':null};
   else if(path==='/api/auth/options')value={googleEnabled:true,pendingGoogle:false};
   else if(path==='/api/login'||path==='/api/register'){signedIn=true;value={username:'planner_test',token:'fixture-session'}}
   else if(path==='/api/logout'){signedIn=false;value={ok:true}}
   else if(path==='/api/subscription-chat'){
    if(method==='POST'){
     const input=JSON.parse(options.body);
-    if(input.action==='create'){value={id:crypto.randomUUID(),title:input.title||'New chat',is_main:false,pinned:false,archived:false,deleted_at:null,created_at:now,updated_at:now};subscriptionChats.push(value)}
+    if(input.action==='file_start'){const id=crypto.randomUUID();subscriptionFiles.set(id,{...input,id});value={id,url:location.origin+'/api/test-relay-files/'+id}}
+    else if(input.action==='file_finish'){const row=subscriptionFiles.get(input.id);value={id:row.id,name:row.name,mime:row.mime,size:row.size}}
+    else if(input.action==='file_download'){const row=subscriptionFiles.get(input.id);value={url:location.origin+'/api/test-relay-files/'+row.id,name:row.name}}
+    else if(input.action==='create'){value={id:crypto.randomUUID(),title:input.title||'New chat',is_main:false,pinned:false,archived:false,deleted_at:null,created_at:now,updated_at:now};subscriptionChats.push(value)}
     else if(input.action==='relay_save'){if(!subscriptionMessages.some(m=>m.id===input.turnId)){subscriptionMessages.push({id:input.turnId,chat_id:input.chatId,role:'user',content:input.prompt,created_at:new Date().toISOString()},{id:crypto.randomUUID(),chat_id:input.chatId,role:'assistant',content:input.reply,created_at:new Date().toISOString()})}value={ok:true}}
     else if(input.action==='update'){const row=subscriptionChats.find(c=>c.id===input.id);Object.assign(row,input,...(input.deleted===undefined?[]:[{deleted_at:input.deleted?now:null}]));value=row}
     else return new Response(JSON.stringify({error:'ChatGPT subscription sign-in is not configured yet.'}),{status:409,headers:{'Content-Type':'application/json'}});

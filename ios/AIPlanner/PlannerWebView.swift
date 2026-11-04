@@ -1,6 +1,7 @@
 import SwiftUI
 import WebKit
 import WidgetKit
+import CryptoKit
 
 struct PlannerWebView: UIViewRepresentable {
     @ObservedObject var model: PlannerModel
@@ -22,7 +23,14 @@ struct PlannerWebView: UIViewRepresentable {
         config.websiteDataStore = .default()
         config.allowsInlineMediaPlayback = true
         config.userContentController.addScriptMessageHandler(context.coordinator, contentWorld: .page, name: "plannerNative")
-        config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeScreenTime=true;window.plannerNativeChatGPTPortal=true;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true'});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeScreenTime=true;window.plannerNativeChatGPTPortal=true;window.plannerNativeChatGPTRelayVersion=2;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true'});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-UITestRelayCSV") {
+            config.userContentController.addUserScript(WKUserScript(source: """
+            document.addEventListener('DOMContentLoaded',()=>{const button=document.createElement('button');button.textContent='Attach CSV test';button.style.cssText='position:fixed;top:160px;right:0;z-index:100000;background:white;color:black';button.onclick=()=>{const input=[...document.querySelectorAll('input[type=file]')].find(n=>n.accept==='*/*');if(!input)return;const transfer=new DataTransfer();transfer.items.add(new File([['kind,value','relay,INPUT-7319',''].join(String.fromCharCode(10))],'relay-check.csv',{type:'text/csv'}));input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));};document.body.append(button)});
+            """, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        }
+        #endif
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-UITestFixture"), ["127.0.0.1", "localhost"].contains(AppConfiguration.origin.host ?? ""), let url = Bundle.main.url(forResource: "UITestFixture", withExtension: "js"), let script = try? String(contentsOf: url, encoding: .utf8) {
             if ProcessInfo.processInfo.arguments.contains("-UITestWidgets") { WidgetTaskControl.clear() }
@@ -165,14 +173,25 @@ struct PlannerWebView: UIViewRepresentable {
                         guard let account = body["account"] as? String, let value = body["settings"], JSONSerialization.isValidJSONObject(value) else { throw NativeError("Missing notification settings.") }
                         let options = try JSONDecoder().decode(TaskNotificationOptions.self, from: JSONSerialization.data(withJSONObject: value))
                         try await PlannerTaskNotifications.shared.configure(account: account, options: options)
-                    case "chatGPTPortal", "chatGPTRelayStatus", "chatGPTRelaySend", "chatGPTRelayStop":
+                    case "chatGPTPortal", "chatGPTRelayStatus", "chatGPTRelaySend", "chatGPTRelayStop", "chatGPTRelayDraft", "chatGPTRelayClearDraft", "chatGPTRelayDownload":
                         guard let account = body["account"] as? String else { throw NativeError("Sign into Planner first.") }
                         let controller = try relay(account: account)
                         if action == "chatGPTRelayStatus" { let state = try await controller.relayStatus(); if state["phase"] as? String == "completed" { parkRelay() }; replyHandler(state, nil); return }
+                        if action == "chatGPTRelayDraft" { replyHandler(try await controller.inspectDraft(), nil); return }
+                        if action == "chatGPTRelayClearDraft" {
+                            guard let expected = body["expected"] as? String else { throw NativeError("Read the draft before clearing it.") }
+                            attachRelayForRun(); defer { parkRelay() }
+                            try await controller.clearDraft(expected: expected); replyHandler(["ok": true], nil); return
+                        }
+                        if action == "chatGPTRelayDownload" {
+                            guard let key = body["key"] as? String, UUID(uuidString: key) != nil else { throw NativeError("Choose a response file.") }
+                            attachRelayForRun(); defer { parkRelay() }
+                            replyHandler(try await controller.downloadResponse(key: key), nil); return
+                        }
                         if action == "chatGPTRelaySend" {
-                            guard let text = body["text"] as? String, let chatId = body["chatId"] as? String, UUID(uuidString: chatId) != nil, !text.isEmpty, text.count <= 12000 else { throw NativeError("Choose a chat and enter a message.") }
+                            guard let text = body["text"] as? String, let chatId = body["chatId"] as? String, UUID(uuidString: chatId) != nil, !text.isEmpty, text.count <= 40000 else { throw NativeError("Choose a chat and enter a message.") }
                             attachRelayForRun()
-                            do { try await controller.send(text: text, chatId: chatId) } catch { parkRelay(); throw error }
+                            do { try await controller.send(text: text, chatId: chatId, files: body["files"] as? [[String: Any]] ?? []) } catch { parkRelay(); throw error }
                             replyHandler(["ok": true], nil); return
                         }
                         if action == "chatGPTRelayStop" { try await controller.stopRelay(); parkRelay(); replyHandler(["ok": true], nil); return }
@@ -363,12 +382,17 @@ struct PlannerWebView: UIViewRepresentable {
 
 /// The real ChatGPT website, with its own persistent account-isolated WebKit store.
 /// No Planner native bridge is injected here, and no credentials are read or exported.
-@MainActor final class PlannerChatGPTPortal: UIViewController, WKNavigationDelegate, WKUIDelegate {
+@MainActor final class PlannerChatGPTPortal: UIViewController, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
     let account: String
     var onClose: (() -> Void)?
+    var pendingDownloads: [ObjectIdentifier: URL] = [:]
+    var downloadMimes: [ObjectIdentifier: String] = [:]
+    var downloadResult: [String: Any]?
+    var downloadFailure: String?
     var documentCommitted = false
     var webFailure: String?
     var recoveryCount = 0
+    var preparedFileFingerprint: String?
     var loadedChat: String?
     var pendingURL: String?
     var pendingChat: String?
@@ -448,7 +472,8 @@ struct PlannerWebView: UIViewRepresentable {
     const last=replies.at(-1),turn=last?.closest('[data-testid^="conversation-turn"],article')||last;
     const clean=last?.cloneNode(true);clean?.querySelectorAll('button,svg,script,style').forEach(node=>node.remove());
     const response=clean?(clean.innerText||clean.textContent||'').trim():'';
-    return {ready:!!box,needsLogin:(!box&&buttons.some(n=>/^(Log in|Sign in)$/i.test(label(n))))||!!document.querySelector('input[type="password"]'),guest:buttons.some(n=>/^(Log in|Sign in)$/i.test(label(n))),running,count:replies.length,text:response,final:!!turn?.querySelector('[data-testid="copy-turn-action-button"],button[aria-label="Copy response"],button[aria-label="Copy"],button[aria-label="Good response"],button[aria-label="Read aloud"]'),url:location.href};})()
+    const outputs=turn?[...turn.querySelectorAll('a[download],a[href^="sandbox:"],a[href*="/backend-api/files/"],button[aria-label="Download file"],button[aria-label="Download image"],button[aria-label="Save image"]')].map(node=>{node.dataset.plannerDownloadId ||= crypto.randomUUID();return {key:node.dataset.plannerDownloadId,name:(node.getAttribute('download')||node.innerText||node.getAttribute('aria-label')||'Download file').trim().slice(0,240)}}):[];
+    return {files:outputs,ready:!!box,needsLogin:(!box&&buttons.some(n=>/^(Log in|Sign in)$/i.test(label(n))))||!!document.querySelector('input[type="password"]'),guest:buttons.some(n=>/^(Log in|Sign in)$/i.test(label(n))),running,count:replies.length,text:response,final:!!turn?.querySelector('[data-testid="copy-turn-action-button"],button[aria-label="Copy response"],button[aria-label="Copy"],button[aria-label="Good response"],button[aria-label="Read aloud"]'),url:location.href};})()
     """ }
     private func snapshot() async throws -> [String: Any] {
         loadViewIfNeeded()
@@ -456,14 +481,80 @@ struct PlannerWebView: UIViewRepresentable {
         guard browser.url?.scheme == "https", browser.url?.host == "chatgpt.com" else { return ["ready": false,"needsLogin": true] }
         return try await browser.evaluateJavaScript(snapshotScript) as? [String: Any] ?? [:]
     }
-    func send(text: String, chatId: String) async throws {
+    func inspectDraft() async throws -> [String: Any] {
+        guard browser.url?.host == "chatgpt.com" else { throw NativeError("Load ChatGPT first.") }
+        return try await browser.evaluateJavaScript("(() => {const box=[...document.querySelectorAll('#prompt-textarea,[role=\"textbox\"][contenteditable=\"true\"],textarea')].find(n=>n.getClientRects().length);return {text:box?(box.tagName==='TEXTAREA'?box.value:box.innerText):''}})()") as? [String: Any] ?? [:]
+    }
+    func clearDraft(expected: String) async throws {
+        guard pendingChat == nil, browser.url?.host == "chatgpt.com" else { throw NativeError("Stop the pending request first.") }
+        _ = try await browser.callAsyncJavaScript("""
+        const box=[...document.querySelectorAll('#prompt-textarea,[role="textbox"][contenteditable="true"],textarea')].find(n=>n.getClientRects().length);
+        const value=box?(box.tagName==='TEXTAREA'?box.value:box.innerText):'';
+        if(!box||value!==expected)throw Error('The ChatGPT draft changed. Read it again before clearing.');
+        box.focus();if(box.tagName==='TEXTAREA'){box.select();document.execCommand('delete');if(box.value)Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(box,'');}else{document.getSelection().selectAllChildren(box);document.execCommand('delete');}
+        box.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'deleteContentBackward'}));await new Promise(r=>setTimeout(r,300));if((box.tagName==='TEXTAREA'?box.value:box.innerText).trim())throw Error('Clearing the draft was not confirmed. Open the session to inspect it.');return true;
+        """, arguments: ["expected": expected], in: nil, contentWorld: .page)
+    }
+    func downloadResponse(key: String) async throws -> [String: Any] {
+        guard browser.url?.host == "chatgpt.com" else { throw NativeError("Load the ChatGPT conversation first.") }
+        downloadResult = nil; downloadFailure = nil
+        _ = try await browser.callAsyncJavaScript("const node=[...document.querySelectorAll('[data-planner-download-id]')].find(n=>n.dataset.plannerDownloadId===key);if(!node)throw Error('The response file is no longer available.');node.click();return true;", arguments: ["key": key], in: nil, contentWorld: .page)
+        for _ in 0..<120 {
+            try await Task.sleep(for: .milliseconds(500))
+            if let result = downloadResult { return result }
+            if let failure = downloadFailure { throw NativeError(failure) }
+        }
+        throw NativeError("ChatGPT did not finish this download. Open the session to inspect it.")
+    }
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) { decisionHandler(navigationAction.shouldPerformDownload ? .download : .allow) }
+    func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        let attachment = (navigationResponse.response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Disposition")?.lowercased().contains("attachment") == true
+        decisionHandler(attachment || !navigationResponse.canShowMIMEType ? .download : .allow)
+    }
+    func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) { download.delegate = self }
+    func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) { download.delegate = self }
+    func download(_ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String, completionHandler: @escaping (URL?) -> Void) {
+        do {
+            guard response.expectedContentLength <= 25 * 1024 * 1024 else { downloadFailure = "Response file exceeds 25 MB."; completionHandler(nil); return }
+            let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let name = URL(fileURLWithPath: suggestedFilename).lastPathComponent
+            let file = folder.appendingPathComponent(name.isEmpty ? "download" : name)
+            pendingDownloads[ObjectIdentifier(download)] = file; downloadMimes[ObjectIdentifier(download)] = response.mimeType ?? "application/octet-stream"; completionHandler(file)
+        } catch { downloadFailure = "Could not save the response file."; completionHandler(nil) }
+    }
+    func downloadDidFinish(_ download: WKDownload) {
+        documentCommitted = true; webFailure = nil
+        guard let url = pendingDownloads.removeValue(forKey: ObjectIdentifier(download)) else { return }
+        do {
+            let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+            guard size <= 25 * 1024 * 1024 else { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()); throw NativeError("Response file exceeds 25 MB.") }
+            let data = try Data(contentsOf: url)
+            defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+            guard data.count <= 25 * 1024 * 1024 else { throw NativeError("Response file exceeds 25 MB.") }
+            let mime = downloadMimes.removeValue(forKey: ObjectIdentifier(download)) ?? "application/octet-stream"
+            downloadResult = ["name": url.lastPathComponent,"size": data.count,"mime": mime,"data": "data:" + mime + ";base64," + data.base64EncodedString()]
+        } catch { downloadFailure = error.localizedDescription }
+    }
+    func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) { if let url = pendingDownloads.removeValue(forKey: ObjectIdentifier(download)) { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }; downloadMimes.removeValue(forKey: ObjectIdentifier(download)); downloadFailure = error.localizedDescription }
+    func send(text: String, chatId: String, files: [[String: Any]] = []) async throws {
         guard pendingChat == nil else { throw NativeError("A ChatGPT reply is still pending. Open the session before retrying.") }
         let key = "chatgpt-conversation:" + account + ":" + chatId
         let stored = UserDefaults.standard.string(forKey: key).flatMap(URL.init(string:))
         let target = stored.flatMap { $0.scheme == "https" && $0.host == "chatgpt.com" && $0.path.hasPrefix("/c/") ? $0 : nil } ?? URL(string: "https://chatgpt.com/")!
         if stored != nil && browser.url?.absoluteString != target.absoluteString { browser.load(URLRequest(url: target, timeoutInterval: 30)) }
         else if let loadedChat, loadedChat != chatId {
-            throw NativeError("This guest session already belongs to another Planner chat. Continue that chat, or sign in to use separate ChatGPT conversations.")
+            let draft = try await inspectDraft()
+            guard (draft["text"] as? String ?? "").isEmpty else { throw NativeError("ChatGPT has an unsent draft. Review it in Planner before switching conversations.") }
+            let previous = browser!
+            previous.stopLoading(); previous.removeFromSuperview()
+            browser = WKWebView(frame: .zero, configuration: previous.configuration)
+            browser.accessibilityIdentifier = "chatGPTPortalWebView"; browser.navigationDelegate = self; browser.uiDelegate = self
+            browser.translatesAutoresizingMaskIntoConstraints = false; browser.allowsBackForwardNavigationGestures = true
+            view.addSubview(browser)
+            NSLayoutConstraint.activate([browser.topAnchor.constraint(equalTo: status.bottomAnchor, constant: 6),browser.leadingAnchor.constraint(equalTo: view.leadingAnchor),browser.trailingAnchor.constraint(equalTo: view.trailingAnchor),browser.bottomAnchor.constraint(equalTo: view.bottomAnchor)])
+            view.layoutIfNeeded(); documentCommitted = false; webFailure = nil
+            browser.load(URLRequest(url: target, timeoutInterval: 30))
         }
         loadedChat = chatId
         var state: [String: Any] = [:]
@@ -474,6 +565,31 @@ struct PlannerWebView: UIViewRepresentable {
         }
         guard state["ready"] as? Bool == true, state["needsLogin"] as? Bool != true else { throw NativeError("Sign into ChatGPT using Connect ChatGPT, then return to Planner.") }
         guard state["running"] as? Bool != true else { throw NativeError("ChatGPT is already working. Open the session to check it first.") }
+        guard files.count <= 4 else { throw NativeError("Attach up to four files.") }
+        if !files.isEmpty {
+            let draft = try await inspectDraft()
+            guard (draft["text"] as? String ?? "").isEmpty else { throw NativeError("ChatGPT has an unsent draft. Review it before adding files.") }
+            var total = 0; var fingerprints: [String] = []
+            for file in files {
+                guard let name = file["name"] as? String, !name.isEmpty, name.count <= 240, let encoded = file["data"] as? String,
+                      let part = encoded.split(separator: ",", maxSplits: 1).last, let data = Data(base64Encoded: String(part)), !data.isEmpty, data.count <= 25 * 1024 * 1024, file["size"] as? Int == data.count else { throw NativeError("File is invalid or exceeds 25 MB.") }
+                total += data.count; fingerprints.append(name + ":" + SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined())
+            }
+            let fingerprint = chatId + ":" + fingerprints.joined(separator: "|")
+            guard total <= 50 * 1024 * 1024 else { throw NativeError("Attach at most 50 MB per message.") }
+            _ = try await browser.callAsyncJavaScript("""
+            let input=document.querySelector('input[type="file"][aria-label="Attach files"]')||[...document.querySelectorAll('input[type="file"]')].find(n=>n.multiple)||document.querySelector('input[type="file"]');
+            if(!input){const add=[...document.querySelectorAll('button')].find(n=>/^(Add files and more|Attach files|Add photos & files)$/i.test(n.getAttribute('aria-label')||n.innerText||''));add?.click();await new Promise(r=>setTimeout(r,300));input=document.querySelector('input[type="file"]');}
+            if(!input)throw Error('ChatGPT file upload is unavailable in this session. Sign in if the website requests it.');
+            const already=prepared&&files.every(file=>document.body.innerText.includes(file.name));
+            const transfer=new DataTransfer();
+            for(const item of files){const binary=atob(item.data.slice(item.data.indexOf(',')+1)),bytes=new Uint8Array(binary.length);for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);transfer.items.add(new File([bytes],item.name,{type:item.mime||'application/octet-stream'}));}
+            if(!already){input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));}
+            for(let attempt=0;attempt<120;attempt++){await new Promise(r=>setTimeout(r,500));const text=document.body.innerText;if(files.every(file=>text.includes(file.name))&&!/upload failed|unsupported file|file type is not supported/i.test(text))return true;}
+            throw Error('ChatGPT did not confirm every file. No message was sent; inspect the session for upload errors.');
+            """, arguments: ["files": files,"prepared": preparedFileFingerprint == fingerprint], in: nil, contentWorld: .page)
+            preparedFileFingerprint = fingerprint
+        }
         var clearTestDraft = false
         #if DEBUG
         clearTestDraft = ProcessInfo.processInfo.arguments.contains("-UITestClearRelayDraft")
@@ -499,6 +615,7 @@ struct PlannerWebView: UIViewRepresentable {
         return true;
         """, arguments: ["text": text, "clearTestDraft": clearTestDraft], in: nil, contentWorld: .page)
         guard result as? Bool == true else { throw NativeError("Message submission was not confirmed.") }
+        preparedFileFingerprint = nil
         pendingChat = chatId; pendingURL = target.path.hasPrefix("/c/") ? target.path : nil; baseline = state["count"] as? Int ?? 0; sawRunning = false; lastText = ""; changedAt = Date(); startedAt = Date()
     }
     func relayStatus() async throws -> [String: Any] {
@@ -521,7 +638,7 @@ struct PlannerWebView: UIViewRepresentable {
         sawRunning = sawRunning || state["running"] as? Bool == true
         let text = state["text"] as? String ?? ""
         if text != lastText { lastText = text; changedAt = Date() }
-        if (state["count"] as? Int ?? 0) > baseline, !text.isEmpty, state["running"] as? Bool != true, (sawRunning || state["final"] as? Bool == true), Date().timeIntervalSince(changedAt) >= 3 {
+        if (state["count"] as? Int ?? 0) > baseline, (!text.isEmpty || !(state["files"] as? [[String: Any]] ?? []).isEmpty), state["running"] as? Bool != true, (sawRunning || state["final"] as? Bool == true), Date().timeIntervalSince(changedAt) >= 3 {
             state["phase"] = "completed"; pendingChat = nil
         } else if Date().timeIntervalSince(startedAt) > 900 { state["phase"] = "attention"; state["message"] = "Reply completion could not be verified. Open ChatGPT before sending again." }
         return state
