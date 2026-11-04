@@ -4,7 +4,8 @@ import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { CodexRpc } from './rpc.mjs'
-import { openLogin, checkSites, liveBrowserNeedsSignIn, shutdownBrowser, closeLiveBrowser, observeSignIn } from './browser.mjs'
+import { openLogin, checkSites, liveBrowserOpen, liveBrowserNeedsSignIn, shutdownBrowser, closeLiveBrowser, observeSignIn } from './browser.mjs'
+import { idleUpdater } from './auto-update.mjs'
 import { tomlValue } from './config-args.mjs'
 import { connectPersonalChatGpt, disconnectPersonalChatGpt } from './oauth.mjs'
 import { connectPersonalDevice, disconnectPersonalDevice, personalCodexStatus } from './device-auth.mjs'
@@ -25,6 +26,7 @@ const workerStartedAt = new Date().toISOString()
 const config = JSON.parse(await readFile(path.join(dataDir, 'worker.json'), 'utf8'))
 process.on('SIGTERM', () => { void shutdownBrowser().finally(() => process.exit(0)) })
 const origin = new URL(config.origin)
+const checkForUpdate = idleUpdater({ origin, dataDir })
 if (origin.protocol !== 'https:' || origin.username || origin.password || origin.pathname !== '/') throw new Error('Use the HTTPS planner origin.')
 await mkdir(path.join(dataDir, 'workspace'), { recursive: true, mode: 0o700 })
 await mkdir(path.join(dataDir, 'codex'), { recursive: true, mode: 0o700 })
@@ -110,12 +112,17 @@ async function chat(job, auth, remote) {
     return { reply, threadId }
   } finally { stopMonitor(); rpc.close() }
 }
-let signedIn = false, identity = null, pendingSites = {}
+let signedIn = false, identity = null, pendingSites = {}, workerReady = false
 const claudePending = path.join(dataDir, 'claude-login-pending')
 for (;;) {
   let job
   try {
     const remote = await api('config')
+    // This is before claiming any work, never during a job or private browser.
+    if (workerReady && await checkForUpdate({ busy: liveBrowserOpen() }).catch(error => { console.error('Worker update deferred: ' + error.message); return false })) {
+      await shutdownBrowser()
+      process.exit(75)
+    }
     const nativeClaude = await claudeStatus(dataDir).catch(() => null)
     const nativeChatGpt = remote.personalChatGptAllowed ? await personalCodexStatus(dataDir).catch(() => null) : null
     const pendingUntil = Number(await readFile(claudePending, 'utf8').catch(() => 0))
@@ -126,6 +133,8 @@ for (;;) {
     signedIn = Boolean(auth); identity = auth?.identity || null
     pendingSites = { ...pendingSites, ...await observeSignIn(dataDir).catch(() => ({})) }
     ;({ job } = await api('claim', { signedIn, identity, workerStartedAt, observedSites: pendingSites, runtime: remote.aiProvider === 'claude_code' ? 'claude' : 'codex', chatgptConnected: Boolean(nativeChatGpt), claudeConnected: Boolean(nativeClaude), activateClaude, version: '0.2.3' }))
+    process.send?.({ type: 'ready' })
+    workerReady = true
     pendingSites = {}
     if (activateClaude) await unlink(claudePending).catch(() => {})
     if (job) {
