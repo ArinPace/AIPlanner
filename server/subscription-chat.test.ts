@@ -40,6 +40,10 @@ test('subscription workspace is fresh and owner-scoped; never touches Agent jobs
   const pull=await (await post({action:'relay_mirror',chatId:extra,expectedUpdatedAt:ack.updated_at,url:'https://chatgpt.com/c/test-mapped',observed:{title:'Renamed on ChatGPT',archived:true,deleted:false}})).json() as any
   assert.deepEqual(pull.plan.pull,{title:'Renamed on ChatGPT',archived:true})
   await assert.rejects(()=>post({action:'relay_mirror',chatId:extra,expectedUpdatedAt:ack.updated_at,url:'https://chatgpt.com/c/test-mapped',observed:{title:'Renamed on ChatGPT',archived:true,deleted:false},applied:{title:'Unverified',archived:true,deleted:false}}),/not verified/)
+  const deleted=await (await post({action:'relay_mirror',chatId:extra,expectedUpdatedAt:ack.updated_at,url:'https://chatgpt.com/c/test-mapped',observed:{title:'Independent Chat',archived:false,deleted:true},applied:{title:'Independent Chat',archived:false,deleted:true}})).json() as any
+  assert(deleted.deleted_at)
+  const restored=await (await post({action:'update',id:extra,deleted:false})).json() as any
+  assert.equal(restored.provider_url,null);assert.equal(restored.provider_snapshot,null)
   const before=requests
   await assert.rejects(()=>post({action:'send',chatId:extra,message:'Hello'}),/subscription sign-in is not configured/)
   await assert.rejects(()=>post({action:'connect'}),/approved Sign in/)

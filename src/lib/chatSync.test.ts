@@ -6,3 +6,5 @@ test('mirror merges independent edits in both directions',()=>{assert.deepEqual(
 test('mirror reports concurrent incompatible renames',()=>{assert.deepEqual(planChatMirror({...base,title:'A'},{...base,title:'B'},base),{push:{},pull:{},conflicts:['title']})})
 test('first binding preserves Planner identity and subsequent remote deletion is pulled',()=>{assert.equal(planChatMirror(base,{...base,title:'Auto title'},null).push.title,'Homework');assert.deepEqual(planChatMirror(base,{...base,deleted:true},base).pull,{deleted:true})})
 test('a deleted ChatGPT conversation cannot be restored by Planner',()=>{assert.deepEqual(planChatMirror(base,{...base,deleted:true},{...base,deleted:true}).conflicts,['deleted'])})
+
+test('an explicit conflict choice preserves independent fields',()=>{assert.deepEqual(planChatMirror({...base,title:'A'},{...base,title:'B',archived:true},base,'planner'),{push:{title:'A'},pull:{archived:true},conflicts:[]})})
