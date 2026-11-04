@@ -47,7 +47,7 @@ test('Google accounts are owner scoped, tokens stay private, and Calendar uses t
   try{
     const response=await startGoogleCalendar('arin'),data=await response.json() as {url:string},url=new URL(data.url)
     assert.equal(url.origin,'https://accounts.google.com');assert.equal(url.searchParams.get('scope'),'openid email '+GOOGLE_CALENDAR_SCOPE+' '+GOOGLE_CALENDAR_WRITE_SCOPE)
-    assert.equal(url.searchParams.get('code_challenge_method'),'S256');assert.equal(url.searchParams.get('access_type'),'offline')
+    assert.equal(url.searchParams.get('include_granted_scopes'),'true');assert.equal(url.searchParams.get('code_challenge_method'),'S256');assert.equal(url.searchParams.get('access_type'),'offline')
     assert.match(response.headers.get('set-cookie') || '',/HttpOnly; Secure; SameSite=Lax/);assert.equal((attempt as Record<string,unknown>|null)?.username,'arin')
     const status=await googleCalendarStatus('arin');assert.equal(status.activeAccountId,account.id);assert.ok(!JSON.stringify(status).includes('test-access'));assert.ok(!JSON.stringify(status).includes('credentials'))
     await selectGoogleAccount('arin',account.id);assert.ok(selected)

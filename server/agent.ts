@@ -65,7 +65,7 @@ async function oauthStart(username: string, provider: string, requestedScopes?: 
   const scopes = requestedScopes || config.scopes
   check(await db().from('planner_oauth_attempts').insert({ username, provider, requested_scopes:scopes, state_hash: sha(state), verifier, nonce, browser_hash: sha(browserToken), expires_at: new Date(Date.now() + 600000).toISOString() }))
   const url = new URL(config.authorize)
-  url.search = new URLSearchParams({ client_id: config.clientId, redirect_uri: `${ORIGIN}/api/agent/oauth/callback/${provider}`, response_type: 'code', scope: scopes, state, nonce, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256', ...(provider === 'google' ? { access_type: 'offline', prompt: 'select_account consent' } : {}) }).toString()
+  url.search = new URLSearchParams({ client_id: config.clientId, redirect_uri: `${ORIGIN}/api/agent/oauth/callback/${provider}`, response_type: 'code', scope: scopes, state, nonce, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256', ...(provider === 'google' ? { access_type: 'offline', prompt: 'select_account consent', include_granted_scopes:'true' } : {}) }).toString()
   const response = json({ url: url.toString() })
   response.headers.set('Set-Cookie', `planner-oauth=${browserToken}; HttpOnly; Secure; SameSite=Lax; Path=/api/agent/oauth; Max-Age=600`)
   return response
