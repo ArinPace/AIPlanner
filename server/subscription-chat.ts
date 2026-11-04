@@ -30,6 +30,14 @@ export async function handleSubscriptionChat(request:Request,username:string){
  const input=await body(request)
  // Never fall back to API-key billing, the Agent VM, or a browser extension.
  if(input.action==='send'||input.action==='connect')throw new ApiError(409,'ChatGPT subscription sign-in is not configured yet. Hosted access requires an approved Sign in with ChatGPT integration. Your draft has been kept.')
+ if(input.action==='relay_save'){
+  const args=z.object({chatId:z.string().uuid(),turnId:z.string().uuid(),prompt:z.string().min(1).max(12000),reply:z.string().min(1).max(80000)}).parse(input)
+  const chat=await owned(username,args.chatId)
+  if(chat.archived||chat.deleted_at)throw new ApiError(409,'Restore this chat before saving its reply.')
+  const saved=storage(await db().rpc('planner_save_relay_turn',{p_username:username,p_chat:args.chatId,p_turn:args.turnId,p_prompt:args.prompt,p_reply:args.reply}))
+  if(saved!==true)throw new ApiError(409,'This chat changed. Restore it before saving its reply.')
+  return json({ok:true})
+ }
  if(input.action==='create'){
   const args=z.object({title:z.string().trim().min(1).max(120).default('New chat')}).parse(input)
   return json(storage(await db().from('planner_subscription_chats').insert({username,title:args.title}).select(fields).single()))

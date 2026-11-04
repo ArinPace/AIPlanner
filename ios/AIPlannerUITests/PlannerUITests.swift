@@ -17,13 +17,18 @@ final class PlannerUITests: XCTestCase {
         let chat = app.webViews.buttons["Chat"]
         XCTAssertTrue(chat.waitForExistence(timeout: 15)); chat.tap()
         XCTAssertTrue(app.webViews.staticTexts["ChatGPT subscription"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.webViews.staticTexts["Not connected"].exists)
+        XCTAssertTrue(app.webViews.buttons["ChatGPT session"].exists)
         XCTAssertTrue(app.webViews.staticTexts["Main Chat"].exists)
         XCTAssertFalse(app.webViews.staticTexts["VM Online"].exists)
         XCTAssertFalse(app.webViews.buttons["Send message"].isEnabled)
-        app.webViews.buttons["Connect ChatGPT"].tap()
-        XCTAssertTrue(app.webViews.staticTexts["Chat settings"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.webViews.staticTexts["ChatGPT subscription sign-in is not configured yet."].firstMatch.waitForExistence(timeout: 5))
+        app.webViews.buttons["ChatGPT session"].tap()
+        let portal = app.webViews["chatGPTPortalWebView"]
+        XCTAssertTrue(portal.waitForExistence(timeout: 10))
+        Thread.sleep(forTimeInterval: 12)
+        XCTAssertTrue(portal.buttons["Log in"].exists || portal.staticTexts["ChatGPT"].exists)
+        XCTAssertTrue(app.navigationBars.buttons["Planner"].exists)
+        app.navigationBars.buttons["Planner"].tap()
+        XCTAssertTrue(app.webViews.buttons["ChatGPT session"].waitForExistence(timeout: 5))
         app.terminate()
     }
     func testNotificationsChecklistAppearsInSidebar() {

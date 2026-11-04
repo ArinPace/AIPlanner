@@ -22,7 +22,7 @@ struct PlannerWebView: UIViewRepresentable {
         config.websiteDataStore = .default()
         config.allowsInlineMediaPlayback = true
         config.userContentController.addScriptMessageHandler(context.coordinator, contentWorld: .page, name: "plannerNative")
-        config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeScreenTime=true;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true'});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeScreenTime=true;window.plannerNativeChatGPTPortal=true;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true'});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-UITestFixture"), ["127.0.0.1", "localhost"].contains(AppConfiguration.origin.host ?? ""), let url = Bundle.main.url(forResource: "UITestFixture", withExtension: "js"), let script = try? String(contentsOf: url, encoding: .utf8) {
             if ProcessInfo.processInfo.arguments.contains("-UITestWidgets") { WidgetTaskControl.clear() }
@@ -61,12 +61,34 @@ struct PlannerWebView: UIViewRepresentable {
     static func dismantleUIView(_ web: WKWebView, coordinator: Coordinator) {
         web.configuration.userContentController.removeScriptMessageHandler(forName: "plannerNative", contentWorld: .page)
         coordinator.hideScreenTime()
+        coordinator.chatGPTPortal?.dismiss(animated: false)
         web.stopLoading(); web.navigationDelegate = nil; web.uiDelegate = nil
     }
     @MainActor final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandlerWithReply, WKDownloadDelegate {
         let model: PlannerModel
         weak var webView: WKWebView?
         var authentication: NativeAuthentication?
+        var chatGPTPortal: UINavigationController?
+        var openedChatGPTForTest = false
+        var chatGPTAccount: String?
+        func relay(account: String) throws -> PlannerChatGPTPortal {
+            guard account == WidgetTaskControl.defaults.string(forKey: "feedback-account"), !account.isEmpty else { throw NativeError("Sign into Planner first.") }
+            if chatGPTAccount != account || chatGPTPortal == nil {
+                chatGPTPortal?.willMove(toParent: nil); chatGPTPortal?.view.removeFromSuperview(); chatGPTPortal?.removeFromParent()
+                let controller = PlannerChatGPTPortal(account: account)
+                let nav = UINavigationController(rootViewController: controller)
+                nav.modalPresentationStyle = .fullScreen
+                controller.onClose = { [weak self, weak nav] in nav?.dismiss(animated: true) { self?.parkRelay() } }
+                chatGPTPortal = nav; chatGPTAccount = account
+                parkRelay()
+            }
+            return chatGPTPortal!.viewControllers[0] as! PlannerChatGPTPortal
+        }
+        func parkRelay() {
+            guard let nav = chatGPTPortal, let web = webView, let parent = web.window?.rootViewController, nav.presentingViewController == nil else { return }
+            if nav.parent == nil { parent.addChild(nav); web.insertSubview(nav.view, at: 0); nav.didMove(toParent: parent) }
+            nav.view.frame = web.bounds; nav.view.alpha = 0.01; nav.view.isUserInteractionEnabled = false
+        }
         var screenTimeHost: UIHostingController<ScreenTimeView>?
         weak var taskScreenTimeHost: UIViewController?
         func hideScreenTime() {
@@ -122,11 +144,33 @@ struct PlannerWebView: UIViewRepresentable {
                         guard let account = body["account"] as? String, let value = body["settings"], JSONSerialization.isValidJSONObject(value) else { throw NativeError("Missing notification settings.") }
                         let options = try JSONDecoder().decode(TaskNotificationOptions.self, from: JSONSerialization.data(withJSONObject: value))
                         try await PlannerTaskNotifications.shared.configure(account: account, options: options)
+                    case "chatGPTPortal", "chatGPTRelayStatus", "chatGPTRelaySend", "chatGPTRelayStop":
+                        guard let account = body["account"] as? String else { throw NativeError("Sign into Planner first.") }
+                        let controller = try relay(account: account)
+                        if action == "chatGPTRelayStatus" { replyHandler(try await controller.relayStatus(), nil); return }
+                        if action == "chatGPTRelaySend" {
+                            guard let text = body["text"] as? String, let chatId = body["chatId"] as? String, UUID(uuidString: chatId) != nil, !text.isEmpty, text.count <= 12000 else { throw NativeError("Choose a chat and enter a message.") }
+                            try await controller.send(text: text, chatId: chatId); replyHandler(["ok": true], nil); return
+                        }
+                        if action == "chatGPTRelayStop" { try await controller.stopRelay(); replyHandler(["ok": true], nil); return }
+                        guard let parent = webView?.window?.rootViewController, parent.presentedViewController == nil, let portal = chatGPTPortal else { throw NativeError("Close the current menu first.") }
+                        portal.willMove(toParent: nil); portal.view.removeFromSuperview(); portal.removeFromParent()
+                        portal.view.alpha = 1; portal.view.isUserInteractionEnabled = true
+                        parent.present(portal, animated: true)
                     case "localReplicaAccount":
                         let account = body["account"] as? String
                         let changed = account != WidgetTaskControl.defaults.string(forKey: "feedback-account")
-                        if changed { TaskFocusRules.clearAll(); taskScreenTimeHost?.dismiss(animated: false); WidgetTaskControl.clear() }
+                        if changed { chatGPTPortal?.dismiss(animated: false); chatGPTPortal = nil; chatGPTAccount = nil; TaskFocusRules.clearAll(); taskScreenTimeHost?.dismiss(animated: false); WidgetTaskControl.clear() }
                         WidgetTaskControl.defaults.set(account, forKey: "feedback-account")
+                        #if DEBUG
+                        if let account, !openedChatGPTForTest, ProcessInfo.processInfo.arguments.contains("-PlannerOpenChatGPT") {
+                            openedChatGPTForTest = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                                guard let self, let parent = self.webView?.window?.rootViewController, parent.presentedViewController == nil, let _ = try? self.relay(account: account), let nav = self.chatGPTPortal else { return }
+                                nav.willMove(toParent: nil); nav.view.removeFromSuperview(); nav.removeFromParent(); nav.view.alpha = 1; nav.view.isUserInteractionEnabled = true; parent.present(nav, animated: true)
+                            }
+                        }
+                        #endif
                         if account == nil { hideScreenTime() }
                         let replicaChanged = try LocalReplicaStore.activate(account)
                         if changed || replicaChanged {
@@ -290,5 +334,136 @@ struct PlannerWebView: UIViewRepresentable {
         func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin, initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType, decisionHandler: @escaping (WKPermissionDecision) -> Void) {
             decisionHandler(origin.host == AppConfiguration.origin.host && frame.isMainFrame ? .prompt : .deny)
         }
+    }
+}
+
+
+/// The real ChatGPT website, with its own persistent account-isolated WebKit store.
+/// No Planner native bridge is injected here, and no credentials are read or exported.
+@MainActor final class PlannerChatGPTPortal: UIViewController, WKNavigationDelegate, WKUIDelegate {
+    let account: String
+    var onClose: (() -> Void)?
+    var pendingURL: String?
+    var pendingChat: String?
+    var baseline = 0
+    var sawRunning = false
+    var lastText = ""
+    var changedAt = Date()
+    var startedAt = Date()
+    var browser: WKWebView!
+    let status = UILabel()
+    init(account: String) { self.account = account; super.init(nibName: nil, bundle: nil) }
+    required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = "ChatGPT website"
+        view.backgroundColor = .systemBackground
+        let configuration = WKWebViewConfiguration()
+        let key = "chatgpt-web-store:" + account
+        let identifier = UUID(uuidString: UserDefaults.standard.string(forKey: key) ?? "") ?? UUID()
+        UserDefaults.standard.set(identifier.uuidString, forKey: key)
+        configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: identifier)
+        configuration.allowsInlineMediaPlayback = true
+        browser = WKWebView(frame: .zero, configuration: configuration)
+        browser.accessibilityIdentifier = "chatGPTPortalWebView"
+        browser.navigationDelegate = self; browser.uiDelegate = self
+        browser.allowsBackForwardNavigationGestures = true
+        browser.translatesAutoresizingMaskIntoConstraints = false
+        status.font = .preferredFont(forTextStyle: .caption1); status.numberOfLines = 0
+        status.text = "Sign in or approve access here, then return to Planner to chat. Planner tools are not connected yet."
+        status.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(status); view.addSubview(browser)
+        NSLayoutConstraint.activate([
+            status.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 6),
+            status.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),status.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
+            browser.topAnchor.constraint(equalTo: status.bottomAnchor, constant: 6),browser.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            browser.trailingAnchor.constraint(equalTo: view.trailingAnchor),browser.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ])
+        navigationItem.leftBarButtonItem = UIBarButtonItem(title: "Planner", style: .done, target: self, action: #selector(close))
+        navigationItem.rightBarButtonItems = [UIBarButtonItem(title: "Safari", style: .plain, target: self, action: #selector(safari)),UIBarButtonItem(barButtonSystemItem: .refresh, target: self, action: #selector(reload))]
+        browser.load(URLRequest(url: URL(string: "https://chatgpt.com/")!))
+    }
+    private var snapshotScript: String { """
+    (()=>{const visible=n=>!!n.getClientRects().length;
+    const box=[...document.querySelectorAll('#prompt-textarea,[role="textbox"][contenteditable="true"],textarea')].find(visible);
+    const buttons=[...document.querySelectorAll('button')].filter(visible);
+    const label=n=>(n.getAttribute('aria-label')||n.innerText||'').trim();
+    const running=buttons.some(n=>/^(Stop|Stop generating|Stop streaming|Pause|Pause task|Stop task)$/i.test(label(n))||n.dataset.testid==='stop-button');
+    const raw=[...document.querySelectorAll('[data-message-author-role="assistant"],[data-markdown-text-style="assistant-message"]')];
+    const replies=raw.filter(n=>!raw.some(other=>other!==n&&other.contains(n)));
+    const last=replies.at(-1),turn=last?.closest('[data-testid^="conversation-turn"],article')||last;
+    return {ready:!!box,needsLogin:buttons.some(n=>/^(Log in|Sign in)$/i.test(label(n)))||!!document.querySelector('input[type="password"]'),running,count:replies.length,text:last?.innerText||'',final:!!turn?.querySelector('[data-testid="copy-turn-action-button"],button[aria-label="Copy response"],button[aria-label="Read aloud"]'),url:location.href};})()
+    """ }
+    private func snapshot() async throws -> [String: Any] {
+        guard browser.url?.scheme == "https", browser.url?.host == "chatgpt.com" else { return ["ready": false,"needsLogin": true] }
+        return try await browser.evaluateJavaScript(snapshotScript) as? [String: Any] ?? [:]
+    }
+    func send(text: String, chatId: String) async throws {
+        guard pendingChat == nil else { throw NativeError("A ChatGPT reply is still pending. Open the session before retrying.") }
+        let key = "chatgpt-conversation:" + account + ":" + chatId
+        let stored = UserDefaults.standard.string(forKey: key).flatMap(URL.init(string:))
+        let target = stored.flatMap { $0.scheme == "https" && $0.host == "chatgpt.com" && $0.path.hasPrefix("/c/") ? $0 : nil } ?? URL(string: "https://chatgpt.com/")!
+        if browser.url?.absoluteString != target.absoluteString { browser.load(URLRequest(url: target)) }
+        var state: [String: Any] = [:]
+        for _ in 0..<40 {
+            try await Task.sleep(for: .milliseconds(500))
+            if browser.isLoading { continue }
+            state = try await snapshot()
+            if state["ready"] as? Bool == true || state["needsLogin"] as? Bool == true { break }
+        }
+        guard state["ready"] as? Bool == true, state["needsLogin"] as? Bool != true else { throw NativeError("Sign into ChatGPT using Connect ChatGPT, then return to Planner.") }
+        guard state["running"] as? Bool != true else { throw NativeError("ChatGPT is already working. Open the session to check it first.") }
+        let result = try await browser.callAsyncJavaScript("""
+        const box=[...document.querySelectorAll('#prompt-textarea,[role="textbox"][contenteditable="true"],textarea')].find(n=>n.getClientRects().length);
+        if(!box)throw Error('ChatGPT composer is unavailable.');
+        if((box.value||box.innerText||'').trim())throw Error('ChatGPT has an unsent draft. Open the session and send or clear it first.');
+        box.focus();
+        if(box.tagName==='TEXTAREA'){Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(box,text);box.dispatchEvent(new Event('input',{bubbles:true}));}
+        else {document.execCommand('insertText',false,text);box.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:text}));}
+        await new Promise(resolve=>setTimeout(resolve,500));
+        if((box.value||box.innerText||'').trim()!==text.trim())throw Error('ChatGPT did not accept the complete draft. Check the session before retrying.');
+        const send=[...document.querySelectorAll('button')].find(n=>!n.disabled&&n.getClientRects().length&&(n.dataset.testid==='send-button'||/^(Send|Send prompt|Send message)$/i.test(n.getAttribute('aria-label')||'')));
+        if(!send)throw Error('ChatGPT Send button is unavailable. Draft retained in the session.');
+        send.click();return true;
+        """, arguments: ["text": text], in: nil, contentWorld: .page)
+        guard result as? Bool == true else { throw NativeError("Message submission was not confirmed.") }
+        pendingChat = chatId; pendingURL = target.path.hasPrefix("/c/") ? target.path : nil; baseline = state["count"] as? Int ?? 0; sawRunning = false; lastText = ""; changedAt = Date(); startedAt = Date()
+    }
+    func relayStatus() async throws -> [String: Any] {
+        var state = try await snapshot()
+        guard let chatId = pendingChat else { state["phase"] = "idle"; return state }
+        state["phase"] = "working"
+        if let url = state["url"] as? String, let parsed = URL(string: url), parsed.path.hasPrefix("/c/") {
+            if let expected = pendingURL, expected != parsed.path { state["phase"] = "attention"; state["text"] = ""; state["message"] = "ChatGPT changed conversations. Open the session to check before retrying."; return state }
+            pendingURL = parsed.path
+        }
+        if (state["count"] as? Int ?? 0) <= baseline { state["text"] = "" }
+        if let url = state["url"] as? String, let parsed = URL(string: url), parsed.host == "chatgpt.com", parsed.path.hasPrefix("/c/") { UserDefaults.standard.set(url, forKey: "chatgpt-conversation:" + account + ":" + chatId) }
+        sawRunning = sawRunning || state["running"] as? Bool == true
+        let text = state["text"] as? String ?? ""
+        if text != lastText { lastText = text; changedAt = Date() }
+        if (state["count"] as? Int ?? 0) > baseline, !text.isEmpty, state["running"] as? Bool != true, (sawRunning || state["final"] as? Bool == true), Date().timeIntervalSince(changedAt) >= 3 {
+            state["phase"] = "completed"; pendingChat = nil
+        } else if Date().timeIntervalSince(startedAt) > 900 { state["phase"] = "attention"; state["message"] = "Reply completion could not be verified. Open ChatGPT before sending again." }
+        return state
+    }
+    func stopRelay() async throws {
+        guard browser.url?.host == "chatgpt.com" else { return }
+        _ = try await browser.evaluateJavaScript("[...document.querySelectorAll('button')].find(n=>n.dataset.testid==='stop-button'||/^(Stop|Stop generating|Stop streaming|Stop task)$/i.test(n.getAttribute('aria-label')||''))?.click()")
+        pendingChat = nil
+    }
+    @objc func close() { onClose?() }
+    @objc func reload() { browser.reload() }
+    @objc func safari() { UIApplication.shared.open(URL(string: "https://chatgpt.com/")!) }
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        status.text = "ChatGPT session · Sign in or approve access, then tap Planner. No credentials are copied to Planner."
+    }
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        status.text = "Could not load ChatGPT: " + error.localizedDescription + " Try Reload or Safari. Safari has a separate sign-in session."
+    }
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        // Keep sign-in links and user-opened tabs visible in this portal.
+        if navigationAction.targetFrame == nil { webView.load(navigationAction.request) }
+        return nil
     }
 }
