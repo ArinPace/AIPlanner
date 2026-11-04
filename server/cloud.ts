@@ -151,7 +151,7 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
     const username = await sessionUser(request)
     if (!username) throw new ApiError(401, 'Please sign in.')
     if (path === '/api/widget/feedback' || path === '/api/widget/snapshot') return await (await import('./widget-background.js')).handleWidgetBackground(request,path,username)
-    if(path==='/api/subscription-chat')return (await import('./subscription-chat.js')).handleSubscriptionChat(request,username)
+    if(path==='/api/subscription-chat')return await (await import('./subscription-chat.js')).handleSubscriptionChat(request,username)
     if(path==='/api/sources/status'&&method==='GET')return json(await (await import('./source-health.js')).sourceHealthStatus(username))
     if(path==='/api/notifications'&&['GET','PUT'].includes(method)){const {taskNotificationSettings}=await import('./task-notifications.js');return json(await taskNotificationSettings(username,method==='PUT'?await body(request):undefined))}
     if (path === '/api/planning') return await handlePlanning(request,username)
