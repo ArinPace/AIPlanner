@@ -1,3 +1,4 @@
+import {durationHeight} from '../lib/calendarDisplay'
 import {TaskScreenTimeButton} from './TaskScreenTimeButton'
 import {taskScreenTimeWindow} from '../lib/taskScreenTime'
 import {supportsScreenTime} from '../lib/platform'
@@ -24,6 +25,7 @@ import {PlanningButton} from './PlanningSettings'
 import {toDateInput} from '../lib/dates'
 
 type TimeGridViewProps = {
+  scaleToDuration?:boolean
   active?:boolean
   cursor: Date
   view: Extract<CalendarView, 'week' | 'day'>
@@ -48,7 +50,7 @@ function clipToDay(item: Occurrence, day: Date): { start: Date; end: Date } | nu
   }
 }
 
-export function TimeGridView({ active=true,cursor, view, zoom, occurrences, busyOccurrences, tags, onSlotClick, onEventClick }: TimeGridViewProps) {
+export function TimeGridView({ scaleToDuration=false, active=true,cursor, view, zoom, occurrences, busyOccurrences, tags, onSlotClick, onEventClick }: TimeGridViewProps) {
   const days = view === 'day' ? [startOfDay(cursor)] : getWeekDays(cursor)
   const scrollRef = useRef<HTMLDivElement>(null)
   const weekScrollRef=useRef<HTMLDivElement>(null)
@@ -85,7 +87,7 @@ export function TimeGridView({ active=true,cursor, view, zoom, occurrences, busy
     if(!active){previousLayout.current=null;return}
     const node = mobileWeek?weekScrollRef.current:scrollRef.current
     if (!node) return
-    const key=view+'/'+dayKey+'/'+todayKey+'/'+(mobileWeek?'mobile':'grid'),previous=previousLayout.current
+    const key=view+'/'+dayKey+'/'+todayKey+'/'+(mobileWeek?'mobile':'grid')+'/'+(mobileWeek&&scaleToDuration),previous=previousLayout.current
     if(previous?.key!==key){
       if(mobileWeek){
         const marker=mobileNowRef.current
@@ -100,7 +102,7 @@ export function TimeGridView({ active=true,cursor, view, zoom, occurrences, busy
       node.scrollTop=midpoint/previous.hourHeight*hourHeight-node.clientHeight/2
     }
     previousLayout.current={key,hourHeight}
-  }, [active,view,dayKey,todayKey,mobileWeek,hourHeight,containsToday])
+  }, [active,view,dayKey,todayKey,mobileWeek,hourHeight,containsToday,scaleToDuration])
 
   const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 60) * hourHeight
   function dayFolderBody(item:Occurrence,day:Date):ReactNode{
@@ -113,7 +115,7 @@ export function TimeGridView({ active=true,cursor, view, zoom, occurrences, busy
     const marker=<div ref={mobileNowRef} className="mobile-week-now" role="img" aria-label={'Current time '+formatTimeCompact(now)}><span>Now · {formatTimeCompact(now)}</span></div>
     return <>{items.map((item,index)=>{
       const folder=item.event.eventKind==='folder',children=(grouped.children.get(folderOccurrenceKey(item))||[]).filter(child=>clipToDay(child,day)),open=folder&&folderOpen(item)
-      const chip=<button type="button" className={'event-chip mobile-week-event'+(nested?' folder-child-event':'')} style={item.freeTime?freeTimeAppearance:eventAppearance(eventColor(item.event,tags),item.event.reminder)} title={item.event.title} aria-expanded={folder?open:undefined} onClick={()=>item.freeTime?onSlotClick(item.start):folder?toggleFolder(item):onEventClick(item.event,item.start)}>
+      const chip=<button type="button" className={'event-chip mobile-week-event'+(nested?' folder-child-event':'')} style={{...(item.freeTime?freeTimeAppearance:eventAppearance(eventColor(item.event,tags),item.event.reminder)),...(scaleToDuration&&view==='week'&&(!folder||!open)?{height:durationHeight(item,'week',zoom,startOfDay(day).getTime(),addDays(startOfDay(day),1).getTime())}:{})}} title={item.event.title} aria-expanded={folder?open:undefined} onClick={()=>item.freeTime?onSlotClick(item.start):folder?toggleFolder(item):onEventClick(item.event,item.start)}>
         <span className="mobile-week-time">{item.event.allDay?(item.event.reminder?'Reminder':'All day'):item.event.reminder?formatTimeCompact(item.start):formatTimeCompact(item.start)+'–'+formatTimeCompact(item.end)}</span>
         <span className="event-title">{folder&&(open?'▾ ▣ ':'▸ ▣ ')}{item.event.urgency!=null&&<span className="event-urgency-badge" style={urgencyColor(item.event.urgency)}>{item.event.urgency}</span>}{item.event.title||'(No title)'}</span>
         {folder&&<small className="folder-event-count">{children.length} {children.length===1?'item':'items'}</small>}
@@ -124,7 +126,7 @@ export function TimeGridView({ active=true,cursor, view, zoom, occurrences, busy
 
   return (
     <div ref={weekScrollRef} data-layout={mobileWeek?'agenda':'grid'} className={`time-view-scroll ${view === 'week' ? 'has-mobile-week' : ''}`}>
-      {view === 'week' && <div className="mobile-week">
+      {view === 'week' && <div className={'mobile-week'+(scaleToDuration?' is-duration-scaled':'')}>
         {days.map(day => {
           const items = withFreeTime(grouped.top.filter(item => clipToDay(item, day)), busyGrouped.top, startOfDay(day), addDays(startOfDay(day),1))
           return <section className="mobile-week-day" key={day.toISOString()}>

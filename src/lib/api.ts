@@ -227,3 +227,5 @@ export function subscriptionChatRequest<T=import('./subscriptionChat').Subscript
 export function calendarAccounts<T>(){return request<T>('/api/calendar/google-accounts',{})}
 
 export function notificationInboxRequest<T>(input?:{id:string;checked:boolean}){return request<T>('/api/agent/notifications',input?{method:'PATCH',body:JSON.stringify(input)}:{})}
+
+export function calendarDisplayRequest(patch?:Partial<import('./calendarDisplay').CalendarDisplay>){return request<import('./calendarDisplay').CalendarDisplay>('/api/calendar/display-settings',patch?{method:'PATCH',body:JSON.stringify(patch)}:{})}

@@ -1,3 +1,4 @@
+import {durationHeight} from '../lib/calendarDisplay'
 import { freeTimeAppearance, withFreeTime } from '../lib/freeTime'
 import { eventAppearance } from '../lib/eventAppearance'
 import {PlannerDate as Date} from '../lib/timezone'
@@ -21,6 +22,7 @@ import {
 const TARGET_WEEK_HEIGHT = 112
 
 type MonthViewProps = {
+  scaleToDuration?:boolean
   cursor: Date
   zoom: number
   busyEvents: CalendarEvent[]
@@ -32,7 +34,7 @@ type MonthViewProps = {
   onEventClick: (event: CalendarEvent, occurrenceStart: Date) => void
 }
 
-export function MonthView({ cursor, zoom, events, busyEvents, onMonthChange, tags, onDayClick, onDayOpen, onEventClick }: MonthViewProps) {
+export function MonthView({ scaleToDuration=false,cursor, zoom, events, busyEvents, onMonthChange, tags, onDayClick, onDayOpen, onEventClick }: MonthViewProps) {
   const [now,setNow]=useState(()=>new Date())
   useEffect(()=>{const timer=window.setInterval(()=>setNow(new Date()),60000);return()=>window.clearInterval(timer)},[])
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -50,11 +52,13 @@ export function MonthView({ cursor, zoom, events, busyEvents, onMonthChange, tag
   useEffect(() => () => { if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current) }, [])
   const reportedMonth = useRef<string | null>(null)
   const jumpedMonth = useRef<string | null>(null)
+  const previousScale=useRef(scaleToDuration)
   const prependAnchor = useRef<{ day: string; top: number } | null>(null)
 
   useLayoutEffect(() => {
     const node = scrollRef.current
     if (!node) return
+    if(previousScale.current!==scaleToDuration){previousScale.current=scaleToDuration;jumpedMonth.current=null;reportedMonth.current=null}
     if (prependAnchor.current) {
       const anchor = prependAnchor.current
       const cell = node.querySelector<HTMLElement>('[data-day="' + anchor.day + '"]')
@@ -75,7 +79,7 @@ export function MonthView({ cursor, zoom, events, busyEvents, onMonthChange, tag
     }
     jumpedMonth.current = monthKey
     node.scrollTop += cell.getBoundingClientRect().top - node.getBoundingClientRect().top
-  }, [monthKey, range, cursor])
+  }, [monthKey, range, cursor,scaleToDuration])
 
   function updateScroll() {
     const node = scrollRef.current
@@ -115,7 +119,7 @@ export function MonthView({ cursor, zoom, events, busyEvents, onMonthChange, tag
   }
 
   return (
-    <div className="month-view">
+    <div className={'month-view'+(scaleToDuration?' is-duration-scaled':'')}>
       <div className="month-dow">
         {WEEKDAYS.map((day) => (
           <div key={day}>{day}</div>
@@ -158,7 +162,8 @@ export function MonthView({ cursor, zoom, events, busyEvents, onMonthChange, tag
                     <button
                       type="button"
                       className={`event-chip ${item.event.reminder?'reminder-event':''}`}
-                      style={item.freeTime?freeTimeAppearance:eventAppearance(color,item.event.reminder)}
+                      title={item.event.title}
+                      style={{...(item.freeTime?freeTimeAppearance:eventAppearance(color,item.event.reminder)),...(scaleToDuration?{height:durationHeight(item,'month',zoom,startOfDay(day).getTime(),addDays(startOfDay(day),1).getTime())}:{})}}
                       onClick={(event) => {
                         event.stopPropagation()
                         if(item.freeTime)onDayClick(item.start)

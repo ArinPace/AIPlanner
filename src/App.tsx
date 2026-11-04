@@ -1,3 +1,4 @@
+import {useCalendarDisplay} from './lib/useCalendarDisplay'
 import {SubscriptionChatView} from './components/SubscriptionChatView'
 import {TaskNotificationSync} from './components/TaskNotificationSync'
 import {taskScreenTimeWindow} from './lib/taskScreenTime'
@@ -147,6 +148,7 @@ export default function App() {
 }
 
 function CalendarApp({ username, onLogout }: { username: string; onLogout: () => void }) {
+  const calendarDisplay=useCalendarDisplay(username)
   const [tab, setTab] = useState<'calendar' | 'files' | 'todo' | 'work' | 'agent' | 'screentime' | 'chat'>(()=>sessionStorage.getItem(RECOVERY_TAB)===username?'agent':'calendar')
   useVmActivity(username,tab!=='chat')
   const [todoRequest,setTodoRequest]=useState(0)
@@ -407,6 +409,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
         cursor={cursor}
         view={view}
         zoom={zoom}
+        calendarDisplay={calendarDisplay}
         username={username}
         onViewChange={setView}
         onNavigate={navigate}
@@ -470,6 +473,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
             />
           ) : view === 'month' ? (
             <MonthView
+              scaleToDuration={calendarDisplay.settings.month}
               cursor={cursor}
               zoom={zoom}
               events={visibleEvents}
@@ -485,6 +489,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
             />
           ) : (
             <TimeGridView
+              scaleToDuration={calendarDisplay.settings.week}
               active={tab==='calendar'}
               cursor={cursor}
               view={view}

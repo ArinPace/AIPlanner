@@ -74,6 +74,7 @@
   else if(path==='/api/auth/options')value={googleEnabled:true,pendingGoogle:false};
   else if(path==='/api/login'||path==='/api/register'){signedIn=true;value={username:'planner_test',token:'fixture-session'}}
   else if(path==='/api/logout'){signedIn=false;value={ok:true}}
+  else if(path==='/api/calendar/display-settings'){value=JSON.parse(localStorage.getItem('fixture-calendar-display')||'{"week":false,"month":false}');if(method==='PATCH'){Object.assign(value,JSON.parse(options.body));localStorage.setItem('fixture-calendar-display',JSON.stringify(value))}}
   else if(path==='/api/subscription-chat'){
    if(method==='POST'){
     const input=JSON.parse(options.body);

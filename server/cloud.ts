@@ -153,6 +153,7 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
     if (path === '/api/widget/feedback' || path === '/api/widget/snapshot') return await (await import('./widget-background.js')).handleWidgetBackground(request,path,username)
     if(path==='/api/agent/notifications')return await (await import('./notification-inbox.js')).notificationInbox(request,username)
     if(path==='/api/calendar/google-accounts'&&method==='GET')return json(await (await import('./agent.js')).googleCalendarStatus(username))
+    if(path==='/api/calendar/display-settings'&&['GET','PATCH'].includes(method)){const {calendarDisplaySettings}=await import('./calendar-display.js');return json(await calendarDisplaySettings(username,method==='PATCH'?await body(request):undefined))}
     if(path==='/api/subscription-chat')return await (await import('./subscription-chat.js')).handleSubscriptionChat(request,username)
     if(path==='/api/sources/status'&&method==='GET')return json(await (await import('./source-health.js')).sourceHealthStatus(username))
     if(path==='/api/notifications'&&['GET','PUT'].includes(method)){const {taskNotificationSettings}=await import('./task-notifications.js');return json(await taskNotificationSettings(username,method==='PUT'?await body(request):undefined))}

@@ -1,3 +1,4 @@
+import type {useCalendarDisplay} from '../lib/useCalendarDisplay'
 import {TaskNotificationSettings} from './TaskNotificationSettings'
 import {LocalCopySettings} from './LocalCopySettings'
 import {downloadCalendarJson} from '../lib/api'
@@ -8,6 +9,7 @@ import { CloseIcon } from './Icons'
 import {PlanningSettings} from './PlanningSettings'
 
 type SettingsPanelProps = {
+  calendarDisplay:ReturnType<typeof useCalendarDisplay>
   zoom: number
   onZoomChange: (zoom: number) => void
   onClose: () => void
@@ -17,7 +19,7 @@ function shortcutMod(): string {
   return /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl'
 }
 
-export function SettingsPanel({ zoom, onZoomChange, onClose }: SettingsPanelProps) {
+export function SettingsPanel({ calendarDisplay, zoom, onZoomChange, onClose }: SettingsPanelProps) {
   const [downloadError,setDownloadError]=useState('')
   const mod = shortcutMod()
   const [theme, setTheme] = useState(readTheme)
@@ -52,6 +54,12 @@ export function SettingsPanel({ zoom, onZoomChange, onClose }: SettingsPanelProp
       <button type="button" className="today-btn" onClick={()=>void downloadCalendarJson().catch(e=>setDownloadError(e.message))}>Download calendar JSON</button>
       <button type="button" className="today-btn" onClick={()=>void downloadCalendarJson(true).catch(e=>setDownloadError(e.message))}>Download staging JSON</button>
       {downloadError&&<p className="form-error" role="alert">{downloadError}</p>}
+      <fieldset className="settings-duration"><legend>Scale to duration</legend>
+        <label className="settings-theme"><span>Week view</span><input type="checkbox" role="switch" aria-label="Scale week view to duration" checked={calendarDisplay.settings.week} disabled={calendarDisplay.saving} onChange={e=>void calendarDisplay.change('week',e.target.checked)}/></label>
+        <label className="settings-theme"><span>Month view</span><input type="checkbox" role="switch" aria-label="Scale month view to duration" checked={calendarDisplay.settings.month} disabled={calendarDisplay.saving} onChange={e=>void calendarDisplay.change('month',e.target.checked)}/></label>
+        <p className="quiet">Size timed events and folders by their duration. Short events keep a minimum tappable height. Saved to your account.</p>
+        {calendarDisplay.error&&<p role="alert" className="form-error">{calendarDisplay.error}</p>}
+      </fieldset>
       <TaskNotificationSettings/>
       <LocalCopySettings/>
       <label className="settings-field">

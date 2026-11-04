@@ -1,3 +1,4 @@
+import type {useCalendarDisplay} from '../lib/useCalendarDisplay'
 import {supportsScreenTime} from '../lib/platform'
 import { useEffect, useRef, useState } from 'react'
 import type { CalendarView } from '../types'
@@ -7,6 +8,7 @@ import {CalendarHistory} from './CalendarHistory'
 import { CalendarMark, ChevronIcon, MenuIcon, PlusIcon, SettingsIcon } from './Icons'
 
 type HeaderProps = {
+  calendarDisplay:ReturnType<typeof useCalendarDisplay>
   tab: 'calendar' | 'files' | 'todo' | 'work' | 'agent' | 'screentime' | 'chat'
   onTabChange: (tab: 'calendar' | 'files' | 'todo' | 'work' | 'agent' | 'screentime' | 'chat') => void
   cursor: Date
@@ -38,6 +40,7 @@ export function Header({
   onCreate,
   onVisualZoomChange,
   onLogout,
+  calendarDisplay,
 }: HeaderProps) {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [historyOpen,setHistoryOpen]=useState(false)
@@ -117,6 +120,7 @@ export function Header({
           </button>
           {settingsOpen && (
             <SettingsPanel
+              calendarDisplay={calendarDisplay}
               zoom={zoom}
               onZoomChange={onVisualZoomChange}
               onClose={() => setSettingsOpen(false)}
