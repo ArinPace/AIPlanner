@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { randomUUID } from 'node:crypto'
-import { validateFilesState, type FilesState, type PlannerDocument } from '../src/lib/files.js'
+import { FILES_WORKSPACE_MAX_BYTES, validateFilesState, type FilesState, type PlannerDocument } from '../src/lib/files.js'
 import { createToken, normalizeUsername, tokenHash } from './auth.js'
 import { handleAgentRequest } from './agent.js'
 import { handleMcpRequest } from './mcp.js'
@@ -50,7 +50,7 @@ export function json(value: unknown, status = 200) {
 }
 export async function body(request: Request): Promise<Record<string, unknown>> {
   const text = await request.text()
-  if (Buffer.byteLength(text) > 3 * 1024 * 1024) throw new ApiError(413, 'This workspace is too large to save in one request.')
+  if (Buffer.byteLength(text) > FILES_WORKSPACE_MAX_BYTES) throw new ApiError(413, 'This workspace is too large to save in one request.')
   try {
     const parsed: unknown = JSON.parse(text || '{}')
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error()

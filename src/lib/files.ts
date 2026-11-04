@@ -1,3 +1,6 @@
+// Leave headroom below the hosting function payload ceiling for JSON wrappers.
+export const FILES_WORKSPACE_MAX_BYTES = 4 * 1024 * 1024
+
 export interface PlannerFolder {
   id: string
   parentId: string | null
@@ -70,7 +73,7 @@ export function descendantIds(folders: PlannerFolder[], id: string): Set<string>
 export function validateFilesState(value: unknown): asserts value is FilesState {
   if (!value || typeof value !== 'object') throw new Error('Invalid files data.')
   const state = value as FilesState
-  if (new TextEncoder().encode(JSON.stringify(state)).length > 3 * 1024 * 1024) throw new Error('The Files workspace supports up to 3 MB of text and metadata. PDFs are stored separately.');
+  if (new TextEncoder().encode(JSON.stringify(state)).length > FILES_WORKSPACE_MAX_BYTES) throw new Error('The Files workspace supports up to 4 MB of text and metadata. PDFs are stored separately.');
   if (!Array.isArray(state.folders) || !Array.isArray(state.files)) throw new Error('Invalid files data.')
   if (state.folders.length > 2000 || state.files.length > 5000) throw new Error('Too many folders or files.')
   const ids = new Set<string>()
