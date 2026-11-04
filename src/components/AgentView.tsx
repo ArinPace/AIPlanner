@@ -12,7 +12,7 @@ import { DictationButton } from './DictationButton'
 import { AgentApproval } from './AgentApproval'
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { agentAction, agentRequest } from '../lib/agent'
-import { VM_SOURCES, type VmChat, type VmJob, type VmState } from '../lib/vm'
+import { type VmChat, type VmJob, type VmState } from '../lib/vm'
 import { AgentSettings } from './AgentSettings'
 import { CloseIcon, MenuIcon, PlusIcon, SettingsIcon } from './Icons'
 import { RenameDialog } from './RenameDialog'
@@ -59,7 +59,6 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
   const [chatAction, setChatAction] = useState<string | null>(null)
   const [selecting,setSelecting]=useState(false)
   const [selectedIds,setSelectedIds]=useState<string[]>([])
-  const [dismissedConnections,setDismissedConnections]=useState<string[]>([])
   const end = useRef<HTMLDivElement>(null)
   const host = state?.hosts[0]
   const claude = state?.settings.ai_provider === 'claude_code'
@@ -70,7 +69,6 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
   const title = state?.chats.find(c => c.id === chat)?.title || (openMainOnLoad.current ? 'Main Chat' : 'New chat')
   const archived = state?.chats.find(c=>c.id===chat)?.archived || false
   const visibleChats = showBin ? state?.deletedChats || [] : state?.chats.filter(c=>Boolean(c.archived)===showArchived) || []
-  const confirmedConnection=state?.runs.find(r=>r.result.connected && r.result.source && !dismissedConnections.includes(r.id) && now-Date.parse(r.result.connectedAt || '')<300000)
   const closePanel = useCallback(() => setPanel(null), [])
   const refreshing=useRef<Promise<void>|null>(null)
   const initialized=useRef(false)
@@ -283,6 +281,7 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
         {chatAction==='bulk' && <span role="status">Updating chats…</span>}
       </div>}
       <nav aria-label="Conversations" className="assistant-conversations">{visibleChats.map(item => <div className={'assistant-chat-row'+(selecting?' is-selecting':'')} key={item.id}>{selecting && !item.is_main && <input type="checkbox" aria-label={'Select '+item.title} disabled={Boolean(chatAction)} checked={selectedIds.includes(item.id)} onChange={e=>setSelectedIds(ids=>e.target.checked?[...ids,item.id]:ids.filter(id=>id!==item.id))}/>}<button type="button" title={item.title} aria-current={item.id === chat ? 'page' : undefined} disabled={showBin} onClick={() => void chooseChat(item.id)}>{(item.is_main||item.pinned)&&<span aria-label={item.is_main?'Permanently pinned':'Pinned'} title={item.is_main?'Permanently pinned':'Pinned'} style={{marginRight:6}}>📌</span>}{item.title}{showBin && item.deleted_at && <small className="assistant-bin-expiry">{binDaysLeft(Date.parse(item.deleted_at)+30*86400000,now)} days left</small>}</button>{!item.is_main && !selecting && !showBin && <details className="assistant-chat-options"><summary aria-label={'Options for '+item.title}>⋯</summary><div><button disabled={Boolean(chatAction)} onClick={()=>void pinChat(item)}>{item.pinned?'Unpin chat':'Pin chat'}</button><button disabled={Boolean(chatAction)} onClick={()=>{setError('');setRenameChat(item)}}>Rename chat</button><button disabled={Boolean(chatAction)} onClick={()=>void manageChat(item,'archive')}>{item.archived?'Restore chat':'Archive chat'}</button><button disabled={Boolean(chatAction)} onClick={()=>void manageChat(item,'delete')}>Delete chat</button></div></details>}</div>)}{state && !visibleChats.length && <p>{showBin?'Bin is empty.':showArchived?'No archived chats.':'No conversations yet.'}</p>}</nav>
+      <SourceConnectionAlerts username={username} active={active} refreshKey={JSON.stringify([state?.settings.sources,state?.settings.sites,state?.google,state?.runs.filter(run=>['browser_check','browser_login'].includes(run.kind)).map(run=>[run.id,run.status])])} onManage={()=>setPanel('connections')}/>
       <button type="button" className="assistant-sidebar-settings" onClick={() => setPanel('settings')}><SettingsIcon size={18}/>Settings</button>
     </aside>}
     {sidebar && <button type="button" className="assistant-sidebar-scrim" aria-label="Close chat sidebar" onClick={() => setSidebar(false)}/>}
@@ -290,9 +289,7 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
       {draggingFiles && <div className="assistant-file-drop" role="status"><div><strong>Drop files to attach</strong><span>Images, PDFs and text documents</span></div></div>}
       <header className="assistant-chat-header"><div>{!sidebar && <button type="button" className="icon-btn" aria-label="Show chat sidebar" onClick={() => setSidebar(true)}><MenuIcon/></button>}<button type="button" className="icon-btn" aria-label="New chat" onClick={newChat}><PlusIcon/></button><div className="assistant-chat-title"><strong>{title}</strong><span>{state ? aiReady ? `${provider} connected` : 'Connect your AI to get started' : 'Loading…'}</span>{state && <span className={'assistant-power ' + power} role="status" aria-label="Virtual machine status"><i aria-hidden="true"/>VM {powerLabel}</span>}</div></div><div><button type="button" className="assistant-sites-button" onClick={() => setPanel('connections')}>Add sites</button><button type="button" className="icon-btn" aria-label="Agent settings" onClick={() => setPanel('settings')}><SettingsIcon/></button></div></header>
       {state?.chats.find(c=>c.id===chat)?.parent_chat_id && <p className="agent-banner assistant-branch-banner">Branched conversation <button type="button" className="assistant-copy" onClick={()=>{const parent=state.chats.find(c=>c.id===state.chats.find(c=>c.id===chat)?.parent_chat_id);if(parent)void chooseChat(parent.id)}} disabled={!state.chats.some(c=>c.id===state.chats.find(c=>c.id===chat)?.parent_chat_id)}>Open original</button></p>}
-      <SourceConnectionAlerts username={username} active={active} refreshKey={JSON.stringify([state?.settings.sources,state?.settings.sites,state?.google,state?.runs.filter(run=>['browser_check','browser_login'].includes(run.kind)).map(run=>[run.id,run.status])])} onManage={()=>setPanel('connections')}/>
       {error && <p role="alert" className="assistant-error">{error}{retryAttachmentFiles && <button type="button" onClick={()=>void reloadAttachmentCode()}>Reload and retry</button>}</p>}
-      {confirmedConnection?.result.source && <p role="status" className="agent-banner">{VM_SOURCES[confirmedConnection.result.source].name} connected. Your sign-in is saved on your private computer. <button aria-label="Dismiss connection confirmation" onClick={()=>setDismissedConnections(current=>[...current,confirmedConnection.id])}>Dismiss</button></p>}
       {archived && <p className="agent-banner">This chat is archived. <button disabled={Boolean(chatAction)} onClick={()=>{const item=state?.chats.find(c=>c.id===chat);if(item)void manageChat(item,'archive')}}>Restore chat</button></p>}
       {state?.provisioning?.error && <p role="alert" className="assistant-error">{state.provisioning.error}</p>}
       <div className="assistant-thread" aria-live="polite">

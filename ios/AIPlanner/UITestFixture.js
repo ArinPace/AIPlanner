@@ -81,6 +81,8 @@
    }else value={chat:subscriptionChats.find(c=>c.id===url.searchParams.get('chat'))||subscriptionMain,chats:subscriptionChats,messages:[],hasOlder:false,sources:[],google:{accounts:[],connected:false,activeAccountId:null},connection:{provider:'chatgpt-subscription',connected:false,state:'setup_required',message:'ChatGPT subscription sign-in is not configured yet.'}};
   }
   else if(path==='/api/agent/instructions')value={content:'',revision:0,updatedAt:now};
+  else if(path==='/api/agent/notifications'){const stored=JSON.parse(localStorage.getItem('fixture-notifications')||'null')||[{id:'fixture-source',title:'Brightspace',message:'Reconnect this source.',kind:'source',active:true,checked:false,created_at:new Date().toISOString()}];if(method==='PATCH'){const input=JSON.parse(options.body);stored.forEach(item=>{if(item.id===input.id)item.checked=input.checked});localStorage.setItem('fixture-notifications',JSON.stringify(stored));value={ok:true}}else value={items:stored}}
+  else if(path==='/api/calendar/google-accounts')value={connected:true,activeAccountId:'fixture-google',accounts:[{id:'fixture-google',identity:'arin@example.com',connected:true,canEdit:true,readEnabled:true}]}
   else if(path==='/api/sources/status')value={issues:sourceIssues,checkedAt:new Date().toISOString()};
   else if(path==='/api/notifications'){if(method==='PUT')notificationSettings=JSON.parse(options.body);value=notificationSettings}
   else if(path==='/api/calendar'){if(method==='PUT'){calendar={...JSON.parse(options.body),revision:calendar.revision+1};value={ok:true,revision:calendar.revision}}else value=calendar}

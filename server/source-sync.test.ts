@@ -11,6 +11,8 @@ test('failed source save releases its collection and the same request can retry 
  globalThis.fetch=async(input,init)=>{
   const request=new Request(input,init),url=new URL(request.url)
   assert.equal(url.hostname,'source-sync.test')
+  if(url.pathname.endsWith('/planner_planning'))return Response.json({started_at:'2026-11-01T12:00:00Z'})
+  if(url.pathname.endsWith('/planner_calendar_staging'))return Response.json([])
   if(url.pathname.endsWith('/planner_agent_settings'))return request.method==='GET'?Response.json({sources:['brightspace']}):new Response(null,{status:204})
   if(url.pathname.endsWith('/planner_vm_settings'))return Response.json([{sources:['brightspace']}])
   if(url.pathname.endsWith('/planner_agent_runs')){

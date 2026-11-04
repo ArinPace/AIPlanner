@@ -223,3 +223,7 @@ export function subscriptionChatRequest<T=import('./subscriptionChat').Subscript
  const query=new URLSearchParams();if(chat)query.set('chat',chat);if(before)query.set('before',before)
  return request<T>('/api/subscription-chat'+(query.size?'?'+query:''),action?{method:'POST',body:JSON.stringify(action)}:{})
 }
+
+export function calendarAccounts<T>(){return request<T>('/api/calendar/google-accounts',{})}
+
+export function notificationInboxRequest<T>(input?:{id:string;checked:boolean}){return request<T>('/api/agent/notifications',input?{method:'PATCH',body:JSON.stringify(input)}:{})}
