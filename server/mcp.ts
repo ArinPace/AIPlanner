@@ -1,3 +1,4 @@
+import {readAgentRunHistory} from './agent-run-history.js'
 import {requireNoWidgetDraft,hasWidgetDraft} from './widget-draft-lock.js'
 import {widgetFeedbackSchema,STAGED_CALENDAR_RULES,prepareCalendarStage,readCalendarStage,editCalendarStage,publishCalendarStage} from './calendar-staging.js'
 import {registerAgentMemory} from './agent-memory.js'
@@ -12,7 +13,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { z } from 'zod'
 import { ApiError, db, json, handlePdfUpload } from './cloud.js'
-import { applyUpdates, parseUpdates, refreshRuns, settings, readGoogleCalendar, googleCalendarStatus } from './agent.js'
+import { applyUpdates, parseUpdates, settings, readGoogleCalendar, googleCalendarStatus } from './agent.js'
 import { saveChatLink } from './chat-links.js'
 import { validateFilesState, type FilesState } from '../src/lib/files.js'
 import { closeMcpBrowser, openMcpBrowser, readMcpBrowser } from './mcp-browser.js'
@@ -198,7 +199,7 @@ export function createPlannerMcp(username: string, scopes: string[]) {
     return {...saved,updateCount:output.updates.length}
   })
   add('planner_register_chat','Save the actual private ChatGPT chat URL in the planner Agent page. Never invent a URL. The user can also paste it in the planner.',{title:z.string().trim().min(1).max(120),url:z.string().max(2000)},'planner:write',false,args=>saveChatLink(username,args))
-  add('planner_runs','Read recent collection outcomes. A completed run confirms whether updates were saved.',{},'planner:read',true,async()=>{await refreshRuns(username);return storage(await db().from('planner_agent_runs').select('id,trigger,status,summary,error,created_at,applied_at').eq('username',username).order('created_at',{ascending:false}).limit(20))})
+  add('planner_runs','Audit actual scheduled reviews and manual chat jobs, newest first with pagination. Default source jobs; source collections reads legacy collection outcomes separately. Filter kind/chatId or use jobId for the full saved request, output and error. This account only; host credentials/leases are excluded. Tool-call traces are not recorded, and completed status alone does not prove a review executed or updates were saved.',{source:z.enum(['jobs','collections']).optional(),kind:z.enum(['chat','sync']).optional(),jobId:z.string().uuid().optional(),chatId:z.string().uuid().optional(),offset:z.number().int().nonnegative().optional(),limit:z.number().int().min(1).max(100).optional()},'planner:read',true,args=>readAgentRunHistory(username,args))
   add('browser_open','Open a short-lived Browser Use browser from your saved profile. Returns the live view for login if needed. Recordings off; usage costs apply. Always close after the check.',{},'browser:read',false,()=>openMcpBrowser(username))
   add('browser_read','Navigate to an enabled source URL and read visible page text and links, including assignment frames. Reuses a tab for the same source. No clicks, form submissions or arbitrary JavaScript.',{url:z.string().max(4000).optional(),pageIndex:z.number().int().min(0).max(100).optional()},'browser:read',true,args=>readMcpBrowser(username,args.url,args.pageIndex))
   add('browser_close','Save the cloud browser profile and stop the owned session after a check, ending browser charges.',{},'browser:read',false,()=>closeMcpBrowser(username))
