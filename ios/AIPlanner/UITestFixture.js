@@ -61,6 +61,8 @@
    button.onclick=()=>{sourceIssues=id?[{id,source:'brightspace',title:'Brightspace',message:'School source needs reconnection.'}]:[];window.dispatchEvent(new Event('focus'))};document.body.append(button);
   }
  });
+ const subscriptionMain={id:'00000000-0000-4000-8000-000000000101',title:'Main Chat',is_main:true,pinned:true,archived:false,deleted_at:null,created_at:now,updated_at:now};
+ let subscriptionChats=[subscriptionMain];
  const fetchReal=window.fetch.bind(window);
  window.fetch=async(input,options={})=>{
   const raw=typeof input==='string'?input:input.url;const url=new URL(raw,location.href);
@@ -70,6 +72,15 @@
   else if(path==='/api/auth/options')value={googleEnabled:true,pendingGoogle:false};
   else if(path==='/api/login'||path==='/api/register'){signedIn=true;value={username:'planner_test',token:'fixture-session'}}
   else if(path==='/api/logout'){signedIn=false;value={ok:true}}
+  else if(path==='/api/subscription-chat'){
+   if(method==='POST'){
+    const input=JSON.parse(options.body);
+    if(input.action==='create'){value={id:crypto.randomUUID(),title:input.title||'New chat',is_main:false,pinned:false,archived:false,deleted_at:null,created_at:now,updated_at:now};subscriptionChats.push(value)}
+    else if(input.action==='update'){const row=subscriptionChats.find(c=>c.id===input.id);Object.assign(row,input,...(input.deleted===undefined?[]:[{deleted_at:input.deleted?now:null}]));value=row}
+    else return new Response(JSON.stringify({error:'ChatGPT subscription sign-in is not configured yet.'}),{status:409,headers:{'Content-Type':'application/json'}});
+   }else value={chat:subscriptionChats.find(c=>c.id===url.searchParams.get('chat'))||subscriptionMain,chats:subscriptionChats,messages:[],hasOlder:false,sources:[],google:{accounts:[],connected:false,activeAccountId:null},connection:{provider:'chatgpt-subscription',connected:false,state:'setup_required',message:'ChatGPT subscription sign-in is not configured yet.'}};
+  }
+  else if(path==='/api/agent/instructions')value={content:'',revision:0,updatedAt:now};
   else if(path==='/api/sources/status')value={issues:sourceIssues,checkedAt:new Date().toISOString()};
   else if(path==='/api/notifications'){if(method==='PUT')notificationSettings=JSON.parse(options.body);value=notificationSettings}
   else if(path==='/api/calendar'){if(method==='PUT'){calendar={...JSON.parse(options.body),revision:calendar.revision+1};value={ok:true,revision:calendar.revision}}else value=calendar}

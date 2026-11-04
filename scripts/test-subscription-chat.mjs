@@ -1,0 +1,40 @@
+import {chromium} from 'playwright-core'
+import fs from 'node:fs'
+import assert from 'node:assert/strict'
+const browser=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true})
+try{
+ for(const native of [true,false]){
+ const page=await browser.newPage({viewport:{width:393,height:852},isMobile:true,hasTouch:true})
+ await page.addInitScript({content:`globalThis.__plannerFixtureSignedIn=true;${fs.readFileSync(new URL('../ios/AIPlanner/UITestFixture.js',import.meta.url),'utf8')}`})
+ await page.addInitScript(native=>{if(native){window.plannerNativeScreenTime=true;window.webkit={messageHandlers:{plannerNative:{postMessage:async()=>({ok:true})}}}};window.subscriptionVmCalls=[];const previous=window.fetch;window.fetch=(input,options)=>{const path=new URL(typeof input==='string'?input:input.url,location.href).pathname;if(window.subscriptionOnly&&/^\/api\/agent\/vm\/(?:send|activity|pair|browser|chatgpt|claude)/.test(path))window.subscriptionVmCalls.push(path);return previous(input,options)}},native)
+ await page.goto('http://127.0.0.1:5174')
+ await page.getByRole('button',{name:'Agent',exact:true}).click()
+ const agent=page.locator('.agent-tab-panel').filter({visible:true}).getByRole('textbox',{name:'Message'})
+ await agent.fill('Original Agent draft stays separate')
+ await page.getByRole('button',{name:'Chat',exact:true}).click()
+ const chat=page.getByRole('main',{name:'Subscription Chat'})
+ await chat.getByText('What can I help with?',{exact:true}).waitFor()
+ await page.evaluate(()=>window.subscriptionOnly=true)
+ assert.equal(await chat.getByRole('textbox',{name:'Message ChatGPT'}).inputValue(),'')
+ await chat.getByRole('textbox',{name:'Message ChatGPT'}).fill('Subscription draft stays here')
+ assert.equal(await chat.getByRole('button',{name:'Send message',exact:true}).isDisabled(),true)
+ assert.equal(await chat.getByText('VM Online',{exact:false}).count(),0)
+ await chat.getByRole('button',{name:'New chat',exact:true}).first().click()
+ await chat.locator('.assistant-chat-title strong').filter({hasText:'New chat'}).waitFor()
+ await chat.getByRole('button',{name:'Show chat sidebar'}).click()
+ await chat.getByRole('button',{name:'📌 Main Chat',exact:true}).click()
+ await page.waitForFunction(()=>document.getElementById('subscription-message')?.value==='Subscription draft stays here')
+ await page.evaluate(()=>window.subscriptionOnly=false)
+ await page.getByRole('button',{name:'Agent',exact:true}).click()
+ assert.equal(await agent.inputValue(),'Original Agent draft stays separate')
+ await page.getByRole('button',{name:'Chat',exact:true}).click()
+ await page.evaluate(()=>window.subscriptionOnly=true)
+ await chat.getByRole('button',{name:'Connect ChatGPT',exact:true}).click()
+ await page.getByRole('dialog',{name:'Chat settings'}).getByText('ChatGPT subscription sign-in is not configured yet.',{exact:true}).waitFor()
+ await page.evaluate(()=>{const original=Date.now;Date.now=()=>original()+61000;window.dispatchEvent(new Event('pointerdown'));Date.now=original})
+ await page.waitForTimeout(100)
+ assert.deepEqual(await page.evaluate(()=>window.subscriptionVmCalls),[])
+ console.log((native?'iPhone':'Web')+' Subscription Chat checks passed: native tab, fresh workspace, independent drafts, new chats, main chat, blocked unconfigured send, visible setup status, no VM send/keepalive or extension transport.')
+ await page.close()
+ }
+}finally{await browser.close()}

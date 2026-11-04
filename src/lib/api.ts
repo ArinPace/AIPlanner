@@ -218,3 +218,8 @@ export async function downloadCalendarJson(staging=false){
 export function taskNotificationsRequest(settings?:TaskNotificationSettings){return request<TaskNotificationSettings>('/api/notifications',settings?{method:'PUT',body:JSON.stringify(settings)}:{})}
 
 export function sourceStatusRequest(){return request<{issues:SourceAlert[];checkedAt:string}>('/api/sources/status')}
+
+export function subscriptionChatRequest<T=import('./subscriptionChat').SubscriptionWorkspace>(chat?:string,action?:Record<string,unknown>,before?:string){
+ const query=new URLSearchParams();if(chat)query.set('chat',chat);if(before)query.set('before',before)
+ return request<T>('/api/subscription-chat'+(query.size?'?'+query:''),action?{method:'POST',body:JSON.stringify(action)}:{})
+}

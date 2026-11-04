@@ -1,10 +1,9 @@
+import {SubscriptionChatView} from './components/SubscriptionChatView'
 import {TaskNotificationSync} from './components/TaskNotificationSync'
 import {taskScreenTimeWindow} from './lib/taskScreenTime'
 import {verifyFreeTimeRequest, type TaskFeedback, type TaskTimeResult} from './lib/widgetTaskFeedback'
 import {WidgetTaskFeedback} from './components/WidgetTaskFeedback'
-import {isIPhoneApp} from './lib/platform'
 import {ScreenTimePanel} from './components/ScreenTimePanel'
-import {ChatExperiment} from './components/ChatExperiment'
 import {RECOVERY_TAB} from './lib/attachmentRecovery'
 import { PlannerDate as Date } from './lib/timezone.js'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
@@ -148,13 +147,14 @@ export default function App() {
 }
 
 function CalendarApp({ username, onLogout }: { username: string; onLogout: () => void }) {
-  useVmActivity(username)
   const [tab, setTab] = useState<'calendar' | 'files' | 'todo' | 'work' | 'agent' | 'screentime' | 'chat'>(()=>sessionStorage.getItem(RECOVERY_TAB)===username?'agent':'calendar')
+  useVmActivity(username,tab!=='chat')
   const [todoRequest,setTodoRequest]=useState(0)
   const [filesUnsaved, setFilesUnsaved] = useState(false)
   const [cursor, setCursor] = useState(() => new Date())
   const [view, setView] = useState<CalendarView>('week')
   const [filesSidebar,setFilesSidebar]=useState(()=>window.innerWidth>600)
+  const [subscriptionSidebar,setSubscriptionSidebar]=useState(()=>window.innerWidth>700)
   const [agentSidebar,setAgentSidebar]=useState(()=>window.innerWidth>700)
   const [sidebarOpen, setSidebarOpen] = useState(() => window.matchMedia('(min-width: 861px)').matches)
   const [events, setEvents] = useState<CalendarEvent[]>([])
@@ -411,7 +411,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
         onViewChange={setView}
         onNavigate={navigate}
         onToday={() => setCursor(new Date())}
-        onToggleSidebar={() => {if(tab==='files'||tab==='todo'||tab==='work')setFilesSidebar(v=>!v);else if(tab==='agent')setAgentSidebar(v=>!v);else setSidebarOpen(v=>!v)}}
+        onToggleSidebar={() => {if(tab==='files'||tab==='todo'||tab==='work')setFilesSidebar(v=>!v);else if(tab==='agent')setAgentSidebar(v=>!v);else if(tab==='chat')setSubscriptionSidebar(v=>!v);else setSidebarOpen(v=>!v)}}
         onCreate={() => openCreate(cursor)}
         onVisualZoomChange={(value) => setZoom(clampZoom(value))}
         onLogout={() => {
@@ -426,7 +426,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
       <div className="files-tab-panel" hidden={tab !== 'files' && tab !== 'todo' && tab !== 'work'}><FilesView standaloneTodo={tab==='todo'||tab==='work'} workMode={tab==='work'} sidebar={filesSidebar} setSidebar={setFilesSidebar} username={username} active={tab === 'files' || tab === 'todo' || tab === 'work'} todoRequest={todoRequest} onUnsavedChange={setFilesUnsaved} /></div>
       {tab==='screentime' && <ScreenTimePanel/>}
       <div className="agent-tab-panel" hidden={tab !== 'agent'}><AgentView username={username} sidebar={agentSidebar} setSidebar={setAgentSidebar} active={tab === 'agent'} /></div>
-      {username==='arin' && !isIPhoneApp() && <div className="chat-tab-panel" hidden={tab!=='chat'}><ChatExperiment active={tab==='chat'} username={username}/></div>}
+      <div className="agent-tab-panel" hidden={tab!=='chat'}><SubscriptionChatView active={tab==='chat'} username={username} sidebar={subscriptionSidebar} setSidebar={setSubscriptionSidebar}/></div>
       <div className="app-body" hidden={tab !== 'calendar'}>
         <Sidebar
           events={events}

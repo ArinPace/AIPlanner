@@ -1,0 +1,38 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import {handleSubscriptionChat} from './subscription-chat.js'
+test('subscription workspace is fresh and owner-scoped; never touches Agent jobs or old relay chats',async()=>{
+ const original=globalThis.fetch,keys=['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','SUPABASE_SECRET_KEY'],saved=Object.fromEntries(keys.map(k=>[k,process.env[k]]))
+ process.env.SUPABASE_URL='https://subscription.test';process.env.SUPABASE_SERVICE_ROLE_KEY='service';delete process.env.SUPABASE_SECRET_KEY
+ const main='a1111111-1111-4111-8111-111111111111',extra='b1111111-1111-4111-8111-111111111111',foreign='c1111111-1111-4111-8111-111111111111'
+ const chats:any[]=[];let requests=0
+ globalThis.fetch=async(input,init)=>{
+  const req=new Request(input,init),url=new URL(req.url),table=url.pathname.split('/').at(-1);requests++
+  assert(!['planner_vm_jobs','planner_vm_hosts','planner_device_chats','planner_chat_web_relay'].includes(table||''),'New Chat cannot access VM jobs or legacy Chat data')
+  if(req.method==='GET')assert.equal(url.searchParams.get('username'),'eq.owner')
+  if(table==='planner_vm_settings')return Response.json({sources:[],google_account_id:null})
+  if(table==='planner_google_accounts')return Response.json([])
+  if(table==='planner_subscription_messages')return Response.json([])
+  if(table==='planner_subscription_chats'){
+   if(req.method==='POST'){const data=await req.json() as any;assert.equal(data.username,'owner');const row={...data,id:data.is_main?main:extra,archived:false,deleted_at:null,updated_at:'2026-11-03T00:00:00Z'};chats.push(row);return Response.json(row)}
+   if(req.method==='PATCH'){assert.equal(url.searchParams.get('username'),'eq.owner');const row=chats.find(c=>c.id===url.searchParams.get('id')?.slice(3));Object.assign(row,await req.json());return Response.json(row)}
+   if(url.searchParams.has('is_main'))return Response.json(chats.find(c=>c.is_main)||null)
+   if(url.searchParams.has('id'))return Response.json(chats.find(c=>c.id===url.searchParams.get('id')?.slice(3))||null)
+   return Response.json(chats)
+  }
+  throw Error('Unexpected table '+table)
+ }
+ const post=(input:any)=>handleSubscriptionChat(new Request('https://planner.test/api/subscription-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)}),'owner')
+ try{
+  const response=await handleSubscriptionChat(new Request('https://planner.test/api/subscription-chat'),'owner'),data=await response.json() as any
+  assert.equal(data.chat.id,main);assert.equal(data.connection.connected,false);assert.deepEqual(data.messages,[]);assert.equal(data.chats.length,1)
+  await assert.rejects(()=>handleSubscriptionChat(new Request('https://planner.test/api/subscription-chat?chat='+foreign),'owner'),/not found/)
+  const created=await (await post({action:'create'})).json() as any;assert.equal(created.id,extra)
+  const renamed=await (await post({action:'update',id:extra,title:'Independent Chat'})).json() as any;assert.equal(renamed.title,'Independent Chat')
+  await assert.rejects(()=>post({action:'update',id:main,deleted:true}),/stays pinned/)
+  const before=requests
+  await assert.rejects(()=>post({action:'send',chatId:extra,message:'Hello'}),/subscription sign-in is not configured/)
+  await assert.rejects(()=>post({action:'connect'}),/approved Sign in/)
+  assert.equal(requests,before,'Unconfigured send/connect cannot invoke any runtime or mutate messages')
+ }finally{globalThis.fetch=original;for(const key of keys){if(saved[key]===undefined)delete process.env[key];else process.env[key]=saved[key]}}
+})

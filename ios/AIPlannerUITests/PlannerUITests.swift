@@ -12,6 +12,20 @@ final class PlannerUITests: XCTestCase {
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = name; screenshot.lifetime = .keepAlways; add(screenshot)
     }
+    func testSubscriptionChatTabStartsFreshWithoutVm() {
+        let app = launch()
+        let chat = app.webViews.buttons["Chat"]
+        XCTAssertTrue(chat.waitForExistence(timeout: 15)); chat.tap()
+        XCTAssertTrue(app.webViews.staticTexts["ChatGPT subscription"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.webViews.staticTexts["Not connected"].exists)
+        XCTAssertTrue(app.webViews.staticTexts["Main Chat"].exists)
+        XCTAssertFalse(app.webViews.staticTexts["VM Online"].exists)
+        XCTAssertFalse(app.webViews.buttons["Send message"].isEnabled)
+        app.webViews.buttons["Connect ChatGPT"].tap()
+        XCTAssertTrue(app.webViews.staticTexts["Chat settings"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.webViews.staticTexts["ChatGPT subscription sign-in is not configured yet."].firstMatch.waitForExistence(timeout: 5))
+        app.terminate()
+    }
     func testSourceWarningPersistsUntilDismissedOrRecovered() {
         let app = XCUIApplication()
         app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"
