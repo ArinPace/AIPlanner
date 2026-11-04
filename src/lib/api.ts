@@ -1,3 +1,4 @@
+import type {SourceAlert} from './sourceAlerts'
 import type {TaskNotificationSettings} from './taskNotifications'
 import {activateReplica,recordReplica,replicaContext,saveReplica} from './localReplica'
 import {isIPhoneApp,nativeRequest} from './platform'
@@ -215,3 +216,5 @@ export async function downloadCalendarJson(staging=false){
 }
 
 export function taskNotificationsRequest(settings?:TaskNotificationSettings){return request<TaskNotificationSettings>('/api/notifications',settings?{method:'PUT',body:JSON.stringify(settings)}:{})}
+
+export function sourceStatusRequest(){return request<{issues:SourceAlert[];checkedAt:string}>('/api/sources/status')}

@@ -1,3 +1,4 @@
+import {reportSourceHealth} from './source-health.js'
 import { ApiError, db } from './cloud.js'
 import { VM_SOURCES } from '../src/lib/vm.js'
 
@@ -6,9 +7,11 @@ export function accountIdentity(value: unknown): string | null {
 }
 export async function observeAccounts(username: string, sites: Record<string, { ready?: boolean; identity?: unknown }>, enabled: string[]) {
   for (const source of Object.keys(VM_SOURCES)) {
-    if (!enabled.includes(source) || sites[source]?.ready !== true) continue
+    if (!enabled.includes(source) || typeof sites[source]?.ready !== 'boolean') continue
+    if(sites[source].ready!==true){await reportSourceHealth(username,source,'browser','Connection check could not verify access. Reconnect or verify this source.').catch(()=>{});continue}
     const { error } = await db().rpc('planner_browser_account_update', { p_username: username, p_source: source, p_action: 'observe', p_identity: accountIdentity(sites[source].identity) })
     if (error) throw new ApiError(503, 'Could not save connected account information.')
+    await reportSourceHealth(username,source,'browser',null).catch(()=>{})
   }
 }
 export async function editBrowserAccount(username: string, input: Record<string, unknown>) {

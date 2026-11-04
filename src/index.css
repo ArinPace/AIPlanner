@@ -2319,3 +2319,8 @@ html, body { touch-action: pan-x pan-y; }
 .task-notification-settings fieldset { border:0; padding:0; margin:0; display:grid; gap:12px; min-width:0; }
 .task-notification-settings label { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
 .task-notification-settings input[type="text"], .task-notification-settings input[type="number"] { width:100%; box-sizing:border-box; padding:8px; font-size:16px; min-width:0; }
+
+.source-connection-alerts { flex-shrink:0; max-height:28dvh; overflow:auto; padding:6px 12px; }
+.source-connection-alert { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; padding:10px 12px; margin:4px 0; border:1px solid #e1b56a; border-radius:10px; background:#fff5df; color:#604109; font-size:13px; }
+.source-connection-alert strong, .source-connection-alert span { display:block; overflow-wrap:anywhere; }
+.source-connection-alert button:not(.icon-btn) { margin-top:5px; background:transparent; border:0; text-decoration:underline; color:inherit; padding:0; }

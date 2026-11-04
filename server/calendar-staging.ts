@@ -1,3 +1,4 @@
+import {withSourceHealth} from './source-health.js'
 import {resizeWidgetOccurrence,verifyFreeTimeRequest,type TaskFeedback} from '../src/lib/widgetTaskFeedback.js'
 import {widgetDraftProblems} from './widget-draft-review.js'
 import {removeCalendarItems} from './planner-control.js'
@@ -27,6 +28,9 @@ export function sourceCalendarIssues(calendar:StoredState,sources:NonNullable<St
  return sources.flatMap(source=>stageIssues(calendar,{events:source.events,mappings:[],timeMin:'',timeMax:''}).filter(issue=>issue.id.startsWith('google-overlap:')).map(issue=>({...issue,id:'source:'+source.accountId+':'+issue.id,message:source.identity+': '+issue.message})))
 }
 async function googleSnapshot(username:string,window?:{timeMin:string;timeMax:string}){
+ return withSourceHealth(username,'calendar','staging',()=>googleSnapshotUnchecked(username,window))
+}
+async function googleSnapshotUnchecked(username:string,window?:{timeMin:string;timeMax:string}){
  const session=await googleCalendarSession(username,undefined,true)
  const mappings=storage(await db().from('planner_google_fixed_events').select('*').eq('username',username).eq('account_id',session.accountId))
  const local=await calendarRow(username)

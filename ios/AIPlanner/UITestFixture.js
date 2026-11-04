@@ -53,6 +53,14 @@
    }catch(e){output.textContent='Notification test failed: '+e}}
   }
  });
+ let sourceIssues=globalThis.__plannerFixtureSourceAlerts?[{id:'fixture-source-1',source:'brightspace',title:'Brightspace',message:'School source needs reconnection.'}]:[];
+ if(globalThis.__plannerFixtureResetSourceAlerts)localStorage.removeItem('planner-dismissed-source-issues:planner_test');
+ if(globalThis.__plannerFixtureSourceAlerts)document.addEventListener('DOMContentLoaded',()=>{
+  for(const [name,id] of [['Recover source',null],['Disconnect source again','fixture-source-2']]){
+   const button=document.createElement('button');button.textContent=name;button.style.cssText='position:fixed;bottom:'+(id?80:120)+'px;right:0;background:white;color:black;z-index:10000';
+   button.onclick=()=>{sourceIssues=id?[{id,source:'brightspace',title:'Brightspace',message:'School source needs reconnection.'}]:[];window.dispatchEvent(new Event('focus'))};document.body.append(button);
+  }
+ });
  const fetchReal=window.fetch.bind(window);
  window.fetch=async(input,options={})=>{
   const raw=typeof input==='string'?input:input.url;const url=new URL(raw,location.href);
@@ -62,6 +70,7 @@
   else if(path==='/api/auth/options')value={googleEnabled:true,pendingGoogle:false};
   else if(path==='/api/login'||path==='/api/register'){signedIn=true;value={username:'planner_test',token:'fixture-session'}}
   else if(path==='/api/logout'){signedIn=false;value={ok:true}}
+  else if(path==='/api/sources/status')value={issues:sourceIssues,checkedAt:new Date().toISOString()};
   else if(path==='/api/notifications'){if(method==='PUT')notificationSettings=JSON.parse(options.body);value=notificationSettings}
   else if(path==='/api/calendar'){if(method==='PUT'){calendar={...JSON.parse(options.body),revision:calendar.revision+1};value={ok:true,revision:calendar.revision}}else value=calendar}
   else if(path==='/api/files'){if(method==='PUT'||method==='PATCH'){const patch=JSON.parse(options.body);if(method==='PATCH'){const removed=new Set(patch.removeIds||[]);for(const section of ['files','folders','documents']){const replacements=new Map((patch.upserts?.[section]||[]).map(item=>[item.id,item]));files[section]=(files[section]||[]).filter(item=>!removed.has(item.id)).map(item=>{const next=replacements.get(item.id)||item;replacements.delete(item.id);return next});files[section].push(...replacements.values())}}else files=patch;files={...files,revision:files.revision+1};value={ok:true,revision:files.revision}}else value=files}

@@ -1,7 +1,11 @@
+import {withSourceHealth} from './source-health.js'
 import {ApiError,db} from './cloud.js'
 import {storage} from './mcp-auth.js'
 import {googleCalendarSession,googleCalendarStatus,GOOGLE_MAIL_READ_SCOPE} from './agent.js'
 export async function readGoogleMail(username:string,args:{accountId:string;query?:string;pageToken?:string;messageId?:string}){
+ return withSourceHealth(username,'gmail',args.accountId,()=>readGoogleMailUnchecked(username,args))
+}
+async function readGoogleMailUnchecked(username:string,args:{accountId:string;query?:string;pageToken?:string;messageId?:string}){
  const settings=storage(await db().from('planner_vm_settings').select('sources').eq('username',username).maybeSingle())
  if(!settings?.sources?.includes('gmail'))throw new ApiError(403,'Enable Gmail in Add sites before reading email.')
  const status=await googleCalendarStatus(username)

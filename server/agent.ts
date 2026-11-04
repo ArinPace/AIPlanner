@@ -1,3 +1,4 @@
+import {withSourceHealth} from './source-health.js'
 import {nativeConnectionReturn} from './native-auth.js'
 import { refreshSubjectOverview,subjectTitle } from './subject-folders.js'
 import { cleanupBinStorage } from './files-bin.js'
@@ -147,7 +148,11 @@ export async function removeGoogleAccount(username:string,id:string) {
   if(!response.ok && response.status!==400) throw new ApiError(502,'Google could not revoke this account. Try removing it again.')
   check(await db().from('planner_google_accounts').delete().eq('id',id).eq('username',username))
 }
-export async function readGoogleCalendar(username: string, timeMin?: string, timeMax?: string, accountId?:string) {
+export async function readGoogleCalendar(username:string,timeMin?:string,timeMax?:string,accountId?:string){
+ const status=await googleCalendarStatus(username)
+ return withSourceHealth(username,'calendar',accountId||status.activeAccountId||'export',()=>readGoogleCalendarUnchecked(username,timeMin,timeMax,accountId))
+}
+async function readGoogleCalendarUnchecked(username: string, timeMin?: string, timeMax?: string, accountId?:string) {
   const status = await googleCalendarStatus(username)
   const selected=status.accounts.find(a=>a.id===(accountId || status.activeAccountId))
   if (!selected?.connected) throw new ApiError(409,'Connect Google Calendar through Add sites first.')

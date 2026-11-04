@@ -12,6 +12,28 @@ final class PlannerUITests: XCTestCase {
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = name; screenshot.lifetime = .keepAlways; add(screenshot)
     }
+    func testSourceWarningPersistsUntilDismissedOrRecovered() {
+        let app = XCUIApplication()
+        app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"
+        app.launchArguments = ["-UITestFixture", "-UITestSignedIn", "-UITestSourceAlerts", "-UITestResetSourceAlerts"]
+        app.launch()
+        XCTAssertTrue(app.webViews.buttons["Agent"].waitForExistence(timeout: 15)); app.webViews.buttons["Agent"].tap()
+        let warning = app.webViews.staticTexts["School source needs reconnection."]
+        XCTAssertTrue(warning.waitForExistence(timeout: 10))
+        app.webViews.buttons["Dismiss Brightspace warning"].tap()
+        XCTAssertFalse(warning.exists)
+        app.terminate()
+        app.launchArguments = ["-UITestFixture", "-UITestSignedIn", "-UITestSourceAlerts"]
+        app.launch()
+        XCTAssertTrue(app.webViews.buttons["Agent"].waitForExistence(timeout: 15)); app.webViews.buttons["Agent"].tap()
+        Thread.sleep(forTimeInterval: 2)
+        XCTAssertFalse(app.webViews.staticTexts["School source needs reconnection."].exists, "Dismissal survives reload")
+        app.webViews.buttons["Recover source"].tap()
+        Thread.sleep(forTimeInterval: 1)
+        app.webViews.buttons["Disconnect source again"].tap()
+        XCTAssertTrue(app.webViews.staticTexts["School source needs reconnection."].waitForExistence(timeout: 10), "A fresh failure must warn again")
+        app.terminate()
+    }
     func testTaskSwitchNotificationWhileBackgrounded() { checkTaskNotification(mode: "switch", expected: "Time to switch tasks") }
     func testTaskAdvanceNotificationWhileBackgrounded() { checkTaskNotification(mode: "advance", expected: "1 minute left") }
     private func checkTaskNotification(mode: String, expected: String) {
