@@ -57,7 +57,7 @@ final class PlannerUITests: XCTestCase {
         app.terminate(); app.launch(); planner = app.webViews["plannerWebView"]
         XCTAssertTrue(planner.buttons["Chat"].waitForExistence(timeout: 20)); planner.buttons["Chat"].tap()
         let show = planner.buttons["Show chat sidebar"]; if show.exists { show.tap() }
-        let existing = planner.buttons[firstPrompt]
+        let existing = planner.buttons[firstPrompt].firstMatch
         XCTAssertTrue(existing.waitForExistence(timeout: 15)); existing.tap()
         saved(4); send("Repeat the remembered code."); saved(6)
         XCTAssertTrue(planner.otherElements.matching(identifier: "Assistant message").element(boundBy: 2).staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "PERSIST-8821")).firstMatch.exists)
