@@ -33,7 +33,6 @@ enum WidgetTaskControl {
         defaults.set(try JSONEncoder().encode(feedback), forKey: "task-feedback")
         prioritizeLocalRender()
         WidgetTimeOverrides.store(feedback)
-        Task { await PlannerTaskNotifications.shared.refresh() }
         WidgetCenter.shared.reloadAllTimelines()
     }
     static func displaySchedule() -> WidgetSchedule { WidgetTimeOverrides.applying(to: WidgetScheduleStore.load()) }
@@ -76,6 +75,7 @@ struct SubmitTaskTimeIntent: AppIntent {
         guard let task = WidgetTaskControl.currentTask(at: Date()), task.id == taskID else { throw WidgetTaskControl.ControlError.stale }
         try WidgetTaskControl.submit(task, done: done)
         try WidgetBackgroundDelivery.enqueuePending()
+        await PlannerTaskNotifications.shared.refresh()
         return .result()
     }
 }
