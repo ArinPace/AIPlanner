@@ -2,9 +2,10 @@ import {albertHosts} from './browser-sources.mjs'
 export function signedInPage(source, href, text, hasPassword = false) {
   let url
   try { url = new URL(href) } catch { return false }
-  const hosts = { linkedin:'linkedin.com', albert:'albert.nyu.edu', whatsapp:'web.whatsapp.com', brightspace:'brightspace.nyu.edu', gradescope:'gradescope.com', gmail:'mail.google.com', calendar:'calendar.google.com', drive:'drive.google.com', slack:'app.slack.com', instagram:'instagram.com', x:'x.com' }
+  const hosts = { whoop:'app.whoop.com', linkedin:'linkedin.com', albert:'albert.nyu.edu', whatsapp:'web.whatsapp.com', brightspace:'brightspace.nyu.edu', gradescope:'gradescope.com', gmail:'mail.google.com', calendar:'calendar.google.com', drive:'drive.google.com', slack:'app.slack.com', instagram:'instagram.com', x:'x.com' }
   if (url.protocol !== 'https:' || !(url.hostname.replace(/^www\./,'') === hosts[source] || source==='albert' && albertHosts.has(url.hostname)) || hasPassword || /(?:^|\/)(?:login|signin|auth|saml)(?:\/|$)/i.test(url.pathname) || /sign in to continue|log in to gradescope|sign in to x|log in to instagram|sign in to your workspace/i.test(text)) return false
   return Boolean({
+    whoop: /log out|sign out|my account|membership/i.test(text) && /sleep|recovery|strain|overview|membership/i.test(text) && !/log in|sign in|forgot password/i.test(text),
     linkedin: /\/(?:feed|messaging|mynetwork)(?:\/|$)/.test(url.pathname) && /messaging/i.test(text) && /my network|notifications/i.test(text),
     albert: (/student center|student homepage|academics|class schedule|my class schedule/i.test(text) || /log out|sign out/i.test(text)&&/\bstudent\b/i.test(text)&&/applicant|other resources|favorites/i.test(text)) && !/sign in|log in|enter your (?:netid|password)/i.test(text),
     whatsapp: /chats|communities/i.test(text) && /search|new chat/i.test(text) && !/scan.*qr|log into whatsapp|link with phone number/i.test(text),

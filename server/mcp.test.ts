@@ -78,3 +78,10 @@ test('anonymous discovery exposes tool schemas but account data and actions requ
   assert.equal(action.status,401)
   assert.match(action.headers.get('WWW-Authenticate') || '',/oauth-protected-resource/)
 })
+
+test('WHOOP browser reads require enabled exact WHOOP origin',()=>{
+ assert.equal(browserUrl('https://app.whoop.com/', ['whoop']), 'https://app.whoop.com/')
+ assert.throws(()=>browserUrl('https://app.whoop.com/', ['brightspace']))
+ assert.throws(()=>browserUrl('https://app.whoop.com.evil.test/', ['whoop']))
+ assert.throws(()=>browserUrl('https://app.whoop.com/logout', ['whoop']))
+})

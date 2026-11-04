@@ -10,6 +10,7 @@ export const VM_SOURCES = {
   albert: { name: 'NYU Albert', url: 'https://albert.nyu.edu/' },
   whatsapp: { name: 'WhatsApp', url: 'https://web.whatsapp.com/' },
   x: { name: 'X', url: 'https://x.com/home' },
+  whoop: { name: 'WHOOP', url: 'https://app.whoop.com/' },
   linkedin: { name: 'LinkedIn', url: 'https://www.linkedin.com/feed/' },
 } as const
 export type VmSource = keyof typeof VM_SOURCES

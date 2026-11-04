@@ -40,3 +40,10 @@ test('Albert remembers an exact portal dashboard without query/session data',()=
  assert.equal(albertLanding(url+'?session=private'),url)
  for(const value of ['https://sis.portal.nyu.edu.evil.test/psp/home/','https://sis.portal.nyu.edu/login','https://sis.portal.nyu.edu/psp/login/','https://user:pass@sis.portal.nyu.edu/psp/home/'])assert.equal(albertLanding(value),null)
 })
+
+test('WHOOP requires its own authenticated page, not a login or unrelated page',()=>{
+ assert.equal(signedInPage('whoop','https://app.whoop.com/','Sleep Recovery Strain My account Sign out'),true)
+ assert.equal(signedInPage('whoop','https://app.whoop.com/login','Log in Forgot password'),false)
+ assert.equal(signedInPage('whoop','https://app.whoop.com/','Sleep Recovery',true),false)
+ assert.equal(signedInPage('whoop','https://app.whoop.com.evil.test/','Sleep My account Sign out'),false)
+})

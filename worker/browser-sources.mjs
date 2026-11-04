@@ -7,5 +7,6 @@ export const sources = {
   drive: 'https://drive.google.com/drive/u/0/my-drive', slack: 'https://app.slack.com/',
   albert: 'https://albert.nyu.edu/', whatsapp: 'https://web.whatsapp.com/',
   instagram: 'https://www.instagram.com/', x: 'https://x.com/home',
+  whoop: 'https://app.whoop.com/',
   linkedin: 'https://www.linkedin.com/feed/',
 }
