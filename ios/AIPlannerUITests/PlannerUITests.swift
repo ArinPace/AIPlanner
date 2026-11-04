@@ -234,7 +234,7 @@ final class PlannerUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.webViews.buttons["Agent"].waitForExistence(timeout: 15));Thread.sleep(forTimeInterval: 3)
         XCUIDevice.shared.press(.home)
-        XCTAssertTrue(home.staticTexts["Available during free time"].waitForExistence(timeout: 15))
+        XCTAssertTrue(home.buttons["Finish current task"].firstMatch.waitForExistence(timeout: 15))
         XCTAssertFalse(home.buttons["Fill my free time"].exists)
     }
     func testScreenTimeRealSystemPicker() {

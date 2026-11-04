@@ -226,7 +226,7 @@ struct DoneTaskWidget: Widget {
                 WidgetFeedbackUpload.shared.handleEvents(completion: completion)
             }
             .configurationDisplayName("Done")
-            .description("End your current activity immediately and ask the agent to adjust the remaining schedule.")
+            .description("Finish your current task, or ask the agent what to do during free time. The button changes automatically.")
             .supportedFamilies([.systemSmall, .accessoryCircular, .accessoryRectangular])
     }
 }
@@ -239,20 +239,29 @@ struct DoneTaskView: View {
     private var hex: UInt64 { UInt64((task?.color ?? "#1a73e8").trimmingCharacters(in: CharacterSet(charactersIn: "#")), radix: 16) ?? 0x1a73e8 }
     private var color: Color { Color(red: Double((hex >> 16) & 255) / 255, green: Double((hex >> 8) & 255) / 255, blue: Double(hex & 255) / 255) }
     private var ink: Color { family != .systemSmall ? .primary : (0.299 * Double((hex >> 16) & 255) + 0.587 * Double((hex >> 8) & 255) + 0.114 * Double(hex & 255)) / 255 > 0.65 ? .black : .white }
+    @ViewBuilder private func actionLabel(freeTime: Bool) -> some View {
+        let icon = freeTime ? "sparkles" : "checkmark.circle.fill"
+        if family == .accessoryCircular { Image(systemName: icon).font(.title2) }
+        else {
+            Label(freeTime ? "Tell me what to do" : "Done", systemImage: icon)
+                .font(freeTime ? .system(size: family == .systemSmall ? 15 : 12, weight: .semibold) : family == .systemSmall ? .title2.weight(.semibold) : .caption)
+                .lineLimit(3).fixedSize(horizontal: false, vertical: true)
+        }
+    }
     var body: some View {
         VStack(spacing: 8) {
             if let task {
                 if family != .accessoryCircular { Text(task.title).font(.headline).lineLimit(2) }
-                Button(intent: SubmitTaskTimeIntent(task: task, done: true)) {
-                    if family == .accessoryCircular {
-                        Image(systemName: "checkmark.circle.fill").font(.title2)
+                Group {
+                    if task.isFreeTime == true {
+                        Button(intent: FillFreeTimeIntent()) { actionLabel(freeTime: true) }
                     } else {
-                        Label("Done", systemImage: "checkmark.circle.fill")
-                            .font(family == .systemSmall ? .title2.weight(.semibold) : .caption)
+                        Button(intent: SubmitTaskTimeIntent(task: task, done: true)) { actionLabel(freeTime: false) }
                     }
                 }.buttonStyle(.bordered)
+                    .disabled(awaitingPlan)
                     .foregroundStyle(awaitingPlan ? Color.gray : ink).opacity(awaitingPlan ? 0.45 : 1)
-                    .accessibilityLabel("Finish current task").accessibilityValue(awaitingPlan ? "Waiting for schedule" : "Ready")
+                    .accessibilityLabel(task.isFreeTime == true ? "Fill my free time" : "Finish current task").accessibilityValue(awaitingPlan ? "Waiting for schedule" : "Ready")
                 if awaitingPlan && family != .accessoryCircular { Text("Sending…").font(.caption2) }
             } else {
                 Label("No current task", systemImage: "checkmark.circle").font(.caption)
@@ -265,44 +274,14 @@ struct FillFreeTimeWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "PlannerFillFreeTime", provider: PlannerProvider()) { FillFreeTimeView(entry: $0) }
             .configurationDisplayName("Tell me what to do")
-            .description("During free time, ask your agent to choose and schedule something useful before your next commitment.")
+            .description("The same adaptive task action: Done during tasks, Tell me what to do during free time.")
             .supportedFamilies([.systemSmall, .accessoryRectangular, .accessoryCircular])
     }
 }
+// Keep the installed legacy widget kind working with the same adaptive action.
 struct FillFreeTimeView: View {
-    @Environment(\.widgetFamily) var family
     let entry: PlannerEntry
-    private var slot: WidgetTask? { WidgetScheduleStore.load().freeSlot(at: entry.date) }
-    @ViewBuilder private var actionLabel: some View {
-        if family == .accessoryCircular { Image(systemName: "sparkles").font(.title2) }
-        else {
-            HStack(spacing: 6) {
-                Image(systemName: "sparkles")
-                Text("Tell me what to do").font(.system(size: family == .systemSmall ? 15 : 12, weight: .semibold))
-                    .lineLimit(3).fixedSize(horizontal: false, vertical: true)
-            }.frame(maxWidth: .infinity, minHeight: family == .systemSmall ? 40 : 0)
-        }
-    }
-    var body: some View {
-        let pending = WidgetTaskControl.pending()
-        VStack(alignment: .leading, spacing: family == .systemSmall ? 8 : 2) {
-            if family == .systemSmall { Text("Free time").font(.headline) }
-            if slot != nil && pending == nil {
-                Button(intent: FillFreeTimeIntent()) { actionLabel }
-                    .buttonStyle(.bordered).controlSize(family == .systemSmall ? .regular : .mini).tint(.primary)
-                    .accessibilityLabel("Fill my free time")
-            } else {
-                actionLabel.foregroundStyle(.secondary).opacity(0.6)
-                    .accessibilityIdentifier("freeTimeUnavailable")
-            }
-            if family != .accessoryCircular {
-                if pending?.kind == "fillFreeTime" { Text("Request saved · sending…").font(.caption) }
-                else if let slot { Text("Free until \(slot.endDate.formatted(date: .omitted, time: .shortened))").font(.caption) }
-                else { Text(entry.schedule.validUntil <= entry.date.timeIntervalSince1970 ? "Open Planner to sync" : "Available during free time").font(.caption) }
-            }
-        }.foregroundStyle(.primary)
-        .containerBackground(for: .widget) { Color(.systemBackground) }
-    }
+    var body: some View { DoneTaskView(entry: entry) }
 }
 
 @main struct PlannerWidgetBundle: WidgetBundle {
