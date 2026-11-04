@@ -56,7 +56,8 @@ const oauthConfig = (provider: string) => provider === 'google' ? {
 }
 export const GOOGLE_CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly'
 export const GOOGLE_CALENDAR_WRITE_SCOPE = 'https://www.googleapis.com/auth/calendar.events'
-export function startGoogleCalendar(username: string) { return oauthStart(username,'google',`openid email ${GOOGLE_CALENDAR_SCOPE} ${GOOGLE_CALENDAR_WRITE_SCOPE}`) }
+export const GOOGLE_MAIL_READ_SCOPE='https://www.googleapis.com/auth/gmail.readonly'
+export function startGoogleCalendar(username: string,mail=false,readOnly=false) { return oauthStart(username,'google',`openid email ${GOOGLE_CALENDAR_SCOPE}${readOnly?'':' '+GOOGLE_CALENDAR_WRITE_SCOPE}${mail?' '+GOOGLE_MAIL_READ_SCOPE:''}`) }
 async function oauthStart(username: string, provider: string, requestedScopes?: string) {
   const config = oauthConfig(provider)
   if (!config.clientId || (provider === 'google' && !config.secret)) throw new ApiError(503, provider === 'google' ? 'Google OAuth needs a registered Google Cloud client. Your Google connections in this chat do not authorize the hosted planner.' : 'Hosted Continue with ChatGPT requires an approved OpenAI client ID. Chat remains available through the planner’s AI connection.')
@@ -92,13 +93,15 @@ async function oauthCallback(request: Request, provider: string) {
     const granted = String(tokens.scope || attempt.requested_scopes || '').split(' ')
     if (attempt.requested_scopes?.includes(GOOGLE_CALENDAR_SCOPE) && !granted.includes(GOOGLE_CALENDAR_SCOPE)) throw new ApiError(400,'Calendar permission was not granted. Start again and allow Calendar access.')
     if (attempt.requested_scopes?.includes(GOOGLE_CALENDAR_WRITE_SCOPE) && !granted.includes(GOOGLE_CALENDAR_WRITE_SCOPE)) throw new ApiError(400,'Calendar editing permission was not granted. Reconnect and allow event editing.')
+    if(attempt.requested_scopes?.includes(GOOGLE_MAIL_READ_SCOPE)&&!granted.includes(GOOGLE_MAIL_READ_SCOPE))throw new ApiError(400,'Read-only email permission was not granted. Reconnect and approve email access.')
     if (!tokens.refresh_token) throw new ApiError(400,'Google did not grant offline access. Reconnect and approve the requested access.')
   }
   const identity=typeof payload.email === 'string' ? payload.email : payload.sub
   const credentials=encrypt({ ...tokens, scope:tokens.scope || attempt.requested_scopes || config.scopes, expires_at: Date.now() + tokens.expires_in * 1000 })
-  if (provider==='google' && [`openid email ${GOOGLE_CALENDAR_SCOPE}`,`openid email ${GOOGLE_CALENDAR_SCOPE} ${GOOGLE_CALENDAR_WRITE_SCOPE}`].includes(attempt.requested_scopes)) {
+  if (provider==='google' && attempt.requested_scopes?.split(' ').includes(GOOGLE_CALENDAR_SCOPE) && !attempt.requested_scopes?.includes('profile')) {
     const account=check(await db().from('planner_google_accounts').upsert({username:attempt.username,google_sub:payload.sub,identity,credentials,updated_at:new Date().toISOString()},{onConflict:'username,google_sub'}).select('id').single())
-    check(await db().from('planner_vm_settings').upsert({username:attempt.username,google_account_id:account.id},{onConflict:'username'}))
+    const existing=check(await db().from('planner_vm_settings').select('google_account_id').eq('username',attempt.username).maybeSingle())
+    if(!existing?.google_account_id)check(await db().from('planner_vm_settings').upsert({username:attempt.username,google_account_id:account.id},{onConflict:'username'}))
     await (await import('./google-fixed-sync.js')).enqueueFixedSync(attempt.username)
   } else check(await db().from('planner_connections').upsert({ username: attempt.username, provider, identity, credentials, updated_at: new Date().toISOString() }))
   return nativeConnectionReturn(request,'connected')||new Response(null, { status: 303, headers: { Location: `${ORIGIN}/?connection=connected`, 'Set-Cookie': 'planner-oauth=; HttpOnly; Secure; SameSite=Lax; Path=/api/agent/oauth; Max-Age=0', 'Cache-Control': 'no-store' } })
@@ -117,8 +120,8 @@ async function googleTokens(username: string) {
   return { tokens, identity:connection.identity }
 }
 export async function googleCalendarStatus(username: string) {
-  const [rows,selected]=await Promise.all([db().from('planner_google_accounts').select('id,identity,credentials,updated_at').eq('username',username).order('updated_at',{ascending:false}),db().from('planner_vm_settings').select('google_account_id').eq('username',username).maybeSingle()])
-  const accounts=check(rows).map(row=>({id:row.id,identity:row.identity,updatedAt:row.updated_at,connected:String(decrypt(row.credentials).scope || '').split(' ').some(scope=>[GOOGLE_CALENDAR_SCOPE,GOOGLE_CALENDAR_WRITE_SCOPE,'https://www.googleapis.com/auth/calendar'].includes(scope)),canEdit:String(decrypt(row.credentials).scope || '').split(' ').some(scope=>[GOOGLE_CALENDAR_WRITE_SCOPE,'https://www.googleapis.com/auth/calendar'].includes(scope))}))
+  const [rows,selected]=await Promise.all([db().from('planner_google_accounts').select('id,identity,credentials,updated_at,read_enabled').eq('username',username).order('updated_at',{ascending:false}),db().from('planner_vm_settings').select('google_account_id').eq('username',username).maybeSingle()])
+  const accounts=check(rows).map(row=>({id:row.id,identity:row.identity,updatedAt:row.updated_at,readEnabled:row.read_enabled!==false,canReadMail:String(decrypt(row.credentials).scope||'').split(' ').includes(GOOGLE_MAIL_READ_SCOPE),connected:String(decrypt(row.credentials).scope || '').split(' ').some(scope=>[GOOGLE_CALENDAR_SCOPE,GOOGLE_CALENDAR_WRITE_SCOPE,'https://www.googleapis.com/auth/calendar'].includes(scope)),canEdit:String(decrypt(row.credentials).scope || '').split(' ').some(scope=>[GOOGLE_CALENDAR_WRITE_SCOPE,'https://www.googleapis.com/auth/calendar'].includes(scope))}))
   const active=accounts.find(a=>a.id===check(selected)?.google_account_id) || accounts[0]
   return { configured:Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET), connected:active?.connected || false, canEdit:active?.canEdit || false, identity:active?.identity || null, updatedAt:active?.updatedAt || null, activeAccountId:active?.id || null, accounts }
 }
@@ -127,6 +130,14 @@ export async function selectGoogleAccount(username:string,id:string) {
   if(!account) throw new ApiError(404,'Google account not found.')
   check(await db().from('planner_vm_settings').upsert({username,google_account_id:id},{onConflict:'username'}))
   await (await import('./google-fixed-sync.js')).enqueueFixedSync(username)
+}
+export async function setGoogleReadEnabled(username:string,id:string,enabled:boolean) {
+ const status=await googleCalendarStatus(username)
+ if(!status.accounts.some(a=>a.id===id))throw new ApiError(404,'Google account not found.')
+ if(id===status.activeAccountId&&!enabled)throw new ApiError(400,'The export account must also be read for reconciliation.')
+ const rows=check(await db().from('planner_google_accounts').update({read_enabled:enabled}).eq('username',username).eq('id',id).select('id'))
+ if(!rows.length)throw new ApiError(409,'Account changed. Refresh and try again.')
+ await (await import('./google-fixed-sync.js')).enqueueFixedSync(username)
 }
 export async function removeGoogleAccount(username:string,id:string) {
   const account=check(await db().from('planner_google_accounts').select('id,credentials').eq('id',id).eq('username',username).maybeSingle())

@@ -7,7 +7,7 @@ import { openVmCredential, sealVmCredential } from './vm-vault.js'
 import { DEFAULT_VM_SCHEDULE, scheduleSlot, validateSchedule, scheduledReviewMessage } from './vm-power.js'
 import { touchVmActivity } from './vm-host.js'
 import { VM_SOURCES } from '../src/lib/vm.js'
-import { googleCalendarStatus, readGoogleCalendar, startGoogleCalendar, selectGoogleAccount, removeGoogleAccount } from './agent.js'
+import { googleCalendarStatus, readGoogleCalendar, startGoogleCalendar, selectGoogleAccount, removeGoogleAccount, setGoogleReadEnabled } from './agent.js'
 import { observeAccounts, editBrowserAccount } from './browser-accounts.js'
 import { bulkManageChats,ensureMainChat,ensureMainWelcome } from './vm-chats.js'
 import { workerApproval, answerApproval, rememberedBrowserTools } from './vm-approvals.js'
@@ -212,7 +212,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
     if(!rows.length)throw new ApiError(409,'Settings changed. Refresh and try again.')
     return json({ok:true})
   }
-  if (path === '/api/agent/vm/google/connect') return startGoogleCalendar(username)
+  if (path === '/api/agent/vm/google/connect') return startGoogleCalendar(username,input.mail===true,input.readOnly===true)
   if (path === '/api/agent/vm/browser/accounts') {
     if (!uuid(input.id)) throw new ApiError(400,'Choose an account.')
     await editBrowserAccount(username,input)
@@ -227,6 +227,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
     await removeGoogleAccount(username,input.id)
     return json({ok:true})
   }
+  if(path==='/api/agent/vm/google/source') {if(!uuid(input.id)||typeof input.enabled!=='boolean')throw new ApiError(400,'Choose a Google account and read setting.');await setGoogleReadEnabled(username,input.id,input.enabled);return json({ok:true})}
   if(path==='/api/agent/vm/google/select') {if(!uuid(input.id))throw new ApiError(400,'Choose a Google account.');await selectGoogleAccount(username,input.id);return json({ok:true})}
   if (path === '/api/agent/vm/activity') return json({ wakeUntil: await touchVmActivity(username) })
   if (path === '/api/agent/vm/provider') {
