@@ -29,7 +29,7 @@ test('multiple account review isolates identical IDs, reads sources, detects sou
    if(table==='planner_publish_calendar_stage'){published++;return Response.json(5)}
   }
   if(url.hostname==='www.googleapis.com'){
-   assert.equal(request.method,'GET','Source review must never write to Google')
+   assert.equal(request.method,'GET','Source review must never write to Google');assert(!url.searchParams.has('events'));assert(!url.searchParams.has('mappings'));assert(!url.searchParams.has('sources'))
    const isSchool=request.headers.get('Authorization')==='Bearer school';schoolRead ||= isSchool
    return Response.json({items:[{id:'same-id',etag:isSchool?schoolEtag:'personal-v1',summary:isSchool?'School exam':'Personal event'}]})
   }

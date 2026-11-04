@@ -31,7 +31,7 @@ async function googleSnapshot(username:string,window?:{timeMin:string;timeMax:st
  const mappings=storage(await db().from('planner_google_fixed_events').select('*').eq('username',username).eq('account_id',session.accountId))
  const local=await calendarRow(username)
  const fixed=local.state.events.filter(e=>e.eventKind!=='folder'&&eventType(e,local.state.tags)==='fixed')
- const bounds=window||{timeMin:new Date(Math.min(Date.now()-30*86400000,...fixed.map(e=>Date.parse(e.start)-86400000))).toISOString(),timeMax:new Date(Math.max(Date.now()+366*86400000,...fixed.map(e=>Date.parse(e.end)+86400000))).toISOString()}
+ const bounds=window?{timeMin:window.timeMin,timeMax:window.timeMax}:{timeMin:new Date(Math.min(Date.now()-30*86400000,...fixed.map(e=>Date.parse(e.start)-86400000))).toISOString(),timeMax:new Date(Math.max(Date.now()+366*86400000,...fixed.map(e=>Date.parse(e.end)+86400000))).toISOString()}
  const events:Remote[]=[],deadline=Date.now()+22000
  const read=async(url:string)=>{if(Date.now()>deadline)throw new ApiError(503,'Google snapshot is incomplete. Retry preparation; nothing was published.');const r=await fetch(url,{headers:{Authorization:'Bearer '+session.tokens.access_token},signal:AbortSignal.timeout(Math.max(1,Math.min(8000,deadline-Date.now())))});if(r.status===404||r.status===410)return null;if(!r.ok)throw new ApiError(502,'Could not read Google Calendar for staging ('+r.status+'). Nothing was published.');return r.json() as Promise<Remote>}
  const params=new URLSearchParams({...bounds,maxResults:'2500',singleEvents:'false',showDeleted:'true'})
