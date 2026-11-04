@@ -31,6 +31,18 @@ final class PlannerUITests: XCTestCase {
         XCTAssertTrue(app.webViews.buttons["ChatGPT session"].waitForExistence(timeout: 5))
         app.terminate()
     }
+    func testRealChatGPTSignInPage() {
+        let app = XCUIApplication()
+        app.launch()
+        let chat = app.webViews.buttons["Chat"]
+        XCTAssertTrue(chat.waitForExistence(timeout: 20)); chat.tap()
+        let session = app.webViews.buttons["ChatGPT session"]
+        XCTAssertTrue(session.waitForExistence(timeout: 15)); session.tap()
+        let portal = app.webViews["chatGPTPortalWebView"]
+        XCTAssertTrue(portal.waitForExistence(timeout: 10))
+        XCTAssertTrue(portal.buttons["Log in"].waitForExistence(timeout: 30))
+        // Leave the real account's sign-in page open for the user, without typing credentials.
+    }
     func testNotificationsChecklistAppearsInSidebar() {
         let app = XCUIApplication()
         app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"

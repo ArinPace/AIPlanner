@@ -61,7 +61,7 @@ struct PlannerWebView: UIViewRepresentable {
     static func dismantleUIView(_ web: WKWebView, coordinator: Coordinator) {
         web.configuration.userContentController.removeScriptMessageHandler(forName: "plannerNative", contentWorld: .page)
         coordinator.hideScreenTime()
-        coordinator.chatGPTPortal?.dismiss(animated: false)
+        coordinator.clearChatGPT()
         web.stopLoading(); web.navigationDelegate = nil; web.uiDelegate = nil
     }
     @MainActor final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandlerWithReply, WKDownloadDelegate {
@@ -69,6 +69,12 @@ struct PlannerWebView: UIViewRepresentable {
         weak var webView: WKWebView?
         var authentication: NativeAuthentication?
         var chatGPTPortal: UINavigationController?
+        func clearChatGPT() {
+            (chatGPTPortal?.viewControllers.first as? PlannerChatGPTPortal)?.browser?.stopLoading()
+            chatGPTPortal?.dismiss(animated: false)
+            chatGPTPortal?.willMove(toParent: nil); chatGPTPortal?.view.removeFromSuperview(); chatGPTPortal?.removeFromParent()
+            chatGPTPortal = nil; chatGPTAccount = nil
+        }
         var openedChatGPTForTest = false
         var chatGPTAccount: String?
         func relay(account: String) throws -> PlannerChatGPTPortal {
@@ -82,7 +88,9 @@ struct PlannerWebView: UIViewRepresentable {
                 chatGPTPortal = nav; chatGPTAccount = account
                 parkRelay()
             }
-            return chatGPTPortal!.viewControllers[0] as! PlannerChatGPTPortal
+            let controller = chatGPTPortal!.viewControllers[0] as! PlannerChatGPTPortal
+            controller.loadViewIfNeeded()
+            return controller
         }
         func parkRelay() {
             guard let nav = chatGPTPortal, let web = webView, let parent = web.window?.rootViewController, nav.presentingViewController == nil else { return }
@@ -160,7 +168,7 @@ struct PlannerWebView: UIViewRepresentable {
                     case "localReplicaAccount":
                         let account = body["account"] as? String
                         let changed = account != WidgetTaskControl.defaults.string(forKey: "feedback-account")
-                        if changed { chatGPTPortal?.dismiss(animated: false); chatGPTPortal = nil; chatGPTAccount = nil; TaskFocusRules.clearAll(); taskScreenTimeHost?.dismiss(animated: false); WidgetTaskControl.clear() }
+                        if changed { clearChatGPT(); TaskFocusRules.clearAll(); taskScreenTimeHost?.dismiss(animated: false); WidgetTaskControl.clear() }
                         WidgetTaskControl.defaults.set(account, forKey: "feedback-account")
                         #if DEBUG
                         if let account, !openedChatGPTForTest, ProcessInfo.processInfo.arguments.contains("-PlannerOpenChatGPT") {
@@ -395,6 +403,7 @@ struct PlannerWebView: UIViewRepresentable {
     return {ready:!!box,needsLogin:buttons.some(n=>/^(Log in|Sign in)$/i.test(label(n)))||!!document.querySelector('input[type="password"]'),running,count:replies.length,text:last?.innerText||'',final:!!turn?.querySelector('[data-testid="copy-turn-action-button"],button[aria-label="Copy response"],button[aria-label="Read aloud"]'),url:location.href};})()
     """ }
     private func snapshot() async throws -> [String: Any] {
+        loadViewIfNeeded()
         guard browser.url?.scheme == "https", browser.url?.host == "chatgpt.com" else { return ["ready": false,"needsLogin": true] }
         return try await browser.evaluateJavaScript(snapshotScript) as? [String: Any] ?? [:]
     }
