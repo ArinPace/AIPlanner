@@ -47,5 +47,6 @@ test('deployed API entry point forwards PATCH into authenticated handling',async
  const {PATCH}=await import('../api/index.js')
  const response=await PATCH(new Request('https://planner.test/api/files',{method:'PATCH',body:'{}'}))
  assert.equal(response.status,401)
- assert.match((await response.json()).error,/sign in/)
+ const result=await response.json() as {error:string}
+ assert.match(result.error,/sign in/)
 })
