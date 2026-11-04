@@ -1754,6 +1754,7 @@ textarea {
 .assistant-archive-toggle { background: transparent; border: 0; padding: 10px 12px; text-align: left; color: #777; font-size: 12px; cursor: pointer; }
 .assistant-copy { display: block; margin-top: 8px; padding: 4px 8px; border: 1px solid #ddd; border-radius: 6px; background: transparent; color: #777; cursor: pointer; font-size: 11px; white-space: normal; }
 .assistant-sidebar-settings { margin-top: 10px; flex-shrink: 0; }
+.assistant-sidebar-notifications { flex-shrink: 0; }
 .assistant-sidebar-scrim { display: none; }
 .assistant-chat { min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; }
 .assistant-chat-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 18px; flex-shrink: 0; min-height: 66px; }

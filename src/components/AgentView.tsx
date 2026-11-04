@@ -18,7 +18,6 @@ import { CloseIcon, MenuIcon, PlusIcon, SettingsIcon } from './Icons'
 import { RenameDialog } from './RenameDialog'
 import { binDaysLeft } from '../lib/bin'
 import {vmJobStatus} from '../lib/vmJobStatus'
-import {planningRequest} from '../lib/api'
 import {StartPlanning} from './StartPlanning'
 import {planningChatLabel,isPlanningLaunch} from '../lib/planningChatLabel'
 import {useChatDraft} from '../lib/chatDraft'
@@ -169,13 +168,6 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
     attachmentEpoch.current++;setAttachments([]);selectedChat.current = null; setChat(null); setJobs([]); selectDraft(null); setError(''); setLoadingChat(false)
     if (window.innerWidth <= 700) setSidebar(false)
   }
-  async function resetMain(){
-    if(!window.confirm('Reset Main Chat completely? This permanently clears its messages, task list, learned estimates, planning preferences and private agent memory. Saved Files, other chats and calendar events remain. Stop all Main Chat tasks first. This cannot be undone.'))return
-    setChatAction('reset-main');setError('')
-    try{await planningRequest({action:'reset-main',confirm:'RESET MAIN CHAT'});setJobs([]);setMessage('');await refresh()}
-    catch(e){setError(e instanceof Error?e.message:'Could not reset Main Chat.')}
-    finally{setChatAction(null)}
-  }
   async function manageSelected(action:'archive'|'restore'|'delete'|'untrash'|'purge') {
     if(chatAction || !selectedIds.length)return
     const ids=selectedIds.filter(id=>visibleChats.some(c=>c.id===id&&!c.is_main))
@@ -269,7 +261,8 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
   return <main className={'assistant-app' + (sidebar ? ' sidebar-open' : '')}>
     {sidebar && <aside className="assistant-sidebar" aria-label="Chat sidebar">
       <div className="assistant-sidebar-top"><strong>Your chats</strong><button type="button" className="icon-btn" aria-label="Hide chat sidebar" onClick={() => setSidebar(false)}><CloseIcon size={18}/></button></div>
-      <button type="button" className="assistant-new-chat" onClick={newChat}><PlusIcon size={18}/>New chat</button>{state?.chats.find(c=>c.id===chat)?.is_main && <button type="button" className="assistant-archive-toggle" disabled={Boolean(chatAction)} onClick={()=>void resetMain()}>Reset Main Chat</button>}
+      <button type="button" className="assistant-new-chat" onClick={newChat}><PlusIcon size={18}/>New chat</button>
+      <SourceConnectionAlerts username={username} active={active} refreshKey={JSON.stringify([state?.settings.sources,state?.settings.sites,state?.google,state?.runs.filter(run=>['browser_check','browser_login'].includes(run.kind)).map(run=>[run.id,run.status])])} onManage={()=>setPanel('connections')}/>
       <button type="button" className="assistant-archive-toggle" disabled={Boolean(chatAction)} aria-pressed={showArchived} onClick={()=>{setShowBin(false);setShowArchived(v=>!v);setSelectedIds([]);setSelecting(false)}}>{showArchived?'Back to chats':'Archived chats'}</button>
       <button type="button" className="assistant-archive-toggle" aria-pressed={showBin} disabled={Boolean(chatAction)} onClick={()=>{setShowBin(v=>!v);setSelectedIds([]);setSelecting(false)}}>{showBin?'Back from Bin':'Bin'}{!showBin && Boolean(state?.deletedChats?.length) && ' ('+state!.deletedChats!.length+')'}</button>
       {showBin && <p className="assistant-bin-note">Deleted chats stay here for 30 days. Restoring keeps their messages and archive status.</p>}
@@ -281,7 +274,6 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
         {chatAction==='bulk' && <span role="status">Updating chats…</span>}
       </div>}
       <nav aria-label="Conversations" className="assistant-conversations">{visibleChats.map(item => <div className={'assistant-chat-row'+(selecting?' is-selecting':'')} key={item.id}>{selecting && !item.is_main && <input type="checkbox" aria-label={'Select '+item.title} disabled={Boolean(chatAction)} checked={selectedIds.includes(item.id)} onChange={e=>setSelectedIds(ids=>e.target.checked?[...ids,item.id]:ids.filter(id=>id!==item.id))}/>}<button type="button" title={item.title} aria-current={item.id === chat ? 'page' : undefined} disabled={showBin} onClick={() => void chooseChat(item.id)}>{(item.is_main||item.pinned)&&<span aria-label={item.is_main?'Permanently pinned':'Pinned'} title={item.is_main?'Permanently pinned':'Pinned'} style={{marginRight:6}}>📌</span>}{item.title}{showBin && item.deleted_at && <small className="assistant-bin-expiry">{binDaysLeft(Date.parse(item.deleted_at)+30*86400000,now)} days left</small>}</button>{!item.is_main && !selecting && !showBin && <details className="assistant-chat-options"><summary aria-label={'Options for '+item.title}>⋯</summary><div><button disabled={Boolean(chatAction)} onClick={()=>void pinChat(item)}>{item.pinned?'Unpin chat':'Pin chat'}</button><button disabled={Boolean(chatAction)} onClick={()=>{setError('');setRenameChat(item)}}>Rename chat</button><button disabled={Boolean(chatAction)} onClick={()=>void manageChat(item,'archive')}>{item.archived?'Restore chat':'Archive chat'}</button><button disabled={Boolean(chatAction)} onClick={()=>void manageChat(item,'delete')}>Delete chat</button></div></details>}</div>)}{state && !visibleChats.length && <p>{showBin?'Bin is empty.':showArchived?'No archived chats.':'No conversations yet.'}</p>}</nav>
-      <SourceConnectionAlerts username={username} active={active} refreshKey={JSON.stringify([state?.settings.sources,state?.settings.sites,state?.google,state?.runs.filter(run=>['browser_check','browser_login'].includes(run.kind)).map(run=>[run.id,run.status])])} onManage={()=>setPanel('connections')}/>
       <button type="button" className="assistant-sidebar-settings" onClick={() => setPanel('settings')}><SettingsIcon size={18}/>Settings</button>
     </aside>}
     {sidebar && <button type="button" className="assistant-sidebar-scrim" aria-label="Close chat sidebar" onClick={() => setSidebar(false)}/>}
