@@ -1,11 +1,20 @@
+import {withSourceHealth} from './source-health.js'
 import {z} from 'zod'
 import {ApiError,db} from './cloud.js'
 import {storage} from './mcp-auth.js'
-import {googleCalendarSession} from './agent.js'
+import {googleCalendarSession,googleCalendarStatus} from './agent.js'
 import {datetime} from './planner-workspace.js'
 export const googleEventPatch={accountId:z.string().uuid().optional(),eventId:z.string().min(1).max(1024).optional(),etag:z.string().max(300).optional(),requestId:z.string().uuid().optional(),scope:z.enum(['event','series']).optional(),title:z.string().trim().min(1).max(300).optional(),description:z.string().max(20000).optional(),location:z.string().max(2000).optional(),start:datetime.optional(),end:datetime.optional(),allDay:z.boolean().optional()}
 type Patch=z.infer<z.ZodObject<typeof googleEventPatch>>
 export async function readGoogleEvent(username:string,args:{eventId:string;accountId?:string}){
+ const status=await googleCalendarStatus(username)
+ return withSourceHealth(username,'calendar',args.accountId||status.activeAccountId||'export',()=>readGoogleEventUnchecked(username,args))
+}
+export async function saveGoogleEvent(username:string,args:Patch){
+ const status=await googleCalendarStatus(username)
+ return withSourceHealth(username,'calendar',args.accountId||status.activeAccountId||'export',()=>saveGoogleEventUnchecked(username,args))
+}
+async function readGoogleEventUnchecked(username:string,args:{eventId:string;accountId?:string}){
  const settings=storage(await db().from('planner_vm_settings').select('sources').eq('username',username).maybeSingle())
  if(!settings?.sources?.includes('calendar'))throw new ApiError(403,'Enable Google Calendar in Add sites before reading it.')
  const session=await googleCalendarSession(username,args.accountId)
@@ -13,7 +22,7 @@ export async function readGoogleEvent(username:string,args:{eventId:string;accou
  if(!response.ok)throw new ApiError(response.status===404?404:502,'Could not read this Google event.')
  return {accountId:session.accountId,calendarId:'primary',event:await response.json() as Record<string,any>}
 }
-export async function saveGoogleEvent(username:string,args:Patch){
+async function saveGoogleEventUnchecked(username:string,args:Patch){
  const settings=storage(await db().from('planner_vm_settings').select('sources').eq('username',username).maybeSingle())
  if(!settings?.sources?.includes('calendar'))throw new ApiError(403,'Enable Google Calendar in Add sites before editing it.')
  const session=await googleCalendarSession(username,args.accountId,true)
