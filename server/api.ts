@@ -1,3 +1,6 @@
+import {filesManifest} from './files-transfer.js'
+import {applyFilesPatch,type FilesPatch} from '../src/lib/filesTransfer.js'
+import {filesWorkspaceLimit,type FilesState} from '../src/lib/files.js'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { randomUUID } from 'node:crypto'
 import { validateFilesState } from '../src/lib/files.ts'
@@ -187,11 +190,11 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
         const name = decodeURIComponent(String(req.headers['x-file-name'] ?? '')).trim()
         data = await readUpload(req)
         if (!name.toLowerCase().endsWith('.pdf') || !data.subarray(0, 1024).includes(Buffer.from('%PDF-'))) throw new Error('Choose a valid PDF file.')
-        const next = { ...state, documents: [...(state.documents ?? []), { id, folderId, name, kind: 'pdf' as const, size: data.length, updatedAt: new Date().toISOString() }] }
+        const next = { ...state, revision:(state.revision||0)+1, documents: [...(state.documents ?? []), { id, folderId, name, kind: 'pdf' as const, size: data.length, updatedAt: new Date().toISOString() }] }
         validateFilesState(next)
         writePdf(username, id, data)
         try { writeFiles(username, next) } catch (error) { deletePdf(username, id); throw error }
-        send(res, 201, next)
+        send(res,201,new URL(req.url!,'http://localhost').searchParams.has('summary')?{ok:true,revision:next.revision}:next)
       } catch (error) {
         send(res, 400, { error: error instanceof Error ? error.message : 'Could not upload PDF.' })
       }
@@ -215,7 +218,16 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       return true
     }
 
-    if (url === '/api/files' && (method === 'GET' || method === 'PUT')) {
+    if(url==='/api/files/item'&&method==='GET'){
+      const username=usernameFromRequest(req)
+      if(!username){send(res,401,{error:'Please sign in.'});return true}
+      const params=new URL(req.url!,'http://localhost').searchParams,section=params.get('section'),index=Number(params.get('index')),revision=Number(params.get('revision')),state=readFiles(username) as FilesState
+      if(!['files','folders','documents'].includes(section||'')||!Number.isSafeInteger(index)||index<0){send(res,400,{error:'Invalid Files item.'});return true}
+      const item=state[section as 'files'|'folders'|'documents']?.[index]
+      if((state.revision||0)!==revision||item?.id!==params.get('id')){send(res,409,{error:'Files changed while loading.'});return true}
+      send(res,200,{revision,item});return true
+    }
+    if (url === '/api/files' && (method === 'GET' || method === 'PUT'||method==='PATCH')) {
       const username = usernameFromRequest(req)
       if (!username) {
         send(res, 401, { error: 'Please sign in.' })
@@ -223,13 +235,18 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
       }
       if (method === 'GET') {
         const state = readFiles(username)
-        validateFilesState(state)
-        send(res, 200, state)
+        validateFilesState(state,filesWorkspaceLimit(username))
+        const full={...state,revision:state.revision||0,storageLimitBytes:filesWorkspaceLimit(username)}
+        send(res,200,new URL(req.url!,'http://localhost').searchParams.has('manifest')?filesManifest(full,username):full)
       } else {
         let state: unknown
         try {
-          state = JSON.parse((await readBody(req)) || '{}')
-          validateFilesState(state)
+          const input=JSON.parse((await readBody(req)) || '{}')
+          const previous=readFiles(username) as FilesState
+          if((input.revision||0)!==(previous.revision||0))throw new Error('Files changed. Read the latest revision before saving.')
+          state=method==='PATCH'?applyFilesPatch(previous,input as FilesPatch):input
+          validateFilesState(state,filesWorkspaceLimit(username))
+          state.revision=(previous.revision||0)+1
         } catch (error) {
           send(res, 400, { error: error instanceof Error ? error.message : 'Invalid files data.' })
           return true
@@ -240,7 +257,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
         for (const document of previous.documents ?? []) {
           if (document.kind === 'pdf' && !state.documents?.some((item) => item.id === document.id)) deletePdf(username, document.id)
         }
-        send(res, 200, { ok: true })
+        send(res, 200, { ok: true, revision:state.revision })
       }
       return true
     }

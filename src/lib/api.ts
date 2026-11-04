@@ -1,8 +1,9 @@
-import {activateReplica,recordReplica,replicaContext} from './localReplica'
+import {activateReplica,recordReplica,replicaContext,saveReplica} from './localReplica'
 import {isIPhoneApp,nativeRequest} from './platform'
 import type { StoredState } from '../types'
 import { DEFAULT_TAGS } from './storage'
-import type { FilesState } from './files'
+import {validateFilesState,type FilesState} from './files'
+import {applyFilesPatch,filesPatches,type FilesManifest,type WorkspaceItem} from './filesTransfer'
 
 const TOKEN_KEY = 'ai-planner-token'
 export function fixedCalendarSync<T>(run=false){return request<T>('/api/calendar/google-sync',run?{method:'POST',body:'{}'}:{})}
@@ -16,7 +17,7 @@ export function getToken(): string | null {
 }
 
 export function setToken(token: string | null): void {
-  if(token!==getToken())calendarRevision=undefined
+  if(token!==getToken()){calendarRevision=undefined;clearFilesCache()}
   if (token) localStorage.setItem(TOKEN_KEY, token)
   else {localStorage.removeItem(TOKEN_KEY);activateReplica(null)}
 }
@@ -94,31 +95,84 @@ export function emptyCalendar(): StoredState {
   return { events: [], tags: DEFAULT_TAGS, hiddenTagIds: [], zoom: 1 }
 }
 
-export function loadFiles() {
-  return request<FilesState>('/api/files')
+let filesCacheToken:string|null=null,filesBase:FilesState|null=null
+let filesLoading:{token:string|null;promise:Promise<FilesState>}|null=null
+const filesItems=new Map<string,{etag:string;item:WorkspaceItem}>()
+function clearFilesCache(){filesBase=null;filesItems.clear();filesLoading=null;filesCacheToken=getToken()}
+async function loadFilesParts():Promise<FilesState>{
+ const token=getToken(),context=replicaContext()
+ if(filesCacheToken!==token)clearFilesCache()
+ const response=await request<FilesManifest|FilesState>('/api/files?manifest=1')
+ // Older local servers and isolated test fixtures still return a complete state.
+ if(!('format' in response)||response.format!=='files-manifest'){
+  const state=response as FilesState;validateFilesState(state);filesBase=state
+  void saveReplica('files',state as unknown as Record<string,unknown>,context);return state
+ }
+ const manifest=response as FilesManifest
+ if(filesBase?.revision===manifest.revision)return filesBase
+ const state:FilesState={revision:manifest.revision,storageLimitBytes:manifest.storageLimitBytes,files:[],folders:[],documents:[]}
+ const values:WorkspaceItem[]=new Array(manifest.items.length)
+ let cursor=0
+ async function consume(){
+  while(cursor<manifest.items.length){
+   const position=cursor++,entry=manifest.items[position],key=entry.section+':'+entry.id,cached=filesItems.get(key)
+   const item=entry.value??(cached&&cached.etag===entry.etag?cached.item:undefined)??(await request<{item:WorkspaceItem}>('/api/files/item?'+new URLSearchParams({section:entry.section,id:entry.id,index:String(entry.index),revision:String(manifest.revision)}))).item
+   if(item.id!==entry.id)throw new Error('Files changed while loading. Please retry.')
+   values[position]=item;filesItems.set(key,{etag:entry.etag,item})
+  }
+ }
+ await Promise.all(Array.from({length:4},consume))
+ for(let i=0;i<values.length;i++)(state[manifest.items[i].section] as WorkspaceItem[]).push(values[i])
+ if(token!==getToken())throw new Error('Your account changed. Reload your current files.')
+ validateFilesState(state,state.storageLimitBytes)
+ if(filesBase?.revision!==undefined&&filesBase.revision>manifest.revision)return filesBase
+ filesBase=state
+ const keep=new Set(manifest.items.map(item=>item.section+':'+item.id));for(const key of filesItems.keys())if(!keep.has(key))filesItems.delete(key)
+ void saveReplica('files',state as unknown as Record<string,unknown>,context)
+ return state
 }
-
-export async function saveFiles(state: FilesState) {
-  const saved=await request<{ ok: boolean; revision?: number; planningSyncError?:string }>('/api/files', { method: 'PUT', body: JSON.stringify(state) })
-  window.dispatchEvent(new Event('planner-calendar-refresh'))
-  return saved
+export function loadFiles():Promise<FilesState>{
+ const token=getToken()
+ if(filesLoading?.token===token)return filesLoading.promise
+ const promise=loadFilesParts().catch(error=>{if(error instanceof Error&&error.message.startsWith('Files changed while loading'))return loadFilesParts();throw error}).finally(()=>{if(filesLoading?.promise===promise)filesLoading=null})
+ filesLoading={token,promise};return promise
+}
+export async function saveFiles(state:FilesState){
+ const context=replicaContext(),token=getToken()
+ const previous=filesBase??await loadFiles()
+ if(previous.revision!==state.revision)throw new Error('Files changed. Reload the latest version before saving.')
+ validateFilesState(state,state.storageLimitBytes)
+ let current=previous,saved:{ok:boolean;revision?:number;planningSyncError?:string}={ok:true,revision:previous.revision}
+ for(const patch of filesPatches(previous,state)){
+  patch.revision=current.revision
+  saved=await request('/api/files',{method:'PATCH',body:JSON.stringify(patch)})
+  current={...applyFilesPatch(current,patch),revision:saved.revision??current.revision}
+  if(token!==getToken())throw new Error('Your account changed. Reload your current files.')
+  filesBase=current
+  void saveReplica('files',current as unknown as Record<string,unknown>,context)
+ }
+ window.dispatchEvent(new Event('planner-calendar-refresh'))
+ return saved
 }
 export interface FileBinEntry {id:string;names:string[];item_count:number;deleted_at:string;expires_at:string}
 export function loadFileBin(){return request<{items:FileBinEntry[]}>('/api/files/bin')}
-export function fileBinAction(action:'trash'|'restore'|'purge',ids:string[],revision:number){return request<FilesState>('/api/files/'+action,{method:'POST',body:JSON.stringify({ids,revision})})}
+export async function fileBinAction(action:'trash'|'restore'|'purge',ids:string[],revision:number){await request('/api/files/'+action+'?summary=1',{method:'POST',body:JSON.stringify({ids,revision})});filesLoading=null;return loadFiles()}
 
 export async function uploadPdf(folderId: string | null, file: File) {
   if (!(await file.slice(0, 1024).text()).includes('%PDF-')) throw new Error('Choose a valid PDF file.')
   const ticket = await request<{ mode: 'local' | 'signed'; id?: string; uploadUrl?: string }>('/api/files/upload/start', {
     method: 'POST', body: JSON.stringify({ folderId, name: file.name, size: file.size }),
   })
-  if (ticket.mode === 'local') return request<FilesState>(`/api/files/upload?folderId=${encodeURIComponent(folderId ?? '')}`, {
-    method: 'POST', body: file, headers: { 'Content-Type': 'application/pdf', 'X-File-Name': encodeURIComponent(file.name) },
-  })
+  if (ticket.mode === 'local') {
+    await request(`/api/files/upload?summary=1&folderId=${encodeURIComponent(folderId ?? '')}`, {
+      method: 'POST', body: file, headers: { 'Content-Type': 'application/pdf', 'X-File-Name': encodeURIComponent(file.name) },
+    })
+    filesLoading=null;return loadFiles()
+  }
   try {
     const upload = await fetch(ticket.uploadUrl!, { method: 'PUT', headers: { 'Content-Type': 'application/pdf', 'x-upsert': 'false' }, body: file })
     if (!upload.ok) throw new Error('Could not upload the PDF. Please try again.')
-    return await request<FilesState>('/api/files/upload/finish', { method: 'POST', body: JSON.stringify({ id: ticket.id }) })
+    await request('/api/files/upload/finish?summary=1', { method: 'POST', body: JSON.stringify({ id: ticket.id }) });filesLoading=null;return loadFiles()
   } catch (error) {
     await request('/api/files/upload/cancel', { method: 'POST', body: JSON.stringify({ id: ticket.id }) }).catch(() => undefined)
     throw error

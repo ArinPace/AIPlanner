@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { ApiError, db, json, body, cleanupUploads } from './cloud.js'
 import { storage } from './mcp-auth.js'
-import { descendantIds, validateFilesState, isPermanentPlannerNote, type FilesState } from '../src/lib/files.js'
+import { descendantIds, filesWorkspaceLimit, validateFilesState, isPermanentPlannerNote, type FilesState } from '../src/lib/files.js'
 import { uuid } from './vm-validation.js'
 
 export function selection(value:unknown) {
@@ -48,8 +48,8 @@ export function restoreFiles(current:FilesState,snapshots:FilesState[]) {
   return state
 }
 async function commit(username:string,revision:number,state:FilesState,add:unknown=null,remove:string[]=[],restore=true){
-  const {revision:_revision,...data}=state
-  validateFilesState(data)
+  const {revision:_revision,storageLimitBytes:_quota,...data}=state
+  validateFilesState(data,filesWorkspaceLimit(username))
   const result=await db().rpc('planner_files_bin_commit',{p_username:username,p_revision:revision,p_state:data,p_add:add,p_remove:remove,p_restore:restore})
   if(result.error)throw new ApiError(result.error.code==='P0001'?409:503,result.error.code==='P0001'?result.error.message:'Could not update the Bin.')
   return {...data,revision:result.data.revision} as FilesState
@@ -73,7 +73,8 @@ export async function handleFilesBin(request:Request,path:string,username:string
   if(!Number.isSafeInteger(input.revision) || input.revision!==row.revision)throw new ApiError(409,'Files changed. Refresh before trying again.')
   if(path==='/api/files/trash'){
     const removed=buildTrash(row.state,ids)
-    return json(await commit(username,row.revision,removed.state,removed.entry))
+    const saved=await commit(username,row.revision,removed.state,removed.entry)
+    return json(new URL(request.url).searchParams.has('summary')?{ok:true,revision:saved.revision}:saved)
   }
   if(!['/api/files/restore','/api/files/purge'].includes(path))throw new ApiError(404,'Unknown Bin action.')
   if(ids.some(id=>!uuid(id)))throw new ApiError(400,'Choose valid Bin items.')
@@ -82,7 +83,7 @@ export async function handleFilesBin(request:Request,path:string,username:string
   const restore=path.endsWith('/restore'),next=restore?restoreFiles(row.state,rows.map(r=>r.snapshot)):row.state
   const saved=await commit(username,row.revision,next,null,ids,restore)
   if(!restore)await cleanupUploads(username)
-  return json(saved)
+  return json(new URL(request.url).searchParams.has('summary')?{ok:true,revision:saved.revision}:saved)
 }
 
 export async function cleanupBinStorage(){

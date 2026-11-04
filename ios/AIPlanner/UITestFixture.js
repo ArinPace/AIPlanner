@@ -44,7 +44,7 @@
   else if(path==='/api/login'||path==='/api/register'){signedIn=true;value={username:'planner_test',token:'fixture-session'}}
   else if(path==='/api/logout'){signedIn=false;value={ok:true}}
   else if(path==='/api/calendar'){if(method==='PUT'){calendar={...JSON.parse(options.body),revision:calendar.revision+1};value={ok:true,revision:calendar.revision}}else value=calendar}
-  else if(path==='/api/files'){if(method==='PUT'){files={...JSON.parse(options.body),revision:files.revision+1};value={ok:true,revision:files.revision}}else value=files}
+  else if(path==='/api/files'){if(method==='PUT'||method==='PATCH'){const patch=JSON.parse(options.body);if(method==='PATCH'){const removed=new Set(patch.removeIds||[]);for(const section of ['files','folders','documents']){const replacements=new Map((patch.upserts?.[section]||[]).map(item=>[item.id,item]));files[section]=(files[section]||[]).filter(item=>!removed.has(item.id)).map(item=>{const next=replacements.get(item.id)||item;replacements.delete(item.id);return next});files[section].push(...replacements.values())}}else files=patch;files={...files,revision:files.revision+1};value={ok:true,revision:files.revision}}else value=files}
   else if(path==='/api/calendar/google-sync')value={connected:true,reviewRequired:true,pending:true,error:null,identity:'fixture@example.com'};
   else if(path==='/api/calendar/export.json')value={format:'ai-planner-calendar',formatVersion:1,calendar};
   else if(path==='/api/calendar/staging.json')value={format:'ai-planner-calendar-stage',formatVersion:1,status:'draft',payload:{calendar}};

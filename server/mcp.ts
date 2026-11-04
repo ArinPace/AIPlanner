@@ -15,7 +15,7 @@ import { z } from 'zod'
 import { ApiError, db, json, handlePdfUpload } from './cloud.js'
 import { applyUpdates, parseUpdates, settings, readGoogleCalendar, googleCalendarStatus } from './agent.js'
 import { saveChatLink } from './chat-links.js'
-import { validateFilesState, type FilesState } from '../src/lib/files.js'
+import { filesWorkspaceLimit, validateFilesState, type FilesState } from '../src/lib/files.js'
 import { closeMcpBrowser, openMcpBrowser, readMcpBrowser } from './mcp-browser.js'
 import { MCP_ORIGIN, MCP_SCOPES, mcpIdentity, oauthRoute, storage } from './mcp-auth.js'
 import { calendarRow, eventPatch, saveEvent, searchFiles, readPdf } from './planner-workspace.js'
@@ -36,7 +36,7 @@ const color = z.string().regex(/^#[0-9a-f]{6}$/i)
 
 async function filesRow(username: string) { return storage(await db().from('planner_files').select('state,revision').eq('username',username).single()) }
 async function saveFiles(username: string, state: FilesState, revision: number) {
-  validateFilesState(state)
+  try{validateFilesState(state,filesWorkspaceLimit(username))}catch(error){throw new ApiError(400,error instanceof Error?error.message:'Invalid Files workspace.')}
   const rows = storage(await db().from('planner_files').update({state,revision:revision+1,updated_at:new Date().toISOString()}).eq('username',username).eq('revision',revision).select('revision'))
   if (!rows.length) throw new ApiError(409,'Files changed while you were editing. Read them again before retrying.')
   let planningSyncError:string|undefined

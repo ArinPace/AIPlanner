@@ -1,5 +1,8 @@
 // Leave headroom below the hosting function payload ceiling for JSON wrappers.
 export const FILES_WORKSPACE_MAX_BYTES = 4 * 1024 * 1024
+export const FILES_ACCOUNT_MAX_BYTES = 25 * 1024 * 1024
+export const FILES_ITEM_MAX_BYTES = 3 * 1024 * 1024
+export function filesWorkspaceLimit(username:string) { return username === 'arin' ? FILES_ACCOUNT_MAX_BYTES : FILES_WORKSPACE_MAX_BYTES }
 
 export interface PlannerFolder {
   id: string
@@ -27,6 +30,7 @@ export interface PlannerTextFile {
 
 export interface FilesState {
   revision?: number
+  storageLimitBytes?: number
   folders: PlannerFolder[]
   files: PlannerTextFile[]
   documents?: PlannerDocument[]
@@ -70,10 +74,10 @@ export function descendantIds(folders: PlannerFolder[], id: string): Set<string>
 }
 
 // Both the UI and API validate the same hierarchy before saving it.
-export function validateFilesState(value: unknown): asserts value is FilesState {
+export function validateFilesState(value: unknown, maxBytes = FILES_ACCOUNT_MAX_BYTES): asserts value is FilesState {
   if (!value || typeof value !== 'object') throw new Error('Invalid files data.')
   const state = value as FilesState
-  if (new TextEncoder().encode(JSON.stringify(state)).length > FILES_WORKSPACE_MAX_BYTES) throw new Error('The Files workspace supports up to 4 MB of text and metadata. PDFs are stored separately.');
+  if (new TextEncoder().encode(JSON.stringify(state)).length > maxBytes) throw new Error(`The Files workspace supports up to ${maxBytes / 1024 / 1024} MB of text and metadata. PDFs are stored separately.`);
   if (!Array.isArray(state.folders) || !Array.isArray(state.files)) throw new Error('Invalid files data.')
   if (state.folders.length > 2000 || state.files.length > 5000) throw new Error('Too many folders or files.')
   const ids = new Set<string>()
@@ -109,6 +113,7 @@ export function validateFilesState(value: unknown): asserts value is FilesState 
   }
   for (const file of state.files) {
     if (!file || typeof file !== 'object') throw new Error('Invalid text file.')
+    if (new TextEncoder().encode(JSON.stringify(file)).length > FILES_ITEM_MAX_BYTES) throw new Error('This note exceeds the 3 MB per-note transfer limit. Split it into smaller notes.')
     if (file.format !== undefined && file.format !== 'note') throw new Error('Invalid note format.')
     if(file.systemRole!==undefined&&(!['goals','todo'].includes(file.systemRole)||file.format!=='note'))throw new Error('Invalid permanent planning note.')
     if(file.pinned!==undefined && typeof file.pinned!=='boolean')throw new Error('Invalid pinned note.')

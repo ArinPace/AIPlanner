@@ -6,7 +6,7 @@ import { generateText, jsonSchema, stepCountIs, tool } from 'ai'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 import { getVercelOidcTokenSync } from '@vercel/oidc'
 import { ApiError, body, db, json } from './cloud.js'
-import { validateFilesState, type FilesState } from '../src/lib/files.js'
+import { filesWorkspaceLimit, validateFilesState, type FilesState } from '../src/lib/files.js'
 import type { StoredState } from '../src/types.js'
 import { expireMcpBrowsers } from './mcp-browser.js'
 
@@ -247,7 +247,7 @@ export async function applyUpdates(username: string, run: any, output: ReturnTyp
     const c = check(await db().from('planner_calendars').select('state,revision').eq('username',username).single())
     const f = check(await db().from('planner_files').select('state,revision').eq('username',username).single())
     let calendar:StoredState,files:FilesState
-    try { ({calendar,files}=mergeUpdates(c.state,f.state,output.updates)) }
+    try { ({calendar,files}=mergeUpdates(c.state,f.state,output.updates));validateFilesState(files,filesWorkspaceLimit(username)) }
     catch(error){throw new ApiError(422,error instanceof Error?error.message:'Invalid source updates. No changes were saved.')}
     const response = await db().rpc('planner_apply_sync',{p_username:username,p_run:run.id,p_calendar_revision:c.revision,p_files_revision:f.revision,p_calendar:calendar,p_files:files,p_summary:output.summary})
     if (!response.error) {if(response.data!==true)throw new ApiError(409,'This collection is no longer active. No changes were saved.');return}

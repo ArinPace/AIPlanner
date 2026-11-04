@@ -1,6 +1,8 @@
+import {cloudFilesManifest,readFilesTransferItem} from './files-transfer.js'
+import {applyFilesPatch,type FilesPatch} from '../src/lib/filesTransfer.js'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { randomUUID } from 'node:crypto'
-import { FILES_WORKSPACE_MAX_BYTES, validateFilesState, type FilesState, type PlannerDocument } from '../src/lib/files.js'
+import { FILES_WORKSPACE_MAX_BYTES, filesWorkspaceLimit, validateFilesState, type FilesState, type PlannerDocument } from '../src/lib/files.js'
 import { createToken, normalizeUsername, tokenHash } from './auth.js'
 import { handleAgentRequest } from './agent.js'
 import { handleMcpRequest } from './mcp.js'
@@ -75,14 +77,15 @@ export async function sessionToken(username: string) {
 }
 async function filesFor(username: string): Promise<FilesState> {
   const row = dataResult(await db().from('planner_files').select('state,revision').eq('username', username).single())
-  validateFilesState(row.state)
-  return { ...row.state, revision: row.revision }
+  validateFilesState(row.state,filesWorkspaceLimit(username))
+  return { ...row.state, revision: row.revision, storageLimitBytes:filesWorkspaceLimit(username) }
 }
 async function setFiles(username: string, next: FilesState, previous: FilesState): Promise<FilesState> {
-  const { revision: _revision, ...state } = next
+  validateFilesState(next,filesWorkspaceLimit(username))
+  const { revision: _revision, storageLimitBytes:_quota, ...state } = next
   const rows = dataResult(await db().from('planner_files').update({ state, revision: previous.revision! + 1, updated_at: new Date().toISOString() }).eq('username', username).eq('revision', previous.revision!).select('revision'))
   if (!rows.length) throw new ApiError(409, 'Files changed in another tab. Reload to see the latest version before saving again.')
-  return { ...state, revision: rows[0].revision }
+  return { ...state, revision: rows[0].revision, storageLimitBytes:filesWorkspaceLimit(username) }
 }
 export async function cleanupUploads(username: string) {
   const uploads = dataResult(await db().from('planner_uploads').select('id,storage_path').eq('username', username).or(`status.eq.deleted,and(status.eq.pending,expires_at.lt.${new Date().toISOString()})`))
@@ -197,16 +200,20 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
       if (!rows.length) throw new ApiError(409, 'Your calendar changed during a sync or in another tab. Reload before saving.')
       return json({ ok: true, revision: rows[0].revision })
     }
+    if(path==='/api/files/item'&&method==='GET')return json(await readFilesTransferItem(username,url))
     if (path === '/api/files' && method === 'GET') {
       const ensured=await db().rpc('planner_ensure_planning_notes',{p_username:username})
       if(ensured.error)throw new ApiError(503,'Could not prepare your planning notes.')
       await cleanupUploads(username)
+      if(url.searchParams.has('manifest'))return json(await cloudFilesManifest(username))
       return json(await filesFor(username))
     }
-    if (path === '/api/files' && method === 'PUT') {
-      const input = await body(request)
-      validateFilesState(input)
+    if (path === '/api/files' && (method === 'PUT'||method === 'PATCH')) {
+      const payload = await body(request)
       const previous = await filesFor(username)
+      if(payload.revision!==previous.revision)throw new ApiError(409,'Files changed in another tab. Reload before saving again.')
+      const input=method==='PATCH'?applyFilesPatch(previous,payload as FilesPatch):payload
+      validateFilesState(input,filesWorkspaceLimit(username))
       if (input.revision !== previous.revision) throw new ApiError(409, 'Files changed in another tab. Reload before saving again.')
       const pdfs = (input.documents ?? []).filter((document) => document.kind === 'pdf')
       if (pdfs.length) {
@@ -243,7 +250,7 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
   } catch (error) {
     if (error instanceof ApiError) return json({ error: error.message }, error.status)
     if (error instanceof Error && error.name==='ZodError') return json({error:'Invalid values. Check dates, times, intensity and required fields.'},400)
-    if (error instanceof Error && /Names must|already exists|folder|file|document|link|label|color|Invalid|Too many|workspace/i.test(error.message)) return json({ error: error.message }, 400)
+    if (error instanceof Error && /Names must|already exists|folder|file|note|document|link|label|color|Invalid|Too many|workspace/i.test(error.message)) return json({ error: error.message }, 400)
     console.error('Planner API failed', { path, method, type: error instanceof Error ? error.name : 'unknown' })
     return json({ error: 'Could not complete this request. Please try again.' }, 500)
   }
@@ -256,7 +263,7 @@ export async function handlePdfUpload(request:Request,path:string,username:strin
       const id = randomUUID()
       const document: PlannerDocument = { id, folderId: input.folderId === null ? null : String(input.folderId ?? ''), name: String(input.name ?? '').trim(), kind: 'pdf', size: Number(input.size), updatedAt: new Date().toISOString() }
       if (!document.name.toLowerCase().endsWith('.pdf')) throw new ApiError(400, 'Choose a PDF file.')
-      validateFilesState({ ...state, documents: [...(state.documents ?? []), document] })
+      validateFilesState({ ...state, documents: [...(state.documents ?? []), document] },filesWorkspaceLimit(username))
       const storagePath = `${username}/${id}.pdf`
       const signed = dataResult(await db().storage.from(BUCKET).createSignedUploadUrl(storagePath, { upsert: false }))
       result(await db().from('planner_uploads').insert({ id, username, folder_id: document.folderId, name: document.name, size: document.size, storage_path: storagePath }))
@@ -266,7 +273,7 @@ export async function handlePdfUpload(request:Request,path:string,username:strin
       const input = await body(request)
       const upload = await ownedUpload(username, String(input.id ?? ''))
       const state = await filesFor(username)
-      if (upload.status === 'complete' && state.documents?.some((document) => document.id === upload.id)) return json(state)
+      if (upload.status === 'complete' && state.documents?.some((document) => document.id === upload.id)) return json(new URL(request.url).searchParams.has('summary')?{ok:true,revision:state.revision}:state)
       if (upload.status !== 'pending' || Date.parse(upload.expires_at) < Date.now()) throw new ApiError(410, 'Upload expired. Upload your PDF again.')
       const info = dataResult(await db().storage.from(BUCKET).info(upload.storage_path))
       if (info.size !== upload.size) throw new ApiError(400, 'Uploaded PDF size does not match. Please upload again.')
@@ -279,9 +286,9 @@ export async function handlePdfUpload(request:Request,path:string,username:strin
       if (!first?.value || !Buffer.from(first.value).subarray(0, 1024).includes(Buffer.from('%PDF-'))) throw new ApiError(400, 'Uploaded file is not a valid PDF.')
       const document: PlannerDocument = { id: upload.id, folderId: upload.folder_id, name: upload.name, size: upload.size, kind: 'pdf', updatedAt: new Date().toISOString() }
       const next = { ...state, documents: [...(state.documents ?? []).filter((item) => item.id !== upload.id), document] }
-      validateFilesState(next)
+      validateFilesState(next,filesWorkspaceLimit(username))
       result(await db().from('planner_uploads').update({ status: 'complete' }).eq('username', username).eq('id', upload.id))
-      try { return json(await setFiles(username, next, state)) }
+      try { const saved=await setFiles(username,next,state);return json(new URL(request.url).searchParams.has('summary')?{ok:true,revision:saved.revision}:saved) }
       catch (error) { await db().from('planner_uploads').update({ status: 'pending' }).eq('username', username).eq('id', upload.id); throw error }
     }
  throw new ApiError(404,'Unknown PDF upload action.')
