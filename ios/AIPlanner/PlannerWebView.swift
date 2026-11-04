@@ -23,7 +23,7 @@ struct PlannerWebView: UIViewRepresentable {
         config.websiteDataStore = .default()
         config.allowsInlineMediaPlayback = true
         config.userContentController.addScriptMessageHandler(context.coordinator, contentWorld: .page, name: "plannerNative")
-        config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeScreenTime=true;window.plannerNativeChatGPTPortal=true;window.plannerNativeChatGPTRelayVersion=2;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true'});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeScreenTime=true;window.plannerNativeChatGPTPortal=true;window.plannerNativeChatGPTRelayVersion=3;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true'});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-UITestRelayCSV") {
             config.userContentController.addUserScript(WKUserScript(source: """
@@ -174,7 +174,7 @@ struct PlannerWebView: UIViewRepresentable {
                         guard let account = body["account"] as? String, let value = body["settings"], JSONSerialization.isValidJSONObject(value) else { throw NativeError("Missing notification settings.") }
                         let options = try JSONDecoder().decode(TaskNotificationOptions.self, from: JSONSerialization.data(withJSONObject: value))
                         try await PlannerTaskNotifications.shared.configure(account: account, options: options)
-                    case "chatGPTPortal", "chatGPTRelayStatus", "chatGPTRelaySend", "chatGPTRelayStop", "chatGPTRelayDraft", "chatGPTRelayClearDraft", "chatGPTRelayDownload":
+                    case "chatGPTPortal", "chatGPTRelayStatus", "chatGPTRelaySend", "chatGPTRelayStop", "chatGPTRelayDraft", "chatGPTRelayClearDraft", "chatGPTRelayDownload", "chatGPTRelayMirror":
                         guard let account = body["account"] as? String else { throw NativeError("Sign into Planner first.") }
                         let controller = try relay(account: account)
                         if action == "chatGPTRelayStatus" {
@@ -182,6 +182,12 @@ struct PlannerWebView: UIViewRepresentable {
                             var state = try await controller.relayStatus(); state["chatId"] = controller.loadedChat
                             if !relayOperationActive && ((state["ready"] as? Bool == true && controller.pendingChat == nil) || state["phase"] as? String == "completed" || state["phase"] as? String == "attention") { parkRelay() }
                             replyHandler(state, nil); return
+                        }
+                        if action == "chatGPTRelayMirror" {
+                            guard !relayOperationActive, chatGPTPortal?.presentingViewController == nil else { throw NativeError("Return to Planner and wait for the current operation before syncing chats.") }
+                            guard let url = body["url"] as? String else { throw NativeError("Choose a linked conversation.") }
+                            relayOperationActive = true; attachRelayForRun(); defer { relayOperationActive = false; parkRelay() }
+                            replyHandler(try await controller.mirrorConversation(url: url, patch: body["patch"] as? [String: Any] ?? [:], expected: body["expected"] as? [String: Any]), nil); return
                         }
                         if action == "chatGPTRelayDraft" { replyHandler(try await controller.inspectDraft(), nil); return }
                         if action == "chatGPTRelayClearDraft" {
@@ -425,6 +431,7 @@ struct PlannerWebView: UIViewRepresentable {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-UITestGuestRelay") { configuration.websiteDataStore = .nonPersistent() }
         #endif
+        configuration.userContentController.addUserScript(WKUserScript(source: Self.deletionObserver, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         configuration.allowsInlineMediaPlayback = true
         browser = WKWebView(frame: .zero, configuration: configuration)
         browser.accessibilityIdentifier = "chatGPTPortalWebView"
@@ -468,6 +475,90 @@ struct PlannerWebView: UIViewRepresentable {
 
         }
     }
+    // BEGIN_CHAT_DELETION_OBSERVER
+    private static var deletionObserver: String { #"""
+// Record only an explicit per-conversation Delete confirmation in this browser.
+// Sidebar absence, failed loads, bulk-delete controls, and logout are ignored.
+window.__plannerMirrorDeleted={};
+let pending=null;
+const check=()=>{
+ if(!pending)return;
+ const statuses=[...document.querySelectorAll('[role="status"],[role="alert"]')].map(n=>n.innerText||'').join('\n');
+ if(/failed|unable|error|try again/i.test(statuses)){pending=null;return}
+ if(/chat deleted|conversation deleted/i.test(statuses)||(location.pathname!==pending.path&&!document.querySelector('[role="alertdialog"] button'))){
+  window.__plannerMirrorDeleted[pending.path]={title:pending.title,deleted:true};pending=null;
+ }
+};
+document.addEventListener('click',event=>{
+ const button=event.target.closest?.('button'),dialog=button?.closest('[role="dialog"],[role="alertdialog"]');
+ if(!button||!dialog||!/^Delete(?: chat)?$/i.test((button.getAttribute('aria-label')||button.innerText||'').trim())||!/delete/i.test(dialog.innerText)||!/^\/(?:g\/[A-Za-z0-9_-]+\/)?c\/[A-Za-z0-9_-]+$/.test(location.pathname))return;
+ pending={path:location.pathname,title:document.title.replace(/\s*[-|–]\s*ChatGPT$/i,'').trim().slice(0,120)};
+ setTimeout(check,500);
+},true);
+document.addEventListener('DOMContentLoaded',()=>new MutationObserver(check).observe(document.documentElement,{childList:true,subtree:true}));
+"""# }
+    // END_CHAT_DELETION_OBSERVER
+    // BEGIN_CHAT_MIRROR_SCRIPT
+    private var mirrorScript: String { #"""
+// Only public page controls; no fetch, tokens, cookies, or private endpoints.
+const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const visible=n=>n&&n.getClientRects().length&&!n.closest('[aria-hidden="true"]');
+const label=n=>(n.getAttribute('aria-label')||n.innerText||'').trim();
+const same=()=>location.origin==='https://chatgpt.com'&&location.pathname===new URL(url).pathname;
+if(!same())throw Error('The ChatGPT conversation changed. Sync was stopped.');
+if([...document.querySelectorAll('button')].filter(visible).some(n=>/^(Log in|Sign in)$/i.test(label(n))))throw Error('Sign in to ChatGPT to sync saved conversations. Guest chats have no sidebar.');
+const find=async(fn,message)=>{for(let i=0;i<50;i++){const value=fn();if(value)return value;await pause(100)}throw Error(message)};
+const menuItems=()=>[...document.querySelectorAll('[role="menuitem"]')].filter(visible);
+const escape=()=>{for(const type of ['keydown','keyup'])document.activeElement?.dispatchEvent(new KeyboardEvent(type,{key:'Escape',code:'Escape',bubbles:true}))};
+const openMenu=async()=>{
+ if(document.querySelector('[role="alertdialog"], [role="dialog"][data-state="open"] input'))throw Error('Close the ChatGPT dialog before syncing.');
+ let items=menuItems();if(items.length){escape();await pause(100)}
+ const buttons=[...document.querySelectorAll('header button[aria-label="Chat actions"],header button[data-testid="conversation-options-button"],button[data-testid="conversation-options-button"]')].filter(visible);
+ if(buttons.length!==1)throw Error('ChatGPT conversation controls were not recognized. Open the session to check this chat.');
+ const button=buttons[0];
+ // Radix menus open on pointerdown; older ChatGPT menus use click.
+ if(button.hasAttribute('aria-haspopup'))button.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,pointerType:'mouse',ctrlKey:false}));else button.click();
+ return await find(()=>menuItems().length?menuItems():null,'ChatGPT did not open this conversation menu.');
+};
+const titleText=()=>document.title.replace(/^🐴\s*/,'').replace(/\s*[-|–]\s*ChatGPT$/i,'').trim();
+const read=async()=>{
+ if(!same())throw Error('The ChatGPT conversation changed. Sync was stopped.');
+ const items=await openMenu(),has=value=>items.some(n=>new RegExp('^'+value+'(?: chat)?$','i').test(label(n)));
+ const unarchive=has('Unarchive'),archive=has('Archive');
+ const explicitArchived=[...document.querySelectorAll('main [role="alert"],main [role="status"],main button')].filter(visible).some(n=>/^(Unarchive|This (?:chat|conversation) is archived)/i.test(label(n)));
+ const title=titleText();escape();
+ if(!title||/^ChatGPT$/i.test(title)||(!unarchive&&!archive&&!explicitArchived))throw Error('ChatGPT did not expose verified chat metadata. Missing history is not treated as deletion.');
+ return {title:title.slice(0,120),archived:unarchive||explicitArchived,deleted:false};
+};
+if(operation==='read')return await read();
+const before=await read();
+if(expected&&['title','archived','deleted'].some(k=>before[k]!==expected[k]))throw Error('This ChatGPT conversation changed while syncing. Refresh and retry.');
+const wanted=operation==='rename'?'Rename':operation==='archive'?'Archive':operation==='unarchive'?'Unarchive':operation==='delete'?'Delete':null;
+if(!wanted)throw Error('Unsupported conversation operation.');
+const items=await openMenu(),item=items.find(n=>new RegExp('^'+wanted+'(?: chat)?$','i').test(label(n)));
+if(!item)throw Error('ChatGPT does not expose '+wanted+' for this conversation.');
+item.click();
+if(operation==='rename'){
+ const input=await find(()=>[...document.querySelectorAll('[role="dialog"] input[type="text"],header input[type="text"]')].find(visible),'ChatGPT rename control was not found.');
+ const dialog=input.closest('[role="dialog"]');
+ Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,title);
+ input.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:title}));input.dispatchEvent(new Event('change',{bubbles:true}));
+ await pause(100);
+ if(dialog){const save=[...dialog.querySelectorAll('button')].find(n=>/^(Save|Rename)$/i.test(label(n)));if(!save||save.disabled)throw Error('ChatGPT rename could not be submitted.');save.click()}
+ else{for(const type of ['keydown','keyup'])input.dispatchEvent(new KeyboardEvent(type,{key:'Enter',code:'Enter',bubbles:true}))}
+ await find(()=>titleText()===title,'ChatGPT did not confirm the new title.');return {applied:true};
+}
+if(operation==='delete'){
+ const dialog=await find(()=>[...document.querySelectorAll('[role="alertdialog"],[role="dialog"]')].find(n=>visible(n)&&/delete/i.test(n.innerText)&&[...n.querySelectorAll('button')].some(b=>/^Delete(?: chat)?$/i.test(label(b)))),'ChatGPT delete confirmation was not found.');
+ const buttons=[...dialog.querySelectorAll('button')].filter(n=>/^Delete(?: chat)?$/i.test(label(n)));
+ if(buttons.length!==1||!same())throw Error('The deletion target could not be verified.');
+ buttons[0].click();
+ await find(()=>!same()||[...document.querySelectorAll('[role="status"],[role="alert"]')].some(n=>/chat deleted|conversation deleted/i.test(n.innerText)),'ChatGPT did not confirm deletion.');
+ return {applied:true,deleted:true};
+}
+await pause(500);return {applied:true};
+"""# }
+    // END_CHAT_MIRROR_SCRIPT
     private var snapshotScript: String { """
     (()=>{const visible=n=>!!n.getClientRects().length;
     const box=[...document.querySelectorAll('#prompt-textarea,[role="textbox"][contenteditable="true"],textarea')].find(visible);
@@ -555,7 +646,13 @@ struct PlannerWebView: UIViewRepresentable {
     func send(text: String, chatId: String, files: [[String: Any]] = [], providerURL: String? = nil, context: String = "") async throws {
         guard pendingChat == nil else { throw NativeError("A ChatGPT reply is still pending. Open the session before retrying.") }
         let key = "chatgpt-conversation:" + account + ":" + chatId
-        let stored = (providerURL ?? UserDefaults.standard.string(forKey: key)).flatMap(URL.init(string:))
+        let stored = providerURL.flatMap(URL.init(string:))
+        // The server binding is authoritative across devices. Restoring a Planner
+        // copy of a permanently deleted conversation must start a fresh remote chat.
+        if stored == nil && UserDefaults.standard.string(forKey: key) != nil {
+            UserDefaults.standard.removeObject(forKey: key)
+            if loadedChat == chatId { loadedChat = nil; loadHome() }
+        }
         let cold = loadedChat != chatId && stored == nil
         let text = cold && !context.isEmpty ? "Conversation context for this Planner chat (earlier files may need restoring):\n" + String(context.suffix(24000)) + "\n\nCurrent user message:\n" + text : text
         let target = stored.flatMap { $0.scheme == "https" && $0.host == "chatgpt.com" && $0.path.contains("/c/") ? $0 : nil } ?? URL(string: "https://chatgpt.com/")!
@@ -659,6 +756,56 @@ struct PlannerWebView: UIViewRepresentable {
         if (state["count"] as? Int ?? 0) > baseline, (!text.isEmpty || !(state["files"] as? [[String: Any]] ?? []).isEmpty), state["running"] as? Bool != true, (sawRunning || state["final"] as? Bool == true), Date().timeIntervalSince(changedAt) >= 3 {
             state["phase"] = "completed"; pendingChat = nil
         } else if Date().timeIntervalSince(startedAt) > 900 { state["phase"] = "attention"; state["message"] = "Reply completion could not be verified. Open ChatGPT before sending again." }
+        return state
+    }
+    func mirrorConversation(url: String, patch: [String: Any], expected: [String: Any]?) async throws -> [String: Any] {
+        guard pendingChat == nil, let target = URL(string: url), target.scheme == "https", target.host == "chatgpt.com", target.query == nil, target.fragment == nil, target.user == nil,
+              target.path.range(of: #"^/(?:g/[A-Za-z0-9_-]+/)?c/[A-Za-z0-9_-]+$"#, options: .regularExpression) != nil else { throw NativeError("Choose an idle, linked ChatGPT conversation.") }
+        let deletionKey = "chatgpt-deleted:" + account + ":" + target.path
+        if let known = UserDefaults.standard.dictionary(forKey: deletionKey) {
+            if patch["deleted"] as? Bool == false { throw NativeError("ChatGPT deletion is permanent. Restore the Planner copy as a separate chat instead.") }
+            return known
+        }
+        let lastKey = "chatgpt-mirror-last:" + account + ":" + target.path
+        if let event = try? await browser.callAsyncJavaScript("return window.__plannerMirrorDeleted?.[path] || null", arguments: ["path": target.path], in: nil, contentWorld: .page) as? [String: Any], event["deleted"] as? Bool == true, var previous = UserDefaults.standard.dictionary(forKey: lastKey) {
+            previous["deleted"] = true
+            if let title = event["title"] as? String, !title.isEmpty { previous["title"] = title }
+            UserDefaults.standard.set(previous, forKey: deletionKey); return previous
+        }
+        let draft = try await inspectDraft()
+        guard (draft["text"] as? String ?? "").isEmpty else { throw NativeError("ChatGPT has an unsent draft. Review it before syncing conversations.") }
+        setInteractive(true); defer { setInteractive(false) }
+        func loadConversation() async throws {
+            if browser.url?.absoluteString != target.absoluteString { browser.load(URLRequest(url: target, timeoutInterval: 30)) }
+            for _ in 0..<60 {
+                if documentCommitted && browser.url?.path == target.path && !browser.isLoading { return }
+                try await Task.sleep(for: .milliseconds(500))
+            }
+            throw NativeError("The linked ChatGPT conversation did not load. No deletion was inferred.")
+        }
+        try await loadConversation()
+        func operation(_ name: String, title: String? = nil, before: [String: Any]? = nil) async throws -> [String: Any] {
+            var arguments: [String: Any] = ["operation": name, "url": url, "title": title ?? "", "expected": (before as Any?) ?? NSNull()]
+            if before == nil { arguments["expected"] = NSNull() }
+            return try await browser.callAsyncJavaScript(mirrorScript, arguments: arguments, in: nil, contentWorld: .page) as? [String: Any] ?? [:]
+        }
+        var state = try await operation("read")
+        UserDefaults.standard.set(state, forKey: lastKey)
+        if let expected, !NSDictionary(dictionary: state).isEqual(to: expected) { throw NativeError("ChatGPT changed while syncing. Refresh and retry.") }
+        if let title = patch["title"] as? String, title != state["title"] as? String {
+            guard !title.isEmpty, title.count <= 120 else { throw NativeError("Use a chat title up to 120 characters.") }
+            _ = try await operation("rename", title: title, before: state); state = try await operation("read")
+        }
+        if patch["deleted"] as? Bool == true {
+            _ = try await operation("delete", before: state); state["deleted"] = true
+            UserDefaults.standard.set(state, forKey: deletionKey); loadedChat = nil; return state
+        }
+        if let archived = patch["archived"] as? Bool, archived != state["archived"] as? Bool {
+            _ = try await operation(archived ? "archive" : "unarchive", before: state)
+            try await loadConversation(); state = try await operation("read")
+            guard state["archived"] as? Bool == archived else { throw NativeError("ChatGPT did not confirm archive status.") }
+        }
+        UserDefaults.standard.set(state, forKey: lastKey)
         return state
     }
     func stopRelay() async throws {

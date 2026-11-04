@@ -29,7 +29,17 @@ test('subscription workspace is fresh and owner-scoped; never touches Agent jobs
   await assert.rejects(()=>handleSubscriptionChat(new Request('https://planner.test/api/subscription-chat?chat='+foreign),'owner'),/not found/)
   const created=await (await post({action:'create'})).json() as any;assert.equal(created.id,extra)
   const renamed=await (await post({action:'update',id:extra,title:'Independent Chat'})).json() as any;assert.equal(renamed.title,'Independent Chat')
-  await assert.rejects(()=>post({action:'update',id:main,deleted:true}),/stays pinned/)
+  await assert.rejects(()=>post({action:'update',id:main,pinned:false}),/stays pinned/)
+  await post({action:'relay_bind',chatId:extra,url:'https://chatgpt.com/c/test-mapped'})
+  await assert.rejects(()=>post({action:'relay_mirror',chatId:extra,expectedUpdatedAt:created.updated_at,url:'https://chatgpt.com/c/another',observed:{title:'Independent Chat',archived:false,deleted:false}}),/link changed/)
+  await assert.rejects(()=>post({action:'relay_mirror',chatId:extra,expectedUpdatedAt:'old',url:'https://chatgpt.com/c/test-mapped',observed:{title:'Independent Chat',archived:false,deleted:false}}),/chat changed/)
+  const plan=await (await post({action:'relay_mirror',chatId:extra,expectedUpdatedAt:renamed.updated_at,url:'https://chatgpt.com/c/test-mapped',observed:{title:'Auto title',archived:false,deleted:false}})).json() as any
+  assert.deepEqual(plan.plan.push,{title:'Independent Chat'})
+  const ack=await (await post({action:'relay_mirror',chatId:extra,expectedUpdatedAt:renamed.updated_at,url:'https://chatgpt.com/c/test-mapped',observed:{title:'Auto title',archived:false,deleted:false},applied:{title:'Independent Chat',archived:false,deleted:false}})).json() as any
+  assert.deepEqual(ack.provider_snapshot,{title:'Independent Chat',archived:false,deleted:false})
+  const pull=await (await post({action:'relay_mirror',chatId:extra,expectedUpdatedAt:ack.updated_at,url:'https://chatgpt.com/c/test-mapped',observed:{title:'Renamed on ChatGPT',archived:true,deleted:false}})).json() as any
+  assert.deepEqual(pull.plan.pull,{title:'Renamed on ChatGPT',archived:true})
+  await assert.rejects(()=>post({action:'relay_mirror',chatId:extra,expectedUpdatedAt:ack.updated_at,url:'https://chatgpt.com/c/test-mapped',observed:{title:'Renamed on ChatGPT',archived:true,deleted:false},applied:{title:'Unverified',archived:true,deleted:false}}),/not verified/)
   const before=requests
   await assert.rejects(()=>post({action:'send',chatId:extra,message:'Hello'}),/subscription sign-in is not configured/)
   await assert.rejects(()=>post({action:'connect'}),/approved Sign in/)
