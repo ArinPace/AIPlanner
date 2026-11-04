@@ -31,7 +31,44 @@ final class PlannerUITests: XCTestCase {
         XCTAssertTrue(app.webViews.buttons["ChatGPT session"].waitForExistence(timeout: 5))
         app.terminate()
     }
-    func testRealChatGPTSignInPage() {
+    func testRealGuestChatGPTMessageRelay() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1", "Opt in explicitly to a real website message test.")
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITestGuestRelay", "-UITestClearRelayDraft"]
+        app.launch()
+        let chat = app.webViews["plannerWebView"].buttons["Chat"]
+        XCTAssertTrue(chat.waitForExistence(timeout: 20)); chat.tap()
+        let session = app.webViews["plannerWebView"].buttons["ChatGPT session"]
+        XCTAssertTrue(session.waitForExistence(timeout: 15)); session.tap()
+        let portal = app.webViews["chatGPTPortalWebView"]
+        XCTAssertTrue(portal.buttons["Log in"].waitForExistence(timeout: 30))
+        let websiteDraft = portal.textViews.firstMatch
+        if (websiteDraft.value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) == "Reply with exactly: Planner relay works." {
+            websiteDraft.tap(withNumberOfTaps: 3, numberOfTouches: 1)
+            websiteDraft.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 40))
+        }
+        app.navigationBars.buttons["Planner"].tap()
+        XCTAssertTrue(app.webViews["plannerWebView"].staticTexts["ChatGPT session ready"].waitForExistence(timeout: 20))
+        app.webViews["plannerWebView"].buttons["New chat"].firstMatch.tap()
+        let box = app.webViews["plannerWebView"].textViews["Message ChatGPT"]
+        XCTAssertTrue(box.waitForExistence(timeout: 15))
+        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: box)
+        waitForExpectations(timeout: 15)
+        box.tap(); box.typeText("Reply with exactly: Planner relay works.")
+        let send = app.webViews["plannerWebView"].buttons["Send message"]
+        let enabled = NSPredicate(format: "enabled == true")
+        expectation(for: enabled, evaluatedWith: send)
+        waitForExpectations(timeout: 30)
+        send.tap()
+        let reply = app.webViews["plannerWebView"].staticTexts["Planner relay works."]
+        XCTAssertTrue(reply.waitForExistence(timeout: 90), "Real ChatGPT reply must return into Planner UI")
+        let copies = app.webViews["plannerWebView"].buttons.matching(identifier: "Copy")
+        expectation(for: NSPredicate { _, _ in copies.count >= 2 }, evaluatedWith: app)
+        waitForExpectations(timeout: 45)
+        XCTAssertTrue(app.webViews["plannerWebView"].buttons["ChatGPT session"].exists, "Planner remains the visible chat UI")
+    }
+    func testRealChatGPTSignInPage() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1", "Opt in explicitly to real website loading.")
         let app = XCUIApplication()
         app.launch()
         let chat = app.webViews.buttons["Chat"]
@@ -40,7 +77,14 @@ final class PlannerUITests: XCTestCase {
         XCTAssertTrue(session.waitForExistence(timeout: 15)); session.tap()
         let portal = app.webViews["chatGPTPortalWebView"]
         XCTAssertTrue(portal.waitForExistence(timeout: 10))
-        XCTAssertTrue(portal.buttons["Log in"].waitForExistence(timeout: 30))
+        let loaded = portal.buttons["Log in"].waitForExistence(timeout: 30)
+        print("CHATGPT_VISIBLE_STATUS", app.staticTexts["chatgpt-load-status"].label)
+        XCTAssertTrue(loaded)
+        for _ in 0..<3 {
+            app.navigationBars.buttons["Planner"].tap()
+            XCTAssertTrue(session.waitForExistence(timeout: 10)); session.tap()
+            XCTAssertTrue(portal.buttons["Log in"].waitForExistence(timeout: 20))
+        }
         // Leave the real account's sign-in page open for the user, without typing credentials.
     }
     func testNotificationsChecklistAppearsInSidebar() {
