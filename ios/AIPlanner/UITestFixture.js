@@ -9,6 +9,7 @@
  if(globalThis.__plannerFixtureTaskFocus){calendar.events[0].end=new Date(Date.now()+45000).toISOString()}
  if(globalThis.__plannerFixtureTaskFocusFuture){calendar.events[0].start=new Date(Date.now()+40000).toISOString();calendar.events[0].end=new Date(Date.now()+70000).toISOString()}
  if(globalThis.__plannerFixtureNextWidgetTask){const start=new Date(Date.now()+1800000),end=new Date(start.getTime()+900000);calendar.events.push({id:'widget-next',title:'Widget next activity',start:start.toISOString(),end:end.toISOString(),description:'',allDay:false,tagIds:[],color:'#db4437',recurrence:{frequency:'none',interval:1,until:null}})}
+ let notificationSettings={enabled:false,switches:true,advance:true,longTaskMinutes:30,minutes:[5]};
  let files={revision:1,folders:[{id:'school-folder',parentId:null,name:'Subjects',color:'#1a73e8',labels:[],updatedAt:now}],documents:[],files:[{id:'todo',name:'To do',systemRole:'todo',format:'note',folderId:null,content:'- [ ] [urgency:80] Prepare for statistics quiz',updatedAt:now},{id:'work',name:'Work',format:'note',folderId:null,content:'- [ ] [urgency:85] Homework due Friday',updatedAt:now},{id:'note',name:'iPhone test note',format:'note',folderId:null,content:'Your notes stay in the same Planner account.',updatedAt:now}]};
  const main={id:'00000000-0000-4000-8000-000000000001',title:'Main Chat',is_main:true,pinned:true,updated_at:now};
  // Simulate a change saved by another device while this test app is away.
@@ -34,6 +35,24 @@
  if(globalThis.__plannerFixtureBlankToken){
   document.addEventListener('DOMContentLoaded',()=>{const button=document.createElement('button');button.textContent='Simulate blank page';button.style.cssText='position:fixed;bottom:0;right:0;z-index:10000';button.onclick=()=>{document.getElementById('root')?.replaceChildren();button.remove()};document.body.append(button)});
  }
+ if(globalThis.__plannerFixtureNotifications)document.addEventListener('DOMContentLoaded',()=>{
+  const output=document.createElement('output');output.setAttribute('role','status');output.style.cssText='position:fixed;top:180px;left:0;background:white;color:black;z-index:10000';document.body.append(output);
+  for(const mode of ['switch','advance']){
+   const button=document.createElement('button');button.textContent='Test '+mode+' notification';button.style.cssText='position:fixed;top:'+(mode==='switch'?100:140)+'px;left:0;background:white;color:black;z-index:10000';document.body.append(button);
+   button.onclick=async()=>{try{
+    const bridge=window.webkit.messageHandlers.plannerNative;
+    await bridge.postMessage({action:'taskNotificationPermission'});
+    const now=Date.now()/1000,end=now+(mode==='switch'?8:68);
+    notificationSettings={enabled:true,switches:mode==='switch',advance:mode==='advance',longTaskMinutes:1,minutes:[1]};
+    calendar={...calendar,revision:calendar.revision+1,events:[{id:'notification-test',title:'Notification sample homework',description:'',start:new Date((now-120)*1000).toISOString(),end:new Date(end*1000).toISOString(),allDay:false,tagIds:[],recurrence:{frequency:'none',interval:1,until:null}},...(mode==='switch'?[{id:'notification-next',title:'Notification next activity',description:'',start:new Date(end*1000).toISOString(),end:new Date((end+120)*1000).toISOString(),allDay:false,tagIds:[],recurrence:{frequency:'none',interval:1,until:null}}]:[])]};
+    window.dispatchEvent(new Event('planner-calendar-refresh'));
+    window.dispatchEvent(new CustomEvent('planner-task-notifications-changed',{detail:notificationSettings}));
+    await bridge.postMessage({action:'taskNotificationSettings',account:'planner_test',settings:notificationSettings});
+    await bridge.postMessage({action:'widgetSchedule',account:'planner_test',schedule:{version:1,generatedAt:now,validUntil:now+1000,events:calendar.events.map(e=>({id:e.id,title:e.title,start:Date.parse(e.start)/1000,end:Date.parse(e.end)/1000}))}});
+    const status=await bridge.postMessage({action:'taskNotificationStatus'});output.textContent='Scheduled '+mode+' notifications: '+status.scheduledCount;
+   }catch(e){output.textContent='Notification test failed: '+e}}
+  }
+ });
  const fetchReal=window.fetch.bind(window);
  window.fetch=async(input,options={})=>{
   const raw=typeof input==='string'?input:input.url;const url=new URL(raw,location.href);
@@ -43,6 +62,7 @@
   else if(path==='/api/auth/options')value={googleEnabled:true,pendingGoogle:false};
   else if(path==='/api/login'||path==='/api/register'){signedIn=true;value={username:'planner_test',token:'fixture-session'}}
   else if(path==='/api/logout'){signedIn=false;value={ok:true}}
+  else if(path==='/api/notifications'){if(method==='PUT')notificationSettings=JSON.parse(options.body);value=notificationSettings}
   else if(path==='/api/calendar'){if(method==='PUT'){calendar={...JSON.parse(options.body),revision:calendar.revision+1};value={ok:true,revision:calendar.revision}}else value=calendar}
   else if(path==='/api/files'){if(method==='PUT'||method==='PATCH'){const patch=JSON.parse(options.body);if(method==='PATCH'){const removed=new Set(patch.removeIds||[]);for(const section of ['files','folders','documents']){const replacements=new Map((patch.upserts?.[section]||[]).map(item=>[item.id,item]));files[section]=(files[section]||[]).filter(item=>!removed.has(item.id)).map(item=>{const next=replacements.get(item.id)||item;replacements.delete(item.id);return next});files[section].push(...replacements.values())}}else files=patch;files={...files,revision:files.revision+1};value={ok:true,revision:files.revision}}else value=files}
   else if(path==='/api/calendar/google-sync')value={connected:true,reviewRequired:true,pending:true,error:null,identity:'fixture@example.com'};

@@ -26,7 +26,7 @@ struct PlannerWebView: UIViewRepresentable {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-UITestFixture"), ["127.0.0.1", "localhost"].contains(AppConfiguration.origin.host ?? ""), let url = Bundle.main.url(forResource: "UITestFixture", withExtension: "js"), let script = try? String(contentsOf: url, encoding: .utf8) {
             if ProcessInfo.processInfo.arguments.contains("-UITestWidgets") { WidgetTaskControl.clear() }
-            let fixture = (ProcessInfo.processInfo.arguments.contains("-UITestSignedIn") ? "globalThis.__plannerFixtureSignedIn=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestResumeSync") ? "globalThis.__plannerFixtureResumeSync=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestFocusZoom") ? "globalThis.__plannerFixtureFocusZoom=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestWidgets") ? "globalThis.__plannerFixtureWidgets=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestTaskFocusAll") ? "globalThis.__plannerFixtureTaskFocus=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestTaskFocusFuture") ? "globalThis.__plannerFixtureTaskFocusFuture=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestFreeTime") ? "globalThis.__plannerFixtureFreeTime=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestNextWidgetTask") ? "globalThis.__plannerFixtureNextWidgetTask=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestAtomicWidgetPlan") ? "globalThis.__plannerFixtureAtomicWidgetPlan=true;" : "") + script
+            let fixture = (ProcessInfo.processInfo.arguments.contains("-UITestSignedIn") ? "globalThis.__plannerFixtureSignedIn=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestResumeSync") ? "globalThis.__plannerFixtureResumeSync=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestFocusZoom") ? "globalThis.__plannerFixtureFocusZoom=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestWidgets") ? "globalThis.__plannerFixtureWidgets=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestTaskFocusAll") ? "globalThis.__plannerFixtureTaskFocus=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestTaskFocusFuture") ? "globalThis.__plannerFixtureTaskFocusFuture=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestFreeTime") ? "globalThis.__plannerFixtureFreeTime=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestNextWidgetTask") ? "globalThis.__plannerFixtureNextWidgetTask=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestAtomicWidgetPlan") ? "globalThis.__plannerFixtureAtomicWidgetPlan=true;" : "") + (ProcessInfo.processInfo.arguments.contains("-UITestNotifications") ? "globalThis.__plannerFixtureNotifications=true;" : "") + script
             if ProcessInfo.processInfo.arguments.contains("-UITestBlankPageOnce") {
                 config.userContentController.addUserScript(WKUserScript(source: "globalThis.__plannerFixtureBlankToken='" + UUID().uuidString + "';", injectionTime: .atDocumentStart, forMainFrameOnly: true))
             }
@@ -114,6 +114,14 @@ struct PlannerWebView: UIViewRepresentable {
             Task { @MainActor in
                 do {
                     switch action {
+                    case "taskNotificationPermission":
+                        replyHandler(try await PlannerTaskNotifications.shared.requestPermission(), nil); return
+                    case "taskNotificationStatus":
+                        replyHandler(await PlannerTaskNotifications.shared.status(), nil); return
+                    case "taskNotificationSettings":
+                        guard let account = body["account"] as? String, let value = body["settings"], JSONSerialization.isValidJSONObject(value) else { throw NativeError("Missing notification settings.") }
+                        let options = try JSONDecoder().decode(TaskNotificationOptions.self, from: JSONSerialization.data(withJSONObject: value))
+                        try await PlannerTaskNotifications.shared.configure(account: account, options: options)
                     case "localReplicaAccount":
                         let account = body["account"] as? String
                         let changed = account != WidgetTaskControl.defaults.string(forKey: "feedback-account")
@@ -125,6 +133,7 @@ struct PlannerWebView: UIViewRepresentable {
                             WidgetTaskControl.clear()
                             try WidgetScheduleStore.save(.empty)
                             WidgetCenter.shared.reloadAllTimelines()
+                            await PlannerTaskNotifications.shared.refresh()
                         }
                     case "localReplica":
                         guard let account = body["account"] as? String, let kind = body["kind"] as? String,
@@ -191,8 +200,10 @@ struct PlannerWebView: UIViewRepresentable {
                         let schedule = try WidgetSchedule.decode(data)
                         TaskFocusRules.sync(windows: schedule.events.map { TaskFocusWindow(id: $0.id, sourceEventId: $0.sourceEventId ?? $0.id, title: $0.title, start: $0.start, end: $0.end) }, from: schedule.generatedAt, until: schedule.validUntil, account: account)
                         if try WidgetScheduleStore.save(schedule) { WidgetCenter.shared.reloadAllTimelines() }
+                        await PlannerTaskNotifications.shared.refresh()
                     case "clearWidgetSchedule":
                         if try WidgetScheduleStore.save(.empty) { WidgetCenter.shared.reloadAllTimelines() }
+                        await PlannerTaskNotifications.shared.refresh()
                     case "googleSignIn": try await authentication?.signIn()
                     case "googleConnection":
                         guard let raw = body["url"] as? String, let url = URL(string: raw) else { throw NativeError("Missing connection URL.") }

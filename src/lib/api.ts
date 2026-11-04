@@ -1,3 +1,4 @@
+import type {TaskNotificationSettings} from './taskNotifications'
 import {activateReplica,recordReplica,replicaContext,saveReplica} from './localReplica'
 import {isIPhoneApp,nativeRequest} from './platform'
 import type { StoredState } from '../types'
@@ -212,3 +213,5 @@ export async function downloadCalendarJson(staging=false){
  const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}))
  const a=document.createElement('a');a.href=url;a.download=staging?'calendar-staging.json':'calendar.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)
 }
+
+export function taskNotificationsRequest(settings?:TaskNotificationSettings){return request<TaskNotificationSettings>('/api/notifications',settings?{method:'PUT',body:JSON.stringify(settings)}:{})}

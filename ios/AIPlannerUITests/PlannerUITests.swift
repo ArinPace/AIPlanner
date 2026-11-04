@@ -12,6 +12,26 @@ final class PlannerUITests: XCTestCase {
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = name; screenshot.lifetime = .keepAlways; add(screenshot)
     }
+    func testTaskSwitchNotificationWhileBackgrounded() { checkTaskNotification(mode: "switch", expected: "Time to switch tasks") }
+    func testTaskAdvanceNotificationWhileBackgrounded() { checkTaskNotification(mode: "advance", expected: "1 minute left") }
+    private func checkTaskNotification(mode: String, expected: String) {
+        let app = XCUIApplication()
+        app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"
+        app.launchArguments = ["-UITestFixture", "-UITestSignedIn", "-UITestNotifications"]
+        addUIInterruptionMonitor(withDescription: "Notification permission") { alert in
+            if alert.buttons["Allow"].exists { alert.buttons["Allow"].tap(); return true }
+            return false
+        }
+        app.launch()
+        XCTAssertTrue(app.webViews.buttons["Test " + mode + " notification"].waitForExistence(timeout: 15))
+        app.webViews.buttons["Test " + mode + " notification"].tap()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        if springboard.alerts.firstMatch.waitForExistence(timeout: 3), springboard.alerts.buttons["Allow"].exists { springboard.alerts.buttons["Allow"].tap() }
+        XCTAssertTrue(app.webViews.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Scheduled " + mode + " notifications:")).firstMatch.waitForExistence(timeout: 10))
+        XCUIDevice.shared.press(.home)
+        XCTAssertTrue(springboard.staticTexts[expected].waitForExistence(timeout: 20), "Task alert must arrive with Planner backgrounded")
+        app.terminate()
+    }
     func testBlankPlannerRecoversOnResume() {
         let app = XCUIApplication()
         app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"

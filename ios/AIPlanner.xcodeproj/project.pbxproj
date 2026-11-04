@@ -31,6 +31,8 @@
 		D6C52B55386A4600216066B5 /* PlannerWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11C8F5F7EBA96DCB0171195 /* PlannerWidgets.swift */; };
 		DD9E7CE3912341C3B99268D9 /* WidgetTaskControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27E5E89C300960C3784C4BCC /* WidgetTaskControl.swift */; };
 		FA20C1EFA0C0D4D4D8130FC4 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8828692B26B9612F431BE690 /* Foundation.framework */; };
+		FF5300E6AC98424199342222 /* TaskNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF5300E6AC98424199341111 /* TaskNotifications.swift */; };
+		FF5300E6AC98424199343333 /* TaskNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF5300E6AC98424199341111 /* TaskNotifications.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -101,6 +103,7 @@
 		DADB8EA1ADF96CCB3DF82135 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		E33A241C0B4FBF94A09D87BF /* PlannerWidgets.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = PlannerWidgets.entitlements; sourceTree = "<group>"; };
 		E3E25921DBE8EA34D1D37124 /* ScreenTimeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ScreenTimeView.swift; sourceTree = "<group>"; };
+		FF5300E6AC98424199341111 /* TaskNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskNotifications.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -233,6 +236,7 @@
 			children = (
 				4444D16B97D810016A359AEB /* WidgetSchedule.swift */,
 				27E5E89C300960C3784C4BCC /* WidgetTaskControl.swift */,
+				FF5300E6AC98424199341111 /* TaskNotifications.swift */,
 			);
 			name = Shared;
 			path = Shared;
@@ -405,6 +409,7 @@
 				D6C52B55386A4600216066B5 /* PlannerWidgets.swift in Sources */,
 				94692D240F205E45DC5631A6 /* WidgetSchedule.swift in Sources */,
 				DD9E7CE3912341C3B99268D9 /* WidgetTaskControl.swift in Sources */,
+				FF5300E6AC98424199343333 /* TaskNotifications.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -432,6 +437,7 @@
 				4C37C716CE063329BD7481C4 /* FocusLocationPicker.swift in Sources */,
 				769A9CF149F4487FD8AE8A1B /* FocusShieldRules.swift in Sources */,
 				83D58607E3E4A457929E5693 /* WidgetTaskControl.swift in Sources */,
+				FF5300E6AC98424199342222 /* TaskNotifications.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -1,3 +1,4 @@
+import {TaskNotificationSync} from './components/TaskNotificationSync'
 import {taskScreenTimeWindow} from './lib/taskScreenTime'
 import {verifyFreeTimeRequest, type TaskFeedback, type TaskTimeResult} from './lib/widgetTaskFeedback'
 import {WidgetTaskFeedback} from './components/WidgetTaskFeedback'
@@ -398,6 +399,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
 
   return (
     <div className="app-shell" inert={widgetSaving}>
+      <TaskNotificationSync username={username} calendar={{events,tags,hiddenTagIds,zoom}}/>
       <WidgetTaskFeedback username={username} onApply={applyWidgetTime}/>
       <Header
         tab={tab}

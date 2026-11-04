@@ -33,6 +33,7 @@ enum WidgetTaskControl {
         defaults.set(try JSONEncoder().encode(feedback), forKey: "task-feedback")
         prioritizeLocalRender()
         WidgetTimeOverrides.store(feedback)
+        Task { await PlannerTaskNotifications.shared.refresh() }
         WidgetCenter.shared.reloadAllTimelines()
     }
     static func displaySchedule() -> WidgetSchedule { WidgetTimeOverrides.applying(to: WidgetScheduleStore.load()) }
@@ -156,6 +157,7 @@ enum WidgetBackgroundDelivery {
             let data = try await request("api/widget/snapshot", credentials: auth)
             guard credentials() == auth else { return }
             _ = try WidgetScheduleStore.save(WidgetSchedule.decode(data))
+            await PlannerTaskNotifications.shared.refresh()
             lastRefresh = (auth, Date())
         } catch { /* Keep the offline schedule and pending preview. */ }
     }

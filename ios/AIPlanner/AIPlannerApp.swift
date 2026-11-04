@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 @main
 struct AIPlannerApp: App {
@@ -16,10 +17,15 @@ struct AIPlannerApp: App {
     }
 }
 
-final class PlannerAppDelegate: NSObject, UIApplicationDelegate {
+final class PlannerAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         FocusLocationController.shared.resume()
+        UNUserNotificationCenter.current().delegate = self
+        Task { await PlannerTaskNotifications.shared.refresh() }
         return true
+    }
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .list, .sound])
     }
     func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String, completionHandler: @escaping () -> Void) {
         guard identifier == WidgetFeedbackUpload.identifier else { completionHandler(); return }

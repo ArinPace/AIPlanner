@@ -2314,3 +2314,8 @@ html, body { touch-action: pan-x pan-y; }
 .calendar-task-with-actions .task-screen-time-button { font-size:11px; max-width:72px; min-height:36px; }
 .task-screen-time-button:disabled { opacity:.5; cursor:default; }
 .task-screen-time-action .form-error { max-width:260px; font-size:12px; overflow-wrap:anywhere; }
+
+.task-notification-settings { border-top:1px solid #ddd; padding-top:12px; margin-top:12px; }
+.task-notification-settings fieldset { border:0; padding:0; margin:0; display:grid; gap:12px; min-width:0; }
+.task-notification-settings label { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.task-notification-settings input[type="text"], .task-notification-settings input[type="number"] { width:100%; box-sizing:border-box; padding:8px; font-size:16px; min-width:0; }
