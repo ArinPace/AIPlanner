@@ -33,6 +33,7 @@ test('real Chromium MCP flow keeps tabs, clicks Sleep, hovers canvas, captures p
  await context.route('**/*',route=>{
   const u=new URL(route.request().url())
   if(u.pathname==='/download')return route.fulfill({headers:{'content-type':'text/csv','content-disposition':'attachment; filename="sleep.csv"'},body:'date,sleep\n2026-10-21,429'})
+  if(u.pathname==='/panel')return route.fulfill({contentType:'text/html',body:'<main style="height:350px;overflow-y:auto" aria-label="App content"><h1>Panel top</h1><div style="height:800px">Chart</div><p>Panel end</p></main><script>document.querySelector("main").scrollTop=37</script>'})
   if(u.pathname==='/frame')return route.fulfill({contentType:'text/html',body:'<button onclick="this.textContent=\'Frame clicked\'">Frame button</button>'})
   if(u.hostname==='docs.example.test')return route.fulfill({contentType:'text/html',body:'<h1>Actual linked external document</h1>'})
   return route.fulfill({contentType:'text/html',body:fixture})
@@ -66,5 +67,8 @@ test('real Chromium MCP flow keeps tabs, clicks Sleep, hovers canvas, captures p
   const tabs=await call('browser_tabs',{});assert.equal(tabs.tabs.length,2)
   const external=await call('browser_navigate',{url:'https://docs.example.test/resource'});assert(external.frames[0].text.includes('Actual linked external document'));assert(calls.every(url=>url.startsWith('https://app.whoop.com')))
   assert.equal((await call('browser_screenshot',{tabId,fullPage:true})).fullPage,true)
+  state=await call('browser_navigate',{url:'https://app.whoop.com/panel',tabId});assert(state.frames.flatMap(f=>f.elements).some(e=>e.scroll?.top===37))
+  const tiles=await client.callTool({name:'browser_screenshot',arguments:{tabId,fullPage:true}});assert(!tiles.isError);const tileMeta=JSON.parse(tiles.content[0].text);assert.equal(tileMeta.captureMode,'scroll-container-tiles');assert.equal(tileMeta.truncated,false);assert(tiles.content.filter(c=>c.type==='image').length>=3)
+  state=await call('browser_snapshot',{tabId});assert(state.frames.flatMap(f=>f.elements).some(e=>e.scroll?.top===37))
  }finally{await client.close();await server.close();await context.close();await rm(directory,{recursive:true,force:true})}
 })

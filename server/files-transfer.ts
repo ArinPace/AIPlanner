@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto'
-import {filesWorkspaceLimit,type FilesState} from '../src/lib/files.js'
+import {filesWorkspaceLimit,type PlannerTextFile,type FilesState} from '../src/lib/files.js'
 import type {FilesManifest,FilesSection,WorkspaceItem} from '../src/lib/filesTransfer.js'
 import {ApiError,db} from './cloud.js'
 import {storage} from './mcp-auth.js'
@@ -39,4 +39,14 @@ export async function readFilesItemById(username:string,id:string){
   }
  }
  throw new ApiError(409,'Files changed while loading. Retry with the latest index.')
+}
+
+export function singleFilePatch(patch:import('../src/lib/filesTransfer.js').FilesPatch,state:FilesState){
+ if(patch.removeIds?.length||patch.upserts?.folders?.length||patch.upserts?.documents?.length||patch.upserts?.files?.length!==1)return null
+ return state.files.find(file=>file.id===patch.upserts!.files![0].id)||null
+}
+export async function commitFileItem(username:string,revision:number,file:PlannerTextFile){
+ const {data,error}=await db().rpc('planner_save_file_item',{p_username:username,p_revision:revision,p_item:file})
+ if(error){console.error('File item commit failed',{code:error.code});throw new ApiError(error.code==='P0001'?409:503,error.code==='P0001'?'Files changed. Read the latest revision before saving.':'Could not save this file. Read it back before retrying.')}
+ return data as {revision:number}
 }

@@ -1,4 +1,4 @@
-import {readFilesItemById} from './files-transfer.js'
+import {readFilesItemById,commitFileItem} from './files-transfer.js'
 import {reportSourceHealth,sourceHealthStatus} from './source-health.js'
 import {readGoogleMail} from './google-mail.js'
 import {readAgentRunHistory} from './agent-run-history.js'
@@ -39,9 +39,9 @@ const labels = z.array(z.string().trim().min(1).max(40)).max(10)
 const color = z.string().regex(/^#[0-9a-f]{6}$/i)
 
 async function filesRow(username: string) { return storage(await db().from('planner_files').select('state,revision').eq('username',username).single()) }
-async function saveFiles(username: string, state: FilesState, revision: number) {
+async function saveFiles(username: string, state: FilesState, revision: number, file?:FilesState['files'][number]) {
   try{validateFilesState(state,filesWorkspaceLimit(username))}catch(error){throw new ApiError(400,error instanceof Error?error.message:'Invalid Files workspace.')}
-  const rows = storage(await db().from('planner_files').update({state,revision:revision+1,updated_at:new Date().toISOString()}).eq('username',username).eq('revision',revision).select('revision'))
+  const rows = file?[await commitFileItem(username,revision,file)]:storage(await db().from('planner_files').update({state,revision:revision+1,updated_at:new Date().toISOString()}).eq('username',username).eq('revision',revision).select('revision'))
   if (!rows.length) throw new ApiError(409,'Files changed while you were editing. Read them again before retrying.')
   let planningSyncError:string|undefined
   try{if(await hasWidgetDraft(username))planningSyncError='Files saved. Calendar completion cleanup is deferred until the widget draft is published.';else await (await import('./planning.js')).syncTodoCompletion(username)}catch{planningSyncError='Files saved, but calendar completion sync is pending. The Agent view retries automatically; report pending sync instead of claiming calendar cleanup succeeded.'}
@@ -110,7 +110,7 @@ export function createPlannerMcp(username: string, scopes: string[]) {
     }
     if(note){const {id:_id,revision:_revision,...patch}=args;const next=patchPlannerNote(note,patch);for(const key of Object.keys(note))delete note[key];Object.assign(note,next)}
     item.updatedAt=new Date().toISOString()
-    return {...await saveFiles(username,row.state,row.revision),item}
+    return {...await saveFiles(username,row.state,row.revision,note||undefined),item}
   })
   add('planner_source_status','Read persistent connection and source-sync issues for this account. Check during every review. Do not claim complete coverage when any enabled source failed.',{},'planner:read',true,()=>sourceHealthStatus(username))
   add('planner_source_report','Immediately report a confirmed source access/sync failure, or clear it only after verified successful access. Use connectionKey browser for whole-site connection checks, browser:short-document-label for a specific page/reader problem, or the authorized Google account UUID for an API account. Clearing browser after a successful sign-in must not clear unrelated document-reader problems. Persist failures even if other sources succeed. Unknown reader failures are access problems, not proof of logout. Never include credentials, cookies or private tokens in the message.',{source:z.enum(VM_SOURCES_LIST),connectionKey:z.string().min(1).max(200),error:z.string().min(1).max(1000).nullable()},'planner:write',false,args=>reportSourceHealth(username,args.source,args.connectionKey,args.error).then(()=>({saved:true})))
@@ -147,7 +147,7 @@ export function createPlannerMcp(username: string, scopes: string[]) {
     const {revision:_revision,...patch}=args
     const file=patchPlannerNote(old||{id:fileId,folderId:args.folderId,name:args.name,content:'',updatedAt:new Date().toISOString()},{...patch,id:fileId,format,updatedAt:new Date().toISOString()})
     row.state.files=row.state.files.filter((item:any)=>item.id!==fileId).concat(file)
-    return {...await saveFiles(username,row.state,row.revision),fileId,format:file.format||'text',file}
+    return {...await saveFiles(username,row.state,row.revision,file),fileId,format:file.format||'text',file}
   }
   add('planner_save_note','Create/update a real rich Note that opens in the Notes editor. This defaults to Note format, not a plain text file. Content is Markdown: headings, bullets, numbered lists, - [ ] checklists, links and tables. Reuse an existing ID to convert a text file in place. Existing pin/tags/rich formatting are preserved unless changed. Root folderId null is allowed. Read latest Files revision first.',{...textSchema,format:z.literal('note').optional(),pinned:z.boolean().optional(),tags:z.array(z.string().min(1).max(40)).max(20).optional(),richText:z.string().max(1000000).optional()},'planner:write',false,args=>saveText(args,'note'))
   add('planner_save_text_file','Create/update an explicitly requested plain text file. For notes, checklists or formatted documents use planner_save_note instead. Updating an existing Note through this tool converts it to plain text and removes its rich formatting. Read latest Files revision first.',textSchema,'planner:write',false,args=>saveText(args,'text'))

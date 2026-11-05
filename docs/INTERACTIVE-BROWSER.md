@@ -12,6 +12,8 @@ The browser MCP adds real, persistent browser tabs and these tools:
 - `browser_snapshot`: visible page text and interactive refs, including iframe content;
   paginate with `offset` and `elementOffset`.
 - `browser_screenshot`: viewport/full page pixels, including SVG/canvas and tooltips.
+  For inner-scrolling app panels, full-page capture returns ordered viewport tiles
+  with actual scroll positions, a coverage/truncation flag, and restores the original scroll.
 - `browser_action`: clicks (including double/right click), hover, fill, keypress,
   select, check/uncheck, scroll, drag, back/forward/reload, wait, upload and close.
 
@@ -41,5 +43,22 @@ MCP tools against real Chromium with intercepted fixture websites: click Sleep,
 read labelled historical times, hover a chart, capture PNGs, iframe interaction,
 fill/send a fixture message, change day, upload/download CSV, accept a dialog,
 follow a popup link, and reuse tabs across calls. This is an integration test of
-the actual browser tools, not proof of authenticated WHOOP data access; the latter
-must be tested on the existing worker's saved WHOOP session after release adoption.
+the actual browser tools. The strengthened test uses a fresh CDP connection per call,
+matching production (target identity and refs survive disconnection).
+
+Live worker 0.3.1 verification: actual WHOOP screenshots, Sleep detail clicks by
+ref, next/previous date clicks by fresh refs, and same-tab reuse passed. October21
+shows 8h01m in bed / 7h16m asleep / 45m awake; November3 shows 7h38m / 7h05m / 33m.
+Explicit bedtime/wake labels and timezone remain unverified; do not infer them
+from axis ticks. The current unsynced day is not a proven WHOOP/login defect.
+The 0.3.2 inner-panel tile capture is separately verified in real Chromium and
+awaits its live WHOOP recheck.
+
+Files reliability follow-up: production note-save failures logged PostgreSQL
+57014. Existing REST saves resent a 4.7 MB state for one note. The service-only
+planner_save_file_item RPC and server callers now transfer only the validated
+note, enforcing owner/revision and retaining existing protection/history triggers.
+Rollback-only production DB QA verified unrelated-state preservation, history,
+stale revisions, creation, protected notes and denied anonymous/authenticated
+function access. Measured one-note write: 776 ms. This is evidence for the narrow
+path, not proof that every intermittent storage failure has the same root cause.

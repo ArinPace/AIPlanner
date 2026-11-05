@@ -74,3 +74,20 @@ test('agent item reads transfer only the requested item and re-index a concurren
   await assert.rejects(()=>readFilesItemById('arin','missing'),/File not found/)
  }finally{globalThis.fetch=before;for(const key of keys){if(env[key]===undefined)delete process.env[key];else process.env[key]=env[key]}}
 })
+
+test('single-note commits send only the validated note with owner/revision and preserve conflict errors',async()=>{
+ const {singleFilePatch,commitFileItem}=await import('./files-transfer.js')
+ const item=note(8),state:FilesState={revision:7,folders:[],files:[item]}
+ assert.equal(singleFilePatch({upserts:{files:[item]}},state),item)
+ for(const patch of [{removeIds:['other'],upserts:{files:[item]}},{upserts:{files:[item],folders:[{id:'f'}]}},{upserts:{files:[item,item]}},{upserts:{files:[]}}])assert.equal(singleFilePatch(patch as any,state),null)
+ const before=globalThis.fetch,keys=['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','SUPABASE_SECRET_KEY'] as const,env=Object.fromEntries(keys.map(k=>[k,process.env[k]]))
+ process.env.SUPABASE_URL='https://transfer.test';process.env.SUPABASE_SERVICE_ROLE_KEY='test';delete process.env.SUPABASE_SECRET_KEY
+ let conflict=false
+ globalThis.fetch=async(input,init)=>{
+  const req=new Request(input,init);assert(req.url.endsWith('/rpc/planner_save_file_item'))
+  const payload=await req.json();assert.deepEqual(payload,{p_username:'arin',p_revision:7,p_item:item});assert(!('state' in payload))
+  return conflict?Response.json({code:'P0001',message:'Files changed'},{status:400}):Response.json({revision:8})
+ }
+ try{assert.deepEqual(await commitFileItem('arin',7,item),{revision:8});conflict=true;await assert.rejects(()=>commitFileItem('arin',7,item),error=>(error as {status:number}).status===409)}
+ finally{globalThis.fetch=before;for(const key of keys){if(env[key]===undefined)delete process.env[key];else process.env[key]=env[key]}}
+})

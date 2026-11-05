@@ -1,4 +1,4 @@
-import {cloudFilesManifest,readFilesTransferItem} from './files-transfer.js'
+import {cloudFilesManifest,readFilesTransferItem,singleFilePatch,commitFileItem} from './files-transfer.js'
 import {applyFilesPatch,type FilesPatch} from '../src/lib/filesTransfer.js'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { randomUUID } from 'node:crypto'
@@ -227,7 +227,8 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
         const uploads = dataResult(await db().from('planner_uploads').select('id,size,status').eq('username', username).in('id', pdfs.map((pdf) => pdf.id)))
         if (pdfs.some((pdf) => !uploads.some((upload) => upload.id === pdf.id && upload.status === 'complete' && upload.size === pdf.size))) throw new ApiError(400, 'A PDF is not available in this account. Reload your files.')
       }
-      const saved = await preserveRemovedFiles(username,input,previous) || await setFiles(username, input, previous)
+      const file=method==='PATCH'?singleFilePatch(payload as FilesPatch,input as FilesState):null
+      const saved = await preserveRemovedFiles(username,input,previous) || (file?await commitFileItem(username,previous.revision!,file):await setFiles(username, input, previous))
       await cleanupUploads(username)
       let planningSyncError:string|undefined
       try{await (await import('./planning.js')).syncTodoCompletion(username)}catch{planningSyncError='Note saved; calendar completion sync is pending. Open Agent to retry.'}

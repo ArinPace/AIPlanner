@@ -92,12 +92,14 @@ export class InteractiveBrowser {
    let data
    try{data=await frame.evaluate(()=>{
     const text=document.body?.innerText||''
-    const candidates=[...document.querySelectorAll('a[href],button,input:not([type=hidden]),textarea,select,summary,[role],[tabindex],canvas,svg')]
+    const controls=[...document.querySelectorAll('a[href],button,input:not([type=hidden]),textarea,select,summary,[role],[tabindex],canvas,svg')]
+    const scrolls=[...document.querySelectorAll('*')].filter(n=>{const s=getComputedStyle(n);return n.clientHeight>60&&n.scrollHeight>n.clientHeight+16&&/(auto|scroll)/.test(s.overflowY)})
+    const candidates=[...new Set([...controls,...scrolls])]
     const nodes=candidates.filter(n=>{const r=n.getBoundingClientRect(),s=getComputedStyle(n);return n.matches('input[type=file]')||(r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none')})
     return {text,nodes:nodes.map((n,i)=>{
      n.setAttribute('data-planner-browser-ref',String(i))
      const r=n.getBoundingClientRect(),password=n.matches('input[type=password]')
-     return {index:i,tag:n.tagName.toLowerCase(),role:n.getAttribute('role'),name:(n.getAttribute('aria-label')||n.getAttribute('title')||n.getAttribute('placeholder')||n.innerText||n.getAttribute('alt')||'').slice(0,400),type:n.getAttribute('type'),value:password?'[redacted]':n.matches('input,textarea,select')?String(n.value).slice(0,500):undefined,href:n.matches('a[href]')?n.href:undefined,checked:n.matches('input[type=checkbox],input[type=radio]')?n.checked:undefined,disabled:n.disabled||n.getAttribute('aria-disabled')==='true',box:{x:r.x,y:r.y,width:r.width,height:r.height}}
+     return {index:i,tag:n.tagName.toLowerCase(),role:n.getAttribute('role'),name:(n.getAttribute('aria-label')||n.getAttribute('title')||n.getAttribute('placeholder')||n.innerText||n.getAttribute('alt')||'').slice(0,400),type:n.getAttribute('type'),value:password?'[redacted]':n.matches('input,textarea,select')?String(n.value).slice(0,500):undefined,href:n.matches('a[href]')?n.href:undefined,checked:n.matches('input[type=checkbox],input[type=radio]')?n.checked:undefined,disabled:n.disabled||n.getAttribute('aria-disabled')==='true',scroll:n.scrollHeight>n.clientHeight+16?{top:n.scrollTop,height:n.scrollHeight,visibleHeight:n.clientHeight}:undefined,box:{x:r.x,y:r.y,width:r.width,height:r.height}}
     })}
    })}catch{continue}
    for(const node of data.nodes){if(node.href)try{const href=publicBrowserUrl(node.href);this.external.set(href,entry.route)}catch{}}
@@ -114,8 +116,35 @@ export class InteractiveBrowser {
  snapshot(args){return this.use(args.tabId,(page,entry)=>this.snapshotPage(page,entry,args.tabId,args))}
  screenshot(args){return this.use(args.tabId,async(page)=>{
   const mask=[];for(const frame of page.frames())mask.push(frame.locator('input[type=password]'))
-  const bytes=await page.screenshot({type:'png',fullPage:args.fullPage||false,mask,timeout:25000})
-  return {content:[{type:'text',text:JSON.stringify({tabId:args.tabId,url:page.url(),fullPage:args.fullPage||false,coordinateSystem:'viewport CSS pixels; full-page image includes content outside viewport'})},{type:'image',mimeType:'image/png',data:bytes.toString('base64')}]}
+  // SPAs often keep the document at viewport height and scroll an inner panel.
+  // Native fullPage only captures the document, omitting those panel contents.
+  // Return actual viewport tiles while scrolling the largest visible panel,
+  // then restore its exact position. Report bounded/partial coverage honestly.
+  if(args.fullPage){
+   let selected=null,largest=0;const captureMarker=randomUUID()
+   for(const frame of page.frames()){
+    const candidate=await frame.evaluate(marker=>{
+     let best=null,area=0
+     for(const n of document.querySelectorAll('*')){const r=n.getBoundingClientRect(),s=getComputedStyle(n);if(n.clientHeight>100&&n.scrollHeight>n.clientHeight+32&&/(auto|scroll)/.test(s.overflowY)&&r.width>100&&r.height>100&&r.bottom>0&&r.top<innerHeight&&r.width*r.height>area){best=n;area=r.width*r.height}}
+     if(!best)return null
+     best.setAttribute('data-planner-scroll-capture',marker);return {area,height:best.scrollHeight,visibleHeight:best.clientHeight,originalTop:best.scrollTop}
+    },captureMarker).catch(()=>null)
+    if(candidate&&candidate.area>largest){largest=candidate.area;selected={frame,...candidate}}
+   }
+   if(selected){
+    const locator=selected.frame.locator('[data-planner-scroll-capture="'+captureMarker+'"]'),images=[],positions=[]
+    try{
+     for(let offset=0;offset<selected.height&&images.length<10;offset+=selected.visibleHeight){
+      const actual=await locator.evaluate((n,top)=>{n.scrollTop=top;return n.scrollTop},offset);await page.waitForTimeout(150)
+      const bytes=await page.screenshot({type:'png',fullPage:false,mask,scale:'css',timeout:25000});images.push({type:'image',mimeType:'image/png',data:bytes.toString('base64')});positions.push(actual)
+      if(actual+selected.visibleHeight>=selected.height)break
+     }
+     return {content:[{type:'text',text:JSON.stringify({tabId:args.tabId,url:page.url(),fullPage:true,captureMode:'scroll-container-tiles',scope:'Largest visible scrolling panel; other independent or nested panels may require separate scrolling.',scrollPositions:positions,scrollHeight:selected.height,visibleHeight:selected.visibleHeight,truncated:positions.at(-1)+selected.visibleHeight<selected.height,coordinateSystem:'Each image is a viewport in CSS pixels. Panel scroll is restored after capture; use a fresh snapshot before coordinate actions.'})},...images]}
+    }finally{await locator.evaluate((n,top)=>n.scrollTop=top,selected.originalTop).catch(()=>{});await locator.evaluate(n=>n.removeAttribute('data-planner-scroll-capture')).catch(()=>{})}
+   }
+  }
+  const bytes=await page.screenshot({type:'png',fullPage:args.fullPage||false,mask,scale:'css',timeout:25000})
+  return {content:[{type:'text',text:JSON.stringify({tabId:args.tabId,url:page.url(),fullPage:args.fullPage||false,captureMode:args.fullPage?'document':'viewport',coordinateSystem:'viewport CSS pixels; full-page image includes content outside viewport'})},{type:'image',mimeType:'image/png',data:bytes.toString('base64')}]}
  })}
  action(args){return this.use(args.tabId,async(page,entry,context)=>{
   const resolveRef=ref=>{const saved=entry.refs.get(ref);if(!saved)return null;const frame=page.frames()[saved.frameIndex];if(!frame||frame.url()!==saved.frameUrl)return null;return frame.locator(saved.selector)}
@@ -164,6 +193,6 @@ export function registerBrowserControl(server,{queued,...options}){
  add('browser_navigate','Open a real persistent browser tab on an enabled website or an observed link. Reuse tabId to navigate the same tab. Returns visible text and interactive refs including frames.',{url:z.string().url().max(4000),tabId:tab.optional()},a=>browser.navigate(a))
  add('browser_tabs','List existing enabled-site browser tabs and their IDs. Does not close tabs.',{},()=>browser.tabsList(),true)
  add('browser_snapshot','Inspect the actual current rendered page, buttons, forms, links and iframe content. Paginate text/controls if needed. Refs remain valid until the next snapshot/action on this tab.',{tabId:tab,offset:z.number().int().min(0).optional(),elementOffset:z.number().int().min(0).optional()},a=>browser.snapshot(a),true)
- add('browser_screenshot','Capture the actual viewport or full page, including canvas/SVG charts and tooltips. Password inputs are masked. Coordinate clicks use viewport CSS pixels.',{tabId:tab,fullPage:z.boolean().optional()},a=>browser.screenshot(a),true)
+ add('browser_screenshot','Capture the actual viewport or full page, including canvas/SVG charts and tooltips. For inner scrolling app panels, fullPage returns ordered viewport tiles and restores the scroll position; inspect all tiles and check truncated. Password inputs are masked. Coordinate clicks use viewport CSS pixels.',{tabId:tab,fullPage:z.boolean().optional()},a=>browser.screenshot(a),true)
  add('browser_action','Operate the actual browser: click, hover, fill, keypress, dropdown, checkbox, scroll, drag, navigation, upload, close. Actions can submit forms and send messages as requested. Use refs or viewport x/y. waitForDownload saves a clicked download in the working folder. accept controls JavaScript confirmation dialogs triggered by the action; omitted/false dismisses them. Returns fresh page state and newly opened tabs.',browserActionSchema,a=>browser.action(a))
 }
