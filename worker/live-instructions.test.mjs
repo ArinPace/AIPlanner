@@ -11,5 +11,5 @@ test('live personal rules are in the actual prompt; clearing supersedes old resu
 test('Tutor maintenance is included in real runtime rules without truncating personal instructions',()=>{
  const personal='P'.repeat(19970),prompt=effectiveInstructions('Tutor enabled for this account: yes',{revision:30,content:personal})
  assert(prompt.includes(personal))
- for(const term of ['homework/assignments','quizzes','tests/exams','recordings','recitations','Grades and A-track','actual graded denominator','ungraded work as zero','scheduled reviews refresh all active subjects'])assert(prompt.includes(term),term)
+ for(const term of ['homework/assignments','quizzes','tests/exams','recordings','recitations','Grades and A-track','actual graded denominator','ungraded work as zero','Main Chat and its ordinary scheduled subject reviews must read','must not edit, reorganize, download into, or refresh','Only the corresponding Tutor conversation','separately booked subject-turnover automation'])assert(prompt.includes(term),term)
 })
