@@ -444,6 +444,8 @@ struct PlannerWebView: UIViewRepresentable {
     var pendingChat: String?
     var submittedDraftFingerprint: String?
     var baseline = 0
+    var baselineReplyKey = ""
+    var baselineReplyText = ""
     var sawRunning = false
     var lastText = ""
     var changedAt = Date()
@@ -750,7 +752,8 @@ await pause(500);return {applied:true};
     });
     const response=(clean?(clean.innerText||clean.textContent||'').trim():'').replace(/(PLANNER_TOOL_REQUEST\\s*)(?:json|planner-tools)\\s*(?=[{])/i,'$1');
     const outputs=turn?[...turn.querySelectorAll('a[download],a[href^="sandbox:"],a[href*="/backend-api/files/"],a[href*="/backend-api/estuary/content"],button[aria-label^="Download "],button[aria-label="Save image"],[data-file-reference="true"][role="button"][aria-label^="Download "]')].map(node=>{node.dataset.plannerDownloadId ||= crypto.randomUUID();return {key:node.dataset.plannerDownloadId,name:(node.getAttribute('download')||node.innerText||node.getAttribute('aria-label')||'Download file').trim().slice(0,240)}}):[];
-    return {files:outputs,ready:!!box,needsLogin:(!box&&guest)||(!secureForm&&!!document.querySelector('input[type="password"]')),guest,interaction,running,count:replies.length,text:response,final:!!turn?.querySelector(completionSelector),url:location.href};})()
+    const replyKey=last?.getAttribute('data-message-id')||last?.closest('[data-message-id]')?.getAttribute('data-message-id')||turn?.id||turn?.getAttribute('data-testid')||'';
+    return {files:outputs,ready:!!box,needsLogin:(!box&&guest)||(!secureForm&&!!document.querySelector('input[type="password"]')),guest,interaction,running,count:replies.length,replyKey,text:response,final:!!turn?.querySelector(completionSelector),url:location.href};})()
     """ }
     private func snapshot() async throws -> [String: Any] {
         loadViewIfNeeded()
@@ -968,7 +971,7 @@ await pause(500);return {applied:true};
         preparedFileFingerprint = nil
         traceRelay("submit-confirmed"); submittedDraftFingerprint=SHA256.hash(data:Data(text.trimmingCharacters(in:.whitespacesAndNewlines).utf8)).map{String(format:"%02x",$0)}.joined()
         _ = try? await browser.evaluateJavaScript("window.__plannerHumanDraft=false")
-        pendingChat = chatId; pendingURL = target.path.contains("/c/") ? target.path : nil; baseline = state["count"] as? Int ?? 0; sawRunning = false; lastText = ""; changedAt = Date(); startedAt = Date()
+        pendingChat = chatId; pendingURL = target.path.contains("/c/") ? target.path : nil; baseline = state["count"] as? Int ?? 0; baselineReplyKey = state["replyKey"] as? String ?? ""; baselineReplyText = state["text"] as? String ?? ""; sawRunning = false; lastText = ""; changedAt = Date(); startedAt = Date()
     }
     private func canonicalConversation(_ value: String?) -> URL? {
         guard let value, let url = URL(string: value), url.scheme == "https", url.host == "chatgpt.com", url.user == nil,
@@ -992,13 +995,15 @@ await pause(500);return {applied:true};
             if let expected = pendingURL, URL(fileURLWithPath: expected).lastPathComponent != parsed.lastPathComponent { state["phase"] = "attention"; state["text"] = ""; state["message"] = "ChatGPT changed conversations. Open the session to check before retrying."; return state }
             pendingURL = parsed.path
         }
-        if (state["count"] as? Int ?? 0) <= baseline { state["text"] = "" }
+        let replyKey = state["replyKey"] as? String ?? "", replyText = state["text"] as? String ?? ""
+        let newReply = (state["count"] as? Int ?? 0) > baseline || (!replyKey.isEmpty && !baselineReplyKey.isEmpty && replyKey != baselineReplyKey) || (!replyText.isEmpty && !baselineReplyText.isEmpty && replyText != baselineReplyText)
+        if !newReply { state["text"] = "" }
         if let parsed = canonicalConversation(state["url"] as? String) { let canonical = "https://chatgpt.com" + parsed.path; state["url"] = canonical; UserDefaults.standard.set(canonical, forKey: "chatgpt-conversation:" + account + ":" + chatId) } else { state.removeValue(forKey: "url") }
         if state["interaction"] as? Bool == true { state["phase"]="interaction";state["message"]="Continue in ChatGPT to approve access or sign in securely.";return state }
         sawRunning = sawRunning || state["running"] as? Bool == true
         let text = state["text"] as? String ?? ""
         if text != lastText { lastText = text; changedAt = Date() }
-        if (state["guest"] as? Bool == true || canonicalConversation(state["url"] as? String) != nil), (state["count"] as? Int ?? 0) > baseline, (!text.isEmpty || !(state["files"] as? [[String: Any]] ?? []).isEmpty), state["running"] as? Bool != true, (sawRunning || state["final"] as? Bool == true), Date().timeIntervalSince(changedAt) >= 3 {
+        if (state["guest"] as? Bool == true || canonicalConversation(state["url"] as? String) != nil), newReply, (!text.isEmpty || !(state["files"] as? [[String: Any]] ?? []).isEmpty), state["running"] as? Bool != true, (sawRunning || state["final"] as? Bool == true), Date().timeIntervalSince(changedAt) >= 3 {
             state["phase"] = "completed"; pendingChat = nil
             if account == "arin", let fingerprint=submittedDraftFingerprint, let value=UserDefaults.standard.string(forKey:"chatgpt-project:"+account+":Test"), let projectURL=URL(string:value), let current=canonicalConversation(state["url"] as? String), current.path.hasPrefix(projectURL.deletingLastPathComponent().path) {
                 let key="chatgpt-confirmed-project-drafts:"+account+":Test"
