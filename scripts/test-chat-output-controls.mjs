@@ -28,5 +28,8 @@ try{
  const machine=await page.evaluate(snapshot)
  const json=machine.text.match(/PLANNER_TOOL_REQUEST\s*([\s\S]*?)\s*END_PLANNER_TOOL_REQUEST/)[1].trim()
  assert.deepEqual(JSON.parse(json),request)
+ await page.evaluate(request=>{document.querySelector('[data-message-author-role="assistant"]').innerText='PLANNER_TOOL_REQUEST\nJSON\n'+JSON.stringify(request)+'\nEND_PLANNER_TOOL_REQUEST'},request)
+ const labeled=await page.evaluate(snapshot)
+ assert.deepEqual(JSON.parse(labeled.text.match(/PLANNER_TOOL_REQUEST\s*([\s\S]*?)\s*END_PLANNER_TOOL_REQUEST/)[1].trim()),request)
  console.log('Exact native snapshot discovers inline ZIP controls, file-card buttons and generated-file links in the completed assistant turn. DOM fixture only.')
 }finally{await browser.close()}

@@ -25,6 +25,11 @@ struct PlannerWebView: UIViewRepresentable {
         config.userContentController.addScriptMessageHandler(context.coordinator, contentWorld: .page, name: "plannerNative")
         config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeScreenTime=true;window.plannerNativeChatGPTPortal=true;window.plannerNativeChatGPTRelayVersion=4;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true'});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-UITestSignedRelayDiagnostics") {
+            config.userContentController.addUserScript(WKUserScript(source: """
+            const originalPlannerFetch=window.fetch;window.fetch=async(...args)=>{try{return await originalPlannerFetch(...args)}catch(error){const path=new URL(typeof args[0]==='string'?args[0]:args[0].url,location.href).pathname;window.webkit.messageHandlers.plannerNative.postMessage({action:'relayNetworkDiagnostic',path,message:String(error).slice(0,300)}).catch(()=>{});throw error}};
+            """,injectionTime:.atDocumentStart,forMainFrameOnly:true))
+        }
         if ProcessInfo.processInfo.arguments.contains("-UITestRelayFileMatrix"), let group=ProcessInfo.processInfo.environment["PLANNER_TEST_FILE_GROUP"], ["documents","media"].contains(group), let folder=FileManager.default.urls(for:.cachesDirectory,in:.userDomainMask).first, let data=try? Data(contentsOf:folder.appendingPathComponent("RelayFileMatrix-"+group+".json")), let fixtures=String(data:data,encoding:.utf8) {
             let script="""
             const relayFixtures=\(fixtures);
@@ -173,6 +178,14 @@ struct PlannerWebView: UIViewRepresentable {
             Task { @MainActor in
                 do {
                     switch action {
+                    #if DEBUG
+                    case "relayNetworkDiagnostic":
+                        if ProcessInfo.processInfo.arguments.contains("-UITestSignedRelayDiagnostics"), let folder=FileManager.default.urls(for:.cachesDirectory,in:.userDomainMask).first {
+                            let value=["path":body["path"] as? String ?? "", "message":body["message"] as? String ?? ""]
+                            if let data=try? JSONSerialization.data(withJSONObject:value){try? data.write(to:folder.appendingPathComponent("RelayNetworkFailure.json"),options:.atomic)}
+                        }
+                        replyHandler(["ok":true],nil);return
+                    #endif
                     case "taskNotificationPermission":
                         replyHandler(try await PlannerTaskNotifications.shared.requestPermission(), nil); return
                     case "taskNotificationStatus":
@@ -735,7 +748,7 @@ await pause(500);return {applied:true};
       const target=parent&&parent!==clean&&others.every(n=>/^(json|planner-tools)$/i.test((n.textContent||'').trim()))?parent:pre;
       const nl=String.fromCharCode(10);target.replaceWith(document.createTextNode(nl+(marked?text:'PLANNER_TOOL_REQUEST'+nl+text+nl+'END_PLANNER_TOOL_REQUEST')+nl));
     });
-    const response=clean?(clean.innerText||clean.textContent||'').trim():'';
+    const response=(clean?(clean.innerText||clean.textContent||'').trim():'').replace(/(PLANNER_TOOL_REQUEST\\s+)(?:json|planner-tools)\\s+(?=[{])/i,'$1');
     const outputs=turn?[...turn.querySelectorAll('a[download],a[href^="sandbox:"],a[href*="/backend-api/files/"],a[href*="/backend-api/estuary/content"],button[aria-label^="Download "],button[aria-label="Save image"],[data-file-reference="true"][role="button"][aria-label^="Download "]')].map(node=>{node.dataset.plannerDownloadId ||= crypto.randomUUID();return {key:node.dataset.plannerDownloadId,name:(node.getAttribute('download')||node.innerText||node.getAttribute('aria-label')||'Download file').trim().slice(0,240)}}):[];
     return {files:outputs,ready:!!box,needsLogin:(!box&&guest)||(!secureForm&&!!document.querySelector('input[type="password"]')),guest,interaction,running,count:replies.length,text:response,final:!!turn?.querySelector(completionSelector),url:location.href};})()
     """ }

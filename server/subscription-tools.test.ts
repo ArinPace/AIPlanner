@@ -58,6 +58,7 @@ test('tool protocol hides commands, checks current turn and bounds large results
  const block='```planner-tools\n'+JSON.stringify({turn:'current',calls:[{id:'one',name:'planner_calendar_read',arguments:{limit:10}}]})+'\n```'
  const plain='PLANNER_TOOL_REQUEST\n'+JSON.stringify({turn:'current',calls:[{id:'one',name:'planner_calendar_read',arguments:{limit:10}}]})+'\nEND_PLANNER_TOOL_REQUEST'
  assert.equal(relayCalls(plain,'current')?.length,1);assert.equal(relayVisible('Working\n'+plain),'Working');assert.throws(()=>relayCalls(plain,'wrong'),/current response/)
+ assert.equal(relayCalls(plain.replace('PLANNER_TOOL_REQUEST\n','PLANNER_TOOL_REQUEST\nJSON\n'),'current')?.length,1)
  assert.equal(relayCalls(block,'current')?.length,1);assert.throws(()=>relayCalls(block,'old'),/current response/)
  const output=toolResultsMessage([{id:'read',result:'x'.repeat(80000)}],'current')
  assert(output.length<30000);assert.match(output,/truncated/);assert.match(output,/Never repeat a write/)

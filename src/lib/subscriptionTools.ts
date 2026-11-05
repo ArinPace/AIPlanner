@@ -3,7 +3,7 @@ export function relayCalls(reply:string,turnId:string){
  const blocks=[...reply.matchAll(/PLANNER_TOOL_REQUEST\s*([\s\S]*?)\s*END_PLANNER_TOOL_REQUEST/g)]
  if(!blocks.length){if(reply.includes('PLANNER_TOOL_REQUEST'))throw Error('ChatGPT returned an incomplete tool request. No tools were run.');return fencedCalls(reply,turnId)}
  if(blocks.length!==1||reply.slice(blocks[0].index!+blocks[0][0].length).trim())throw Error('ChatGPT returned an ambiguous tool request. No tools were run.')
- const json=blocks[0][1].trim().replace(/^```(?:json|planner-tools)?\s*\n([\s\S]*?)\n```$/,'$1')
+ const json=blocks[0][1].trim().replace(/^```(?:json|planner-tools)?\s*\n([\s\S]*?)\n```$/i,'$1').replace(/^(?:json|planner-tools)\s*\n/i,'')
  return fencedCalls('```planner-tools\n'+json+'\n```',turnId)
 }
 export function relayVisible(reply:string){return fencedVisible(reply).replace(/PLANNER_TOOL_REQUEST[\s\S]*$/,'').trim()}

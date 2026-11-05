@@ -154,7 +154,7 @@ final class PlannerUITests: XCTestCase {
             if planner.buttons.matching(identifier:"Copy").count>=2 {print("LIVE_TASK_REPLY",planner.otherElements.matching(identifier:"Assistant message").staticTexts.allElementsBoundByIndex.map{$0.label}.joined(separator:" | "));return}
             let secure=planner.buttons["Continue in ChatGPT"]
             if secure.exists && secure.isHittable && !app.webViews["chatGPTPortalWebView"].exists{print("LIVE_SECURE_SIGNIN_OPENING");secure.tap()}
-            let errors=planner.staticTexts.matching(NSPredicate(format:"label CONTAINS %@ OR label BEGINSWITH %@","No tools were run","Invalid values."))
+            let errors=planner.staticTexts.matching(NSPredicate(format:"label CONTAINS %@ OR label BEGINSWITH %@ OR label BEGINSWITH %@","No tools were run","Invalid values.","Could not reach the server."))
             if errors.firstMatch.exists{print("LIVE_TASK_ERROR",errors.firstMatch.label);throw NSError(domain:"LiveToolTest",code:1)}
             if second%30==0{print("LIVE_TASK_WAIT",second)}
             Thread.sleep(forTimeInterval:1)
