@@ -44,6 +44,9 @@ test('subscription tools require active owned turns, use real MCP schemas and re
   const catalog:any=await run('tool_call',{calls:[{id:'list',name:'relay_list_tools',arguments:{}}]})
   assert(catalog.results[0].result.some((t:any)=>t.name==='planner_app_settings_update'))
   assert(catalog.results[0].result.some((t:any)=>t.name==='planner_save_note'))
+  assert(catalog.results[0].result.some((t:any)=>t.name==='planner_client_control'))
+  const client:any=await run('tool_call',{calls:[{id:'client-nav',name:'planner_client_control',arguments:{command:{action:'ui_navigate',tab:'work'}}}]});assert.equal(client.results[0].result.structuredContent.result.executed,false);assert.equal(client.results[0].result.structuredContent.result.clientAction.command.tab,'work');assert.equal(writes,0)
+  const badClient:any=await run('tool_call',{calls:[{id:'client-js',name:'planner_client_control',arguments:{command:{action:'ui_navigate',tab:'work',javascript:'alert(1)'}}}]});assert.equal(badClient.results[0].result.isError,true);assert.equal(writes,0)
   assert(!catalog.results[0].result.some((t:any)=>t.name==='browser_open'))
   const oversized:any=await run('tool_call',{calls:[{id:'describe-too-many',name:'relay_describe_tools',arguments:{names:Array(12).fill('planner_calendar_read')}}]});assert.match(oversized.results[0].error,/one to eight/);assert.equal(writes,0)
   const calls=[{id:'save-tag',name:'planner_save_tag',arguments:{revision:1,name:'Tools test',color:'#abcdef'}}]

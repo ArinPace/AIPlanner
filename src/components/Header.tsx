@@ -45,6 +45,8 @@ export function Header({
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [historyOpen,setHistoryOpen]=useState(false)
   const settingsRef = useRef<HTMLDivElement>(null)
+  useEffect(()=>{const handle=(event:Event)=>{const open=(event as CustomEvent).detail?.open;if(typeof open==='boolean')setSettingsOpen(open)};window.addEventListener('planner-client-settings',handle);return()=>window.removeEventListener('planner-client-settings',handle)},[])
+
 
   useEffect(() => {
     if (!settingsOpen) return

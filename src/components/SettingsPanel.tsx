@@ -24,6 +24,7 @@ export function SettingsPanel({ calendarDisplay, zoom, onZoomChange, onClose }: 
   const mod = shortcutMod()
   const [theme, setTheme] = useState(readTheme)
   const [planningOpen,setPlanningOpen]=useState(false)
+  useEffect(()=>{const update=()=>setTheme(readTheme());window.addEventListener('planner-theme-refresh',update);return()=>window.removeEventListener('planner-theme-refresh',update)},[])
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {

@@ -1,3 +1,4 @@
+import {applyTheme,readTheme} from './lib/theme'
 import {useCalendarDisplay} from './lib/useCalendarDisplay'
 import {SubscriptionChatView} from './components/SubscriptionChatView'
 import {TaskNotificationSync} from './components/TaskNotificationSync'
@@ -177,6 +178,35 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   const [widgetSaving,setWidgetSaving]=useState(false)
   const latestCalendar=useRef({events,tags,hiddenTagIds,zoom,loaded,draft})
   useLayoutEffect(()=>{latestCalendar.current={events,tags,hiddenTagIds,zoom,loaded,draft}},[events,tags,hiddenTagIds,zoom,loaded,draft])
+
+  const clientUI=useRef({tab,view,date:cursor.toISOString(),filesUnsaved,calendarEditorOpen:Boolean(draft),loaded})
+  useLayoutEffect(()=>{clientUI.current={tab,view,date:cursor.toISOString(),filesUnsaved,calendarEditorOpen:Boolean(draft),loaded}},[tab,view,cursor,filesUnsaved,draft,loaded])
+  useEffect(()=>{
+    const handle=(event:Event)=>{const d=(event as CustomEvent).detail;if(!d||typeof d.resolve!=='function'||typeof d.reject!=='function')return
+      try{
+        if(d.account!==username)throw Error('Your account changed. No UI action was applied.')
+        const c=d.command
+        if(c.action==='ui_read'){d.resolve({...clientUI.current,theme:readTheme(),zoom,hiddenTypes});return}
+        if(c.action==='ui_preferences'){
+          if(c.expected.theme!==readTheme()||c.expected.zoom!==zoom||JSON.stringify([...c.expected.hiddenTypes].sort())!==JSON.stringify([...hiddenTypes].sort()))throw Error('UI preferences changed. Read them before editing.')
+          if(c.theme)applyTheme(c.theme)
+          if(c.zoom!==undefined)setZoom(clampZoom(c.zoom))
+          if(c.hiddenTypes){setHiddenTypes(c.hiddenTypes);localStorage.setItem('planner-event-types:'+username,JSON.stringify(c.hiddenTypes))}
+        }else if(c.action==='ui_settings'){window.dispatchEvent(new CustomEvent('planner-client-settings',{detail:{open:c.open}}))}
+        else if(c.action==='ui_navigate'){
+          if((filesUnsaved||draft)&&c.tab!==tab)throw Error('Finish unsaved note/calendar edits before changing tabs.')
+          if(c.tab==='screentime'&&!window.plannerNativeScreenTime)throw Error('Screen Time is available in the iPhone app.')
+          const date=c.date?new Date(c.date+'T12:00:00'):null
+          if(date&&(!Number.isFinite(date.getTime())||date.getFullYear()!==Number(c.date.slice(0,4))||date.getMonth()+1!==Number(c.date.slice(5,7))||date.getDate()!==Number(c.date.slice(8,10))))throw Error('Invalid calendar date.')
+          setTab(c.tab);if(c.tab==='todo'||c.tab==='work')setTodoRequest(n=>n+1)
+          if(c.view)setView(c.view)
+          if(date)setCursor(date)
+        }else throw Error('Unknown Planner UI action.')
+        requestAnimationFrame(()=>requestAnimationFrame(()=>d.resolve({...clientUI.current,theme:readTheme(),...(c.action==='ui_preferences'?{zoom:c.zoom??zoom,hiddenTypes:c.hiddenTypes??hiddenTypes}:{}),...(c.action==='ui_settings'?{settingsOpen:c.open}:{})})))
+      }catch(error){d.reject(error)}
+    }
+    window.addEventListener('planner-client-ui',handle);return()=>window.removeEventListener('planner-client-ui',handle)
+  },[username,filesUnsaved,draft,tab,zoom,hiddenTypes])
 
   const applyState = useCallback((state: StoredState) => {
     persistedCalendar.current = calendarFingerprint(state)

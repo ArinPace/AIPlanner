@@ -3,6 +3,7 @@ import FamilyControls
 import ManagedSettings
 import DeviceActivity
 import Security
+import CryptoKit
 
 @MainActor final class ScreenTimeModel: ObservableObject {
     @Published var selection = FamilyActivitySelection(includeEntireCategory: true)
@@ -58,7 +59,7 @@ import Security
         }
         catch { self.error = error.localizedDescription; return false }
     }
-    func start(minutes: Int) {
+    func start(minutes: Int, until absoluteEnd: Date? = nil) {
         guard authorized else { error = "Allow Screen Time access first."; return }
         guard !selection.applicationTokens.isEmpty || !selection.categoryTokens.isEmpty || !selection.webDomainTokens.isEmpty else { error = "Choose apps to block first."; return }
         guard end == nil else { error = "End the current session before starting another."; return }
@@ -66,7 +67,8 @@ import Security
         if let locationError = FocusLocationController.shared.validationError() { error = locationError; return }
         // Align the persisted deadline with DeviceActivity's whole-second schedule.
         let now = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970))
-        let until = now.addingTimeInterval(Double(minutes) * 60 + 1)
+        let until = absoluteEnd.map { Date(timeIntervalSince1970: floor($0.timeIntervalSince1970)) } ?? now.addingTimeInterval(Double(minutes) * 60 + 1)
+        guard (900...43201).contains(until.timeIntervalSince(now)) else { error = "Choose an end between 15 minutes and 12 hours away.";return }
         let calendar = Calendar.current
         let fields: Set<Calendar.Component> = [.year, .month, .day, .hour, .minute, .second]
         do {
@@ -113,6 +115,7 @@ struct ScreenTimeView: View {
     @Environment(\.scenePhase) private var phase
     @State private var picker = false
     @State private var minutes = 30
+    private let pickerRequest = NotificationCenter.default.publisher(for: Notification.Name("PlannerAgentChooseApps"))
     var body: some View {
         NavigationStack {
             Form {
@@ -201,6 +204,7 @@ struct ScreenTimeView: View {
             }
             .navigationTitle("Screen Time")
             .familyActivityPicker(isPresented: $picker, selection: $model.selection)
+            .onReceive(pickerRequest) { _ in Task { guard model.end == nil else{return};if await model.authorize() { picker = true } } }
             .sheet(isPresented: $choosingLocation) { FocusLocationPicker(location: location) }
         }
         .onChange(of: model.selection) { _, _ in model.saveSelection() }
@@ -415,3 +419,129 @@ private struct NextDNSSettings: View {
         message = "Loaded blocked domains. Device filtering must be checked separately."
     }
 }
+
+/// Executed only by the active account's Planner bridge. No app tokens or keys leave the device.
+@MainActor enum PlannerClientScreenTime {
+    private static func iso(_ value: String) -> Date? {
+        let parser=ISO8601DateFormatter();parser.formatOptions=[.withInternetDateTime,.withFractionalSeconds]
+        return parser.date(from:value) ?? ISO8601DateFormatter().date(from:value)
+    }
+    private static func digest(_ data: Data) -> String { SHA256.hash(data:data).map{String(format:"%02x",$0)}.joined() }
+    private static func bytes(_ value: Any) throws -> Data { try JSONSerialization.data(withJSONObject:value,options:[.sortedKeys]) }
+    private static func json<T:Encodable>(_ value:T) throws -> Any { try JSONSerialization.jsonObject(with:JSONEncoder().encode(value)) }
+    static func state(account:String) throws -> [String:Any] {
+        let model=ScreenTimeModel(),location=FocusLocationController.shared,defaults=FocusShieldRules.defaults
+        model.refresh()
+        let rules=TaskFocusRules.records().values.filter{$0.account==account}.sorted{$0.window.id<$1.window.id}
+        let config:[String:Any]=["authorized":model.authorized,"end":model.end?.timeIntervalSince1970 as Any? ?? NSNull(),"selectionDigest":digest(defaults.data(forKey:"focusSelection") ?? Data()),"rulesDigest":digest(defaults.data(forKey:TaskFocusRules.key) ?? Data()),"locationEnabled":location.enabled,"locationRule":location.rule.rawValue,"place":try location.place.map{try json($0)} as Any? ?? NSNull(),"preciseTracking":location.preciseTracking,"checkInterval":location.checkInterval,"dnsProfile":UserDefaults.standard.string(forKey:"nextdns-profile:"+account) ?? ""]
+        return ["fingerprint":digest(try bytes(config)),"now":ISO8601DateFormatter().string(from:Date()),"authorized":model.authorized,"end":model.end?.timeIntervalSince1970 as Any? ?? NSNull(),"selection":["apps":model.selection.applicationTokens.count,"categories":model.selection.categoryTokens.count,"websites":model.selection.webDomainTokens.count],"globalShieldConfigured":model.store.shield.applications != nil || model.store.shield.applicationCategories != nil || model.store.shield.webDomains != nil || model.store.shield.webDomainCategories != nil,"taskRules":try rules.map{["task":try json($0.window),"selection":["apps":$0.selection.applicationTokens.count,"categories":$0.selection.categoryTokens.count,"websites":$0.selection.webDomainTokens.count]]},"location":["enabled":location.enabled,"rule":location.rule.rawValue,"place":config["place"]!,"preciseTracking":location.preciseTracking,"checkInterval":location.checkInterval,"validationError":location.validationError() as Any? ?? NSNull()],"nextDNS":["hasCredential":!NextDNSCredentials.load(account).isEmpty,"profile":config["dnsProfile"]!],"limits":"Counts and configured shields do not prove OS enforcement. The user chooses opaque app tokens in Apple's picker; permissions need OS approval. DNS device routing must be verified separately."]
+    }
+    static func run(account:String,command:[String:Any],key:String,issued:String) async throws -> [String:Any] {
+        guard account==WidgetTaskControl.defaults.string(forKey:"feedback-account"),let date=iso(issued),Date().timeIntervalSince(date)<7200,Date().timeIntervalSince(date) > -300,key.count<=200,let action=command["action"] as? String else {throw TaskFocusError("Expired request or account changed. No native change was made.")}
+        let defaults=FocusShieldRules.defaults,cacheKey="planner-client-receipts:"+account,hash=digest(try bytes(command))
+        var cache=(defaults.data(forKey:cacheKey).flatMap{try? JSONSerialization.jsonObject(with:$0)} as? [String:[String:Any]]) ?? [:]
+        if let prior=cache[key] {
+            guard prior["digest"] as? String==hash else {throw TaskFocusError("This command ID belongs to different arguments.")}
+            guard let result=prior["result"] as? [String:Any] else {throw TaskFocusError("This native command already started. Read current state; do not repeat a write blindly.")}
+            var replay=result;replay["replayed"]=true;return replay
+        }
+        let before=try state(account:account),writes=["screen_time_start","screen_time_stop","screen_time_task_save","screen_time_task_remove","screen_time_location","screen_time_dns_domain"]
+        if writes.contains(action),command["expected"] as? String != before["fingerprint"] as? String {throw TaskFocusError("Screen Time changed. Read its current fingerprint before editing.")}
+        cache[key]=["digest":hash,"at":Date().timeIntervalSince1970];defaults.set(try bytes(cache),forKey:cacheKey)
+        var detail:[String:Any]=[:]
+        do {
+            let model=ScreenTimeModel(),location=FocusLocationController.shared
+            switch action {
+            case "screen_time_read":break
+            case "screen_time_authorize":detail=["approved":await model.authorize(),"userActionRequired":!model.authorized]
+            case "screen_time_pick_apps":
+                guard model.end==nil else {throw TaskFocusError("End the current focus session before changing apps.")}
+                NotificationCenter.default.post(name:.init("PlannerAgentChooseApps"),object:nil)
+                detail=["pickerRequested":true,"userActionRequired":true,"selectionConfirmed":false]
+            case "screen_time_start":
+                guard let value=command["end"] as? String,let end=iso(value) else {throw TaskFocusError("Choose a valid absolute focus end.")}
+                model.start(minutes:Int(ceil(end.timeIntervalSinceNow/60)),until:end)
+                if let error=model.error {throw TaskFocusError(error)}
+                guard model.end != nil else {throw TaskFocusError("Focus monitoring did not start.")}
+            case "screen_time_stop":model.stop()
+            case "screen_time_task_save":
+                guard let raw=command["task"] as? [String:Any],let id=raw["id"] as? String,let source=raw["sourceEventId"] as? String,let title=raw["title"] as? String,let startValue=raw["start"] as? String,let endValue=raw["end"] as? String,let start=iso(startValue),let end=iso(endValue) else {throw TaskFocusError("Choose a valid task occurrence.")}
+                try TaskFocusRules.save(account:account,window:.init(id:id,sourceEventId:source,title:title,start:start.timeIntervalSince1970,end:end.timeIntervalSince1970),selection:model.selection)
+            case "screen_time_task_remove":
+                guard let id=command["taskId"] as? String else {throw TaskFocusError("Choose one task occurrence.")}
+                for record in TaskFocusRules.records().values where record.account==account && record.window.id==id {TaskFocusRules.remove(record.name)}
+            case "screen_time_location":
+                guard model.end==nil else {throw TaskFocusError("End the focus session before changing location rules.")}
+                let rule=(command["rule"] as? String).flatMap(FocusLocationRule.init(rawValue:)) ?? location.rule
+                let precise=command["preciseTracking"] as? Bool ?? location.preciseTracking
+                guard rule != .allowInside || precise else {throw TaskFocusError("Allow-only-here requires precise tracking.")}
+                if let raw=command["place"] as? [String:Any] {let place=try JSONDecoder().decode(FocusPlace.self,from:bytes(raw));guard place.isValid else{throw TaskFocusError("Invalid focus location.")};location.setPlace(place)}
+                location.setRule(rule);location.setPreciseTracking(precise)
+                if let interval=command["checkInterval"] as? Double {guard [120.0,180,300,600].contains(interval) else{throw TaskFocusError("Unsupported location interval.")};location.setCheckInterval(interval)}
+                if let enabled=command["enabled"] as? Bool {location.setEnabled(enabled)}
+            case "screen_time_dns_read","screen_time_dns_domain":
+                let profile=UserDefaults.standard.string(forKey:"nextdns-profile:"+account) ?? "",apiKey=NextDNSCredentials.load(account)
+                guard profile.range(of:#"^[a-fA-F0-9]{6}$"#,options:.regularExpression) != nil,!apiKey.isEmpty else {throw TaskFocusError("Connect NextDNS in Screen Time first. No API key is exposed to Chat.")}
+                var suffix="",method="GET",payload:[String:Any]?
+                if action=="screen_time_dns_domain" {
+                    guard let domain=command["domain"] as? String,domain.count<=253,domain.range(of:#"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$"#,options:.regularExpression) != nil,let blocked=command["blocked"] as? Bool else {throw TaskFocusError("Choose a valid website domain.")}
+                    if blocked {method="POST";payload=["id":domain,"active":true]}else{method="DELETE";suffix="/"+domain}
+                }
+                var request=URLRequest(url:URL(string:"https://api.nextdns.io/profiles/"+profile+"/denylist"+suffix)!);request.httpMethod=method;request.timeoutInterval=25;request.setValue(apiKey,forHTTPHeaderField:"X-Api-Key")
+                if let payload{request.httpBody=try bytes(payload);request.setValue("application/json",forHTTPHeaderField:"Content-Type")}
+                let (data,response)=try await URLSession.shared.data(for:request)
+                guard let http=response as? HTTPURLResponse,(200...299).contains(http.statusCode) else{throw TaskFocusError("NextDNS request failed. Read the denylist before retrying; an interrupted write may have completed.")}
+                let responseBody=(try? JSONSerialization.jsonObject(with:data)) as? [String:Any] ?? [:]
+                guard (responseBody["errors"] as? [Any] ?? []).isEmpty else{throw TaskFocusError("NextDNS rejected this request. Read the current denylist.")}
+                detail=["nextDNS":responseBody,"deviceDNSVerified":false]
+            default:throw TaskFocusError("Unknown native control.")
+            }
+            guard account==WidgetTaskControl.defaults.string(forKey:"feedback-account") else {throw TaskFocusError("Your account changed. Read current state after signing in.")}
+            let result:[String:Any]=["state":try state(account:account),"detail":detail]
+            cache=(defaults.data(forKey:cacheKey).flatMap{try? JSONSerialization.jsonObject(with:$0)} as? [String:[String:Any]]) ?? [:];cache[key]=["digest":hash,"at":Date().timeIntervalSince1970,"result":result]
+            let ordered=cache.sorted{($0.value["at"] as? Double ?? 0)>($1.value["at"] as? Double ?? 0)};defaults.set(try bytes(Dictionary(uniqueKeysWithValues:ordered.prefix(100).map{($0.key,$0.value)})),forKey:cacheKey)
+            return result
+        }catch{
+            // Failed/uncertain calls stay receipted. A fresh read is safe; automatic write replay is not.
+            throw error
+        }
+    }
+}
+#if DEBUG
+extension PlannerClientScreenTime {
+    static func verify(account:String) async -> [String:Any] {
+        var checks:[String:Any]=[:]
+        let issued=ISO8601DateFormatter().string(from:Date()),prefix=UUID().uuidString
+        func call(_ label:String,_ command:[String:Any]) async throws -> [String:Any] {try await run(account:account,command:command,key:prefix+":"+label,issued:issued)}
+        do {
+            let baseline=try state(account:account);checks["baseline"]=baseline
+            let read=try await call("read",["action":"screen_time_read"]);guard read["state"] != nil else {throw TaskFocusError("Missing native read state.")};checks["read"]=true
+            do { _=try await run(account:"not-current-account",command:["action":"screen_time_read"],key:prefix+":other",issued:issued);checks["ownerRejected"]=false }catch{checks["ownerRejected"]=true}
+            do {_=try await call("stale",["action":"screen_time_stop","expected":String(repeating:"0",count:64)]);checks["staleRejected"]=false}catch{checks["staleRejected"]=true}
+            let model=ScreenTimeModel(),hasSelection = !model.selection.applicationTokens.isEmpty || !model.selection.categoryTokens.isEmpty || !model.selection.webDomainTokens.isEmpty
+            if model.end==nil && model.authorized && hasSelection {
+                let end=ISO8601DateFormatter().string(from:Date().addingTimeInterval(960)),startCommand:[String:Any]=["action":"screen_time_start","expected":baseline["fingerprint"]!,"end":end]
+                _=try await call("start",startCommand);let active=try state(account:account);guard !(active["end"] is NSNull) else {throw TaskFocusError("Start did not persist.")};checks["start"]=true;checks["shieldConfigured"]=active["globalShieldConfigured"]
+                _=try await call("stop",["action":"screen_time_stop","expected":active["fingerprint"]!]);checks["stop"]=try state(account:account)["end"] is NSNull
+                _=try await call("start",startCommand);checks["replayDidNotRestart"]=try state(account:account)["end"] is NSNull
+                do {_=try await call("start",["action":"screen_time_stop","expected":active["fingerprint"]!]);checks["changedIdRejected"]=false}catch{checks["changedIdRejected"]=true}
+                let task:[String:Any]=["id":prefix,"sourceEventId":"client-control-qa","title":"Disposable client control QA","start":ISO8601DateFormatter().string(from:Date().addingTimeInterval(1800)),"end":ISO8601DateFormatter().string(from:Date().addingTimeInterval(2760))]
+                _=try await call("task-save",["action":"screen_time_task_save","expected":try state(account:account)["fingerprint"]!,"task":task]);checks["taskSave"]=TaskFocusRules.records().values.contains{$0.account==account && $0.window.id==prefix}
+                _=try await call("task-remove",["action":"screen_time_task_remove","expected":try state(account:account)["fingerprint"]!,"taskId":prefix]);checks["taskRemoved"] = !TaskFocusRules.records().values.contains{$0.account==account && $0.window.id==prefix}
+            }else{checks["blockingTestsSkipped"]="Requires idle session, approved Screen Time and a user-selected app/category. Existing policy was preserved."}
+            if ScreenTimeModel().end==nil {
+                let location=FocusLocationController.shared,old=location.checkInterval,next=old==180 ? 300.0 : 180.0
+                _=try await call("location",["action":"screen_time_location","expected":try state(account:account)["fingerprint"]!,"checkInterval":next]);checks["locationChanged"]=location.checkInterval==next
+                _=try await call("location-restore",["action":"screen_time_location","expected":try state(account:account)["fingerprint"]!,"checkInterval":old]);checks["locationRestored"]=location.checkInterval==old
+            }
+            checks["final"]=try state(account:account);checks["finished"]=true
+        }catch{
+            checks["error"]=error.localizedDescription
+            // Only clean this run's own policy. Never stop a user's pre-existing session.
+            if checks["start"] as? Bool==true {ScreenTimeModel().stop()}
+            for record in TaskFocusRules.records().values where record.account==account && record.window.id==prefix {TaskFocusRules.remove(record.name)}
+        }
+        return checks
+    }
+}
+#endif

@@ -23,7 +23,7 @@ struct PlannerWebView: UIViewRepresentable {
         config.websiteDataStore = .default()
         config.allowsInlineMediaPlayback = true
         config.userContentController.addScriptMessageHandler(context.coordinator, contentWorld: .page, name: "plannerNative")
-        config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeScreenTime=true;window.plannerNativeChatGPTPortal=true;window.plannerNativeChatGPTRelayVersion=5;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true'});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeScreenTime=true;window.plannerNativeChatGPTPortal=true;window.plannerNativeChatGPTRelayVersion=6;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true'});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-UITestSignedRelayDiagnostics") {
             config.userContentController.addUserScript(WKUserScript(source: """
@@ -131,6 +131,7 @@ struct PlannerWebView: UIViewRepresentable {
             (controller as? PlannerChatGPTPortal)?.setInteractive(false)
             (controller as? PlannerChatGPTPortal)?.endSiteSignIn()
         }
+        var clientControlTestStarted = false
         var relayOperationActive = false
         var screenTimeHost: UIHostingController<ScreenTimeView>?
         weak var taskScreenTimeHost: UIViewController?
@@ -187,6 +188,13 @@ struct PlannerWebView: UIViewRepresentable {
                         }
                         replyHandler(["ok":true],nil);return
                     #endif
+                    case "plannerClientScreenTime":
+                        guard let account=body["account"] as? String, account == WidgetTaskControl.defaults.string(forKey:"feedback-account"), let command=body["command"] as? [String:Any], let key=body["receiptKey"] as? String, let issued=body["issuedAt"] as? String else { throw NativeError("Sign into the same Planner account first.") }
+                        if command["action"] as? String == "screen_time_pick_apps" {
+                            for _ in 0..<15 {if screenTimeHost != nil {break};try await Task.sleep(for:.milliseconds(100))}
+                            guard screenTimeHost != nil else {throw NativeError("Open the Screen Time tab before choosing apps.")}
+                        }
+                        replyHandler(try await PlannerClientScreenTime.run(account:account,command:command,key:key,issued:issued),nil);return
                     case "taskNotificationPermission":
                         replyHandler(try await PlannerTaskNotifications.shared.requestPermission(), nil); return
                     case "taskNotificationStatus":
@@ -248,6 +256,13 @@ struct PlannerWebView: UIViewRepresentable {
                         if changed { clearChatGPT(); TaskFocusRules.clearAll(); taskScreenTimeHost?.dismiss(animated: false); WidgetTaskControl.clear() }
                         WidgetTaskControl.defaults.set(account, forKey: "feedback-account")
                         #if DEBUG
+                        if let account,!clientControlTestStarted,ProcessInfo.processInfo.arguments.contains("-UITestClientControls") {
+                            clientControlTestStarted=true
+                            Task { @MainActor in
+                                let result=await PlannerClientScreenTime.verify(account:account)
+                                if let data=try? JSONSerialization.data(withJSONObject:result),let folder=FileManager.default.urls(for:.cachesDirectory,in:.userDomainMask).first {try? data.write(to:folder.appendingPathComponent("ClientControlsQA.json"),options:.atomic)}
+                            }
+                        }
                         if let account, !openedChatGPTForTest, ProcessInfo.processInfo.arguments.contains("-PlannerOpenChatGPT") {
                             openedChatGPTForTest = true
                             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in

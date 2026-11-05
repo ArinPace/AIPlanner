@@ -6,4 +6,5 @@ export function readTheme(): Theme {
 export function applyTheme(theme: Theme) {
   document.documentElement.dataset.theme = theme
   try { localStorage.setItem('ai-planner-theme', theme) } catch { /* Keep the current theme when storage is unavailable. */ }
+  window.dispatchEvent(new Event('planner-theme-refresh'))
 }
