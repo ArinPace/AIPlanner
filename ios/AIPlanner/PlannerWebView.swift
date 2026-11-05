@@ -748,7 +748,7 @@ await pause(500);return {applied:true};
       const target=parent&&parent!==clean&&others.every(n=>/^(json|planner-tools)$/i.test((n.textContent||'').trim()))?parent:pre;
       const nl=String.fromCharCode(10);target.replaceWith(document.createTextNode(nl+(marked?text:'PLANNER_TOOL_REQUEST'+nl+text+nl+'END_PLANNER_TOOL_REQUEST')+nl));
     });
-    const response=(clean?(clean.innerText||clean.textContent||'').trim():'').replace(/(PLANNER_TOOL_REQUEST\\s+)(?:json|planner-tools)\\s+(?=[{])/i,'$1');
+    const response=(clean?(clean.innerText||clean.textContent||'').trim():'').replace(/(PLANNER_TOOL_REQUEST\\s*)(?:json|planner-tools)\\s*(?=[{])/i,'$1');
     const outputs=turn?[...turn.querySelectorAll('a[download],a[href^="sandbox:"],a[href*="/backend-api/files/"],a[href*="/backend-api/estuary/content"],button[aria-label^="Download "],button[aria-label="Save image"],[data-file-reference="true"][role="button"][aria-label^="Download "]')].map(node=>{node.dataset.plannerDownloadId ||= crypto.randomUUID();return {key:node.dataset.plannerDownloadId,name:(node.getAttribute('download')||node.innerText||node.getAttribute('aria-label')||'Download file').trim().slice(0,240)}}):[];
     return {files:outputs,ready:!!box,needsLogin:(!box&&guest)||(!secureForm&&!!document.querySelector('input[type="password"]')),guest,interaction,running,count:replies.length,text:response,final:!!turn?.querySelector(completionSelector),url:location.href};})()
     """ }

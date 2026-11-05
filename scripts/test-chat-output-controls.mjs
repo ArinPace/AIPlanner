@@ -2,7 +2,7 @@ import {chromium} from 'playwright-core'
 import fs from 'node:fs'
 import assert from 'node:assert/strict'
 const swift=fs.readFileSync(new URL('../ios/AIPlanner/PlannerWebView.swift',import.meta.url),'utf8')
-const snapshot=swift.split('private var snapshotScript: String { """')[1].split('""" }')[0]
+const snapshot=swift.split('private var snapshotScript: String { """')[1].split('""" }')[0].replaceAll('\\\\','\\')
 const composer=swift.split('// BEGIN_CHAT_COMPOSER_READER')[1].split('#"""\n')[1].split('"""#')[0]
 const browser=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true})
 try{
