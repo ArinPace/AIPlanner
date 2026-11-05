@@ -51,8 +51,12 @@ ref, next/previous date clicks by fresh refs, and same-tab reuse passed. October
 shows 8h01m in bed / 7h16m asleep / 45m awake; November3 shows 7h38m / 7h05m / 33m.
 Explicit bedtime/wake labels and timezone remain unverified; do not infer them
 from axis ticks. The current unsynced day is not a proven WHOOP/login defect.
-The 0.3.2 inner-panel tile capture is separately verified in real Chromium and
-awaits its live WHOOP recheck.
+The 0.3.2 live WHOOP recheck also passed in sync mode (approval policy never):
+2 real image tiles at scroll offsets [0,97], full chart-bottom coverage,
+truncated:false, and restored scroll position 0. The PDF negative probe reached
+source HTTP403 without an approval/schema rejection; it did not save a PDF or
+verify successful original-file access. All three QA jobs completed. The dated
+Errors report contains the results; the separate QA chat is archived.
 
 Files reliability follow-up: production note-save failures logged PostgreSQL
 57014. Existing REST saves resent a 4.7 MB state for one note. The service-only
@@ -62,3 +66,5 @@ Rollback-only production DB QA verified unrelated-state preservation, history,
 stale revisions, creation, protected notes and denied anonymous/authenticated
 function access. Measured one-note write: 776 ms. This is evidence for the narrow
 path, not proof that every intermittent storage failure has the same root cause.
+Actual Planner PATCH saves/readbacks of the dated Errors report then succeeded at
+Files revisions 1475,1476,1477 after the full-state path had failed twice.
