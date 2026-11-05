@@ -316,6 +316,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
   if (path === '/api/agent/vm/chats/bulk') return json(await bulkManageChats(username,input))
   if(path === '/api/agent/vm/chats/branch'){
     if(!uuid(input.jobId))throw new ApiError(400,'Choose a message to branch.')
+    await (await import('./chat-branch-policy.js')).assertBranchableJob(username,input.jobId)
     let edited:string|undefined
     if(input.message!==undefined){try{edited=vmMessage(input.message)}catch{throw new ApiError(400,'Enter a message between 1 and 12000 characters.')}}
     const {data,error}=await db().rpc('planner_branch_chat',{p_username:username,p_job:input.jobId,...(edited===undefined?{}:{p_edit:edited})})
