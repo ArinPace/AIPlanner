@@ -497,7 +497,7 @@ struct PlannerWebView: UIViewRepresentable {
     """#
     // END_SITE_SIGNIN_SURFACE
     func beginSiteSignIn() {
-        siteSignInMode = true;browser.alpha = 0;title = "Connect website"
+        siteSignInMode = true;returnAfterWebsiteInteraction = true;browser.alpha = 0;title = "Connect website"
         navigationItem.leftBarButtonItem = UIBarButtonItem(title:"Cancel",style:.plain,target:self,action:#selector(close))
         navigationItem.rightBarButtonItems = nil
         status.text = "Preparing secure sign-in…"
