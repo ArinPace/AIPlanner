@@ -45,6 +45,7 @@ test('subscription tools require active owned turns, use real MCP schemas and re
   assert(catalog.results[0].result.some((t:any)=>t.name==='planner_app_settings_update'))
   assert(catalog.results[0].result.some((t:any)=>t.name==='planner_save_note'))
   assert(!catalog.results[0].result.some((t:any)=>t.name==='browser_open'))
+  const oversized:any=await run('tool_call',{calls:[{id:'describe-too-many',name:'relay_describe_tools',arguments:{names:Array(12).fill('planner_calendar_read')}}]});assert.match(oversized.results[0].error,/one to eight/);assert.equal(writes,0)
   const calls=[{id:'save-tag',name:'planner_save_tag',arguments:{revision:1,name:'Tools test',color:'#abcdef'}}]
   const first:any=await run('tool_call',{calls});assert.equal(first.results[0].result.isError,undefined);assert.equal(writes,1)
   await run('tool_call',{calls});assert.equal(writes,1)
