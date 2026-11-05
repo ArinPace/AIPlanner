@@ -49,12 +49,14 @@ export async function handleVmPool(request: Request, path: string) {
         decisions.push({ username: computer.username, shouldRun: computer.status === 'provisioning' && Date.parse(computer.lease_until || '') > Date.now() })
         continue
       }
-      const [settings, jobs, host] = await Promise.all([
+      const [settings, jobs, host, rollover] = await Promise.all([
         db().from('planner_vm_settings').select('schedule_enabled,schedule').eq('username', computer.username).maybeSingle(),
         db().from('planner_vm_jobs').select('chat_id,kind,status,result,schedule_slot,created_at,finished_at').eq('username', computer.username).or(`created_at.gte.${new Date(Date.now() - 86400000).toISOString()},status.in.(queued,running,waiting,paused)`),
         db().from('planner_vm_hosts').select('id').eq('username', computer.username).is('revoked_at', null).maybeSingle(),
+        db().from('planner_subject_rollovers').select('next_at,last_queued_at').eq('username',computer.username).maybeSingle(),
       ])
-      decisions.push({ username: computer.username, shouldRun: Boolean(checked(host)) && shouldRunVm({ wakeUntil: computer.wake_until, scheduled: checked(settings)?.schedule_enabled || false, schedule: settings.data?.schedule, jobs: checked(jobs) }) })
+      const turnover=checked(rollover),rolloverAt=turnover?.next_at&&(!turnover.last_queued_at||Date.parse(turnover.next_at)>Date.parse(turnover.last_queued_at))?turnover.next_at:null
+      decisions.push({ username: computer.username, shouldRun: Boolean(checked(host)) && shouldRunVm({ rolloverAt,wakeUntil: computer.wake_until, scheduled: checked(settings)?.schedule_enabled || false, schedule: settings.data?.schedule, jobs: checked(jobs) }) })
     }
     return json({ computers: decisions, capacity: pool.max_vms })
   }

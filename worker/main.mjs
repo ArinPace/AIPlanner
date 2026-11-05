@@ -62,7 +62,7 @@ async function chat(job, auth, remote) {
   if (auth.type === 'claude') return claudeChat({ dataDir, job, remote, origin, token: config.token, instructions, progress: reply => api('progress', { id: job.id, lease: job.lease, reply }) })
   const root = path.dirname(fileURLToPath(import.meta.url)), node = process.execPath
   const executable = path.join(root, 'node_modules', '.bin', 'codex')
-  const args = ['app-server', '--listen', 'stdio://']
+  const args = ['--search','app-server', '--listen', 'stdio://']
   const overrides = {
     ...(auth.type === 'codex' ? {} : {
       model_provider: 'planner', 'model_providers.planner.name': 'Planner AI', 'model_providers.planner.base_url': 'https://api.openai.com/v1',

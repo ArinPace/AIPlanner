@@ -93,6 +93,7 @@ export async function handleVmWorker(request: Request, path: string) {
         for (const source of Object.keys(verified)) if(observed[source].completedConnection===true)await confirmBrowserConnection(host.username,source)
       }
     }
+    checked(await db().rpc('planner_queue_subject_rollover',{p_username:host.username,p_host:host.id,p_message:(await import('./subject-rollover.js')).subjectRolloverMessage()}))
     const slot = scheduleSlot(new Date(), settings.schedule || DEFAULT_VM_SCHEDULE, false)
     if (settings.schedule_enabled && settings.sources.length && slot) {
       const mainId=await ensureMainChat(host.username)

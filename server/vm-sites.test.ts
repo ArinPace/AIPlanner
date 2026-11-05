@@ -22,6 +22,7 @@ test('observed connections merge atomically instead of overwriting a stale sites
    merged=true
    return Response.json(null)
   }
+  if(url.pathname==='/rest/v1/rpc/planner_queue_subject_rollover')return Response.json(null)
   if(url.pathname==='/rest/v1/rpc/planner_vm_claim')return Response.json(null)
   throw Error('Unexpected connection test route: '+url.pathname)
  }

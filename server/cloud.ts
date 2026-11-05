@@ -151,6 +151,7 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
     const username = await sessionUser(request)
     if (!username) throw new ApiError(401, 'Please sign in.')
     if (path === '/api/widget/feedback' || path === '/api/widget/snapshot') return await (await import('./widget-background.js')).handleWidgetBackground(request,path,username)
+    if(path==='/api/agent/subject-rollover'&&['GET','POST'].includes(method)){const handler=await import('./subject-rollover.js');return json(method==='GET'?await handler.readSubjectRollover(username):await handler.scheduleSubjectRollover(username,await body(request)))}
     if(path==='/api/agent/notifications')return await (await import('./notification-inbox.js')).notificationInbox(request,username)
     if(path==='/api/calendar/google-accounts'&&method==='GET')return json(await (await import('./agent.js')).googleCalendarStatus(username))
     if(path==='/api/calendar/display-settings'&&['GET','PATCH'].includes(method)){const {calendarDisplaySettings}=await import('./calendar-display.js');return json(await calendarDisplaySettings(username,method==='PATCH'?await body(request):undefined))}

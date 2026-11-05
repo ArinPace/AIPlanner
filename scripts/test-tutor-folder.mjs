@@ -15,6 +15,9 @@ try{for(const width of [393,1280]){
  await subjects.getByRole('button',{name:'Computer Science',exact:true}).click();await page.locator('.assistant-chat-title strong').getByText('Computer Science',{exact:true}).waitFor()
  await open();await page.getByRole('button',{name:'Refresh Tutor subjects'}).click();await subjects.getByRole('button',{name:'Statistics',exact:true}).waitFor()
  assert.equal(await subjects.getByRole('button').count(),3)
+ await page.getByRole('complementary',{name:'Chat sidebar'}).getByRole('button',{name:'Settings',exact:true}).click()
+ await page.getByRole('region',{name:'Automatic subject turnover'}).getByText(/Dec 23, 2026.*9:00 AM/).waitFor()
+ await page.getByRole('dialog',{name:'Settings',exact:true}).getByRole('button',{name:'Done',exact:true}).click()
  console.log(width+'px: Tutor folder, three independent subject selections, collapse persistence and refresh passed')
  await page.close()
 }}finally{await browser.close()}
