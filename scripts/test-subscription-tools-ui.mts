@@ -8,7 +8,7 @@ try{
  await page.addInitScript(()=>{
   const stamp=new Date().toISOString(),chat={id:'11111111-1111-4111-8111-111111111111',title:'Main Chat',is_main:true,pinned:true,archived:false,deleted_at:null,updated_at:stamp,provider_url:null,provider_snapshot:null}
   const messages:any[]=[],calls:any[]=[],nativeCalls:any[]=[],turns:any[]=[];let turn='',stage=0,pending=false,interact=false,portal=false
-  Object.assign(window,{plannerNativeChatGPTPortal:true,plannerNativeChatGPTRelayVersion:4,toolFixture:{messages,calls,nativeCalls,turns}})
+  Object.assign(window,{plannerNativeChatGPTPortal:true,plannerNativeChatGPTRelayVersion:5,toolFixture:{messages,calls,nativeCalls,turns}})
   const original=window.fetch
   window.fetch=async(input:any,options:any={})=>{
    const path=new URL(typeof input==='string'?input:input.url,location.href).pathname
@@ -28,7 +28,7 @@ try{
   window.webkit={messageHandlers:{plannerNative:{postMessage:async(b:any)=>{
    nativeCalls.push(b)
    if(b.action==='chatGPTRelayMirror')return {title:'Main Chat',archived:false,deleted:false}
-   if(b.action==='chatGPTPortal'){portal=true;return {ok:true}}
+   if(b.action==='chatGPTPortal'||b.action==='chatGPTSiteSignIn'){portal=true;return {ok:true}}
    if(b.action==='chatGPTRelaySend'){assertTurn(b.text);pending=true;return {ok:true}}
    if(b.action==='chatGPTRelayStatus'){
     if(b.peek||!pending)return {ready:true,needsLogin:false,phase:'idle'}
@@ -47,13 +47,16 @@ try{
  const chat=page.getByRole('main',{name:'Subscription Chat'})
  await chat.getByRole('textbox',{name:'Message ChatGPT'}).fill('Create a test note, then check Brightspace sign-in.')
  await chat.getByRole('button',{name:'Send message'}).click()
- await chat.getByRole('button',{name:'Continue in ChatGPT',exact:true}).click({timeout:20000})
  await chat.getByText('Created the test note and read it back.',{exact:true}).waitFor({timeout:20000})
  const state=await page.evaluate(()=>(window as any).toolFixture)
  assert.equal(state.calls.length,1);assert.equal(state.calls[0].name,'planner_save_note')
  assert.equal(state.messages.length,2);assert.equal(state.messages[0].content,'Create a test note, then check Brightspace sign-in.')
  assert(!JSON.stringify(state.messages).includes('planner-tools'));assert(state.turns.some((t:any)=>t.action==='tool_finish'&&!t.cancelled))
- assert(state.nativeCalls.some((c:any)=>c.action==='chatGPTPortal'&&c.intent==='interaction'))
+ assert(state.nativeCalls.some((c:any)=>c.action==='chatGPTSiteSignIn'&&c.intent==='interaction'))
  assert(state.nativeCalls.some((c:any)=>c.action==='chatGPTRelayStatus'&&c.peek===true))
+ await chat.getByRole('button',{name:'Add sites',exact:true}).first().click()
+ await page.getByRole('dialog',{name:'Chat connected sites'}).getByRole('button',{name:'Connect Brightspace',exact:true}).click()
+ await page.waitForFunction(()=>(window as any).toolFixture.messages.length===4)
+ assert((await page.evaluate(()=>(window as any).toolFixture.messages[2].content)).includes('https://brightspace.nyu.edu'))
  console.log('Planner UI tool loop, private protocol, secure-interaction handoff, final transcript and non-consuming status checks passed against fixtures. Not a live Brightspace sign-in test.')
 }finally{await browser.close()}

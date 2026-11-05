@@ -23,7 +23,7 @@ struct PlannerWebView: UIViewRepresentable {
         config.websiteDataStore = .default()
         config.allowsInlineMediaPlayback = true
         config.userContentController.addScriptMessageHandler(context.coordinator, contentWorld: .page, name: "plannerNative")
-        config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeScreenTime=true;window.plannerNativeChatGPTPortal=true;window.plannerNativeChatGPTRelayVersion=4;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true'});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeScreenTime=true;window.plannerNativeChatGPTPortal=true;window.plannerNativeChatGPTRelayVersion=5;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true'});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-UITestSignedRelayDiagnostics") {
             config.userContentController.addUserScript(WKUserScript(source: """
@@ -129,6 +129,7 @@ struct PlannerWebView: UIViewRepresentable {
             controller?.loadViewIfNeeded(); controller?.view.frame = nav.view.bounds
             controller?.view.layoutIfNeeded()
             (controller as? PlannerChatGPTPortal)?.setInteractive(false)
+            (controller as? PlannerChatGPTPortal)?.endSiteSignIn()
         }
         var relayOperationActive = false
         var screenTimeHost: UIHostingController<ScreenTimeView>?
@@ -194,7 +195,7 @@ struct PlannerWebView: UIViewRepresentable {
                         guard let account = body["account"] as? String, let value = body["settings"], JSONSerialization.isValidJSONObject(value) else { throw NativeError("Missing notification settings.") }
                         let options = try JSONDecoder().decode(TaskNotificationOptions.self, from: JSONSerialization.data(withJSONObject: value))
                         try await PlannerTaskNotifications.shared.configure(account: account, options: options)
-                    case "chatGPTPortal", "chatGPTRelayStatus", "chatGPTRelaySend", "chatGPTRelayStop", "chatGPTRelayDraft", "chatGPTRelayClearDraft", "chatGPTRelayDownload", "chatGPTRelayMirror":
+                    case "chatGPTPortal", "chatGPTSiteSignIn", "chatGPTRelayStatus", "chatGPTRelaySend", "chatGPTRelayStop", "chatGPTRelayDraft", "chatGPTRelayClearDraft", "chatGPTRelayDownload", "chatGPTRelayMirror":
                         guard let account = body["account"] as? String else { throw NativeError("Sign into Planner first.") }
                         let controller = try relay(account: account)
                         if action == "chatGPTRelayStatus" {
@@ -233,6 +234,12 @@ struct PlannerWebView: UIViewRepresentable {
                         portal.view.alpha = 1; portal.view.isUserInteractionEnabled = true; portal.view.accessibilityElementsHidden = false
                         controller.returnAfterAuthentication = body["intent"] as? String == "connect"
                         controller.returnAfterWebsiteInteraction = body["intent"] as? String == "interaction"
+                        if action == "chatGPTSiteSignIn" {
+                            controller.beginSiteSignIn();controller.returnAfterWebsiteInteraction = true
+                            portal.modalPresentationStyle = .pageSheet
+                            portal.sheetPresentationController?.detents = [.large()]
+                            portal.sheetPresentationController?.prefersGrabberVisible = true
+                        } else { controller.endSiteSignIn();portal.modalPresentationStyle = .fullScreen }
                         controller.setInteractive(true)
                         parent.present(portal, animated: true)
                     case "localReplicaAccount":
@@ -245,7 +252,7 @@ struct PlannerWebView: UIViewRepresentable {
                             openedChatGPTForTest = true
                             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
                                 guard let self, let parent = self.webView?.window?.rootViewController, parent.presentedViewController == nil, let _ = try? self.relay(account: account), let nav = self.chatGPTPortal else { return }
-                                nav.willMove(toParent: nil); nav.view.removeFromSuperview(); nav.removeFromParent(); nav.view.alpha = 1; nav.view.isUserInteractionEnabled = true; nav.view.accessibilityElementsHidden = false; (nav.viewControllers.first as? PlannerChatGPTPortal)?.setInteractive(true); (nav.viewControllers.first as? PlannerChatGPTPortal)?.returnAfterAuthentication = ProcessInfo.processInfo.arguments.contains("-UITestReturnChatGPTOnReady"); parent.present(nav, animated: true)
+                                nav.willMove(toParent: nil); nav.view.removeFromSuperview(); nav.removeFromParent(); nav.view.alpha = 1; nav.view.isUserInteractionEnabled = true; nav.view.accessibilityElementsHidden = false; (nav.viewControllers.first as? PlannerChatGPTPortal)?.setInteractive(true); (nav.viewControllers.first as? PlannerChatGPTPortal)?.returnAfterAuthentication = ProcessInfo.processInfo.arguments.contains("-UITestReturnChatGPTOnReady"); if ProcessInfo.processInfo.arguments.contains("-PlannerOpenSiteSignIn") {(nav.viewControllers.first as? PlannerChatGPTPortal)?.beginSiteSignIn();nav.modalPresentationStyle = .pageSheet}; parent.present(nav, animated: true)
                             }
                         }
                         #endif
@@ -452,6 +459,66 @@ struct PlannerWebView: UIViewRepresentable {
     var startedAt = Date()
     var browser: WKWebView!
     let status = UILabel()
+    private var siteSignInMode = false
+    // BEGIN_SITE_SIGNIN_SURFACE
+    static let siteSignInSurface = #"""
+    (()=>{
+      if(window.__plannerSiteSignIn)return window.__plannerSiteSignIn.refresh();
+      const attr='data-planner-secure-',html=document.documentElement;
+      const style=document.createElement('style');style.textContent=`
+        html[data-planner-site-signin] body{display:block!important;overflow:auto!important;min-height:100vh!important}
+        html[data-planner-site-signin][data-planner-secure-waiting] body{visibility:hidden!important}
+        [data-planner-secure-hidden]{display:none!important}
+        [data-planner-secure-path]{display:contents!important}
+        [data-planner-secure-root]{display:block!important;visibility:visible!important;position:relative!important;transform:none!important;width:calc(100% - 32px)!important;max-width:640px!important;min-width:0!important;margin:16px auto!important;padding:0!important;box-sizing:border-box!important}
+        [data-planner-secure-root]>div{width:100%!important;max-width:100%!important;min-width:0!important;box-sizing:border-box!important}
+        [data-planner-secure-root] input{font-size:16px!important}
+      `;document.head.append(style);
+      const clear=()=>document.querySelectorAll('[data-planner-secure-hidden],[data-planner-secure-path],[data-planner-secure-root]').forEach(n=>['hidden','path','root'].forEach(k=>n.removeAttribute(attr+k)));
+      const domain=root=>(root.innerText.match(/sign in to\s+([a-z0-9.-]+\.[a-z]{2,})/i)||[])[1]||'';
+      let current=null;
+      const refresh=()=>{
+        if(current?.isConnected&&current.getClientRects().length)return {found:true,domain:domain(current)};
+        clear();html.setAttribute('data-planner-site-signin','');html.setAttribute('data-planner-secure-waiting','');
+        const visible=n=>!!n.getClientRects().length,label=n=>(n.getAttribute('aria-label')||n.innerText||n.textContent||'').trim();
+        let root=[...document.querySelectorAll('form')].find(n=>visible(n)&&(n.querySelector('input[type=password]')||/sign in to [a-z0-9.-]+[.][a-z]{2,}/i.test(n.textContent)));
+        if(!root)root=[...document.querySelectorAll('[role=dialog],[role=alertdialog]')].find(n=>visible(n)&&/sign in|website|browser|access to|visit site/i.test(n.textContent)&&[...n.querySelectorAll('button')].some(b=>/^(Allow|Approve|Continue|Take over to sign in|Sign in on web page|Return control|I.m done)$/i.test(label(b))));
+        if(!root){const button=[...document.querySelectorAll('button')].find(n=>visible(n)&&/^(Take over to sign in|Sign in on web page|Return control|I.m done)$/i.test(label(n)));if(button)root=button.closest('section,[role=region]')||button.parentElement;}
+        if(!root||root===document.body){current=null;return {found:false}}
+        root.setAttribute(attr+'root','');let child=root;
+        for(let parent=root.parentElement;parent;child=parent,parent=parent.parentElement){for(const sibling of parent.children)if(sibling!==child&&!['SCRIPT','STYLE','LINK'].includes(sibling.tagName))sibling.setAttribute(attr+'hidden','');if(parent===document.body)break;parent.setAttribute(attr+'path','');}
+        current=root;html.removeAttribute('data-planner-secure-waiting');return {found:true,domain:domain(root)};
+      };
+      // Returns only the displayed destination hostname, never input values.
+      const observer=new MutationObserver(()=>refresh());observer.observe(document.body,{childList:true,subtree:true});
+      window.__plannerSiteSignIn={refresh,restore:()=>{observer.disconnect();clear();style.remove();html.removeAttribute('data-planner-site-signin');html.removeAttribute('data-planner-secure-waiting');delete window.__plannerSiteSignIn}};
+      return refresh();
+    })()
+    """#
+    // END_SITE_SIGNIN_SURFACE
+    func beginSiteSignIn() {
+        siteSignInMode = true;browser.alpha = 0;title = "Connect website"
+        navigationItem.leftBarButtonItem = UIBarButtonItem(title:"Cancel",style:.plain,target:self,action:#selector(close))
+        navigationItem.rightBarButtonItems = nil
+        status.text = "Preparing secure sign-in…"
+    }
+    func endSiteSignIn() {
+        guard siteSignInMode else{return};siteSignInMode = false
+        browser.evaluateJavaScript("window.__plannerSiteSignIn?.restore()",completionHandler:{_,_ in})
+        browser.alpha = 1;title = "ChatGPT website"
+        navigationItem.leftBarButtonItem = UIBarButtonItem(title:"Planner",style:.done,target:self,action:#selector(close))
+        navigationItem.rightBarButtonItems = [UIBarButtonItem(title:"Safari",style:.plain,target:self,action:#selector(safari)),UIBarButtonItem(barButtonSystemItem:.refresh,target:self,action:#selector(reload))]
+    }
+    private func refreshSiteSignIn() async {
+        guard siteSignInMode else{return}
+        if browser.url?.scheme == "https",let host=browser.url?.host,host != "chatgpt.com" {
+            browser.alpha = 1;status.text = "Secure sign-in · " + host;return
+        }
+        let surface = try? await browser.evaluateJavaScript(Self.siteSignInSurface) as? [String:Any]
+        browser.alpha = surface?["found"] as? Bool == true ? 1 : 0
+        let host=surface?["domain"] as? String ?? ""
+        status.text = surface?["found"] as? Bool == true ? (host.isEmpty ? "Approve access or sign in below. Return to Planner is automatic." : "Secure sign-in · " + host + "\nReturn to Planner is automatic.") : "Waiting for the website’s secure sign-in panel…"
+    }
     init(account: String) { self.account = account; super.init(nibName: nil, bundle: nil) }
     required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
     override func viewDidLoad() {
@@ -518,6 +585,17 @@ struct PlannerWebView: UIViewRepresentable {
     #if DEBUG
     private var remoteMirrorTestStarted = false
     private func inspectPageForTest() {
+        if ProcessInfo.processInfo.arguments.contains("-UITestInspectSecureSurface") {
+            Task { @MainActor [weak self] in
+                for _ in 0..<30 {
+                    try? await Task.sleep(for:.seconds(1));guard let self else{return}
+                    let script = #"""
+                    (()=>{const visible=n=>!!n.getClientRects().length;const shape=n=>({tag:n.tagName,id:n.id,role:n.getAttribute('role'),class:n.className,rect:n.getBoundingClientRect().toJSON()});const seeds=[...document.querySelectorAll('form,[role=dialog],input[type=password],button')].filter(visible).filter(n=>n.matches('form,[role=dialog],input[type=password]')||/^(Take over to sign in|Sign in on web page|Return control|I.m done|Sign in|Allow|Approve)$/i.test((n.getAttribute('aria-label')||n.innerText||'').trim()));return JSON.stringify({host:location.hostname,surfaces:seeds.map(n=>({node:shape(n),buttons:[...n.querySelectorAll('button')].map(b=>(b.getAttribute('aria-label')||b.innerText||'').trim()),inputs:[...n.querySelectorAll('input')].map(i=>({type:i.type})),parents:(()=>{const a=[];for(let p=n.parentElement;p&&a.length<6;p=p.parentElement)a.push(shape(p));return a})()}))})})()
+                    """#
+                    if let value=try? await self.browser.evaluateJavaScript(script) as? String,let folder=FileManager.default.urls(for:.cachesDirectory,in:.userDomainMask).first{try? value.write(to:folder.appendingPathComponent("SecureSurfaceStructure.json"),atomically:true,encoding:.utf8)}
+                }
+            }
+        }
         guard ProcessInfo.processInfo.arguments.contains("-UITestInspectChatGPT") else { return }
         Task { @MainActor [weak self] in
             guard let self else { return }
@@ -561,6 +639,7 @@ struct PlannerWebView: UIViewRepresentable {
         authenticationWatch = Task { @MainActor [weak self] in
             guard let self else { return }; var verified = 0
             while !Task.isCancelled, self.navigationController?.presentingViewController != nil {
+                await self.refreshSiteSignIn()
                 if let state = try? await self.snapshot() {
                     if state["guest"] as? Bool == true || state["needsLogin"] as? Bool == true || self.browser.url?.host != "chatgpt.com" { self.returnAfterAuthentication = true }
                     if (self.returnAfterAuthentication || self.returnAfterWebsiteInteraction) && state["interaction"] as? Bool != true && (state["ready"] as? Bool == true || state["running"] as? Bool == true) && state["guest"] as? Bool == false && state["needsLogin"] as? Bool != true { verified += 1 } else { verified = 0 }
