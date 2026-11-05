@@ -15,5 +15,5 @@ export interface AgentState {
   settings: { schedule_enabled: boolean; sources: AgentSource[]; context_focus: string; profile_id: string | null; login_url: string | null; login_browser_id: string | null }
   runs: AgentRun[]; messages: AgentMessage[]
 }
-export function agentRequest<T>(path:string,options:RequestInit={}):Promise<T>{return agentNetworkRequest<T>(path,options,getToken())}
+export async function agentRequest<T>(path:string,options:RequestInit={}):Promise<T>{const token=getToken(),result=await agentNetworkRequest<T>(path,options,token);if(token!==getToken())throw Error('Your account changed. Reopen your current chat.');return result}
 export function agentAction<T>(path: string, value: unknown = {}) { return agentRequest<T>(path, { method: 'POST', body: JSON.stringify(value) }) }

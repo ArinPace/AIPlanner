@@ -5,9 +5,9 @@ test('subscription workspace is fresh and owner-scoped; never touches Agent jobs
  const original=globalThis.fetch,keys=['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','SUPABASE_SECRET_KEY'],saved=Object.fromEntries(keys.map(k=>[k,process.env[k]]))
  process.env.SUPABASE_URL='https://subscription.test';process.env.SUPABASE_SERVICE_ROLE_KEY='service';delete process.env.SUPABASE_SECRET_KEY
  const main='a1111111-1111-4111-8111-111111111111',extra='b1111111-1111-4111-8111-111111111111',foreign='c1111111-1111-4111-8111-111111111111'
- const chats:any[]=[];let requests=0
+ const chats:any[]=[];let requests=0;const tables:string[]=[]
  globalThis.fetch=async(input,init)=>{
-  const req=new Request(input,init),url=new URL(req.url),table=url.pathname.split('/').at(-1);requests++
+  const req=new Request(input,init),url=new URL(req.url),table=url.pathname.split('/').at(-1);requests++;tables.push(table||'')
   if(table==='planner_sync_subscription_tutors'){assert.equal((await req.json() as any).p_username,'owner');return Response.json({count:0})}
   assert(!['planner_vm_jobs','planner_vm_hosts','planner_device_chats','planner_chat_web_relay'].includes(table||''),'New Chat cannot access VM jobs or legacy Chat data')
   if(req.method==='GET')assert.equal(url.searchParams.get('username'),'eq.owner')
@@ -27,6 +27,7 @@ test('subscription workspace is fresh and owner-scoped; never touches Agent jobs
  try{
   const response=await handleSubscriptionChat(new Request('https://planner.test/api/subscription-chat'),'owner'),data=await response.json() as any
   assert.equal(data.chat.id,main);assert.equal(data.connection.connected,false);assert.deepEqual(data.messages,[]);assert.equal(data.chats.length,1)
+  const mark=tables.length;await handleSubscriptionChat(new Request('https://planner.test/api/subscription-chat?fast=1'),'owner');assert(!tables.slice(mark).some(t=>['planner_sync_subscription_tutors','planner_vm_settings','planner_google_accounts'].includes(t)),'Fast subscription transcript must not wait on Tutor or Google settings')
   await assert.rejects(()=>handleSubscriptionChat(new Request('https://planner.test/api/subscription-chat?chat='+foreign),'owner'),/not found/)
   const created=await (await post({action:'create'})).json() as any;assert.equal(created.id,extra)
   const renamed=await (await post({action:'update',id:extra,title:'Independent Chat'})).json() as any;assert.equal(renamed.title,'Independent Chat')

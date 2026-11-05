@@ -112,6 +112,7 @@
   }
   else if(path==='/api/agent/subject-rollover')value={nextAt:'2026-12-23T14:00:00Z',basis:'After the final exam period',sources:['https://bulletins.nyu.edu/nyu/academic-calendar/'],needsNextDate:false,revision:1};
   else if(path==='/api/agent/vm/chats/tutor')value={enabled:true,count:tutorChats.length};
+  else if(path==='/api/agent/vm/main')value={chat:main,jobs:[],hasMore:false};
   else if(path==='/api/agent/vm')value={power:'offline',hosts:[],chats:[main,...tutorChats],deletedChats:[],runs:[],settings:{tutor_enabled:Boolean(globalThis.__plannerFixtureTutor),ai_provider:'codex',sources:[],sites:{},schedule_enabled:false,schedule:{timezone:'America/New_York',times:[]}},accounts:[],google:{accounts:[],connected:false,configured:true,activeAccountId:null},queue:{active:null,queuedIds:[]},planning:{startedAt:now,ready:true,revision:1},provisioning:null,personalChatGptAvailable:true,hostedChatGptAvailable:false,recordings:false};
   else if(path.includes('/jobs'))value={jobs:[],hasMore:false};
   else if(path==='/api/planning')value={preferences:{intensity:20},tasks:[]};

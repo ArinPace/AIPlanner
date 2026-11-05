@@ -1,3 +1,4 @@
+import {peekChatCache,readChatCache,writeChatCache} from '../lib/chatCache'
 import {canBranchChat} from '../lib/chatBranching'
 import {SourceConnectionAlerts} from './SourceConnectionAlerts'
 import {prepareAttachment} from '../lib/prepareAttachments'
@@ -28,16 +29,22 @@ function MessageTime({value,label}:{value:string|null|undefined;label:string}) {
   const date=new Date(value)
   return <time className="assistant-message-time" dateTime={value} title={date.toLocaleString(undefined,{timeZoneName:'short'})} aria-label={label+': '+date.toLocaleString()}>{date.toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'})}</time>
 }
+type MainDisplay={chat:VmChat;chats:VmChat[];jobs:VmJob[];hasMore:boolean}
+const displayJobs=(rows:VmJob[])=>rows.slice(-8).map(job=>({...job,approvals:undefined,result:{steered:job.result?.steered},attachments:undefined}))
 const pending = (job: VmJob) => ['queued', 'running','waiting'].includes(job.status)
 export function AgentView({ active, sidebar, setSidebar, username }: { active: boolean; sidebar:boolean; setSidebar:(open:boolean)=>void;username:string }) {
+  const cachedMain=peekChatCache<MainDisplay>(username,'agent-main')
+  const [cachedChats,setCachedChats]=useState<VmChat[]>(cachedMain?.chats||[])
   const [state, setState] = useState<VmState | null>(null)
   const [editingJob,setEditingJob]=useState<VmJob|null>(null)
   const [branching,setBranching]=useState(false)
-  const [chat, setChat] = useState<string | null>(null)
-  const selectedChat = useRef<string | null>(null)
+  const [chat, setChat] = useState<string | null>(cachedMain?.chat.id||null)
+  useEffect(()=>{void readChatCache<MainDisplay>(username,'agent-main')},[username])
+  const mainLoadVersion=useRef(0)
+  const selectedChat = useRef<string | null>(cachedMain?.chat.id||null)
   const openMainOnLoad = useRef(true)
-  const [jobs, setJobs] = useState<VmJob[]>([])
-  const [hasOlder,setHasOlder]=useState(false)
+  const [jobs, setJobs] = useState<VmJob[]>(cachedMain?.jobs||[])
+  const [hasOlder,setHasOlder]=useState(cachedMain?.hasMore||false)
   const [loadingOlder,setLoadingOlder]=useState(false)
   const {message,setMessage,selectDraft}=useChatDraft(username)
   const [dictating,setDictating]=useState(false)
@@ -65,11 +72,11 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
   const aiReady = Boolean(state?.settings.ai_provider === 'openai_api' || (host?.capabilities.signedIn && (claude ? host.capabilities.runtime === 'claude' : host.capabilities.runtime !== 'claude')))
   const provider = claude ? 'Claude' : state?.settings.ai_provider === 'openai_api' ? 'OpenAI API' : 'ChatGPT'
   const power = state?.power || (host?.online ? 'online' : 'offline')
-  const powerLabel = { online: 'Online', offline: 'Offline', starting: 'Starting', preparing: 'Preparing' }[power]
-  const title = state?.chats.find(c => c.id === chat)?.title || (openMainOnLoad.current ? 'Main Chat' : 'New chat')
-  const branchingAllowed=canBranchChat(state?.chats.find(c=>c.id===chat))
-  const archived = state?.chats.find(c=>c.id===chat)?.archived || false
-  const visibleChats = showBin ? state?.deletedChats || [] : state?.chats.filter(c=>Boolean(c.archived)===showArchived) || []
+  const powerLabel = !state?'Checking connection…':{ online: 'Online', offline: 'Offline', starting: 'Starting', preparing: 'Preparing' }[power]
+  const title = (state?.chats||cachedChats).find(c => c.id === chat)?.title || (openMainOnLoad.current ? 'Main Chat' : 'New chat')
+  const branchingAllowed=canBranchChat((state?.chats||cachedChats).find(c=>c.id===chat))
+  const archived = (state?.chats||cachedChats).find(c=>c.id===chat)?.archived || false
+  const visibleChats = showBin ? state?.deletedChats || [] : (state?.chats||cachedChats).filter(c=>Boolean(c.archived)===showArchived) || []
   const [tutorOpen,setTutorOpen]=useState(false)
   const tutorChats=visibleChats.filter(c=>c.tutor_subject_id).sort((a,b)=>a.title.localeCompare(b.title))
   const regularChats=visibleChats.filter(c=>!c.tutor_subject_id)
@@ -89,17 +96,18 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
       if (id) {openMainOnLoad.current=false;selectedChat.current=id;setChat(id);selectDraft(id)}
     }
     if (id) {
-      const result = await agentRequest<{ jobs: VmJob[];hasMore:boolean }>('vm/messages?chat=' + encodeURIComponent(id))
+      const result = await agentRequest<{ jobs: VmJob[];hasMore:boolean }>('vm/messages?chat=' + encodeURIComponent(id)+'&limit=8&compact=1')
       if (selectedChat.current === id) {
         setJobs(previous=>{const latest=new Set(result.jobs.map(job=>job.id));return [...previous.filter(job=>!latest.has(job.id)&&job.created_at<(result.jobs[0]?.created_at||'')),...result.jobs]})
         setHasOlder(previous=>jobsLoadedOlder.current?previous:result.hasMore)
+        const main=next.chats.find(c=>c.id===id&&c.is_main);if(main)writeChatCache(username,'agent-main',{chat:main,chats:next.chats,jobs:displayJobs(result.jobs),hasMore:result.hasMore})
       }
     }
     setError(current=>current.startsWith('Could not reach the agent')||/^(?:signal timed out|The operation was aborted due to timeout)$/.test(current)?'':current)
     })().finally(()=>{if(refreshing.current===pending)refreshing.current=null})
     refreshing.current=pending
     return pending
-  }, [selectDraft])
+  }, [selectDraft,username])
   const jobsLoadedOlder=useRef(false)
   const prependingHistory=useRef(false)
   async function loadOlder(){
@@ -108,7 +116,7 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
     const thread=end.current?.closest('.assistant-thread'),height=thread?.scrollHeight||0,top=thread?.scrollTop||0
     setLoadingOlder(true)
     try{
-      const result=await agentRequest<{jobs:VmJob[];hasMore:boolean}>('vm/messages?chat='+encodeURIComponent(id)+'&before='+encodeURIComponent(before))
+      const result=await agentRequest<{jobs:VmJob[];hasMore:boolean}>('vm/messages?chat='+encodeURIComponent(id)+'&compact=1&before='+encodeURIComponent(before))
       if(selectedChat.current!==id)return
       prependingHistory.current=true;jobsLoadedOlder.current=true;setHasOlder(result.hasMore)
       setJobs(current=>{const ids=new Set(current.map(job=>job.id));return [...result.jobs.filter(job=>!ids.has(job.id)),...current]})
@@ -126,20 +134,27 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
         await addAttachments(saved.files,saved.attachments)
   })
   const openMainChat=useEffectEvent(async()=>{
-    const main=state?.chats.find(item=>item.is_main)
-    if(main?.id && selectedChat.current===main.id){await refresh();return}
-    jobsLoadedOlder.current=false;setHasOlder(false)
-    selectedChat.current=main?.id || null
-    openMainOnLoad.current=!main
-    attachmentEpoch.current++;setAttachments([]);setRetryAttachmentFiles(null);setChat(main?.id || null);setJobs([]);selectDraft(main?.id || null);setError('');setLoadingChat(true);setPanel(null);setShowArchived(false);setShowBin(false);setSelecting(false);setSelectedIds([])
+    const loadVersion=++mainLoadVersion.current
+    let fresh=false
+    const main=state?.chats.find(item=>item.is_main),previous=selectedChat.current
+    if(main?.id&&previous===main.id&&jobs.length){void refresh().catch(e=>setError(e.message));return}
+    jobsLoadedOlder.current=false
+    attachmentEpoch.current++;setAttachments([]);setRetryAttachmentFiles(null);setError('');setPanel(null);setShowArchived(false);setShowBin(false);setSelecting(false);setSelectedIds([])
+    const apply=(saved:MainDisplay)=>{openMainOnLoad.current=false;selectedChat.current=saved.chat.id;setChat(saved.chat.id);setJobs(saved.jobs);setHasOlder(saved.hasMore);setCachedChats(saved.chats?.length?saved.chats:[saved.chat]);selectDraft(saved.chat.id);setLoadingChat(false)}
+    const cached=peekChatCache<MainDisplay>(username,'agent-main')
+    if(cached)apply(cached);else{selectedChat.current=main?.id||null;setChat(main?.id||null);setJobs([]);setLoadingChat(true)}
+    const target=selectedChat.current
+    if(!cached)void readChatCache<MainDisplay>(username,'agent-main').then(saved=>{if(saved&&!fresh&&loadVersion===mainLoadVersion.current&&(selectedChat.current===target||!selectedChat.current))apply(saved)})
+    void refresh().catch(e=>setError(e.message))
     try{
-      const earlierPoll=Boolean(refreshing.current)
-      await refresh()
-      // A poll started before this tab opened may already have chosen its chat.
-      // Finish that request, then load Main Chat if it has not been selected yet.
-      if(earlierPoll || openMainOnLoad.current)await refresh()
+      const latest=await agentRequest<{chat:VmChat;jobs:VmJob[];hasMore:boolean}>('vm/main')
+      if(loadVersion!==mainLoadVersion.current)return
+      fresh=true
+      if(selectedChat.current&&selectedChat.current!==target&&selectedChat.current!==latest.chat.id)return
+      apply({...latest,chats:state?.chats||[latest.chat]})
+      writeChatCache(username,'agent-main',{...latest,jobs:displayJobs(latest.jobs),chats:state?.chats||[latest.chat]})
       await restoreAttachmentDraft()
-    }finally{setLoadingChat(false)}
+    }finally{if(loadVersion===mainLoadVersion.current)setLoadingChat(false)}
   })
   useEffect(() => {
     if (!active) return
@@ -160,15 +175,17 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
   const lastReply = jobs.at(-1)?.reply
   useEffect(() => { if(prependingHistory.current){prependingHistory.current=false;return}end.current?.scrollIntoView({ block: 'nearest' }) }, [chat, jobs.length, lastReply])
   async function chooseChat(id: string) {
+    mainLoadVersion.current++
     jobsLoadedOlder.current=false;setHasOlder(false)
     openMainOnLoad.current=false
     attachmentEpoch.current++;setAttachments([]);selectedChat.current = id; setChat(id); setJobs([]); selectDraft(id); setError(''); setLoadingChat(true)
     if (window.innerWidth <= 700) setSidebar(false)
-    try { const result = await agentRequest<{ jobs: VmJob[];hasMore:boolean }>('vm/messages?chat=' + encodeURIComponent(id)); if (selectedChat.current === id) {setJobs(result.jobs);setHasOlder(result.hasMore)} }
+    try { const result = await agentRequest<{ jobs: VmJob[];hasMore:boolean }>('vm/messages?chat=' + encodeURIComponent(id)+'&limit=8&compact=1'); if (selectedChat.current === id) {setJobs(result.jobs);setHasOlder(result.hasMore)} }
     catch (e) { setError(e instanceof Error ? e.message : 'Could not open this chat.') }
     finally { if (selectedChat.current === id) setLoadingChat(false) }
   }
   function newChat() {
+    mainLoadVersion.current++
     jobsLoadedOlder.current=false;setHasOlder(false)
     openMainOnLoad.current=false
     setShowArchived(false);setShowBin(false)
@@ -298,9 +315,9 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
     <section className="assistant-chat" aria-label="Assistant chat" onDragEnter={event=>{if(isFileDrop(event.dataTransfer)){event.preventDefault();fileDragDepth.current++;setDraggingFiles(true)}}} onDragLeave={event=>{if(isFileDrop(event.dataTransfer)){fileDragDepth.current=Math.max(0,fileDragDepth.current-1);if(!fileDragDepth.current)setDraggingFiles(false)}}} onDragOver={event=>{if(isFileDrop(event.dataTransfer)){event.preventDefault();event.dataTransfer.dropEffect='copy'}}} onDrop={dropFiles}>
       {draggingFiles && <div className="assistant-file-drop" role="status"><div><strong>Drop files to attach</strong><span>Images, PDFs and text documents</span></div></div>}
       <header className="assistant-chat-header"><div>{!sidebar && <button type="button" className="icon-btn" aria-label="Show chat sidebar" onClick={() => setSidebar(true)}><MenuIcon/></button>}<button type="button" className="icon-btn" aria-label="New chat" onClick={newChat}><PlusIcon/></button><div className="assistant-chat-title"><strong>{title}</strong><span>{state ? aiReady ? `${provider} connected` : 'Connect your AI to get started' : 'Loading…'}</span>{state && <span className={'assistant-power ' + power} role="status" aria-label="Virtual machine status"><i aria-hidden="true"/>VM {powerLabel}</span>}</div></div><div><button type="button" className="assistant-sites-button" onClick={() => setPanel('connections')}>Add sites</button><button type="button" className="icon-btn" aria-label="Agent settings" onClick={() => setPanel('settings')}><SettingsIcon/></button></div></header>
-      {state?.chats.find(c=>c.id===chat)?.parent_chat_id && <p className="agent-banner assistant-branch-banner">Branched conversation <button type="button" className="assistant-copy" onClick={()=>{const parent=state.chats.find(c=>c.id===state.chats.find(c=>c.id===chat)?.parent_chat_id);if(parent)void chooseChat(parent.id)}} disabled={!state.chats.some(c=>c.id===state.chats.find(c=>c.id===chat)?.parent_chat_id)}>Open original</button></p>}
+      {(state?.chats||cachedChats).find(c=>c.id===chat)?.parent_chat_id && <p className="agent-banner assistant-branch-banner">Branched conversation <button type="button" className="assistant-copy" onClick={()=>{const parent=(state?.chats||cachedChats).find(c=>c.id===(state?.chats||cachedChats).find(c=>c.id===chat)?.parent_chat_id);if(parent)void chooseChat(parent.id)}} disabled={!(state?.chats||cachedChats).some(c=>c.id===(state?.chats||cachedChats).find(c=>c.id===chat)?.parent_chat_id)}>Open original</button></p>}
       {error && <p role="alert" className="assistant-error">{error}{retryAttachmentFiles && <button type="button" onClick={()=>void reloadAttachmentCode()}>Reload and retry</button>}</p>}
-      {archived && <p className="agent-banner">This chat is archived. <button disabled={Boolean(chatAction)} onClick={()=>{const item=state?.chats.find(c=>c.id===chat);if(item)void manageChat(item,'archive')}}>Restore chat</button></p>}
+      {archived && <p className="agent-banner">This chat is archived. <button disabled={Boolean(chatAction)} onClick={()=>{const item=(state?.chats||cachedChats).find(c=>c.id===chat);if(item)void manageChat(item,'archive')}}>Restore chat</button></p>}
       {state?.provisioning?.error && <p role="alert" className="assistant-error">{state.provisioning.error}</p>}
       <div className="assistant-thread" aria-live="polite">
         <div className="assistant-thread-content">

@@ -1,3 +1,4 @@
+import {peekChatCache,readChatCache,writeChatCache} from '../lib/chatCache'
 import {toolTurnMessage,toolResultsMessage,relayCalls,relayVisible} from '../lib/subscriptionTools'
 import type {ChatMirror,ChatMirrorPlan} from '../lib/chatSync'
 import {prepareRelayFile,storeRelayFile,relayFileLink,downloadRelayFile,RELAY_BATCH_MAX,type RelayFile} from '../lib/relayFiles'
@@ -20,8 +21,11 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
  const [schedulePrefs,setSchedulePrefs]=useState<{enabled:boolean;schedule:{times:string[];timezone:string;instructions?:string};updatedAt:string|null}|null>(null)
  const [scheduleError,setScheduleError]=useState(''),[scheduleSaving,setScheduleSaving]=useState(false)
  const scheduleLock=useRef(false)
- const [workspace,setWorkspace]=useState<SubscriptionWorkspace|null>(null),[chatId,setChatId]=useState<string|null>(null)
- const selected=useRef<string|null>(null),epoch=useRef(0),alive=useRef(true)
+ useEffect(()=>{void readChatCache<SubscriptionWorkspace>(username,'subscription-main')},[username])
+ const cachedWorkspace=peekChatCache<SubscriptionWorkspace>(username,'subscription-main')
+ const [workspace,setWorkspace]=useState<SubscriptionWorkspace|null>(cachedWorkspace),[chatId,setChatId]=useState<string|null>(cachedWorkspace?.chat.id||null)
+ const workspaceRef=useRef(workspace);workspaceRef.current=workspace
+ const selected=useRef<string|null>(cachedWorkspace?.chat.id||null),epoch=useRef(0),alive=useRef(true)
  const native=Boolean(window.plannerNativeChatGPTPortal)
  const [relayReady,setRelayReady]=useState(false),[relayPrompt,setRelayPrompt]=useState(''),[relayText,setRelayText]=useState(''),[relayPhase,setRelayPhase]=useState(''),[remoteDraft,setRemoteDraft]=useState<string|null>(null)
  type Recovery={chatId:string;turnId:string;prompt:string;reply:string;outputs?:{key:string;name:string}[];providerUrl?:string;toolTurnId?:string}
@@ -38,17 +42,20 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
  const [rename,setRename]=useState<SubscriptionChat|null>(null),[attachments,setAttachments]=useState<RelayFile[]>([]),[preparing,setPreparing]=useState(false),[dictating,setDictating]=useState(false)
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;epoch.current++}},[])
  useEffect(()=>{if(!panel)return;const key=(e:KeyboardEvent)=>{if(e.key==='Escape')setPanel(null)};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)},[panel])
- const refresh=useCallback(async(id=selected.current)=>{
-  const generation=epoch.current
-  const result=await subscriptionChatRequest(id||undefined)
-  if(!alive.current||generation!==epoch.current)return
+ const latestRefresh=useRef(0)
+ const refresh=useCallback(async(id=selected.current,fast=false)=>{
+  const generation=epoch.current,refreshVersion=++latestRefresh.current
+  const result=await subscriptionChatRequest(id||undefined,undefined,undefined,fast)
+  if(!alive.current||generation!==epoch.current||refreshVersion!==latestRefresh.current)return
   selected.current=result.chat.id;setChatId(result.chat.id);setWorkspace(result)
+  if(result.chat.is_main)writeChatCache(username,'subscription-main',{...result,messages:result.messages.slice(-8),hasOlder:result.hasOlder||result.messages.length>8,google:undefined})
   return result
- },[])
+ },[username])
  useEffect(()=>{
   if(!active)return
-  let cancelled=false;setLoading(true)
-  void refresh().then(result=>{if(result&&!cancelled)selectDraft(result.chat.id)}).catch(e=>{if(!cancelled)setError(e.message)}).finally(()=>{if(!cancelled)setLoading(false)})
+  let cancelled=false,fresh=false;setLoading(!workspaceRef.current)
+  if(!workspaceRef.current)void readChatCache<SubscriptionWorkspace>(username,'subscription-main').then(saved=>{if(saved&&!cancelled&&!fresh&&!workspaceRef.current){selected.current=saved.chat.id;setChatId(saved.chat.id);setWorkspace(saved);selectDraft(saved.chat.id);setLoading(false)}})
+  void refresh(selected.current,true).then(result=>{fresh=true;if(result&&!cancelled){selectDraft(result.chat.id);setLoading(false);void refresh().catch(e=>{if(!cancelled)setError(e.message)})}}).catch(e=>{if(!cancelled)setError(e.message)}).finally(()=>{if(!cancelled)setLoading(false)})
   const update=()=>void refresh().catch(e=>{if(!cancelled)setError(e.message)})
   const timer=setInterval(update,30000);window.addEventListener('focus',update)
   return()=>{cancelled=true;clearInterval(timer);window.removeEventListener('focus',update)}

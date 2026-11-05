@@ -1,3 +1,4 @@
+import {clearChatCache} from './chatCache'
 import type {SourceAlert} from './sourceAlerts'
 import type {TaskNotificationSettings} from './taskNotifications'
 import {activateReplica,recordReplica,replicaContext,saveReplica,readReplica} from './localReplica'
@@ -19,7 +20,7 @@ export function getToken(): string | null {
 }
 
 export function setToken(token: string | null): void {
-  if(token!==getToken()){calendarRevision=undefined;clearFilesCache()}
+  if(token!==getToken()){calendarRevision=undefined;clearFilesCache();clearChatCache()}
   if (token) localStorage.setItem(TOKEN_KEY, token)
   else {localStorage.removeItem(TOKEN_KEY);activateReplica(null)}
 }
@@ -230,8 +231,8 @@ export function taskNotificationsRequest(settings?:TaskNotificationSettings){ret
 
 export function sourceStatusRequest(){return request<{issues:SourceAlert[];checkedAt:string}>('/api/sources/status')}
 
-export async function subscriptionChatRequest<T=import('./subscriptionChat').SubscriptionWorkspace>(chat?:string,action?:Record<string,unknown>,before?:string){
- const query=new URLSearchParams();if(chat)query.set('chat',chat);if(before)query.set('before',before)
+export async function subscriptionChatRequest<T=import('./subscriptionChat').SubscriptionWorkspace>(chat?:string,action?:Record<string,unknown>,before?:string,fast=false){
+ const query=new URLSearchParams();if(fast)query.set('fast','1');if(chat)query.set('chat',chat);if(before)query.set('before',before)
  const token=getToken(),retryable=!action||['tool_begin','tool_call','tool_finish','relay_bind','relay_save'].includes(String(action.action))
  for(let attempt=0;;attempt++){
   try{return await request<T>('/api/subscription-chat'+(query.size?'?'+query:''),action?{method:'POST',body:JSON.stringify(action)}:{})}

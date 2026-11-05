@@ -7,7 +7,7 @@ import { hostOnline, safeWorkerStatus, safeDeviceAuthorization, uuid, vmHash, vm
 import { openVmCredential, sealVmCredential } from './vm-vault.js'
 import { DEFAULT_VM_SCHEDULE, scheduleSlot, validateSchedule, scheduledReviewMessage } from './vm-power.js'
 import { touchVmActivity } from './vm-host.js'
-import { VM_SOURCES } from '../src/lib/vm.js'
+import { VM_SOURCES,type VmJob } from '../src/lib/vm.js'
 import { googleCalendarStatus, readGoogleCalendar, startGoogleCalendar, selectGoogleAccount, removeGoogleAccount, setGoogleReadEnabled } from './agent.js'
 import { observeAccounts, editBrowserAccount } from './browser-accounts.js'
 import { bulkManageChats,ensureMainChat,ensureMainWelcome } from './vm-chats.js'
@@ -176,24 +176,31 @@ export async function handleVmRequest(request: Request, path: string, username: 
     const planning=checked(await db().from('planner_planning').select('started_at,revision,onboarded:state->onboarded').eq('username',username).maybeSingle())
     return json({ tutorError,planning:{startedAt:planning?.started_at||null,ready:planning?.onboarded===true,revision:Number(planning?.revision||0)},queue:{active:checked(queue).find(job=>job.status==='running')||null,queuedIds:checked(queue).filter(job=>['queued','waiting'].includes(job.status)).map(job=>job.id)}, hosts: connectedHosts, power, accounts:checked(accounts), google:await googleCalendarStatus(username), chats: checked(chats), deletedChats:bin, settings: checked(settings), runs: checked(runs).filter(r=>!removed.has(r.chat_id)).map(r=>({...r,message:'',reply:''})), provisioning: machine, personalChatGptAvailable: personalChatGptAllowed(username), hostedChatGptAvailable: false, recordings: false })
   }
+  if(request.method==='GET'&&path==='/api/agent/vm/main'){
+    const id=await ensureMainChat(username)
+    return handleVmRequest(new Request(new URL('/api/agent/vm/messages?chat='+id+'&limit=8&compact=1',request.url)), '/api/agent/vm/messages',username)
+  }
   if (request.method === 'GET' && path === '/api/agent/vm/messages') {
     const chatId = url.searchParams.get('chat')
     if (!uuid(chatId)) throw new ApiError(400, 'Choose a chat.')
-    const owned=checked(await db().from('planner_vm_chats').select('id').eq('username',username).eq('id',chatId).is('deleted_at',null).maybeSingle())
+    const owned=checked(await db().from('planner_vm_chats').select('id,title,is_main,pinned,tutor_subject_id,archived,updated_at').eq('username',username).eq('id',chatId).is('deleted_at',null).maybeSingle())
     if(!owned)throw new ApiError(404,'Chat not found. Restore deleted chats from the Bin first.')
+    const limit=Number(url.searchParams.get('limit')||20)
+    if(!Number.isInteger(limit)||limit<1||limit>20)throw new ApiError(400,'Choose a message page size from 1 to 20.')
     const before=url.searchParams.get('before')
-    let query=db().from('planner_vm_jobs').select(publicJob).eq('username',username).eq('chat_id',chatId)
+    const compact=url.searchParams.get('compact')==='1'
+    let query=db().from('planner_vm_jobs').select(compact?publicJob.replace(',result,',',display_steered:result->steered,'):publicJob).eq('username',username).eq('chat_id',chatId)
     if(before){
       if(!uuid(before))throw new ApiError(400,'Choose a valid message cursor.')
       const cursor=checked(await db().from('planner_vm_jobs').select('id,created_at').eq('username',username).eq('chat_id',chatId).eq('id',before).maybeSingle())
       if(!cursor)throw new ApiError(404,'Message cursor not found.')
       query=query.or(`created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`)
     }
-    const page=checked(await query.order('created_at',{ascending:false}).order('id',{ascending:false}).limit(21))
-    const hasMore=page.length>20,jobs=page.slice(0,20).reverse()
+    const page=checked(await query.order('created_at',{ascending:false}).order('id',{ascending:false}).limit(limit+1).overrideTypes<(Omit<VmJob,'result'>&{result?:VmJob['result'];display_steered?:boolean})[],{merge:false}>())
+    const hasMore=page.length>limit,jobs=page.slice(0,limit).reverse()
     const ids=jobs.filter(j=>j.status==='running').map(j=>j.id)
     const approvals=ids.length?checked(await db().from('planner_vm_approvals').select('id,job_id,questions,expires_at').eq('username',username).in('job_id',ids).is('answers',null).gt('expires_at',new Date().toISOString())):[]
-    return json({ hasMore, jobs:jobs.map(j=>({...j,message:j.kind==='sync'?'Scheduled calendar review':j.message,approvals:approvals.filter(a=>a.job_id===j.id)})) })
+    return json({chat:owned, hasMore, jobs:jobs.map(j=>{const {display_steered,...row}=j;return {...row,result:compact?{steered:display_steered===true}:j.result||{},message:j.kind==='sync'?'Scheduled calendar review':j.message,approvals:approvals.filter(a=>a.job_id===j.id)}}) })
   }
   if(request.method==='GET' && path==='/api/agent/vm/attachment'){
     const jobId=url.searchParams.get('job'),id=url.searchParams.get('id')
