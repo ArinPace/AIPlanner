@@ -2339,3 +2339,9 @@ html, body { touch-action: pan-x pan-y; }
 .month-view.is-duration-scaled .event-chip { box-sizing: border-box; overflow: hidden; }
 .month-view.is-duration-scaled .event-title { max-height: 100%; overflow: hidden; }
 .settings-duration { border: 1px solid var(--line); border-radius: 8px; margin: 12px 0; padding: 8px 12px; }
+
+.assistant-tutor-folder { flex-shrink: 0; min-width: 0; }
+.assistant-tutor-heading { display: flex; align-items: center; gap: 2px; }
+.assistant-tutor-heading > button:first-child { flex: 1; font-weight: 600; }
+.assistant-tutor-heading > button:last-child { width: 36px; flex: 0 0 36px; padding: 6px; }
+.assistant-tutor-subjects { border-left: 1px solid var(--line); margin-left: 18px; padding-left: 6px; }

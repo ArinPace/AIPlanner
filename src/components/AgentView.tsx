@@ -68,6 +68,12 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
   const title = state?.chats.find(c => c.id === chat)?.title || (openMainOnLoad.current ? 'Main Chat' : 'New chat')
   const archived = state?.chats.find(c=>c.id===chat)?.archived || false
   const visibleChats = showBin ? state?.deletedChats || [] : state?.chats.filter(c=>Boolean(c.archived)===showArchived) || []
+  const [tutorOpen,setTutorOpen]=useState(()=>{try{return localStorage.getItem('planner-tutor-open:'+username)!=='false'}catch{return true}})
+  const tutorChats=visibleChats.filter(c=>c.tutor_subject_id).sort((a,b)=>a.title.localeCompare(b.title))
+  const regularChats=visibleChats.filter(c=>!c.tutor_subject_id)
+  function toggleTutor(){setTutorOpen(value=>{const next=!value;try{localStorage.setItem('planner-tutor-open:'+username,String(next))}catch{/* Keep the folder usable. */}return next})}
+  async function refreshTutor(){if(chatAction)return;setChatAction('tutor-sync');try{await agentAction('vm/chats/tutor');await refresh();setError('')}catch(e){setError(e instanceof Error?e.message:'Could not refresh Tutor subjects.')}finally{setChatAction(null)}}
+
   const closePanel = useCallback(() => setPanel(null), [])
   const refreshing=useRef<Promise<void>|null>(null)
   const initialized=useRef(false)
@@ -258,6 +264,7 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not send your message.') }
     finally { setBusy(false) }
   }
+  const renderChat=(item:VmChat)=>(<div className={'assistant-chat-row'+(selecting?' is-selecting':'')} key={item.id}>{selecting && !item.is_main && <input type="checkbox" aria-label={'Select '+item.title} disabled={Boolean(chatAction)} checked={selectedIds.includes(item.id)} onChange={e=>setSelectedIds(ids=>e.target.checked?[...ids,item.id]:ids.filter(id=>id!==item.id))}/>}<button type="button" title={item.title} aria-current={item.id === chat ? 'page' : undefined} disabled={showBin} onClick={() => void chooseChat(item.id)}>{(item.is_main||item.pinned)&&<span aria-label={item.is_main?'Permanently pinned':'Pinned'} title={item.is_main?'Permanently pinned':'Pinned'} style={{marginRight:6}}>📌</span>}{item.title}{showBin && item.deleted_at && <small className="assistant-bin-expiry">{binDaysLeft(Date.parse(item.deleted_at)+30*86400000,now)} days left</small>}</button>{!item.is_main && !selecting && !showBin && <details className="assistant-chat-options"><summary aria-label={'Options for '+item.title}>⋯</summary><div><button hidden={Boolean(item.tutor_subject_id)} disabled={Boolean(chatAction)} onClick={()=>void pinChat(item)}>{item.pinned?'Unpin chat':'Pin chat'}</button><button hidden={Boolean(item.tutor_subject_id)} disabled={Boolean(chatAction)} onClick={()=>{setError('');setRenameChat(item)}}>Rename chat</button><button disabled={Boolean(chatAction)} onClick={()=>void manageChat(item,'archive')}>{item.archived?'Restore chat':'Archive chat'}</button><button disabled={Boolean(chatAction)} onClick={()=>void manageChat(item,'delete')}>Delete chat</button></div></details>}</div>)
   return <main className={'assistant-app' + (sidebar ? ' sidebar-open' : '')}>
     {sidebar && <aside className="assistant-sidebar" aria-label="Chat sidebar">
       <div className="assistant-sidebar-top"><strong>Your chats</strong><button type="button" className="icon-btn" aria-label="Hide chat sidebar" onClick={() => setSidebar(false)}><CloseIcon size={18}/></button></div>
@@ -273,7 +280,16 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
         <div><button type="button" disabled={!selectedIds.length || Boolean(chatAction)} onClick={()=>void manageSelected(showBin?'untrash':showArchived?'restore':'archive')}>{showBin || showArchived?'Restore selected':'Archive selected'}</button><button type="button" className="assistant-bulk-delete" disabled={!selectedIds.length || Boolean(chatAction)} onClick={()=>void manageSelected(showBin?'purge':'delete')}>{showBin?'Delete permanently':'Delete selected'}</button></div>
         {chatAction==='bulk' && <span role="status">Updating chats…</span>}
       </div>}
-      <nav aria-label="Conversations" className="assistant-conversations">{visibleChats.map(item => <div className={'assistant-chat-row'+(selecting?' is-selecting':'')} key={item.id}>{selecting && !item.is_main && <input type="checkbox" aria-label={'Select '+item.title} disabled={Boolean(chatAction)} checked={selectedIds.includes(item.id)} onChange={e=>setSelectedIds(ids=>e.target.checked?[...ids,item.id]:ids.filter(id=>id!==item.id))}/>}<button type="button" title={item.title} aria-current={item.id === chat ? 'page' : undefined} disabled={showBin} onClick={() => void chooseChat(item.id)}>{(item.is_main||item.pinned)&&<span aria-label={item.is_main?'Permanently pinned':'Pinned'} title={item.is_main?'Permanently pinned':'Pinned'} style={{marginRight:6}}>📌</span>}{item.title}{showBin && item.deleted_at && <small className="assistant-bin-expiry">{binDaysLeft(Date.parse(item.deleted_at)+30*86400000,now)} days left</small>}</button>{!item.is_main && !selecting && !showBin && <details className="assistant-chat-options"><summary aria-label={'Options for '+item.title}>⋯</summary><div><button disabled={Boolean(chatAction)} onClick={()=>void pinChat(item)}>{item.pinned?'Unpin chat':'Pin chat'}</button><button disabled={Boolean(chatAction)} onClick={()=>{setError('');setRenameChat(item)}}>Rename chat</button><button disabled={Boolean(chatAction)} onClick={()=>void manageChat(item,'archive')}>{item.archived?'Restore chat':'Archive chat'}</button><button disabled={Boolean(chatAction)} onClick={()=>void manageChat(item,'delete')}>Delete chat</button></div></details>}</div>)}{state && !visibleChats.length && <p>{showBin?'Bin is empty.':showArchived?'No archived chats.':'No conversations yet.'}</p>}</nav>
+      <nav aria-label="Conversations" className="assistant-conversations">
+        {regularChats.filter(item=>item.is_main).map(renderChat)}
+        {(state?.settings.tutor_enabled||tutorChats.length>0)&&<section className="assistant-tutor-folder" aria-label="Tutor folder">
+          <div className="assistant-tutor-heading"><button type="button" aria-label="Tutor" aria-expanded={tutorOpen} aria-controls="tutor-subject-chats" onClick={toggleTutor}><span aria-hidden="true">{tutorOpen?'▾':'▸'} 📌 📁</span> Tutor</button><button type="button" aria-label="Refresh Tutor subjects" title="Refresh subjects" disabled={Boolean(chatAction)} onClick={()=>void refreshTutor()}>↻</button></div>
+          {tutorOpen&&<div id="tutor-subject-chats" role="group" aria-label="Tutor subjects" className="assistant-tutor-subjects">{tutorChats.map(renderChat)}{!tutorChats.length&&<p>{showBin?'No deleted subject chats.':showArchived?'No archived subject chats.':'Add subject folders under Subjects in Files, then refresh.'}</p>}</div>}
+          {state?.tutorError&&<p role="status">{state.tutorError}</p>}
+        </section>}
+        {regularChats.filter(item=>!item.is_main).map(renderChat)}
+        {state&&!visibleChats.length&&<p>{showBin?'Bin is empty.':showArchived?'No archived chats.':'No conversations yet.'}</p>}
+      </nav>
       <button type="button" className="assistant-sidebar-settings" onClick={() => setPanel('settings')}><SettingsIcon size={18}/>Settings</button>
     </aside>}
     {sidebar && <button type="button" className="assistant-sidebar-scrim" aria-label="Close chat sidebar" onClick={() => setSidebar(false)}/>}

@@ -61,6 +61,7 @@
    button.onclick=()=>{sourceIssues=id?[{id,source:'brightspace',title:'Brightspace',message:'School source needs reconnection.'}]:[];window.dispatchEvent(new Event('focus'))};document.body.append(button);
   }
  });
+ const tutorChats=globalThis.__plannerFixtureTutor?['Statistics','Computer Science','Commerce and Culture'].map((title,index)=>({id:'00000000-0000-4000-8000-00000000020'+index,title,tutor_subject_id:'subject-'+index,archived:false,pinned:false,updated_at:now})):[];
  const subscriptionMessages=[]; const subscriptionFiles=new Map(); globalThis.__plannerRelayFixtureFiles=subscriptionFiles;
  const subscriptionMain={id:'00000000-0000-4000-8000-000000000101',title:'Main Chat',is_main:true,pinned:true,archived:false,deleted_at:null,created_at:now,updated_at:now};
  let subscriptionChats=[subscriptionMain];
@@ -109,7 +110,8 @@
    }
    output.textContent='Widget feedback received: '+(request.message.startsWith('Free-time request')?'free':request.message.includes('finished this activity early')?'done':'time');document.body.append(output);value={id:'fixture-accepted'};
   }
-  else if(path==='/api/agent/vm')value={power:'offline',hosts:[],chats:[main],deletedChats:[],runs:[],settings:{ai_provider:'codex',sources:[],sites:{},schedule_enabled:false,schedule:{timezone:'America/New_York',times:[]}},accounts:[],google:{accounts:[],connected:false,configured:true,activeAccountId:null},queue:{active:null,queuedIds:[]},planning:{startedAt:now,ready:true,revision:1},provisioning:null,personalChatGptAvailable:true,hostedChatGptAvailable:false,recordings:false};
+  else if(path==='/api/agent/vm/chats/tutor')value={enabled:true,count:tutorChats.length};
+  else if(path==='/api/agent/vm')value={power:'offline',hosts:[],chats:[main,...tutorChats],deletedChats:[],runs:[],settings:{tutor_enabled:Boolean(globalThis.__plannerFixtureTutor),ai_provider:'codex',sources:[],sites:{},schedule_enabled:false,schedule:{timezone:'America/New_York',times:[]}},accounts:[],google:{accounts:[],connected:false,configured:true,activeAccountId:null},queue:{active:null,queuedIds:[]},planning:{startedAt:now,ready:true,revision:1},provisioning:null,personalChatGptAvailable:true,hostedChatGptAvailable:false,recordings:false};
   else if(path.includes('/jobs'))value={jobs:[],hasMore:false};
   else if(path==='/api/planning')value={preferences:{intensity:20},tasks:[]};
   else value={items:[],chats:[main],jobs:[],hasMore:false};

@@ -104,6 +104,10 @@ export async function handleVmWorker(request: Request, path: string) {
       }
     }
     const job = checked(await db().rpc('planner_vm_claim', { p_host: host.id }))
+    if(job?.kind==='chat'&&job.chat_id){
+      const context=await db().from('planner_vm_chats').select('title,tutor_subject_id').eq('username',host.username).eq('id',job.chat_id).maybeSingle()
+      if(!context.error&&context.data?.tutor_subject_id)job.tutor_subject={name:context.data.title,folderId:context.data.tutor_subject_id}
+    }
     return json({ job: job || null })
   }
   if (path === '/api/agent/vm/worker/progress' || path === '/api/agent/vm/worker/finish') {
@@ -144,15 +148,17 @@ export async function handleVmRequest(request: Request, path: string, username: 
   if (request.method === 'GET' && path === '/api/agent/vm') {
     const polling=url.searchParams.get('poll')==='1'
     const mainId=polling?null:await ensureMainChat(username)
+    let tutorError:string|null=null
+    if(!polling){try{await (await import('./vm-tutor.js')).syncTutorChats(username)}catch{tutorError='Tutor subjects could not sync. Use Refresh subjects to retry.'}}
     if(!polling)checked(await db().from('planner_vm_settings').upsert({ username }, { onConflict: 'username', ignoreDuplicates: true }))
     const [hosts, chats, settings, runs, provisioning, accounts, deletedChats, queue] = await Promise.all([
       db().from('planner_vm_hosts').select(publicHost).eq('username', username).is('revoked_at', null).order('created_at', { ascending: false }),
-      db().from('planner_vm_chats').select('id,title,is_main,pinned,archived,parent_chat_id,parent_job_id,created_at,updated_at').eq('username', username).is('deleted_at',null).order('is_main',{ascending:false}).order('pinned',{ascending:false}).order('updated_at', { ascending: false }).limit(100),
-      db().from('planner_vm_settings').select('sources,schedule_enabled,sites,ai_provider,schedule,whatsapp_read_consent_at,message_read_consent').eq('username', username).single(),
+      db().from('planner_vm_chats').select('id,title,is_main,pinned,tutor_subject_id,archived,parent_chat_id,parent_job_id,created_at,updated_at').eq('username', username).is('deleted_at',null).order('is_main',{ascending:false}).order('tutor_subject_id',{ascending:true,nullsFirst:false}).order('pinned',{ascending:false}).order('updated_at', { ascending: false }).limit(100),
+      db().from('planner_vm_settings').select('sources,schedule_enabled,sites,ai_provider,schedule,whatsapp_read_consent_at,message_read_consent,tutor_enabled').eq('username', username).single(),
       db().from('planner_vm_jobs').select('id,chat_id,kind,status,error,created_at,started_at,finished_at,result').eq('username', username).order('created_at', { ascending: false }).limit(20),
       db().from('planner_vm_provisioning').select('status,error,wake_until,power_state,power_updated_at').eq('username', username).maybeSingle(),
       db().from('planner_browser_accounts').select('id,source,identity,label,active,verified_at').eq('username',username).order('verified_at',{ascending:false}),
-      db().from('planner_vm_chats').select('id,title,archived,parent_chat_id,parent_job_id,created_at,updated_at,deleted_at').eq('username',username).not('deleted_at','is',null).gt('deleted_at',new Date(Date.now()-30*86400000).toISOString()).order('deleted_at',{ascending:false}).limit(1000),
+      db().from('planner_vm_chats').select('id,title,tutor_subject_id,archived,parent_chat_id,parent_job_id,created_at,updated_at,deleted_at').eq('username',username).not('deleted_at','is',null).gt('deleted_at',new Date(Date.now()-30*86400000).toISOString()).order('deleted_at',{ascending:false}).limit(1000),
       db().from('planner_vm_jobs').select('id,chat_id,kind,status,started_at').eq('username',username).in('status',['queued','running','waiting']).order('created_at',{ascending:true}).limit(100),
     ])
     const machine = checked(provisioning) || null
@@ -166,7 +172,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
     const bin=checked(deletedChats),removed=new Set(bin.map(c=>c.id))
     if(!polling)await (await import('./planning.js')).syncTodoCompletion(username)
     const planning=checked(await db().from('planner_planning').select('started_at,revision,onboarded:state->onboarded').eq('username',username).maybeSingle())
-    return json({ planning:{startedAt:planning?.started_at||null,ready:planning?.onboarded===true,revision:Number(planning?.revision||0)},queue:{active:checked(queue).find(job=>job.status==='running')||null,queuedIds:checked(queue).filter(job=>['queued','waiting'].includes(job.status)).map(job=>job.id)}, hosts: connectedHosts, power, accounts:checked(accounts), google:await googleCalendarStatus(username), chats: checked(chats), deletedChats:bin, settings: checked(settings), runs: checked(runs).filter(r=>!removed.has(r.chat_id)).map(r=>({...r,message:'',reply:''})), provisioning: machine, personalChatGptAvailable: personalChatGptAllowed(username), hostedChatGptAvailable: false, recordings: false })
+    return json({ tutorError,planning:{startedAt:planning?.started_at||null,ready:planning?.onboarded===true,revision:Number(planning?.revision||0)},queue:{active:checked(queue).find(job=>job.status==='running')||null,queuedIds:checked(queue).filter(job=>['queued','waiting'].includes(job.status)).map(job=>job.id)}, hosts: connectedHosts, power, accounts:checked(accounts), google:await googleCalendarStatus(username), chats: checked(chats), deletedChats:bin, settings: checked(settings), runs: checked(runs).filter(r=>!removed.has(r.chat_id)).map(r=>({...r,message:'',reply:''})), provisioning: machine, personalChatGptAvailable: personalChatGptAllowed(username), hostedChatGptAvailable: false, recordings: false })
   }
   if (request.method === 'GET' && path === '/api/agent/vm/messages') {
     const chatId = url.searchParams.get('chat')
@@ -300,6 +306,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
     checked(await db().from('planner_vm_jobs').update({ status: 'cancelled', finished_at: new Date().toISOString() }).eq('username', username).eq('host_id', input.id).in('status', ['queued', 'running','paused','waiting']))
     return json({ ok: true })
   }
+  if(path==='/api/agent/vm/chats/tutor')return json(await (await import('./vm-tutor.js')).syncTutorChats(username,true))
   if (path === '/api/agent/vm/chats') {
     const title = typeof input.title === 'string' && input.title.trim() ? input.title.trim().slice(0, 100) : 'New conversation'
     return json(checked(await db().from('planner_vm_chats').insert({ username, title }).select('id,title,created_at,updated_at').single()), 201)

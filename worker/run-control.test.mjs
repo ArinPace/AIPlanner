@@ -32,3 +32,11 @@ test('prolonged connection loss stops before running indefinitely without a leas
  const stop=monitorRun(async()=>{elapsed+=30000;throw new TypeError('fetch failed')},async error=>{assert.match(error.message,/Saved progress is kept/);finish()},2,{graceMs:60000,now:()=>elapsed})
  await done;stop();assert.equal(elapsed,60000)
 })
+
+test('Tutor context identifies the subject without treating a new question as steering',()=>{
+ const prompt=continuationPrompt({message:'Explain this topic',tutor_subject:{name:'Statistics',folderId:'subject-stats'}})
+ assert.match(prompt,/"name":"Statistics"/)
+ assert.match(prompt,/"folderId":"subject-stats"/)
+ assert(!prompt.includes('steering an unfinished task'))
+ assert(prompt.endsWith('Explain this topic'))
+})
