@@ -142,6 +142,175 @@ final class PlannerUITests: XCTestCase {
         waitForExpectations(timeout: 45)
         XCTAssertTrue(app.webViews["plannerWebView"].buttons["ChatGPT session"].exists, "Planner remains the visible chat UI")
     }
+    func testSignedInChatGPTInspection() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
+        let app = XCUIApplication(); app.launchArguments = ["-PlannerOpenChatGPT", "-UITestInspectChatGPT", "-UITestEnsureProject"]; app.launch()
+        XCTAssertTrue(app.webViews["chatGPTPortalWebView"].waitForExistence(timeout: 40))
+        Thread.sleep(forTimeInterval: 18)
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Signed-in ChatGPT project inspection"; shot.lifetime = .keepAlways; add(shot)
+    }
+    func testSignedInAutoReturnToPlanner() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
+        let app = XCUIApplication(); app.launchArguments = ["-PlannerOpenChatGPT", "-UITestReturnChatGPTOnReady"]; app.launch()
+        XCTAssertTrue(app.webViews["plannerWebView"].waitForExistence(timeout: 30))
+        let portal = app.webViews["chatGPTPortalWebView"]
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: portal); waitForExpectations(timeout: 30)
+        XCTAssertTrue(app.webViews["plannerWebView"].buttons["Chat"].exists)
+    }
+    func testSignedInPersistentProjectConversation() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
+        let app = XCUIApplication(); app.launchArguments = ["-UITestSignedRelayDiagnostics"]; app.launch()
+        var planner = app.webViews["plannerWebView"]
+        XCTAssertTrue(planner.buttons["Chat"].waitForExistence(timeout: 30)); planner.buttons["Chat"].tap()
+        let first = "Remember code SIGNED-TEST-5521. Reply only ACK."
+        func send(_ text: String) {
+            let box = planner.textViews["Message ChatGPT"]; XCTAssertTrue(box.waitForExistence(timeout: 20))
+            expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: box); waitForExpectations(timeout: 30)
+            box.tap(); box.typeText(text)
+            let button = planner.buttons["Send message"]; expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: button); waitForExpectations(timeout: 20); button.tap()
+            let review = planner.buttons["Review ChatGPT draft"]
+            if review.waitForExistence(timeout: 5) {
+                review.tap(); Thread.sleep(forTimeInterval: 1)
+                print("SIGNED_DRAFT_INSPECTION", planner.staticTexts.allElementsBoundByIndex.map { $0.label }.joined(separator: " | "))
+                if planner.staticTexts.allElementsBoundByIndex.contains(where:{$0.label.trimmingCharacters(in:.whitespacesAndNewlines)==first}) {
+                    planner.buttons["Clear ChatGPT draft"].tap(); Thread.sleep(forTimeInterval: 1); button.tap()
+                }
+            }
+        }
+        func saved(_ count: Int) throws {
+            let copies = planner.buttons.matching(identifier: "Copy")
+            let condition = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in copies.count >= count }, object: app)
+            if XCTWaiter.wait(for: [condition], timeout: 45) != .completed {
+                print("SIGNED_RELAY_UI", planner.staticTexts.allElementsBoundByIndex.map { $0.label }.joined(separator: " | "))
+                let shot = XCTAttachment(screenshot: app.screenshot()); shot.name="Signed relay failure"; shot.lifetime = .keepAlways; add(shot)
+                throw NSError(domain: "SignedRelayTest", code: 1, userInfo: [NSLocalizedDescriptionKey:"Reply was not saved"])
+            }
+        }
+        XCTAssertTrue(planner.buttons["New chat"].firstMatch.waitForExistence(timeout: 20)); planner.buttons["New chat"].firstMatch.tap()
+        send(first); try saved(2)
+        send("Repeat the remembered code only."); try saved(4)
+        XCTAssertTrue(planner.otherElements.matching(identifier: "Assistant message").element(boundBy: 1).staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "SIGNED-TEST-5521")).firstMatch.exists)
+        app.terminate(); app.launch(); planner = app.webViews["plannerWebView"]
+        XCTAssertTrue(planner.buttons["Chat"].waitForExistence(timeout: 30)); planner.buttons["Chat"].tap()
+        let show=planner.buttons["Show chat sidebar"]; if show.exists { show.tap() }
+        let existing=planner.buttons[first].firstMatch; XCTAssertTrue(existing.waitForExistence(timeout: 20)); existing.tap()
+        try saved(4); send("What code did I give you? Reply with only the code."); try saved(6)
+        XCTAssertTrue(planner.otherElements.matching(identifier: "Assistant message").element(boundBy: 2).staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "SIGNED-TEST-5521")).firstMatch.exists)
+    }
+    func testSignedInRenameArchiveRestoreDelete() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
+        guard let initial=ProcessInfo.processInfo.environment["PLANNER_TEST_LIFECYCLE_TITLE"],initial.hasPrefix("SIGNED-TEST-") else {throw XCTSkip("Supply a disposable linked Test chat title; this test deletes it on both platforms.")}
+        let app=XCUIApplication(); app.launchArguments=["-UITestSignedRelayDiagnostics"]; app.launch()
+        let planner=app.webViews["plannerWebView"]
+        XCTAssertTrue(planner.buttons["Chat"].waitForExistence(timeout:30)); planner.buttons["Chat"].tap()
+        func sidebar(){let show=planner.buttons["Show chat sidebar"];if show.waitForExistence(timeout:2){show.tap()}}
+        func options(_ title:String){sidebar();if planner.buttons["Rename chat"].exists || planner.buttons["Move to bin"].exists || planner.buttons["Restore chat"].exists{return};let item=planner.buttons["Options for "+title].firstMatch;if item.exists{item.tap()}else{let row=planner.buttons[title].firstMatch;XCTAssertTrue(row.waitForExistence(timeout:15));row.coordinate(withNormalizedOffset:CGVector(dx:1,dy:0.5)).withOffset(CGVector(dx:16,dy:0)).tap()};Thread.sleep(forTimeInterval:0.5)}
+        func synced() throws {
+            Thread.sleep(forTimeInterval:1)
+            for _ in 0..<3 {
+                let review=planner.buttons["Review ChatGPT draft"]
+                if !review.waitForExistence(timeout:2){break}
+                let hide=planner.buttons["Hide chat sidebar"];if hide.exists{hide.tap()}
+                review.tap();Thread.sleep(forTimeInterval:1)
+                let known=["Read relay-check.csv. Reply with the value in its relay row, and create a downloadable CSV copy named signed-relay-copy.csv. Use Python if needed.","What code did I give you? Reply with only the code.","Remember code SIGNED-TEST-5521. Reply only ACK."]
+                guard planner.staticTexts.allElementsBoundByIndex.contains(where:{known.contains($0.label.trimmingCharacters(in:.whitespacesAndNewlines))}) else {throw NSError(domain:"UnrelatedDraft",code:1)}
+                planner.buttons["Clear ChatGPT draft"].tap();Thread.sleep(forTimeInterval:2);sidebar();planner.buttons["Sync ChatGPT chats"].tap();Thread.sleep(forTimeInterval:3)
+            }
+            if !planner.staticTexts["ChatGPT conversation synced."].waitForExistence(timeout:30) && !planner.staticTexts["ChatGPT conversations synced."].exists{print("SIGNED_SYNC_UI",planner.staticTexts.allElementsBoundByIndex.map{$0.label}.joined(separator:" | "));throw NSError(domain:"SignedSyncTest",code:1)}
+        }
+        sidebar();let row=planner.buttons[initial].firstMatch;XCTAssertTrue(row.waitForExistence(timeout:20));row.tap()
+        options(initial);planner.buttons["Rename chat"].tap()
+        let field=planner.textFields["New name"];XCTAssertTrue(field.waitForExistence(timeout:10));field.coordinate(withNormalizedOffset:CGVector(dx:0.98,dy:0.5)).tap();let old=(field.value as? String) ?? "";field.typeText(String(repeating:XCUIKeyboardKey.delete.rawValue,count:old.count)+"SIGNED-TEST-QA-RENAMED");guard field.value as? String == "SIGNED-TEST-QA-RENAMED" else {throw NSError(domain:"RenameInputTest",code:1)}
+        field.typeText("\n");Thread.sleep(forTimeInterval:1);if planner.buttons["Rename"].exists{planner.buttons["Rename"].tap()};try synced()
+        options("SIGNED-TEST-QA-RENAMED");planner.buttons["Archive chat"].tap();try synced()
+        sidebar();planner.buttons["Archived chats"].tap();options("SIGNED-TEST-QA-RENAMED");planner.buttons["Restore chat"].tap();try synced()
+        planner.buttons["Back to chats"].tap();options("SIGNED-TEST-QA-RENAMED");planner.buttons["Move to bin"].tap()
+        let confirm=app.alerts.buttons["Continue"];if confirm.waitForExistence(timeout:5){confirm.tap()}else if app.alerts.buttons["OK"].exists{app.alerts.buttons["OK"].tap()}
+        try synced()
+    }
+    func testSignedInCSVFileRoundTrip() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
+        let app=XCUIApplication();app.launchArguments=["-UITestRelayCSV","-UITestSignedRelayDiagnostics"];app.launch()
+        let planner=app.webViews["plannerWebView"]
+        XCTAssertTrue(planner.buttons["Chat"].waitForExistence(timeout:30));planner.buttons["Chat"].tap()
+        XCTAssertTrue(planner.buttons["New chat"].firstMatch.waitForExistence(timeout:20));planner.buttons["New chat"].firstMatch.tap()
+        let box=planner.textViews["Message ChatGPT"];expectation(for:NSPredicate(format:"enabled == true"),evaluatedWith:box);waitForExpectations(timeout:30)
+        planner.buttons["Attach CSV test"].tap()
+        XCTAssertTrue(planner.staticTexts.matching(NSPredicate(format:"label CONTAINS %@","relay-check.csv")).firstMatch.waitForExistence(timeout:15))
+        box.tap();box.typeText("Read relay-check.csv. Reply with the value in its relay row, and create a downloadable CSV copy named signed-relay-copy.csv. Use Python if needed.")
+        let send=planner.buttons["Send message"];expectation(for:NSPredicate(format:"enabled == true"),evaluatedWith:send);waitForExpectations(timeout:20);send.tap()
+        let review=planner.buttons["Review ChatGPT draft"]
+        if review.waitForExistence(timeout:5){
+            review.tap();Thread.sleep(forTimeInterval:1)
+            let ownDraft=planner.staticTexts.allElementsBoundByIndex.contains { $0.label.trimmingCharacters(in: .whitespacesAndNewlines) == "Remember code SIGNED-TEST-5521. Reply only ACK." }
+            guard ownDraft else { print("SIGNED_FILE_DRAFT",planner.staticTexts.allElementsBoundByIndex.map{$0.label}.joined(separator:" | "));throw NSError(domain:"UnrelatedDraft",code:1) }
+            planner.buttons["Clear ChatGPT draft"].tap();Thread.sleep(forTimeInterval:2);box.tap();send.tap()
+        }
+        let copies=planner.buttons.matching(identifier:"Copy")
+        let condition=XCTNSPredicateExpectation(predicate:NSPredicate{_,_ in copies.count>=2},object:app)
+        if XCTWaiter.wait(for:[condition],timeout:180) != .completed {print("SIGNED_FILES_UI",planner.staticTexts.allElementsBoundByIndex.map{$0.label}.joined(separator:" | "));throw NSError(domain:"SignedFilesTest",code:1)}
+        XCTAssertTrue(planner.otherElements.matching(identifier:"Assistant message").staticTexts.matching(NSPredicate(format:"label CONTAINS %@","INPUT-7319")).firstMatch.exists)
+        XCTAssertTrue(planner.links.matching(NSPredicate(format:"label CONTAINS %@","signed-relay-copy.csv")).firstMatch.exists)
+    }
+    private func signedInFileMatrix(_ group:String,markers:[String],extensions:[String]) throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
+        let app=XCUIApplication();app.launchArguments=["-UITestRelayFileMatrix","-UITestSignedRelayDiagnostics"];app.launchEnvironment["PLANNER_TEST_FILE_GROUP"]=group;app.launch()
+        let planner=app.webViews["plannerWebView"];XCTAssertTrue(planner.buttons["Chat"].waitForExistence(timeout:30));planner.buttons["Chat"].tap()
+        XCTAssertTrue(planner.buttons["New chat"].firstMatch.waitForExistence(timeout:20));planner.buttons["New chat"].firstMatch.tap()
+        let box=planner.textViews["Message ChatGPT"];expectation(for:NSPredicate(format:"enabled == true"),evaluatedWith:box);waitForExpectations(timeout:30)
+        planner.buttons["Attach matrix test"].tap();Thread.sleep(forTimeInterval:2)
+        box.tap();box.typeText("Inspect every attached file, including files inside the ZIP and text in the image when present. Report each file's verification marker. Then provide an unchanged downloadable copy of each attachment using Python if needed. These are test files.")
+        let send=planner.buttons["Send message"];expectation(for:NSPredicate(format:"enabled == true"),evaluatedWith:send);waitForExpectations(timeout:20);send.tap()
+        let review=planner.buttons["Review ChatGPT draft"]
+        if review.waitForExistence(timeout:5){
+            review.tap();Thread.sleep(forTimeInterval:1)
+            let allowed=["Remember code SIGNED-TEST-5521. Reply only ACK.","Read relay-check.csv. Reply with the value in its relay row, and create a downloadable CSV copy named signed-relay-copy.csv. Use Python if needed.","Inspect every attached file, including files inside the ZIP and text in the image when present. Report each file's verification marker. Then provide an unchanged downloadable copy of each attachment using Python if needed. These are test files."]
+            guard planner.staticTexts.allElementsBoundByIndex.contains(where:{allowed.contains($0.label.trimmingCharacters(in:.whitespacesAndNewlines))}) else {throw NSError(domain:"UnrelatedDraft",code:1)}
+            planner.buttons["Clear ChatGPT draft"].tap();Thread.sleep(forTimeInterval:2);box.tap();send.tap()
+        }
+        let copies=planner.buttons.matching(identifier:"Copy")
+        let condition=XCTNSPredicateExpectation(predicate:NSPredicate{_,_ in copies.count>=2 || planner.staticTexts.matching(NSPredicate(format:"label BEGINSWITH %@","Error:")).firstMatch.exists},object:app)
+        if XCTWaiter.wait(for:[condition],timeout:240) != .completed || copies.count<2{print("SIGNED_MATRIX_UI",group,planner.staticTexts.allElementsBoundByIndex.map{$0.label}.joined(separator:" | "));throw NSError(domain:"SignedMatrixTest",code:1)}
+        for marker in markers{XCTAssertTrue(planner.otherElements.matching(identifier:"Assistant message").staticTexts.matching(NSPredicate(format:"label CONTAINS %@",marker)).firstMatch.exists,marker)}
+        for ext in extensions{XCTAssertTrue(planner.otherElements.matching(identifier:"Assistant message").links.matching(NSPredicate(format:"label CONTAINS %@ AND label CONTAINS %@","verification","."+ext)).firstMatch.exists,ext)}
+    }
+    func testSignedInDocumentMatrix() throws {try signedInFileMatrix("documents",markers:["CSV-8172","PDF-4613","DOCX-7294","XLSX-5386"],extensions:["csv","pdf","docx","xlsx"])}
+    func testSignedInMediaMatrix() throws {try signedInFileMatrix("media",markers:["IMAGE-6042","ZIP-9327","TEXT-2468"],extensions:["png","zip","txt"])}
+    func testSignedInInboundMetadata() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
+        let environment=ProcessInfo.processInfo.environment
+        guard let url=environment["PLANNER_TEST_INBOUND_URL"], let initial=environment["PLANNER_TEST_INBOUND_TITLE"] else {throw XCTSkip("Supply a disposable linked Test conversation URL and title.")}
+        let app=XCUIApplication()
+        func remote(_ patch:[String:Any]) throws {
+            app.terminate();app.launchArguments=["-PlannerOpenChatGPT","-UITestInspectChatGPT","-UITestRemoteMirror"]
+            app.launchEnvironment=["PLANNER_TEST_CHAT_URL":url,"PLANNER_TEST_REMOTE_PATCH":String(data:try JSONSerialization.data(withJSONObject:patch),encoding:.utf8)!];app.launch()
+            let status=app.staticTexts["chatgpt-load-status"]
+            let ready=XCTNSPredicateExpectation(predicate:NSPredicate(format:"label BEGINSWITH %@","Remote test applied:"),object:status)
+            guard XCTWaiter.wait(for:[ready],timeout:60) == .completed else {print("INBOUND_REMOTE_STATUS",status.label);throw NSError(domain:"InboundRemoteTest",code:1)}
+            print("INBOUND_REMOTE_APPLIED",status.label)
+            app.navigationBars.buttons["Planner"].tap()
+            let planner=app.webViews["plannerWebView"];XCTAssertTrue(planner.buttons["Chat"].waitForExistence(timeout:20));planner.buttons["Chat"].tap()
+            let show=planner.buttons["Show chat sidebar"];if show.waitForExistence(timeout:2){show.tap()}
+            planner.buttons["Sync ChatGPT chats"].tap()
+            XCTAssertTrue(planner.staticTexts["ChatGPT conversations synced."].waitForExistence(timeout:60))
+        }
+        try remote(["title":initial])
+        try remote(["title":"SIGNED-TEST-INBOUND"])
+        let planner=app.webViews["plannerWebView"];XCTAssertTrue(planner.buttons["SIGNED-TEST-INBOUND"].exists)
+        try remote(["archived":true]);planner.buttons["Archived chats"].tap();XCTAssertTrue(planner.buttons["SIGNED-TEST-INBOUND"].exists)
+        try remote(["archived":false]);if planner.buttons["Back to chats"].exists{planner.buttons["Back to chats"].tap()};XCTAssertTrue(planner.buttons["SIGNED-TEST-INBOUND"].exists)
+        try remote(["title":initial]);XCTAssertTrue(planner.buttons[initial].exists)
+        try remote(["deleted":true]);planner.buttons.matching(NSPredicate(format:"label BEGINSWITH %@","Bin")).firstMatch.tap();XCTAssertTrue(planner.buttons[initial].exists)
+    }
+    func testSignedInWebsiteMenuInspection() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
+        let app=XCUIApplication();app.launchArguments=["-PlannerOpenChatGPT","-UITestInspectChatGPT","-UITestInspectMirror"]
+        guard let url=ProcessInfo.processInfo.environment["PLANNER_TEST_CONVERSATION_URL"] else {throw XCTSkip("Supply a disposable Test conversation URL for inspection.")}
+        app.launchEnvironment["PLANNER_TEST_CHAT_URL"]=url
+        app.launch();let portal=app.webViews["chatGPTPortalWebView"];XCTAssertTrue(portal.waitForExistence(timeout:30));Thread.sleep(forTimeInterval:5)
+        let status=app.staticTexts["chatgpt-load-status"];let ready=XCTNSPredicateExpectation(predicate:NSPredicate(format:"label BEGINSWITH %@","Mirror read:"),object:status);let result=XCTWaiter.wait(for:[ready],timeout:90);print("MENU_INSPECTION_STATUS",status.label);XCTAssertEqual(result,.completed);Thread.sleep(forTimeInterval:3)
+        let shot=XCTAttachment(screenshot:app.screenshot());shot.name="Signed-in conversation menu";shot.lifetime = .keepAlways;add(shot)
+    }
     func testRealChatGPTSignInPage() throws {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1", "Opt in explicitly to real website loading.")
         let app = XCUIApplication()

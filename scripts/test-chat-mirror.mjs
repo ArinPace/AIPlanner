@@ -18,6 +18,11 @@ try{
  await page.goto(url)
  const run=(operation,extra={})=>page.evaluate(async({script,url,operation,...args})=>{const execute=new Function('url','operation','expected','title',`return (async()=>{${script}})()`);return execute(url,operation,args.expected??null,args.title??'')},{script,url,operation,...extra})
  assert.deepEqual(await run('read'),{title:'Planner QA',archived:false,deleted:false})
+ // Real signed-in pages keep a hidden duplicate header and can hydrate late.
+ await page.evaluate(()=>{const hidden=document.createElement('header');hidden.hidden=true;hidden.innerHTML='<button aria-label="Chat actions">Hidden options</button>';document.body.prepend(hidden)})
+ assert.deepEqual(await run('read'),{title:'Planner QA',archived:false,deleted:false})
+ await page.evaluate(()=>{const button=document.querySelector('header:not([hidden]) button');const fresh=button.cloneNode(true);button.replaceWith(fresh);setTimeout(()=>fresh.addEventListener('pointerdown',()=>button.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))),700)})
+ assert.deepEqual(await run('read'),{title:'Planner QA',archived:false,deleted:false})
  await run('rename',{title:'Math',expected:{title:'Planner QA',archived:false,deleted:false}})
  assert.equal((await run('read')).title,'Math')
  await run('archive',{expected:{title:'Math',archived:false,deleted:false}})

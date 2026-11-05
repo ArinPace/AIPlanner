@@ -86,7 +86,7 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
   setBusy(true);setError('')
   try{const saved=await subscriptionChatRequest<SubscriptionChat>(undefined,{action:'update',id:chat.id,...patch});setRename(null);if(native&&saved.provider_url&&Object.keys(patch).some(k=>['title','archived','deleted'].includes(k))){setSyncing(true);try{await mirrorChat(saved);setSyncNotice('ChatGPT conversation synced.')}finally{setSyncing(false)}}else if(saved.provider_url&&!native){setSyncNotice('Saved in Planner. Open the iPhone app to sync ChatGPT.')}await refresh()}catch(e){setError(e instanceof Error?e.message:'Could not update chat.')}finally{setBusy(false);await refresh().catch(()=>{})}
  }
- async function connect(){setError('');try{if(window.plannerNativeChatGPTPortal){await nativeRequest({action:'chatGPTPortal',account:username});return}await subscriptionChatRequest(undefined,{action:'connect'})}catch(e){setError(e instanceof Error?e.message:'Could not connect ChatGPT.')}}
+ async function connect(){setError('');try{if(window.plannerNativeChatGPTPortal){await nativeRequest({action:'chatGPTPortal',account:username,intent:relayReady?'inspect':'connect'});return}await subscriptionChatRequest(undefined,{action:'connect'})}catch(e){setError(e instanceof Error?e.message:'Could not connect ChatGPT.')}}
  async function saveReply(value:Recovery){
   while(value.outputs?.length){
    const output=value.outputs[0];setRelayPhase('Downloading '+output.name+'…')

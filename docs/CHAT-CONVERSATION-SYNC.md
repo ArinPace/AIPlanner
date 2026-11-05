@@ -10,10 +10,21 @@ ChatGPT deletion is permanent; Planner asks before a linked conversation is move
 
 A page observer records per-chat delete confirmations made inside the app's ChatGPT session. Only positively observed deletion of a previously verified linked chat propagates back. Deletes made in another browser/device that merely produce an unavailable page are reported for attention rather than guessed. Rename/archive pulls require readable metadata on the linked conversation page. Changed site markup, unsupported locale controls, authentication, a site-level dialog or an unsent website draft stop the operation and leave Planner changes pending.
 
+## Sign-in and test project
+
+Connecting ChatGPT automatically returns to Planner after two consecutive signed-in, composer-ready checks. This dismisses the portal, not the login session. Opening an already connected session manually keeps it available for inspection. The website data store remains separate for each Planner account.
+
+For arin's current signed-in testing, fresh conversations are created in the **Test** project through visible project controls. A missing or unrecognized project control stops sending; it does not silently send outside the project. Empty Planner chats are still local drafts until their first message. Existing linked chats retain their canonical conversation IDs across app restarts. Provisional `local-chatgpt:` routes are never saved as provider bindings.
+
+The composer reader handles the current ChatGPT Work layout and ignores CSS placeholder text. Actual unsent drafts stop sending or syncing. The project home sometimes restores a previously submitted prompt: only a fingerprint of a prompt with a verified completed reply in that same project is eligible for automatic cleanup. Arbitrary drafts are never cleared automatically. File editors are not used as conversation composers.
+
 ## Verification
 
 - Web and simulator native builds.
 - Pure reconciliation tests and backend ownership, stale version, wrong URL and verified-ack tests.
 - Exact native JavaScript against browser DOM fixtures: rename, archive, unarchive, confirmed delete, observer detection, stale-state refusal, guest rejection and missing controls.
 - Planner UI/native bridge fixtures for outbound rename/unarchive/delete and inbound rename/archive.
-- These fixtures do not establish real signed-in ChatGPT acceptance. The user declined simulator sign-in. Read-only metadata was observed on a real Chrome ChatGPT test chat; a later mutation test lost CDP, so its outcome was not verified. No private endpoints, login credentials or cookies were accessed.
+- November 5 signed-in simulator acceptance: automatic return to Planner; a three-turn remembered-code conversation including app termination/relaunch; new saved conversations in Test; real CSV, PDF, DOCX, XLSX, PNG, ZIP and TXT inputs read and returned through Planner. Hidden content markers were recovered, including image pixels and the ZIP member. All seven returned files were independently downloaded from Planner storage and matched the authored originals byte-for-byte. Live metadata reading uses the foreground menu rather than hidden duplicate controls.
+- Live Planner-originated rename/archive/restore/delete passed. Website-originated rename/archive/restore/delete passed the full regression across app restarts, including a successful all-chat sync after deletion. Restored home-page prompts no longer block unrelated chats. Rename/archive mutations are also verified after reloading ChatGPT, avoiding an optimistic-only acknowledgement. Fixture passes remain distinct from live evidence.
+- Authored valid fixtures are in `ios/AIPlannerUITests/Fixtures/Relay`. After installing the debug app, run `python3 scripts/install-relay-test-fixtures.py <simulator-UDID>`. Live tests require `TEST_RUNNER_PLANNER_LIVE_CHAT_RELAY_TEST=1` for xcodebuild. Lifecycle deletion tests additionally require an explicitly supplied disposable Test chat (`TEST_RUNNER_PLANNER_TEST_LIFECYCLE_TITLE`, or inbound URL/title variables); inspection requires `TEST_RUNNER_PLANNER_TEST_CONVERSATION_URL`. They submit real test prompts/files and consume account usage; run only in an authorized test account/project.
+- No private ChatGPT endpoints, login credentials or cookies are read. The Chat relay still requires Planner to remain open and does not supply the VM Agent's browser tools or unattended scheduling.
