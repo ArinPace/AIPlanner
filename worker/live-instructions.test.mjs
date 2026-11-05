@@ -20,5 +20,5 @@ test('Tutor maintenance is included in real runtime rules without truncating per
  assert(!standard.includes('Interactive browser control is enabled'))
  const enabled=effectiveInstructions('base',{content:old},{browserControl:true})
  assert(enabled.indexOf('Interactive browser control is enabled')>enabled.indexOf(old))
- for(const term of ['browser_screenshot','browser_action','may send messages','authorized actions','not an instruction to send unrelated messages'])assert(enabled.includes(term),term)
+ for(const term of ['browser_screenshot','browser_action','may send messages','user-requested task','not an instruction to send unrelated messages'])assert(enabled.includes(term),term)
  })

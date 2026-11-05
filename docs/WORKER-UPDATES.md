@@ -10,8 +10,9 @@ not a compromised app deployment. Redirects are rejected and downloads are bound
 Site additions still require registering the source in the web/server and worker
 code, including source-specific sign-in detection and read support. Deploying that
 change publishes the worker release automatically. Users can then enable the site
-and sign in privately through Add sites. This is not arbitrary browser automation
-or a promise that every site's web app exposes all its data.
+and sign in privately through Add sites. Accounts with explicitly enabled interactive control can also operate real pages
+through the tools in docs/INTERACTIVE-BROWSER.md. Source-specific extracted readers
+still do not guarantee that every site's data is available.
 
 ## Existing VM: one-time installation
 
