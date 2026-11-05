@@ -23,8 +23,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-worker-upd
 ```
 
 The script asks for the Planner password privately only to check for pending work;
-it does not persist it. It authenticates the existing Multipass guest, repairs a
-stale hostname mapping if necessary (with a hosts backup), stages the updater
+it does not persist it. It authenticates the existing Multipass guest, or uses
+direct SSH after matching the guest IP to its Hyper-V MAC address. Direct SSH uses
+a temporary owner-restricted copy of the existing Multipass key, removed in cleanup;
+the original key and hosts file are unchanged. It stages the updater
 files, and changes the worker's systemd entry point. It never provisions a VM.
 Do not queue new work during this initial maintenance window. The guest installer
 requires a stopped worker; failure restarts the old service. New VMs receive the
