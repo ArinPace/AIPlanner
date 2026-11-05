@@ -11,6 +11,7 @@ export const clientControlSchema=z.discriminatedUnion('action',[
  z.object({action:action('screen_time_read')}).strict(),
  z.object({action:action('screen_time_authorize')}).strict(),
  z.object({action:action('screen_time_pick_apps')}).strict(),
+ z.object({action:action('screen_time_configure'),expected,groupIds:z.array(z.string().uuid()).max(50),allApps:z.boolean(),domains:z.array(z.string().max(253)).max(50),allWebsites:z.boolean(),allowedDomains:z.array(z.string().max(253)).max(50)}).strict(),
  z.object({action:action('screen_time_start'),expected,end:iso}).strict(),
  z.object({action:action('screen_time_stop'),expected}).strict(),
  z.object({action:action('screen_time_task_save'),expected,task}).strict(),

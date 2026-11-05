@@ -16,6 +16,10 @@ enum FocusShieldRules {
     static let leaseActivity = DeviceActivityName("plannerLocationLease")
     static let defaults = UserDefaults(suiteName: "group.com.arinpace.aiplanner")!
     static var rule: FocusLocationRule { FocusLocationRule(rawValue: defaults.string(forKey: "focusLocationRule") ?? "") ?? .blockInside }
+    static func applyPolicy(_ policy: FocusBlockPolicy, to store: ManagedSettingsStore) {
+        store.shield.applicationCategories = policy.allApps ? .all(except: []) : store.shield.applicationCategories
+        store.webContent.blockedByFilter = policy.allWebsites ? .all(except: Set(policy.allowedDomains.map { WebDomain(domain: $0) })) : (policy.domains.isEmpty ? nil : .specific(Set(policy.domains.map { WebDomain(domain: $0) })))
+    }
     static func apply(blocked: Bool) {
         let store = ManagedSettingsStore(named: .init("plannerFocus"))
         guard blocked, defaults.double(forKey: "focusEnd") > Date().timeIntervalSince1970,
@@ -26,6 +30,7 @@ enum FocusShieldRules {
         store.shield.applications = selection.applicationTokens.isEmpty ? nil : selection.applicationTokens
         store.shield.applicationCategories = selection.categoryTokens.isEmpty ? nil : .specific(selection.categoryTokens)
         store.shield.webDomains = selection.webDomainTokens.isEmpty ? nil : selection.webDomainTokens
+        if let data = defaults.data(forKey: "focusBlockPolicy"), let policy = try? JSONDecoder().decode(FocusBlockPolicy.self, from: data) { applyPolicy(policy, to: store) }
         if defaults.double(forKey: "focusEnd") <= Date().timeIntervalSince1970 { store.clearAllSettings() }
     }
     static func registerVerification(until: Date) throws {
@@ -75,6 +80,7 @@ struct TaskFocusRecord: Codable {
     var account: String
     var window: TaskFocusWindow
     var selection: FamilyActivitySelection
+    var policy: FocusBlockPolicy? = nil
     var testAllApps: Bool = false
 }
 /// Each occurrence has its own settings store, so overlapping task blocks cannot clear one another.
@@ -102,15 +108,15 @@ enum TaskFocusRules {
             intervalStart: calendar.dateComponents(fields, from: Date(timeIntervalSince1970: monitorStart)),
             intervalEnd: calendar.dateComponents(fields, from: Date(timeIntervalSince1970: end)), repeats: false, warningTime: warning))
     }
-    static func save(account: String, window: TaskFocusWindow, selection: FamilyActivitySelection, testAllApps: Bool = false) throws {
+    static func save(account: String, window: TaskFocusWindow, selection: FamilyActivitySelection, testAllApps: Bool = false, policy: FocusBlockPolicy? = nil) throws {
         guard account == defaults.string(forKey: "feedback-account"), window.valid, window.end > Date().timeIntervalSince1970 else { throw TaskFocusError("This task has ended or your account changed. Refresh your calendar.") }
         guard AuthorizationCenter.shared.authorizationStatus == .approved else { throw TaskFocusError("Allow Screen Time access first.") }
-        guard testAllApps || !selection.applicationTokens.isEmpty || !selection.categoryTokens.isEmpty || !selection.webDomainTokens.isEmpty else { throw TaskFocusError("Choose apps to block first.") }
+        guard policy?.hasRules == true || testAllApps || !selection.applicationTokens.isEmpty || !selection.categoryTokens.isEmpty || !selection.webDomainTokens.isEmpty else { throw TaskFocusError("Choose apps to block first.") }
         refreshAll()
         var values = records()
         let old = record(account: account, window: window)
         guard let name = old?.name ?? (0..<16).map({ prefix + String($0) }).first(where: { values[$0] == nil }) else { throw TaskFocusError("Remove a scheduled task block before adding another.") }
-        let next = TaskFocusRecord(name: name, account: account, window: window, selection: selection, testAllApps: testAllApps)
+        let next = TaskFocusRecord(name: name, account: account, window: window, selection: selection, policy: policy, testAllApps: testAllApps)
         values[name] = next; write(values)
         do { try register(next) }
         catch { values[name] = old; write(values); throw error }
@@ -125,6 +131,7 @@ enum TaskFocusRules {
         store.shield.applications = record.selection.applicationTokens.isEmpty ? nil : record.selection.applicationTokens
         store.shield.applicationCategories = record.selection.categoryTokens.isEmpty ? nil : .specific(record.selection.categoryTokens)
         store.shield.webDomains = record.selection.webDomainTokens.isEmpty ? nil : record.selection.webDomainTokens
+        if let policy = record.policy { FocusShieldRules.applyPolicy(policy, to: store) }
         #if DEBUG && targetEnvironment(simulator)
         if record.testAllApps { store.shield.applicationCategories = .all(except: []) }
         #endif
@@ -154,4 +161,44 @@ struct TaskFocusError: LocalizedError {
     let message: String
     init(_ message: String) { self.message = message }
     var errorDescription: String? { message }
+}
+
+struct FocusBlockPolicy: Codable {
+    var allApps = false
+    var domains: [String] = []
+    var allWebsites = false
+    var allowedDomains: [String] = []
+    var hasRules: Bool { allApps || allWebsites || !domains.isEmpty }
+    static func domains(_ text: String) throws -> [String] {
+        let values = Array(Set(text.lowercased().split(whereSeparator: { $0.isWhitespace || $0 == "," }).map(String.init))).sorted()
+        guard values.count <= 50, values.allSatisfy({ $0.range(of: #"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$"#, options: .regularExpression) != nil }) else { throw TaskFocusError("Enter up to 50 website domains, such as instagram.com, without paths.") }
+        return values
+    }
+}
+struct FocusAppGroup: Codable, Identifiable {
+    var id: String
+    var name: String
+    var selection: FamilyActivitySelection
+}
+enum FocusAppGroups {
+    static func key(_ account: String) -> String { "focus-app-groups:" + account }
+    static func read(_ account: String) -> [FocusAppGroup] {
+        guard let data = FocusShieldRules.defaults.data(forKey: key(account)) else { return [] }
+        return (try? JSONDecoder().decode([FocusAppGroup].self, from: data)) ?? []
+    }
+    static func write(_ groups: [FocusAppGroup], account: String) throws {
+        guard !account.isEmpty, account == FocusShieldRules.defaults.string(forKey: "feedback-account") else { throw TaskFocusError("Sign in before saving app groups.") }
+        FocusShieldRules.defaults.set(try JSONEncoder().encode(groups), forKey: key(account))
+    }
+    static func selection(_ ids: [String], account: String) throws -> FamilyActivitySelection {
+        let groups = read(account)
+        guard ids.allSatisfy({ id in groups.contains { $0.id == id } }) else { throw TaskFocusError("An app group no longer exists. Read Screen Time again.") }
+        var selection = FamilyActivitySelection(includeEntireCategory: true)
+        for group in groups where ids.contains(group.id) {
+            selection.applicationTokens.formUnion(group.selection.applicationTokens)
+            selection.categoryTokens.formUnion(group.selection.categoryTokens)
+            selection.webDomainTokens.formUnion(group.selection.webDomainTokens)
+        }
+        return selection
+    }
 }

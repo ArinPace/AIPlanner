@@ -29,6 +29,6 @@ function NativeScreenTimePanel(){
 }
 
 export function ScreenTimePanel(){
- const [mode,setMode]=useState<'cloud'|'native'>('cloud')
+ const [mode,setMode]=useState<'cloud'|'native'>(window.plannerNativeScreenTime?'native':'cloud')
  return <div className="agent-tab-panel"><div><button type="button" aria-pressed={mode==='cloud'} onClick={()=>setMode('cloud')}>Cloud blocking</button>{window.plannerNativeScreenTime&&<button type="button" aria-pressed={mode==='native'} onClick={()=>setMode('native')}>Apple Screen Time</button>}</div>{mode==='cloud'?<CloudScreenTime/>:<NativeScreenTimePanel/>}</div>
 }

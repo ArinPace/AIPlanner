@@ -253,7 +253,7 @@ struct PlannerWebView: UIViewRepresentable {
                     case "localReplicaAccount":
                         let account = body["account"] as? String
                         let changed = account != WidgetTaskControl.defaults.string(forKey: "feedback-account")
-                        if changed { clearChatGPT(); TaskFocusRules.clearAll(); taskScreenTimeHost?.dismiss(animated: false); WidgetTaskControl.clear() }
+                        if changed { ScreenTimeModel().stop(); FocusShieldRules.defaults.removeObject(forKey: "focusSelection"); FocusShieldRules.defaults.removeObject(forKey: "focusBlockPolicy"); clearChatGPT(); TaskFocusRules.clearAll(); taskScreenTimeHost?.dismiss(animated: false); WidgetTaskControl.clear() }
                         WidgetTaskControl.defaults.set(account, forKey: "feedback-account")
                         #if DEBUG
                         if let account,!clientControlTestStarted,ProcessInfo.processInfo.arguments.contains("-UITestClientControls") {

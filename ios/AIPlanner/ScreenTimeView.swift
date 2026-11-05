@@ -7,6 +7,7 @@ import CryptoKit
 
 @MainActor final class ScreenTimeModel: ObservableObject {
     @Published var selection = FamilyActivitySelection(includeEntireCategory: true)
+    @Published var policy = FocusBlockPolicy()
     @Published var end: Date?
     @Published var error: String?
     @Published var authorizing = false
@@ -25,6 +26,7 @@ import CryptoKit
             restored.webDomainTokens = saved.webDomainTokens
             selection = restored
         }
+        if let data = defaults.data(forKey: "focusBlockPolicy"), let saved = try? JSONDecoder().decode(FocusBlockPolicy.self, from: data) { policy = saved }
         refresh()
     }
     func refresh() {
@@ -61,7 +63,7 @@ import CryptoKit
     }
     func start(minutes: Int, until absoluteEnd: Date? = nil) {
         guard authorized else { error = "Allow Screen Time access first."; return }
-        guard !selection.applicationTokens.isEmpty || !selection.categoryTokens.isEmpty || !selection.webDomainTokens.isEmpty else { error = "Choose apps to block first."; return }
+        guard policy.hasRules || !selection.applicationTokens.isEmpty || !selection.categoryTokens.isEmpty || !selection.webDomainTokens.isEmpty else { error = "Choose apps to block first."; return }
         guard end == nil else { error = "End the current session before starting another."; return }
         guard (15...720).contains(minutes) else { error = "Choose between 15 minutes and 12 hours."; return }
         if let locationError = FocusLocationController.shared.validationError() { error = locationError; return }
@@ -76,6 +78,7 @@ import CryptoKit
             let schedule = DeviceActivitySchedule(intervalStart: calendar.dateComponents(fields, from: now), intervalEnd: calendar.dateComponents(fields, from: until), repeats: false)
             try DeviceActivityCenter().startMonitoring(activity, during: schedule)
             defaults.set(encodedSelection, forKey: "focusSelection")
+            defaults.set(try JSONEncoder().encode(policy), forKey: "focusBlockPolicy")
             defaults.set(until.timeIntervalSince1970, forKey: "focusEnd")
             if FocusLocationController.shared.enabled { FocusLocationController.shared.arm() }
             else { FocusLocationController.shared.reconcileShields() }
@@ -115,6 +118,13 @@ struct ScreenTimeView: View {
     @Environment(\.scenePhase) private var phase
     @State private var picker = false
     @State private var minutes = 30
+    @State private var groups: [FocusAppGroup] = []
+    @State private var groupName = ""
+    @State private var groupSelection = FamilyActivitySelection(includeEntireCategory: true)
+    @State private var groupPicker = false
+    @State private var websites = ""
+    @State private var allowedWebsites = ""
+    private var account: String { WidgetTaskControl.defaults.string(forKey: "feedback-account") ?? "" }
     private let pickerRequest = NotificationCenter.default.publisher(for: Notification.Name("PlannerAgentChooseApps"))
     var body: some View {
         NavigationStack {
@@ -125,7 +135,29 @@ struct ScreenTimeView: View {
                 if !model.authorized {
                     Section { Button("Allow Screen Time access") { Task { await model.authorize() } }.disabled(model.authorizing) }
                 }
-                NextDNSSection(account: WidgetTaskControl.defaults.string(forKey: "feedback-account") ?? "")
+                Section("App groups") {
+                    TextField("Group name (e.g. Social media)", text: $groupName)
+                    Button("Choose apps for new group") {
+                        groupSelection = FamilyActivitySelection(includeEntireCategory: true)
+                        Task { if await model.authorize() { groupPicker = true } }
+                    }.disabled(groupName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    ForEach(groups) { group in
+                        HStack {
+                            Button(group.name) { model.selection = group.selection; model.saveSelection() }
+                            Spacer()
+                            Button("Remove", role: .destructive) {
+                                do { let next = groups.filter { $0.id != group.id }; try FocusAppGroups.write(next, account: account); groups = next } catch { model.error = error.localizedDescription }
+                            }
+                        }
+                    }
+                    Text("Select a saved group to use it for a session. The agent can combine multiple groups.").font(.footnote)
+                }.disabled(model.end != nil)
+                Section("Blocking options") {
+                    Toggle("Block all apps", isOn: $model.policy.allApps)
+                    Toggle("Block all websites", isOn: $model.policy.allWebsites)
+                    TextField(model.policy.allWebsites ? "Allowed domains, separated by commas" : "Blocked domains, separated by commas", text: model.policy.allWebsites ? $allowedWebsites : $websites).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    Text("Website rules need no DNS account. Use domains such as youtube.com.").font(.footnote)
+                }.disabled(model.end != nil)
                 Section("Apps to block") {
                     Button("Choose apps") {
                         Task { if await model.authorize() { picker = true } }
@@ -185,7 +217,9 @@ struct ScreenTimeView: View {
                 } else {
                     Section("Duration") {
                         Stepper("\(minutes) minutes", value: $minutes, in: 15...720, step: 15)
-                        Button("Start blocking") { model.start(minutes: minutes) }.disabled(!model.authorized)
+                        Button("Start blocking") {
+                            do { model.policy.domains = try FocusBlockPolicy.domains(websites); model.policy.allowedDomains = try FocusBlockPolicy.domains(allowedWebsites); model.start(minutes: minutes) } catch { model.error = error.localizedDescription }
+                        }.disabled(!model.authorized)
                     }
                 }
                 #if DEBUG
@@ -204,6 +238,19 @@ struct ScreenTimeView: View {
             }
             .navigationTitle("Screen Time")
             .familyActivityPicker(isPresented: $picker, selection: $model.selection)
+            .familyActivityPicker(isPresented: $groupPicker, selection: $groupSelection)
+            .onChange(of: groupPicker) { wasOpen, isOpen in
+                guard wasOpen && !isOpen else { return }
+                guard !groupSelection.applicationTokens.isEmpty || !groupSelection.categoryTokens.isEmpty || !groupSelection.webDomainTokens.isEmpty else { return }
+                do {
+                    let name = groupName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !name.isEmpty, name.count <= 100 else { throw TaskFocusError("Use a group name of 1–100 characters.") }
+                    let next = groups + [FocusAppGroup(id: UUID().uuidString, name: name, selection: groupSelection)]
+                    try FocusAppGroups.write(next, account: account); groups = next; groupName = ""
+                } catch { model.error = error.localizedDescription }
+            }
+            .onChange(of: account) { _, _ in groups = FocusAppGroups.read(account); groupName = ""; groupSelection = FamilyActivitySelection(includeEntireCategory: true); model.selection = FamilyActivitySelection(includeEntireCategory: true); model.policy = FocusBlockPolicy(); websites = ""; allowedWebsites = ""; model.refresh() }
+            .onAppear { groups = FocusAppGroups.read(account); websites = model.policy.domains.joined(separator: ", "); allowedWebsites = model.policy.allowedDomains.joined(separator: ", ") }
             .onReceive(pickerRequest) { _ in Task { guard model.end == nil else{return};if await model.authorize() { picker = true } } }
             .sheet(isPresented: $choosingLocation) { FocusLocationPicker(location: location) }
         }
@@ -247,6 +294,8 @@ struct TaskScreenTimeView: View {
     let task: TaskFocusWindow
     @StateObject private var authorization = ScreenTimeModel()
     @State private var selection: FamilyActivitySelection
+    @State private var policy = FocusBlockPolicy()
+    @State private var domains = ""
     @State private var picker = false
     @State private var error: String?
     @State private var now = Date()
@@ -260,6 +309,9 @@ struct TaskScreenTimeView: View {
             saved.webDomainTokens = record.selection.webDomainTokens
         }
         _selection = State(initialValue: saved)
+        let savedPolicy = TaskFocusRules.record(account: account, window: task)?.policy ?? FocusBlockPolicy()
+        _policy = State(initialValue: savedPolicy)
+        _domains = State(initialValue: savedPolicy.domains.joined(separator: ", "))
     }
     private var configured: TaskFocusRecord? { TaskFocusRules.record(account: account, window: task) }
     private var ended: Bool { task.end <= now.timeIntervalSince1970 }
@@ -275,7 +327,18 @@ struct TaskScreenTimeView: View {
                 if !authorization.authorized {
                     Section { Button("Allow Screen Time access") { Task { await authorization.authorize() } }.disabled(authorization.authorizing) }
                 }
-                NextDNSSection(account: account)
+                Section("Saved groups and websites") {
+                    ForEach(FocusAppGroups.read(account)) { group in
+                        Button(group.name) {
+                            selection.applicationTokens.formUnion(group.selection.applicationTokens)
+                            selection.categoryTokens.formUnion(group.selection.categoryTokens)
+                            selection.webDomainTokens.formUnion(group.selection.webDomainTokens)
+                        }
+                    }
+                    Toggle("Block all apps", isOn: $policy.allApps)
+                    Toggle("Block all websites", isOn: $policy.allWebsites)
+                    TextField("Blocked domains, separated by commas", text: $domains).textInputAutocapitalization(.never).autocorrectionDisabled()
+                }.disabled(ended)
                 Section("Apps to block for this task") {
                     Button("Choose apps") { Task { if await authorization.authorize() { picker = true } } }.disabled(authorization.authorizing || ended)
                     Text("\(selection.applicationTokens.count) apps · \(selection.categoryTokens.count) categories · \(selection.webDomainTokens.count) websites").font(.footnote).foregroundStyle(.secondary)
@@ -287,7 +350,8 @@ struct TaskScreenTimeView: View {
                             #if DEBUG && targetEnvironment(simulator)
                             testAll = ProcessInfo.processInfo.arguments.contains("-UITestTaskFocusAll")
                             #endif
-                            try TaskFocusRules.save(account: account, window: task, selection: selection, testAllApps: testAll)
+                            policy.domains = try FocusBlockPolicy.domains(domains)
+                            try TaskFocusRules.save(account: account, window: task, selection: selection, testAllApps: testAll, policy: policy)
                             error = nil; now = Date()
                         } catch { self.error = error.localizedDescription }
                     }.disabled(!authorization.authorized || ended)
@@ -433,8 +497,8 @@ private struct NextDNSSettings: View {
         let model=ScreenTimeModel(),location=FocusLocationController.shared,defaults=FocusShieldRules.defaults
         model.refresh()
         let rules=TaskFocusRules.records().values.filter{$0.account==account}.sorted{$0.window.id<$1.window.id}
-        let config:[String:Any]=["authorized":model.authorized,"end":model.end?.timeIntervalSince1970 as Any? ?? NSNull(),"selectionDigest":digest(defaults.data(forKey:"focusSelection") ?? Data()),"rulesDigest":digest(defaults.data(forKey:TaskFocusRules.key) ?? Data()),"locationEnabled":location.enabled,"locationRule":location.rule.rawValue,"place":try location.place.map{try json($0)} as Any? ?? NSNull(),"preciseTracking":location.preciseTracking,"checkInterval":location.checkInterval,"dnsProfile":UserDefaults.standard.string(forKey:"nextdns-profile:"+account) ?? ""]
-        return ["fingerprint":digest(try bytes(config)),"now":ISO8601DateFormatter().string(from:Date()),"authorized":model.authorized,"end":model.end?.timeIntervalSince1970 as Any? ?? NSNull(),"selection":["apps":model.selection.applicationTokens.count,"categories":model.selection.categoryTokens.count,"websites":model.selection.webDomainTokens.count],"globalShieldConfigured":model.store.shield.applications != nil || model.store.shield.applicationCategories != nil || model.store.shield.webDomains != nil || model.store.shield.webDomainCategories != nil,"taskRules":try rules.map{["task":try json($0.window),"selection":["apps":$0.selection.applicationTokens.count,"categories":$0.selection.categoryTokens.count,"websites":$0.selection.webDomainTokens.count]]},"location":["enabled":location.enabled,"rule":location.rule.rawValue,"place":config["place"]!,"preciseTracking":location.preciseTracking,"checkInterval":location.checkInterval,"validationError":location.validationError() as Any? ?? NSNull()],"nextDNS":["hasCredential":!NextDNSCredentials.load(account).isEmpty,"profile":config["dnsProfile"]!],"limits":"Counts and configured shields do not prove OS enforcement. The user chooses opaque app tokens in Apple's picker; permissions need OS approval. DNS device routing must be verified separately."]
+        let config:[String:Any]=["authorized":model.authorized,"end":model.end?.timeIntervalSince1970 as Any? ?? NSNull(),"selectionDigest":digest(defaults.data(forKey:"focusSelection") ?? Data()),"rulesDigest":digest(defaults.data(forKey:TaskFocusRules.key) ?? Data()),"groupsDigest":digest(defaults.data(forKey:FocusAppGroups.key(account)) ?? Data()),"policyDigest":digest(defaults.data(forKey:"focusBlockPolicy") ?? Data()),"locationEnabled":location.enabled,"locationRule":location.rule.rawValue,"place":try location.place.map{try json($0)} as Any? ?? NSNull(),"preciseTracking":location.preciseTracking,"checkInterval":location.checkInterval,"dnsProfile":UserDefaults.standard.string(forKey:"nextdns-profile:"+account) ?? ""]
+        return ["groups":try FocusAppGroups.read(account).map { ["id":$0.id,"name":$0.name,"apps":$0.selection.applicationTokens.count,"categories":$0.selection.categoryTokens.count] as [String:Any] },"policy":try json(model.policy),"fingerprint":digest(try bytes(config)),"now":ISO8601DateFormatter().string(from:Date()),"authorized":model.authorized,"end":model.end?.timeIntervalSince1970 as Any? ?? NSNull(),"selection":["apps":model.selection.applicationTokens.count,"categories":model.selection.categoryTokens.count,"websites":model.selection.webDomainTokens.count],"globalShieldConfigured":model.store.shield.applications != nil || model.store.shield.applicationCategories != nil || model.store.shield.webDomains != nil || model.store.shield.webDomainCategories != nil || model.store.webContent.blockedByFilter != nil,"taskRules":try rules.map{["task":try json($0.window),"selection":["apps":$0.selection.applicationTokens.count,"categories":$0.selection.categoryTokens.count,"websites":$0.selection.webDomainTokens.count]]},"location":["enabled":location.enabled,"rule":location.rule.rawValue,"place":config["place"]!,"preciseTracking":location.preciseTracking,"checkInterval":location.checkInterval,"validationError":location.validationError() as Any? ?? NSNull()],"nextDNS":["hasCredential":!NextDNSCredentials.load(account).isEmpty,"profile":config["dnsProfile"]!],"limits":"Counts and configured shields do not prove OS enforcement. The user chooses opaque app tokens in Apple's picker; permissions need OS approval. DNS device routing must be verified separately."]
     }
     static func run(account:String,command:[String:Any],key:String,issued:String) async throws -> [String:Any] {
         guard account==WidgetTaskControl.defaults.string(forKey:"feedback-account"),let date=iso(issued),Date().timeIntervalSince(date)<7200,Date().timeIntervalSince(date) > -300,key.count<=200,let action=command["action"] as? String else {throw TaskFocusError("Expired request or account changed. No native change was made.")}
@@ -445,7 +509,7 @@ private struct NextDNSSettings: View {
             guard let result=prior["result"] as? [String:Any] else {throw TaskFocusError("This native command already started. Read current state; do not repeat a write blindly.")}
             var replay=result;replay["replayed"]=true;return replay
         }
-        let before=try state(account:account),writes=["screen_time_start","screen_time_stop","screen_time_task_save","screen_time_task_remove","screen_time_location","screen_time_dns_domain"]
+        let before=try state(account:account),writes=["screen_time_start","screen_time_stop","screen_time_task_save","screen_time_task_remove","screen_time_location","screen_time_dns_domain","screen_time_configure"]
         if writes.contains(action),command["expected"] as? String != before["fingerprint"] as? String {throw TaskFocusError("Screen Time changed. Read its current fingerprint before editing.")}
         cache[key]=["digest":hash,"at":Date().timeIntervalSince1970];defaults.set(try bytes(cache),forKey:cacheKey)
         var detail:[String:Any]=[:]
@@ -458,6 +522,13 @@ private struct NextDNSSettings: View {
                 guard model.end==nil else {throw TaskFocusError("End the current focus session before changing apps.")}
                 NotificationCenter.default.post(name:.init("PlannerAgentChooseApps"),object:nil)
                 detail=["pickerRequested":true,"userActionRequired":true,"selectionConfirmed":false]
+            case "screen_time_configure":
+                guard model.end == nil else { throw TaskFocusError("End the current session before changing its blocking options.") }
+                let ids = command["groupIds"] as? [String] ?? []
+                let selection = try FocusAppGroups.selection(ids, account: account)
+                let policy = FocusBlockPolicy(allApps: command["allApps"] as? Bool ?? false, domains: try FocusBlockPolicy.domains((command["domains"] as? [String] ?? []).joined(separator: ",")), allWebsites: command["allWebsites"] as? Bool ?? false, allowedDomains: try FocusBlockPolicy.domains((command["allowedDomains"] as? [String] ?? []).joined(separator: ",")))
+                model.selection = selection; model.saveSelection()
+                defaults.set(try JSONEncoder().encode(policy), forKey: "focusBlockPolicy")
             case "screen_time_start":
                 guard let value=command["end"] as? String,let end=iso(value) else {throw TaskFocusError("Choose a valid absolute focus end.")}
                 model.start(minutes:Int(ceil(end.timeIntervalSinceNow/60)),until:end)
@@ -466,7 +537,7 @@ private struct NextDNSSettings: View {
             case "screen_time_stop":model.stop()
             case "screen_time_task_save":
                 guard let raw=command["task"] as? [String:Any],let id=raw["id"] as? String,let source=raw["sourceEventId"] as? String,let title=raw["title"] as? String,let startValue=raw["start"] as? String,let endValue=raw["end"] as? String,let start=iso(startValue),let end=iso(endValue) else {throw TaskFocusError("Choose a valid task occurrence.")}
-                try TaskFocusRules.save(account:account,window:.init(id:id,sourceEventId:source,title:title,start:start.timeIntervalSince1970,end:end.timeIntervalSince1970),selection:model.selection)
+                try TaskFocusRules.save(account:account,window:.init(id:id,sourceEventId:source,title:title,start:start.timeIntervalSince1970,end:end.timeIntervalSince1970),selection:model.selection,policy:model.policy)
             case "screen_time_task_remove":
                 guard let id=command["taskId"] as? String else {throw TaskFocusError("Choose one task occurrence.")}
                 for record in TaskFocusRules.records().values where record.account==account && record.window.id==id {TaskFocusRules.remove(record.name)}
@@ -516,6 +587,36 @@ extension PlannerClientScreenTime {
         let issued=ISO8601DateFormatter().string(from:Date()),prefix=UUID().uuidString
         func call(_ label:String,_ command:[String:Any]) async throws -> [String:Any] {try await run(account:account,command:command,key:prefix+":"+label,issued:issued)}
         do {
+            checks["domainNormalization"] = try FocusBlockPolicy.domains("YouTube.com, youtube.com instagram.com") == ["instagram.com", "youtube.com"]
+            do { _ = try FocusBlockPolicy.domains("https://youtube.com/path"); checks["invalidDomainRejected"] = false } catch { checks["invalidDomainRejected"] = true }
+            do { _ = try FocusBlockPolicy.domains((0..<51).map { "site\($0).com" }.joined(separator: ",")); checks["domainLimit"] = false } catch { checks["domainLimit"] = true }
+            let groupKey = FocusAppGroups.key(account), originalGroups = FocusShieldRules.defaults.data(forKey: groupKey)
+            do {
+                defer { if let originalGroups { FocusShieldRules.defaults.set(originalGroups, forKey: groupKey) } else { FocusShieldRules.defaults.removeObject(forKey: groupKey) } }
+                let id = UUID().uuidString
+                try FocusAppGroups.write([FocusAppGroup(id: id, name: "QA temporary", selection: FamilyActivitySelection())], account: account)
+                checks["groupPersistence"] = FocusAppGroups.read(account).first?.id == id
+                checks["groupAccountIsolation"] = FocusAppGroups.read("qa-other-" + id).isEmpty
+                _ = try FocusAppGroups.selection([id], account: account)
+                do { _ = try FocusAppGroups.selection([UUID().uuidString], account: account); checks["unknownGroupRejected"] = false } catch { checks["unknownGroupRejected"] = true }
+            }
+            let qaModel = ScreenTimeModel()
+            if qaModel.authorized && qaModel.end == nil {
+                let defaults = FocusShieldRules.defaults
+                let oldSelection = defaults.data(forKey: "focusSelection"), oldPolicy = defaults.data(forKey: "focusBlockPolicy")
+                defer {
+                    ScreenTimeModel().stop()
+                    for (key, data) in [("focusSelection", oldSelection), ("focusBlockPolicy", oldPolicy)] { if let data { defaults.set(data, forKey: key) } else { defaults.removeObject(forKey: key) } }
+                }
+                _ = try await call("configure", ["action":"screen_time_configure", "expected":try state(account:account)["fingerprint"]!, "groupIds":[], "allApps":true, "domains":["example.com"], "allWebsites":false, "allowedDomains":[]])
+                checks["agentPolicyPersisted"] = ScreenTimeModel().policy.allApps && ScreenTimeModel().policy.domains == ["example.com"]
+                _ = try await call("policy-start", ["action":"screen_time_start", "expected":try state(account:account)["fingerprint"]!, "end":ISO8601DateFormatter().string(from:Date().addingTimeInterval(960))])
+                let store = ManagedSettingsStore(named: .init("plannerFocus"))
+                checks["allAppsConfigured"] = store.shield.applicationCategories == .all(except: [])
+                checks["domainsConfigured"] = store.webContent.blockedByFilter == .specific([WebDomain(domain:"example.com")])
+                _ = try await call("policy-stop", ["action":"screen_time_stop", "expected":try state(account:account)["fingerprint"]!])
+                checks["policyStopClears"] = store.webContent.blockedByFilter == nil && store.shield.applicationCategories == nil
+            }
             let baseline=try state(account:account);checks["baseline"]=baseline
             let read=try await call("read",["action":"screen_time_read"]);guard read["state"] != nil else {throw TaskFocusError("Missing native read state.")};checks["read"]=true
             do { _=try await run(account:"not-current-account",command:["action":"screen_time_read"],key:prefix+":other",issued:issued);checks["ownerRejected"]=false }catch{checks["ownerRejected"]=true}
