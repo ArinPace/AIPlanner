@@ -487,7 +487,9 @@ private struct NextDNSSettings: View {
                     guard let domain=command["domain"] as? String,domain.count<=253,domain.range(of:#"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$"#,options:.regularExpression) != nil,let blocked=command["blocked"] as? Bool else {throw TaskFocusError("Choose a valid website domain.")}
                     if blocked {method="POST";payload=["id":domain,"active":true]}else{method="DELETE";suffix="/"+domain}
                 }
-                var request=URLRequest(url:URL(string:"https://api.nextdns.io/profiles/"+profile+"/denylist"+suffix)!);request.httpMethod=method;request.timeoutInterval=25;request.setValue(apiKey,forHTTPHeaderField:"X-Api-Key")
+                var target=URLComponents(string:"https://api.nextdns.io/profiles/"+profile+"/denylist"+suffix)!
+                if let cursor=command["cursor"] as? String {guard action=="screen_time_dns_read",cursor.count<=1000 else{throw TaskFocusError("Invalid NextDNS page cursor.")};target.queryItems=[URLQueryItem(name:"cursor",value:cursor)]}
+                var request=URLRequest(url:target.url!);request.httpMethod=method;request.timeoutInterval=25;request.setValue(apiKey,forHTTPHeaderField:"X-Api-Key")
                 if let payload{request.httpBody=try bytes(payload);request.setValue("application/json",forHTTPHeaderField:"Content-Type")}
                 let (data,response)=try await URLSession.shared.data(for:request)
                 guard let http=response as? HTTPURLResponse,(200...299).contains(http.statusCode) else{throw TaskFocusError("NextDNS request failed. Read the denylist before retrying; an interrupted write may have completed.")}

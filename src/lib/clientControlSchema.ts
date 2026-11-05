@@ -16,7 +16,7 @@ export const clientControlSchema=z.discriminatedUnion('action',[
  z.object({action:action('screen_time_task_save'),expected,task}).strict(),
  z.object({action:action('screen_time_task_remove'),expected,taskId:z.string().min(1).max(500)}).strict(),
  z.object({action:action('screen_time_location'),expected,enabled:z.boolean().optional(),rule:z.enum(['allowInside','blockInside']).optional(),preciseTracking:z.boolean().optional(),checkInterval:z.union([z.literal(120),z.literal(180),z.literal(300),z.literal(600)]).optional(),place:z.object({name:z.string().min(1).max(200),latitude:z.number().min(-90).max(90),longitude:z.number().min(-180).max(180),radius:z.number().min(50).max(1000)}).strict().optional()}).strict(),
- z.object({action:action('screen_time_dns_read')}).strict(),
+ z.object({action:action('screen_time_dns_read'),cursor:z.string().min(1).max(1000).optional()}).strict(),
  z.object({action:action('screen_time_dns_domain'),expected,domain:z.string().toLowerCase().regex(/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/),blocked:z.boolean()}).strict(),
 ])
 export type ClientControl=z.infer<typeof clientControlSchema>
