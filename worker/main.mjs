@@ -72,12 +72,13 @@ async function chat(job, auth, remote) {
     'mcp_servers.planner.url': new URL('/api/agent/vm/worker/mcp', origin).href,
     'mcp_servers.planner.bearer_token_env_var': 'PLANNER_WORKER_TOKEN',
     'mcp_servers.planner.http_headers': { 'X-Planner-Job': job.id, 'X-Planner-Lease': job.lease },
-    'mcp_servers.planner.disabled_tools': ['browser_open', 'browser_read', 'browser_close', 'google_calendar_accounts', 'google_calendar_read'],
+    'mcp_servers.planner.disabled_tools': ['browser_open', 'browser_read', 'browser_close'],
     'mcp_servers.browser.command': node,
     'mcp_servers.browser.tool_timeout_sec': 300,
     'mcp_servers.browser.args': [path.join(root, 'browser-tools.mjs')],
-    'mcp_servers.browser.env': { ...browserRuntimeEnv(dataDir), PLANNER_JOB_ID:job.id, PLANNER_JOB_LEASE:job.lease, PLANNER_ENABLED_SOURCES: JSON.stringify(remote.sources) },
+    'mcp_servers.browser.env': { ...browserRuntimeEnv(dataDir), PLANNER_BROWSER_CONTROL:remote.browserControlEnabled===true?'1':'0', PLANNER_JOB_ID:job.id, PLANNER_JOB_LEASE:job.lease, PLANNER_ENABLED_SOURCES: JSON.stringify(remote.sources) },
     'mcp_servers.browser.env_vars': ['PLANNER_WORKER_TOKEN', 'PLANNER_ORIGIN'],
+    ...(remote.browserControlEnabled===true?Object.fromEntries(['browser_navigate','browser_action','browser_tabs','browser_snapshot','browser_screenshot','browser_import_pdf','browser_view_image','browser_read'].map(name=>['mcp_servers.browser.tools.'+name+'.approval_mode','approve'])):{}),
     ...(remote.approvedBrowserTools?.includes('browser_read_whatsapp_chat') && remote.whatsappReadConsentAt && remote.sources.includes('whatsapp') ? {'mcp_servers.browser.tools.browser_read_whatsapp_chat.approval_mode':'approve'} : {}),
     ...(remote.approvedBrowserTools?.includes('browser_read_slack_dm') && remote.messageReadConsent?.slack && remote.sources.includes('slack') ? {'mcp_servers.browser.tools.browser_read_slack_dm.approval_mode':'approve'} : {}),
   }
@@ -99,7 +100,7 @@ async function chat(job, auth, remote) {
   })
   try {
     await rpc.initialize()
-    const params = { cwd: path.join(dataDir, 'workspace'), ...(process.env.PLANNER_MODEL ? { model: process.env.PLANNER_MODEL } : auth.type === 'codex' ? {} : { model: 'gpt-6-luna' }), approvalPolicy: job.kind === 'sync' ? 'never' : 'on-request', sandbox: 'workspace-write', developerInstructions: effectiveInstructions((remote.accountBehaviorInstructions||'')+'\nTutor enabled for this account: '+(remote.tutorEnabled===true?'yes':'no')+'\n'+instructions+'\n\n'+plannerGuidance+'\n\n'+whatsappPermissionText(remote.whatsappReadConsentAt)+'\n\n'+messagePermissionText(remote.messageReadConsent),remote.agentInstructions) }
+    const params = { cwd: path.join(dataDir, 'workspace'), ...(process.env.PLANNER_MODEL ? { model: process.env.PLANNER_MODEL } : auth.type === 'codex' ? {} : { model: 'gpt-6-luna' }), approvalPolicy: job.kind === 'sync' ? 'never' : 'on-request', sandbox: 'workspace-write', developerInstructions: effectiveInstructions((remote.accountBehaviorInstructions||'')+'\nTutor enabled for this account: '+(remote.tutorEnabled===true?'yes':'no')+'\n'+instructions+'\n\n'+plannerGuidance+'\n\n'+whatsappPermissionText(remote.whatsappReadConsentAt)+'\n\n'+messagePermissionText(remote.messageReadConsent),remote.agentInstructions,{browserControl:remote.browserControlEnabled===true}) }
     const fork=!threadId && job.fork_thread_id && job.fork_turn_id
     const thread = await rpc.request(fork?'thread/fork':threadId ? 'thread/resume' : 'thread/start', { ...params, ...(fork?{threadId:job.fork_thread_id,lastTurnId:job.fork_turn_id,excludeTurns:true}:threadId ? { threadId, excludeTurns: true } : {}) }, 60000)
     threadId = thread.thread.id
@@ -132,7 +133,7 @@ for (;;) {
     const auth = await credential(remote).catch(() => null)
     signedIn = Boolean(auth); identity = auth?.identity || null
     pendingSites = { ...pendingSites, ...await observeSignIn(dataDir).catch(() => ({})) }
-    ;({ job } = await api('claim', { signedIn, identity, workerStartedAt, observedSites: pendingSites, runtime: remote.aiProvider === 'claude_code' ? 'claude' : 'codex', chatgptConnected: Boolean(nativeChatGpt), claudeConnected: Boolean(nativeClaude), activateClaude, version: '0.2.3' }))
+    ;({ job } = await api('claim', { signedIn, identity, workerStartedAt, observedSites: pendingSites, runtime: remote.aiProvider === 'claude_code' ? 'claude' : 'codex', chatgptConnected: Boolean(nativeChatGpt), claudeConnected: Boolean(nativeClaude), activateClaude, version: '0.3.0' }))
     process.send?.({ type: 'ready' })
     workerReady = true
     pendingSites = {}

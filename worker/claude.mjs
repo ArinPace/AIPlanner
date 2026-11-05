@@ -65,17 +65,17 @@ export async function claudeChat({ dataDir, job, remote, origin, token, instruct
   instructions += '\n\n'+plannerGuidance
   instructions += '\n\n' + whatsappPermissionText(remote.whatsappReadConsentAt)
   instructions += '\n\n' + messagePermissionText(remote.messageReadConsent)
-  instructions=effectiveInstructions((remote.accountBehaviorInstructions||'')+'\nTutor enabled for this account: '+(remote.tutorEnabled===true?'yes':'no')+'\n'+instructions,remote.agentInstructions)
+  instructions=effectiveInstructions((remote.accountBehaviorInstructions||'')+'\nTutor enabled for this account: '+(remote.tutorEnabled===true?'yes':'no')+'\n'+instructions,remote.agentInstructions,{browserControl:remote.browserControlEnabled===true})
   const sessionPath = path.join(dataDir, 'claude-sessions.json')
   let sessions = {}; try { sessions = JSON.parse(await readFile(sessionPath, 'utf8')) } catch {}
   const key = job.chat_id || job.id, existing = sessions[key]
   const sessionId = existing || randomUUID()
   const mcp = { mcpServers: {
     planner: { type: 'http', url: new URL('/api/agent/vm/worker/mcp', origin).href, headers: { Authorization: 'Bearer ' + token, 'X-Planner-Job': job.id, 'X-Planner-Lease': job.lease } },
-    browser: { command: process.execPath, args: [path.join(root, 'browser-tools.mjs')], env: { ...browserRuntimeEnv(dataDir), PLANNER_JOB_ID:job.id, PLANNER_JOB_LEASE:job.lease, PLANNER_ENABLED_SOURCES: JSON.stringify(remote.sources), PLANNER_ORIGIN: origin.href, PLANNER_WORKER_TOKEN: token } },
+    browser: { command: process.execPath, args: [path.join(root, 'browser-tools.mjs')], env: { ...browserRuntimeEnv(dataDir), PLANNER_BROWSER_CONTROL:remote.browserControlEnabled===true?'1':'0', PLANNER_JOB_ID:job.id, PLANNER_JOB_LEASE:job.lease, PLANNER_ENABLED_SOURCES: JSON.stringify(remote.sources), PLANNER_ORIGIN: origin.href, PLANNER_WORKER_TOKEN: token } },
   } }
   // Lease headers are transient and never written into the native credential store.
-  const args = ['-p', '--input-format','stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--strict-mcp-config', '--mcp-config', JSON.stringify(mcp), '--tools', '', '--allowedTools', 'mcp__planner__*', 'mcp__browser__*', '--disallowedTools', 'mcp__planner__browser_open', 'mcp__planner__browser_read', 'mcp__planner__browser_close', 'mcp__planner__google_calendar_accounts', 'mcp__planner__google_calendar_read', '--append-system-prompt', instructions, ...(existing ? ['--resume', sessionId] : ['--session-id', sessionId])]
+  const args = ['-p', '--input-format','stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--strict-mcp-config', '--mcp-config', JSON.stringify(mcp), '--tools', '', '--allowedTools', 'mcp__planner__*', 'mcp__browser__*', '--disallowedTools', 'mcp__planner__browser_open', 'mcp__planner__browser_read', 'mcp__planner__browser_close', '--append-system-prompt', instructions, ...(existing ? ['--resume', sessionId] : ['--session-id', sessionId])]
   const child = spawn(executable, args, { env: environment(dataDir), cwd: path.join(dataDir, 'workspace'), stdio: ['pipe', 'pipe', 'ignore'] })
   const partial=job.continuation && job.reply?job.reply+'\n\n':''
   let reply = partial, buffer = '', result, checkpoint=Promise.resolve()

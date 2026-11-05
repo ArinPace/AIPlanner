@@ -13,3 +13,12 @@ test('Tutor maintenance is included in real runtime rules without truncating per
  assert(prompt.includes(personal))
  for(const term of ['homework/assignments','quizzes','tests/exams','recordings','recitations','Grades and A-track','actual graded denominator','ungraded work as zero','Main Chat and its ordinary scheduled subject reviews must read','must not edit, reorganize, download into, or refresh','Only the corresponding Tutor conversation','separately booked subject-turnover automation'])assert(prompt.includes(term),term)
 })
+
+ test('interactive browser permission is explicit, account-scoped and supersedes old blanket write bans',()=>{
+ const old='Never send messages. Source websites are read-only.'
+ const standard=effectiveInstructions('base',{content:old})
+ assert(!standard.includes('Interactive browser control is enabled'))
+ const enabled=effectiveInstructions('base',{content:old},{browserControl:true})
+ assert(enabled.indexOf('Interactive browser control is enabled')>enabled.indexOf(old))
+ for(const term of ['browser_screenshot','browser_action','may send messages','authorized actions','not an instruction to send unrelated messages'])assert(enabled.includes(term),term)
+ })
