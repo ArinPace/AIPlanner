@@ -17,7 +17,7 @@ try{
     if(b.action==='tool_begin'){turn=b.turnId;turns.push(b);return Response.json({instructions:'Use Planner tools through planner-tools blocks.'})}
     if(b.action==='tool_call'){calls.push(...b.calls);return Response.json({results:b.calls.map((c:any)=>({id:c.id,result:{saved:true,note:{name:'Relay tools QA',content:'Verified'},revision:2}}))})}
     if(b.action==='tool_finish'){turns.push(b);return Response.json({finished:true})}
-    if(b.action==='relay_bind'){chat.provider_url=b.url;return Response.json({ok:true})}
+    if(b.action==='relay_bind'){if(!(window as any).__bindRetried){(window as any).__bindRetried=true;throw new TypeError('Network connection interrupted')}chat.provider_url=b.url;return Response.json({ok:true})}
     if(b.action==='relay_save'){messages.push({id:'u',role:'user',content:b.prompt,created_at:stamp},{id:'a',role:'assistant',content:b.reply,created_at:stamp});return Response.json({ok:true})}
     if(b.action==='relay_mirror'){if(!b.applied)return Response.json({plan:{push:{},pull:{},conflicts:[]}});return Response.json(chat)}
     return Response.json({chat,chats:[chat],messages,hasOlder:false,sources:[],google:{accounts:[],connected:false},connection:{connected:false}})

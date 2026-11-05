@@ -219,9 +219,19 @@ export function taskNotificationsRequest(settings?:TaskNotificationSettings){ret
 
 export function sourceStatusRequest(){return request<{issues:SourceAlert[];checkedAt:string}>('/api/sources/status')}
 
-export function subscriptionChatRequest<T=import('./subscriptionChat').SubscriptionWorkspace>(chat?:string,action?:Record<string,unknown>,before?:string){
+export async function subscriptionChatRequest<T=import('./subscriptionChat').SubscriptionWorkspace>(chat?:string,action?:Record<string,unknown>,before?:string){
  const query=new URLSearchParams();if(chat)query.set('chat',chat);if(before)query.set('before',before)
- return request<T>('/api/subscription-chat'+(query.size?'?'+query:''),action?{method:'POST',body:JSON.stringify(action)}:{})
+ const token=getToken(),retryable=!action||['tool_begin','tool_call','tool_finish','relay_bind','relay_save'].includes(String(action.action))
+ for(let attempt=0;;attempt++){
+  try{return await request<T>('/api/subscription-chat'+(query.size?'?'+query:''),action?{method:'POST',body:JSON.stringify(action)}:{})}
+  catch(error){
+   // These writes have stable turn/call receipts or set the same owned URL.
+   // Never resend ChatGPT messages or non-idempotent chat creation here.
+   if(!retryable||attempt>=2||token!==getToken()||!(error instanceof Error)||error.message!=='Could not reach the server. Check your connection and try again.')throw error
+   await new Promise(resolve=>setTimeout(resolve,500*(attempt+1)))
+   if(token!==getToken())throw new Error('Your account changed. Reload your current plan.')
+  }
+ }
 }
 
 export function calendarAccounts<T>(){return request<T>('/api/calendar/google-accounts',{})}
