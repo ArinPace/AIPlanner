@@ -29,7 +29,7 @@ export function ScreenTimePanel(){
    </div>
    <h2 style={{margin:'0 0 12px'}}>{ready?'Your Screen Time setup':'Make room for focus'}</h2>
    <p style={{color:'var(--text-secondary, #68717d)',lineHeight:1.6,margin:'0 0 28px'}}>{ready?'Your planner can use these groups and location preferences when scheduling blocking.':'Choose app groups and optional locations. Your planner can handle when to block them.'}</p>
-   {ready&&<div style={{textAlign:'left',border:'1px solid #dce3ec',borderRadius:18,padding:20,marginBottom:24}}>
+   {ready&&status&&<div style={{textAlign:'left',border:'1px solid #dce3ec',borderRadius:18,padding:20,marginBottom:24}}>
     <p style={{margin:'0 0 12px',fontWeight:600}}>App groups</p>
     {status.groups.length?<ul style={{paddingLeft:20,margin:'0 0 20px'}}>{status.groups.map(group=><li key={group.id} style={{marginBottom:8}}>{group.name}</li>)}</ul>:<p>No groups yet. You can add them in Edit setup.</p>}
     <p style={{margin:'0 0 6px',fontWeight:600}}>Location</p><p style={{margin:0}}>{status.location??'No location restriction'}</p>
