@@ -15,15 +15,19 @@ export async function readCloudDNS(username:string,cursor?:string){
  const row=await account(username),data=await provider(row.profile,row.apiKey,'/denylist'+(cursor?'?cursor='+encodeURIComponent(cursor):''))
  return {profile:row.profile,domains:(data.data||[]).map((item:any)=>({domain:item.id,active:item.active!==false})),cursor:data.meta?.pagination?.cursor||null,deviceRoutingVerified:false}
 }
+async function domainState(row:{profile:string;apiKey:string},domain:string){
+ let cursor:string|undefined;const seen=new Set<string>()
+ do{const page=await provider(row.profile,row.apiKey,'/denylist'+(cursor?'?cursor='+encodeURIComponent(cursor):''));if((page.data||[]).some((x:any)=>x.id===domain&&x.active!==false))return true;cursor=page.meta?.pagination?.cursor||undefined;if(cursor&&seen.has(cursor))throw new ApiError(502,'NextDNS pagination repeated. Read current rules before changing them.');if(cursor)seen.add(cursor)}while(cursor&&seen.size<100)
+ if(cursor)throw new ApiError(502,'NextDNS list is too large to verify in one request. Read before retrying.')
+ return false
+}
 export async function setCloudDNSDomain(username:string,input:unknown){
  const args=z.object({domain:dnsDomain,blocked:z.boolean()}).parse(input),row=await account(username)
- await provider(row.profile,row.apiKey,'/denylist'+(args.blocked?'':'/'+encodeURIComponent(args.domain)),args.blocked?'POST':'DELETE',args.blocked?{id:args.domain,active:true}:undefined)
- // Read every returned page: a successful HTTP response alone is not verification.
- let cursor:string|undefined,found=false;const seen=new Set<string>()
- do{const page=await readCloudDNS(username,cursor);if(page.domains.some((x:any)=>x.domain===args.domain&&x.active)){found=true;break}cursor=page.cursor||undefined;if(cursor&&seen.has(cursor))throw new ApiError(502,'NextDNS pagination repeated. Rule status is uncertain; read before retrying.');if(cursor)seen.add(cursor)}while(cursor&&seen.size<100)
- if(cursor&&seen.size>=100)throw new ApiError(502,'NextDNS list is too large to verify in one request. Read before retrying.')
+ const previous=await domainState(row,args.domain)
+ if(previous!==args.blocked)await provider(row.profile,row.apiKey,'/denylist'+(args.blocked?'':'/'+encodeURIComponent(args.domain)),args.blocked?'POST':'DELETE',args.blocked?{id:args.domain,active:true}:undefined)
+ const found=await domainState(row,args.domain)
  if(found!==args.blocked)throw new ApiError(502,'NextDNS did not confirm the requested domain state. Read its rules before retrying.')
- return {saved:true,verified:true,domain:args.domain,blocked:found,profile:row.profile,deviceRoutingVerified:false}
+ return {saved:true,verified:true,unchanged:previous===args.blocked,domain:args.domain,blocked:found,profile:row.profile,deviceRoutingVerified:false}
 }
 export async function handleCloudDNS(request:Request,username:string){
  if(request.method==='GET')return json(await cloudDNSStatus(username))

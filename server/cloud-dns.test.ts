@@ -26,6 +26,7 @@ test('cloud DNS keeps credentials encrypted, scopes accounts, paginates verifica
   await assert.rejects(()=>readCloudDNS('foreign'),/Connect cloud NextDNS/)
   assert.equal((await readCloudDNS('owner')).cursor,'next')
   assert.equal((await setCloudDNSDomain('owner',{domain:'example.com',blocked:true})).verified,true);assert.equal(blocked,true)
+  assert.equal((await setCloudDNSDomain('owner',{domain:'example.com',blocked:true})).unchanged,true);assert.equal(writes,1)
   assert.equal((await setCloudDNSDomain('owner',{domain:'example.com',blocked:false})).blocked,false)
   await assert.rejects(()=>setCloudDNSDomain('owner',{domain:'http://localhost/private',blocked:true}));assert.equal(writes,2)
   bad=true;await assert.rejects(()=>readCloudDNS('owner'),error=>error instanceof Error&&/NextDNS could not/.test(error.message)&&!error.message.includes('private provider'))
