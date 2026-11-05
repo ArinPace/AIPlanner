@@ -15,6 +15,7 @@ test('one-time subject schedule checks owner/revision and preserves independent 
  await assert.rejects(()=>scheduleSubjectRollover('owner',{expectedRevision:0,runAt:'2031-05-15T09:00:00-04:00',basis:'Next term',sources:['https://nyu.edu/']}),/changed/)
  await assert.rejects(()=>scheduleSubjectRollover('owner',{expectedRevision:1,runAt:'2020-01-01T09:00:00Z',basis:'Past',sources:['https://nyu.edu/']}),/future/)
  assert.match(subjectRolloverMessage(),/following turnover/)
+ assert.match(scheduledReviewMessage({timezone:'America/New_York',times:['07:00']}),/grade-and-progress Note/)
  assert.match(scheduledReviewMessage({timezone:'America/New_York',times:['07:00']}),/one-time turnover/)
  }finally{globalThis.fetch=old;for(const key of keys){if(env[key]===undefined)delete process.env[key];else process.env[key]=env[key]}}
 })

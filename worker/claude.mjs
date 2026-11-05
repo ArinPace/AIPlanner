@@ -65,7 +65,7 @@ export async function claudeChat({ dataDir, job, remote, origin, token, instruct
   instructions += '\n\n'+plannerGuidance
   instructions += '\n\n' + whatsappPermissionText(remote.whatsappReadConsentAt)
   instructions += '\n\n' + messagePermissionText(remote.messageReadConsent)
-  instructions=effectiveInstructions(instructions,remote.agentInstructions)
+  instructions=effectiveInstructions('Tutor enabled for this account: '+(remote.tutorEnabled===true?'yes':'no')+'\n'+instructions,remote.agentInstructions)
   const sessionPath = path.join(dataDir, 'claude-sessions.json')
   let sessions = {}; try { sessions = JSON.parse(await readFile(sessionPath, 'utf8')) } catch {}
   const key = job.chat_id || job.id, existing = sessions[key]

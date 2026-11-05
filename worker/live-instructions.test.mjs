@@ -7,3 +7,9 @@ test('live personal rules are in the actual prompt; clearing supersedes old resu
  const cleared=effectiveInstructions('Built-in planner rules',{revision:3,content:''})
  assert.match(cleared,/Previously configured personal instructions are cleared/);assert.doesNotMatch(cleared,/Plan errands on Friday/)
 })
+
+test('Tutor maintenance is included in real runtime rules without truncating personal instructions',()=>{
+ const personal='P'.repeat(19970),prompt=effectiveInstructions('Tutor enabled for this account: yes',{revision:30,content:personal})
+ assert(prompt.includes(personal))
+ for(const term of ['homework/assignments','quizzes','tests/exams','recordings','recitations','Grades and A-track','actual graded denominator','ungraded work as zero','scheduled reviews refresh all active subjects'])assert(prompt.includes(term),term)
+})

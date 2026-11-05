@@ -99,7 +99,7 @@ async function chat(job, auth, remote) {
   })
   try {
     await rpc.initialize()
-    const params = { cwd: path.join(dataDir, 'workspace'), ...(process.env.PLANNER_MODEL ? { model: process.env.PLANNER_MODEL } : auth.type === 'codex' ? {} : { model: 'gpt-6-luna' }), approvalPolicy: job.kind === 'sync' ? 'never' : 'on-request', sandbox: 'workspace-write', developerInstructions: effectiveInstructions(instructions+'\n\n'+plannerGuidance+'\n\n'+whatsappPermissionText(remote.whatsappReadConsentAt)+'\n\n'+messagePermissionText(remote.messageReadConsent),remote.agentInstructions) }
+    const params = { cwd: path.join(dataDir, 'workspace'), ...(process.env.PLANNER_MODEL ? { model: process.env.PLANNER_MODEL } : auth.type === 'codex' ? {} : { model: 'gpt-6-luna' }), approvalPolicy: job.kind === 'sync' ? 'never' : 'on-request', sandbox: 'workspace-write', developerInstructions: effectiveInstructions('Tutor enabled for this account: '+(remote.tutorEnabled===true?'yes':'no')+'\n'+instructions+'\n\n'+plannerGuidance+'\n\n'+whatsappPermissionText(remote.whatsappReadConsentAt)+'\n\n'+messagePermissionText(remote.messageReadConsent),remote.agentInstructions) }
     const fork=!threadId && job.fork_thread_id && job.fork_turn_id
     const thread = await rpc.request(fork?'thread/fork':threadId ? 'thread/resume' : 'thread/start', { ...params, ...(fork?{threadId:job.fork_thread_id,lastTurnId:job.fork_turn_id,excludeTurns:true}:threadId ? { threadId, excludeTurns: true } : {}) }, 60000)
     threadId = thread.thread.id
