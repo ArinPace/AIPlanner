@@ -342,7 +342,11 @@ struct PlannerWebView: UIViewRepresentable {
                         let data = try JSONSerialization.data(withJSONObject: payload)
                         guard data.count <= 2 * 1024 * 1024 else { throw NativeError("Widget schedule is too large.") }
                         let schedule = try WidgetSchedule.decode(data)
-                        TaskFocusRules.sync(windows: schedule.events.map { TaskFocusWindow(id: $0.id, sourceEventId: $0.sourceEventId ?? $0.id, title: $0.title, start: $0.start, end: $0.end) }, from: schedule.generatedAt, until: schedule.validUntil, account: account)
+                        let focusWindows: [TaskFocusWindow]
+                        if let raw=(payload as? [String:Any])?["focusWindows"] {focusWindows=try JSONDecoder().decode([TaskFocusWindow].self,from:JSONSerialization.data(withJSONObject:raw))}
+                        else {focusWindows=schedule.events.map {TaskFocusWindow(id:$0.id,sourceEventId:$0.sourceEventId ?? $0.id,title:$0.title,start:$0.start,end:$0.end)}}
+                        guard focusWindows.allSatisfy({$0.valid}) else {throw NativeError("Invalid Screen Time calendar windows.")}
+                        TaskFocusRules.sync(windows:focusWindows,from:schedule.generatedAt,until:schedule.validUntil,account:account)
                         if try WidgetScheduleStore.save(schedule) { WidgetCenter.shared.reloadAllTimelines() }
                         await PlannerTaskNotifications.shared.refresh()
                     case "clearWidgetSchedule":

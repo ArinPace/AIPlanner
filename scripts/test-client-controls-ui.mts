@@ -24,5 +24,15 @@ try{
  assert.equal((await run({action:'ui_read'},'other-user'))[0].result.isError,true)
  assert.equal((await run({action:'screen_time_read'}))[0].result.clientResult.state.authorized,true)
  assert.equal((await run({action:'ui_navigate',tab:'work',javascript:'alert(1)'}))[0].result.isError,true)
+ await page.getByRole('button',{name:'Create',exact:true}).click()
+ assert.equal((await run({action:'ui_navigate',tab:'work'}))[0].result.isError,true)
+ await page.getByRole('button',{name:'Cancel',exact:true}).last().click()
+ const cancellation=await page.evaluate(async()=>{
+  const {executeClientResults}=await import('/src/lib/clientControls.ts');const bridge=window.webkit!.messageHandlers!.plannerNative!,original=bridge.postMessage;let active=true,count=0
+  bridge.postMessage=async()=>{count++;active=false;return {state:{}}}
+  const results=[1,2].map(i=>({id:'cancel-'+i,result:{structuredContent:{result:{requiresClient:true,clientAction:{version:1,issuedAt:new Date().toISOString(),command:{action:'screen_time_read'}}}}}}))
+  try{await executeClientResults(results,[1,2].map(i=>({id:'cancel-'+i,name:'planner_client_control'})),'planner_test','cancel-test',()=>active);return {count,error:''}}catch(error){return {count,error:String(error)}}finally{bridge.postMessage=original}
+ })
+ assert.equal(cancellation.count,1);assert.match(cancellation.error,/stopped/)
  console.log('Real Planner UI navigation across all seven tabs, calendar date/view, Settings, account rejection, strict commands and native result forwarding passed with fixture data. OS enforcement requires native verification.')
 }finally{await browser.close()}
