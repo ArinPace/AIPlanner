@@ -142,6 +142,26 @@ final class PlannerUITests: XCTestCase {
         waitForExpectations(timeout: 45)
         XCTAssertTrue(app.webViews["plannerWebView"].buttons["ChatGPT session"].exists, "Planner remains the visible chat UI")
     }
+    func testSubscriptionToolsLive() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
+        guard let prompt=ProcessInfo.processInfo.environment["PLANNER_TEST_TASK"] else {throw XCTSkip("Supply an authorized QA task.")}
+        let app=XCUIApplication();app.launchArguments=["-UITestSignedRelayDiagnostics"];app.launch()
+        let planner=app.webViews["plannerWebView"];XCTAssertTrue(planner.buttons["Chat"].waitForExistence(timeout:30));planner.buttons["Chat"].tap()
+        XCTAssertTrue(planner.buttons["New chat"].firstMatch.waitForExistence(timeout:20));planner.buttons["New chat"].firstMatch.tap()
+        let box=planner.textViews["Message ChatGPT"];expectation(for:NSPredicate(format:"enabled == true"),evaluatedWith:box);waitForExpectations(timeout:30)
+        box.tap();box.typeText(prompt);planner.buttons["Send message"].tap()
+        var opened=false
+        for second in 0..<900 {
+            if planner.buttons.matching(identifier:"Copy").count>=2 {print("LIVE_TASK_REPLY",planner.otherElements.matching(identifier:"Assistant message").staticTexts.allElementsBoundByIndex.map{$0.label}.joined(separator:" | "));return}
+            let secure=planner.buttons["Continue in ChatGPT"]
+            if !opened&&secure.exists&&secure.isHittable{print("LIVE_SECURE_SIGNIN_OPENING");secure.tap();opened=true}
+            let errors=planner.staticTexts.matching(NSPredicate(format:"label CONTAINS %@","No tools were run"))
+            if errors.firstMatch.exists{print("LIVE_TASK_ERROR",errors.firstMatch.label);throw NSError(domain:"LiveToolTest",code:1)}
+            if second%30==0{print("LIVE_TASK_WAIT",second)}
+            Thread.sleep(forTimeInterval:1)
+        }
+        print("LIVE_TASK_UI",planner.staticTexts.allElementsBoundByIndex.map{$0.label}.joined(separator:" | "));throw NSError(domain:"LiveToolTest",code:2)
+    }
     func testSignedInChatGPTInspection() throws {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
         let app = XCUIApplication(); app.launchArguments = ["-PlannerOpenChatGPT", "-UITestInspectChatGPT", "-UITestEnsureProject"]; app.launch()

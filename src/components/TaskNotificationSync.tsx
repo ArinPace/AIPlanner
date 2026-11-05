@@ -12,8 +12,8 @@ export function TaskNotificationSync({username,calendar}:{username:string;calend
   let active=true;setLoaded(false)
   const load=()=>void taskNotificationsRequest().then(value=>{if(active){setSettings(value);setLoaded(true)}}).catch(()=>{})
   const changed=(e:Event)=>{setSettings((e as CustomEvent<TaskNotificationSettings>).detail);setLoaded(true)}
-  load();const timer=setInterval(load,60000);window.addEventListener('focus',load);window.addEventListener(TASK_NOTIFICATIONS_CHANGED,changed)
-  return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',load);window.removeEventListener(TASK_NOTIFICATIONS_CHANGED,changed)}
+  load();const timer=setInterval(load,60000);window.addEventListener('focus',load);window.addEventListener('planner-preferences-refresh',load);window.addEventListener(TASK_NOTIFICATIONS_CHANGED,changed)
+  return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',load);window.removeEventListener('planner-preferences-refresh',load);window.removeEventListener(TASK_NOTIFICATIONS_CHANGED,changed)}
  },[username])
  useEffect(()=>{
   if(!loaded)return

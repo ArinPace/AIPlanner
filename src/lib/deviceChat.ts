@@ -10,7 +10,7 @@ export function relayCalls(reply:string,turn:string):DeviceCall[]|null{
  if(!Array.isArray(parsed.calls)||!parsed.calls.length||parsed.calls.length>8)throw Error('ChatGPT must request between one and eight tools per batch.')
  const ids=new Set<string>()
  for(const call of parsed.calls){
-  if(typeof call.id!=='string'||!call.id||call.id.length>80||ids.has(call.id)||typeof call.name!=='string'||!/^(planner_|google_calendar_|relay_(list|describe)_tools$)/.test(call.name)||!call.arguments||typeof call.arguments!=='object'||Array.isArray(call.arguments))throw Error('Invalid or duplicate Planner tool request. No tools were run.')
+  if(typeof call.id!=='string'||!call.id||call.id.length>80||ids.has(call.id)||typeof call.name!=='string'||!/^(planner_|google_calendar_|google_mail_|relay_(list|describe)_tools$)/.test(call.name)||!call.arguments||typeof call.arguments!=='object'||Array.isArray(call.arguments))throw Error('Invalid or duplicate Planner tool request. No tools were run.')
   ids.add(call.id)
  }
  return parsed.calls

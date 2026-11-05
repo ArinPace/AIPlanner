@@ -10,8 +10,8 @@ export function useCalendarDisplay(username:string){
  useEffect(()=>{
   alive.current=true
   const read=async()=>{if(inFlight.current)return;const generation=++version.current;try{const result=await calendarDisplayRequest();if(alive.current&&generation===version.current){setSettings(result);cache(result);setError('')}}catch(e){if(alive.current&&generation===version.current)setError(e instanceof Error?e.message:'Display settings could not sync.')}}
-  void read();window.addEventListener('focus',read)
-  return()=>{alive.current=false;window.removeEventListener('focus',read)}
+  void read();window.addEventListener('focus',read);window.addEventListener('planner-preferences-refresh',read)
+  return()=>{alive.current=false;window.removeEventListener('focus',read);window.removeEventListener('planner-preferences-refresh',read)}
  },[username])
  async function change(view:keyof CalendarDisplay,value:boolean){
   if(inFlight.current)return

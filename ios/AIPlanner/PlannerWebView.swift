@@ -23,7 +23,7 @@ struct PlannerWebView: UIViewRepresentable {
         config.websiteDataStore = .default()
         config.allowsInlineMediaPlayback = true
         config.userContentController.addScriptMessageHandler(context.coordinator, contentWorld: .page, name: "plannerNative")
-        config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeScreenTime=true;window.plannerNativeChatGPTPortal=true;window.plannerNativeChatGPTRelayVersion=3;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true'});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeScreenTime=true;window.plannerNativeChatGPTPortal=true;window.plannerNativeChatGPTRelayVersion=4;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true'});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-UITestRelayFileMatrix"), let group=ProcessInfo.processInfo.environment["PLANNER_TEST_FILE_GROUP"], ["documents","media"].contains(group), let folder=FileManager.default.urls(for:.cachesDirectory,in:.userDomainMask).first, let data=try? Data(contentsOf:folder.appendingPathComponent("RelayFileMatrix-"+group+".json")), let fixtures=String(data:data,encoding:.utf8) {
             let script="""
@@ -186,7 +186,7 @@ struct PlannerWebView: UIViewRepresentable {
                         let controller = try relay(account: account)
                         if action == "chatGPTRelayStatus" {
                             if !controller.documentCommitted && controller.pendingChat == nil && chatGPTPortal?.presentingViewController == nil { attachRelayForRun() }
-                            var state = try await controller.relayStatus(); state["chatId"] = controller.loadedChat
+                            var state = try await controller.relayStatus(peek:body["peek"] as? Bool == true); state["chatId"] = controller.loadedChat
                             if !relayOperationActive && ((state["ready"] as? Bool == true && controller.pendingChat == nil) || state["phase"] as? String == "completed" || state["phase"] as? String == "attention") { parkRelay() }
                             replyHandler(state, nil); return
                         }
@@ -208,10 +208,10 @@ struct PlannerWebView: UIViewRepresentable {
                             replyHandler(try await controller.downloadResponse(key: key), nil); return
                         }
                         if action == "chatGPTRelaySend" {
-                            guard let text = body["text"] as? String, let chatId = body["chatId"] as? String, UUID(uuidString: chatId) != nil, !text.isEmpty, text.count <= 40000 else { throw NativeError("Choose a chat and enter a message.") }
+                            guard let text = body["text"] as? String, let chatId = body["chatId"] as? String, UUID(uuidString: chatId) != nil, !text.isEmpty, text.count <= 100000 else { throw NativeError("Choose a chat and enter a message.") }
                             relayOperationActive = true; defer { relayOperationActive = false }
                             attachRelayForRun()
-                            do { try await controller.send(text: text, chatId: chatId, files: body["files"] as? [[String: Any]] ?? [], providerURL: body["url"] as? String, context: body["context"] as? String ?? "") } catch { parkRelay(); throw error }
+                            do { try await controller.send(text: text, chatId: chatId, files: body["files"] as? [[String: Any]] ?? [], providerURL: body["url"] as? String, workMode: body["work"] as? Bool == true, context: body["context"] as? String ?? "") } catch { parkRelay(); throw error }
                             replyHandler(["ok": true], nil); return
                         }
                         if action == "chatGPTRelayStop" { try await controller.stopRelay(); parkRelay(); replyHandler(["ok": true], nil); return }
@@ -219,6 +219,7 @@ struct PlannerWebView: UIViewRepresentable {
                         portal.willMove(toParent: nil); portal.view.removeFromSuperview(); portal.removeFromParent()
                         portal.view.alpha = 1; portal.view.isUserInteractionEnabled = true; portal.view.accessibilityElementsHidden = false
                         controller.returnAfterAuthentication = body["intent"] as? String == "connect"
+                        controller.returnAfterWebsiteInteraction = body["intent"] as? String == "interaction"
                         controller.setInteractive(true)
                         parent.present(portal, animated: true)
                     case "localReplicaAccount":
@@ -460,7 +461,7 @@ struct PlannerWebView: UIViewRepresentable {
         browser.translatesAutoresizingMaskIntoConstraints = false
         status.accessibilityIdentifier = "chatgpt-load-status"
         status.font = .preferredFont(forTextStyle: .caption1); status.numberOfLines = 0
-        status.text = "Sign in or approve access here, then return to Planner to chat. Planner tools are not connected yet."
+        status.text = "Sign in or approve access here, then return to Planner. Credentials stay in ChatGPT’s secure sign-in flow."
         status.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(status); view.addSubview(browser)
         NSLayoutConstraint.activate([
@@ -535,6 +536,7 @@ struct PlannerWebView: UIViewRepresentable {
     }
     #endif
     var returnAfterAuthentication = false
+    var returnAfterWebsiteInteraction = false
     private var authenticationWatch: Task<Void, Never>?
     private func watchAuthentication() {
         authenticationWatch?.cancel()
@@ -546,8 +548,8 @@ struct PlannerWebView: UIViewRepresentable {
             while !Task.isCancelled, self.navigationController?.presentingViewController != nil {
                 if let state = try? await self.snapshot() {
                     if state["guest"] as? Bool == true || state["needsLogin"] as? Bool == true || self.browser.url?.host != "chatgpt.com" { self.returnAfterAuthentication = true }
-                    if self.returnAfterAuthentication && state["ready"] as? Bool == true && state["guest"] as? Bool == false && state["needsLogin"] as? Bool != true { verified += 1 } else { verified = 0 }
-                    if verified >= 2 { self.returnAfterAuthentication = false; self.onClose?(); return }
+                    if (self.returnAfterAuthentication || self.returnAfterWebsiteInteraction) && state["interaction"] as? Bool != true && (state["ready"] as? Bool == true || state["running"] as? Bool == true) && state["guest"] as? Bool == false && state["needsLogin"] as? Bool != true { verified += 1 } else { verified = 0 }
+                    if verified >= 2 { self.returnAfterAuthentication = false; self.returnAfterWebsiteInteraction = false; self.onClose?(); return }
                 }
                 try? await Task.sleep(for: .seconds(1))
             }
@@ -711,6 +713,10 @@ await pause(500);return {applied:true};
     const box=window.__plannerComposer();
     const buttons=[...document.querySelectorAll('button')].filter(visible);
     const label=n=>(n.getAttribute('aria-label')||n.innerText||'').trim();
+    const secureForm=buttons.some(n=>/^(Take over to sign in|Sign in on web page|Return control|I.m done)$/i.test(label(n)))||[...document.querySelectorAll('form,[role="dialog"]')].filter(visible).some(n=>/sign in to [a-z0-9.-]+[.][a-z]{2,}/i.test(n.innerText));
+    const approval=[...document.querySelectorAll('[role="dialog"],[role="alertdialog"]')].filter(visible).some(n=>/website|browser|access to|visit site/i.test(n.innerText)&&[...n.querySelectorAll('button')].some(b=>/^(Allow|Approve|Continue)$/i.test(label(b))));
+    const interaction=secureForm||approval;
+    const guest=!secureForm&&buttons.some(n=>/^(Log in|Sign in)$/i.test(label(n)));
     const running=buttons.some(n=>/^(Stop|Stop generating|Stop streaming|Pause|Pause task|Stop task)$/i.test(label(n))||n.dataset.testid==='stop-button');
     let raw=[...document.querySelectorAll('[data-message-author-role="assistant"],[data-markdown-text-style="assistant-message"]')];
     if(!raw.length)raw=[...document.querySelectorAll('button[aria-label="Copy response"]')].map(button=>button.closest('li')).filter(Boolean);
@@ -724,7 +730,7 @@ await pause(500);return {applied:true};
     const clean=last?.cloneNode(true);clean?.querySelectorAll('button,svg,script,style').forEach(node=>node.remove());
     const response=clean?(clean.innerText||clean.textContent||'').trim():'';
     const outputs=turn?[...turn.querySelectorAll('a[download],a[href^="sandbox:"],a[href*="/backend-api/files/"],a[href*="/backend-api/estuary/content"],button[aria-label^="Download "],button[aria-label="Save image"],[data-file-reference="true"][role="button"][aria-label^="Download "]')].map(node=>{node.dataset.plannerDownloadId ||= crypto.randomUUID();return {key:node.dataset.plannerDownloadId,name:(node.getAttribute('download')||node.innerText||node.getAttribute('aria-label')||'Download file').trim().slice(0,240)}}):[];
-    return {files:outputs,ready:!!box,needsLogin:(!box&&buttons.some(n=>/^(Log in|Sign in)$/i.test(label(n))))||!!document.querySelector('input[type="password"]'),guest:buttons.some(n=>/^(Log in|Sign in)$/i.test(label(n))),running,count:replies.length,text:response,final:!!turn?.querySelector(completionSelector),url:location.href};})()
+    return {files:outputs,ready:!!box,needsLogin:(!box&&guest)||(!secureForm&&!!document.querySelector('input[type="password"]')),guest,interaction,running,count:replies.length,text:response,final:!!turn?.querySelector(completionSelector),url:location.href};})()
     """ }
     private func snapshot() async throws -> [String: Any] {
         loadViewIfNeeded()
@@ -816,7 +822,7 @@ await pause(500);return {applied:true};
         if let data=try? JSONSerialization.data(withJSONObject:values){try? data.write(to:folder.appendingPathComponent("RelaySendStage.json"),options:.atomic)}
         #endif
     }
-    func send(text: String, chatId: String, files: [[String: Any]] = [], providerURL: String? = nil, context: String = "") async throws {
+    func send(text: String, chatId: String, files: [[String: Any]] = [], providerURL: String? = nil, workMode: Bool = false, context: String = "") async throws {
         guard pendingChat == nil else { throw NativeError("A ChatGPT reply is still pending. Open the session before retrying.") }
         let key = "chatgpt-conversation:" + account + ":" + chatId
         let stored = canonicalConversation(providerURL)
@@ -874,6 +880,9 @@ await pause(500);return {applied:true};
             guard browser.url?.path == target.path else { throw NativeError("The fresh Test project composer was not confirmed. No message was sent.") }
             traceRelay("fresh-chat-ready")
             try await requireCleanDraft("ChatGPT has an unsent draft in Test. Review it before creating a new conversation.");setInteractive(true)
+        }
+        if workMode && stored == nil && project != nil {
+            _ = try await browser.callAsyncJavaScript("const buttons=[...document.querySelectorAll('button')].filter(n=>n.getClientRects().length);const work=buttons.find(n=>(n.getAttribute('aria-label')||n.innerText||'').trim()==='Work');if(work){work.click();await new Promise(r=>setTimeout(r,500));return true}return false;",arguments:[:],in:nil,contentWorld:.page)
         }
         guard files.count <= 4 else { throw NativeError("Attach up to four files.") }
         if !files.isEmpty {
@@ -947,7 +956,7 @@ await pause(500);return {applied:true};
               url.lastPathComponent != "new" else { return nil }
         return URL(string: "https://chatgpt.com" + url.path)
     }
-    func relayStatus() async throws -> [String: Any] {
+    func relayStatus(peek: Bool = false) async throws -> [String: Any] {
         if let webFailure { return ["phase": "attention", "ready": false, "needsLogin": false, "message": webFailure] }
         var state = try await snapshot()
         #if DEBUG
@@ -956,6 +965,7 @@ await pause(500);return {applied:true};
         diagnostic["baseline"] = baseline; diagnostic["hasPending"] = pendingChat != nil; diagnostic["committed"] = documentCommitted; diagnostic["loading"] = browser.isLoading
         if let data = try? JSONSerialization.data(withJSONObject: diagnostic), let folder = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first { try? data.write(to: folder.appendingPathComponent("ChatRelayDiagnostics.json"), options: .atomic) }
         #endif
+        if peek { state["phase"] = pendingChat == nil ? "idle" : "working"; return state }
         guard let chatId = pendingChat else { state["phase"] = "idle"; return state }
         state["phase"] = "working"
         if let parsed = canonicalConversation(state["url"] as? String) {
@@ -964,6 +974,7 @@ await pause(500);return {applied:true};
         }
         if (state["count"] as? Int ?? 0) <= baseline { state["text"] = "" }
         if let parsed = canonicalConversation(state["url"] as? String) { let canonical = "https://chatgpt.com" + parsed.path; state["url"] = canonical; UserDefaults.standard.set(canonical, forKey: "chatgpt-conversation:" + account + ":" + chatId) } else { state.removeValue(forKey: "url") }
+        if state["interaction"] as? Bool == true { state["phase"]="interaction";state["message"]="Continue in ChatGPT to approve access or sign in securely.";return state }
         sawRunning = sawRunning || state["running"] as? Bool == true
         let text = state["text"] as? String ?? ""
         if text != lastText { lastText = text; changedAt = Date() }

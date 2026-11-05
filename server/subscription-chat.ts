@@ -31,6 +31,7 @@ export async function handleSubscriptionChat(request:Request,username:string){
  }
  if(request.method!=='POST')throw new ApiError(405,'Use GET or POST.')
  const input=await body(request)
+ if(typeof input.action==='string'&&input.action.startsWith('tool_'))return json(await (await import('./subscription-tools.js')).subscriptionTools(username,input))
  if(typeof input.action==='string'&&['file_start','file_finish','file_download'].includes(input.action))return await (await import('./subscription-files.js')).subscriptionFileAction(username,input)
  // Never fall back to API-key billing, the Agent VM, or a browser extension.
  if(input.action==='send'||input.action==='connect')throw new ApiError(409,'ChatGPT subscription sign-in is not configured yet. Hosted access requires an approved Sign in with ChatGPT integration. Your draft has been kept.')

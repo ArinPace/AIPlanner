@@ -18,5 +18,10 @@ try{
  assert.equal(result.count,1);assert.equal(result.final,true);assert.equal(result.files.length,3)
  assert.equal(new Set(result.files.map(f=>f.key)).size,3)
  assert.equal(await page.locator('[data-planner-download-id]').count(),3)
+ await page.evaluate(()=>{const f=document.createElement('form');f.id='secure';f.innerHTML='<h2>Sign in to brightspace.nyu.edu</h2><input type="password" value="fixture-secret-do-not-export"><button>Sign in</button><button>Take over to sign in</button>';document.body.append(f)})
+ const secure=await page.evaluate(snapshot)
+ assert.equal(secure.interaction,true);assert.equal(secure.guest,false);assert.equal(secure.needsLogin,false);assert(!JSON.stringify(secure).includes('fixture-secret-do-not-export'))
+ await page.locator('#secure').evaluate(n=>n.remove())
+ const normal=await page.evaluate(snapshot);assert.equal(normal.interaction,false)
  console.log('Exact native snapshot discovers inline ZIP controls, file-card buttons and generated-file links in the completed assistant turn. DOM fixture only.')
 }finally{await browser.close()}

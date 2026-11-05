@@ -1,3 +1,4 @@
+import {registerAppSettingsTools} from './app-settings-tools.js'
 import {readFilesItemById,commitFileItem} from './files-transfer.js'
 import {reportSourceHealth,sourceHealthStatus} from './source-health.js'
 import {readGoogleMail} from './google-mail.js'
@@ -65,6 +66,7 @@ export function createPlannerMcp(username: string, scopes: string[]) {
   add('planner_subject_rollover_read','Read the actual next one-time subject turnover, its official date evidence and version. This is independent of regular daily reviews.',{},'planner:read',true,async()=> (await import('./subject-rollover.js')).readSubjectRollover(username))
   add('planner_subject_rollover_schedule','Book the next one-time subject turnover after researching official term/course dates. Always replace it with the following turnover or an evidence-based retry during each execution. Pass runAt null only when the user wants to disable it. Preserves daily review times.',{expectedRevision:z.number().int().nonnegative(),runAt:iso.nullable(),basis:z.string().min(1).max(4000),sources:z.array(z.string().url()).min(1).max(10)},'planner:write',false,async args=> (await import('./subject-rollover.js')).scheduleSubjectRollover(username,args))
   registerPlannerControls(add,username)
+  registerAppSettingsTools(add,username)
   registerPlanningTools(add,username)
   registerAgentMemory(add,username)
   registerAgentInstructions(add,username)

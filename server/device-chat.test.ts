@@ -33,6 +33,7 @@ test('device tools use the actual MCP catalog, argument validation and owner-sco
    if(req.method==='POST'){assert.equal(body.username,'arin');receipts.set(body.call_id,{...body,result:null});return new Response(null,{status:201})}
    receipts.get(id!).result=body.result;return new Response(null,{status:204})
   }
+  if(table==='planner_calendar_staging')return Response.json(null)
   if(table==='planner_planning')return Response.json({started_at:started?'2026-10-21T00:00:00Z':null})
   if(table==='planner_calendars'){
    if(req.method==='GET')return Response.json({state,revision})
