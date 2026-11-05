@@ -133,7 +133,7 @@ for (;;) {
     const auth = await credential(remote).catch(() => null)
     signedIn = Boolean(auth); identity = auth?.identity || null
     pendingSites = { ...pendingSites, ...await observeSignIn(dataDir).catch(() => ({})) }
-    ;({ job } = await api('claim', { signedIn, identity, workerStartedAt, observedSites: pendingSites, runtime: remote.aiProvider === 'claude_code' ? 'claude' : 'codex', chatgptConnected: Boolean(nativeChatGpt), claudeConnected: Boolean(nativeClaude), activateClaude, version: '0.3.0' }))
+    ;({ job } = await api('claim', { signedIn, identity, workerStartedAt, observedSites: pendingSites, runtime: remote.aiProvider === 'claude_code' ? 'claude' : 'codex', chatgptConnected: Boolean(nativeChatGpt), claudeConnected: Boolean(nativeClaude), activateClaude, version: '0.3.1' }))
     process.send?.({ type: 'ready' })
     workerReady = true
     pendingSites = {}

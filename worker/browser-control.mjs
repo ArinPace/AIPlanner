@@ -40,9 +40,11 @@ export class InteractiveBrowser {
   const entry=this.tabs.get(id);if(!entry)throw Error('Unknown tab. Open it with browser_navigate or browser_tabs first.')
   const connection=await this.connect(entry.route,await this.profiles())
   try{
-   const page=connection.contexts()[0].pages()[entry.index]
-   // Index alone can select the wrong tab after a website closes another tab.
-   if(!page||page.isClosed()||await this.targetId(page)!==entry.marker)throw Error('Tab changed or closed. Use browser_tabs to refresh it.')
+   let page
+   // CDP target enumeration order can change at every reconnect. Match its real
+   // target ID, never an old array index or a locator owned by a closed socket.
+   for(const candidate of connection.contexts()[0].pages())if(await this.targetId(candidate).catch(()=>null)===entry.marker){page=candidate;break}
+   if(!page||page.isClosed())throw Error('Tab changed or closed. Use browser_tabs to refresh it.')
    publicBrowserUrl(page.url());return await fn(page,entry,connection.contexts()[0])
   }finally{await connection.close()}
  }
@@ -61,7 +63,7 @@ export class InteractiveBrowser {
    const page=context.pages().find(p=>p.url()===href)||await context.newPage()
    if(page.url()!==href)await page.goto(href,{waitUntil:'domcontentloaded',timeout:45000})
    publicBrowserUrl(page.url())
-   const id=await this.adopt(page,route,context);return this.snapshotPage(page,this.tabs.get(id),id)
+   const id=await this.adopt(page,route,context);return await this.snapshotPage(page,this.tabs.get(id),id)
   }finally{await connection.close()}
  }
  async tabsList(){
@@ -102,7 +104,7 @@ export class InteractiveBrowser {
    const start=total;total+=data.nodes.length
    const nodes=data.nodes.filter((_,i)=>start+i>=elementOffset&&start+i<elementOffset+250).map(node=>{
     const key=entry.epoch+':'+frameIndex+':'+node.index
-    entry.refs.set(key,frame.locator('[data-planner-browser-ref="'+node.index+'"]'))
+    entry.refs.set(key,{frameIndex,frameUrl:frame.url(),selector:'[data-planner-browser-ref="'+node.index+'"]'})
     const {index,...rest}=node;return {ref:key,...rest}
    })
    frames.push({frame:frameIndex,url:frame.url(),text:data.text.slice(offset,offset+16000),totalCharacters:data.text.length,hasMoreText:offset+16000<data.text.length,elements:nodes})
@@ -116,12 +118,13 @@ export class InteractiveBrowser {
   return {content:[{type:'text',text:JSON.stringify({tabId:args.tabId,url:page.url(),fullPage:args.fullPage||false,coordinateSystem:'viewport CSS pixels; full-page image includes content outside viewport'})},{type:'image',mimeType:'image/png',data:bytes.toString('base64')}]}
  })}
  action(args){return this.use(args.tabId,async(page,entry,context)=>{
-  const locator=args.ref?entry.refs.get(args.ref):null
+  const resolveRef=ref=>{const saved=entry.refs.get(ref);if(!saved)return null;const frame=page.frames()[saved.frameIndex];if(!frame||frame.url()!==saved.frameUrl)return null;return frame.locator(saved.selector)}
+  const locator=args.ref?resolveRef(args.ref):null
   if(args.ref&&!locator)throw Error('Stale element reference. Take a fresh browser_snapshot.')
   const point=Number.isFinite(args.x)&&Number.isFinite(args.y)
   if(['fill','select','check','uncheck','upload'].includes(args.action)&&!locator)throw Error('This action requires an element ref from browser_snapshot.')
   const before=new Set(context.pages());let download=null,dialogInfo=null
-  const onDialog=async dialog=>{dialogInfo={type:dialog.type(),message:dialog.message()};if(args.accept)await dialog.accept(args.text);else await dialog.dismiss()}
+  const onDialog=async dialog=>{dialogInfo={type:dialog.type(),message:dialog.message()};try{if(args.accept)await dialog.accept(args.text);else await dialog.dismiss();dialogInfo.handled=true}catch{dialogInfo.handled=false;dialogInfo.error='The dialog was already handled by another browser client.'}}
   page.on('dialog',onDialog)
   const pending=args.waitForDownload?page.waitForEvent('download',{timeout:20000}):null
   pending?.catch(()=>{})
@@ -139,7 +142,7 @@ export class InteractiveBrowser {
     case 'forward':await page.goForward({waitUntil:'domcontentloaded',timeout:30000});break
     case 'reload':await page.reload({waitUntil:'domcontentloaded',timeout:30000});break
     case 'wait':await page.waitForTimeout(args.milliseconds??1000);break
-    case 'drag':{const target=entry.refs.get(args.targetRef);if(!locator||!target)throw Error('Drag requires source ref and targetRef from the current snapshot.');await locator.dragTo(target,{timeout:15000});break}
+    case 'drag':{const target=resolveRef(args.targetRef);if(!locator||!target)throw Error('Drag requires source ref and targetRef from the current snapshot.');await locator.dragTo(target,{timeout:15000});break}
     case 'upload':if(!args.files?.length)throw Error('Upload needs working-folder file paths.');await locator.setInputFiles(await Promise.all(args.files.map(f=>workspaceFile(this.workspace,f))),{timeout:15000});break
     case 'close':await page.close();this.tabs.delete(args.tabId);return {closed:true,tabId:args.tabId}
    }
