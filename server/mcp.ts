@@ -1,3 +1,4 @@
+import {readFilesItemById} from './files-transfer.js'
 import {reportSourceHealth,sourceHealthStatus} from './source-health.js'
 import {readGoogleMail} from './google-mail.js'
 import {readAgentRunHistory} from './agent-run-history.js'
@@ -86,13 +87,13 @@ export function createPlannerMcp(username: string, scopes: string[]) {
     return {revision:row.revision,...searchFiles(row.state,args)}
   })
   add('planner_read_file','Read any internal Planner note, saved link or uploaded PDF by ID. Notes support character pagination; PDFs support page pagination. Links return their URL, not fetched website content. PDF extraction explicitly reports scanned/empty pages.',{id,offset:z.number().int().nonnegative().optional(),limit:z.number().int().min(1).max(50000).optional(),pageStart:z.number().int().min(1).optional(),pageCount:z.number().int().min(1).max(11).optional(),includeRichText:z.boolean().optional()},'planner:read',true,async args=>{
-    const row=await filesRow(username),file=row.state.files.find((f:any)=>f.id===args.id)
+    const row=await readFilesItemById(username,args.id),file=row.section==='files'?row.item as any:null
     if(file) {
       const offset=args.offset || 0,limit=args.limit || 20000
       const {richText,richTextSource,...metadata}=file
       return {...metadata,format:file.format||'text',...(args.includeRichText?{richText,richTextSource}:{}),content:file.content.slice(offset,offset+limit),revision:row.revision,offset,totalCharacters:file.content.length,hasMore:offset+limit<file.content.length}
     }
-    const document=(row.state.documents || []).find((f:any)=>f.id===args.id)
+    const document=row.section==='documents'?row.item as any:null
     if(!document)throw new ApiError(404,'File not found.')
     return {...document,revision:row.revision,...(document.kind==='pdf'?await readPdf(username,document.id,args.pageStart || 1,args.pageCount || 5):{})}
   })
