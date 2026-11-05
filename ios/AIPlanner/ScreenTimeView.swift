@@ -112,6 +112,9 @@ import CryptoKit
 }
 
 struct ScreenTimeView: View {
+    var guided = false
+    @State private var setupStep = 0
+    @Environment(\.dismiss) private var dismiss
     @StateObject private var model = ScreenTimeModel()
     @ObservedObject private var location = FocusLocationController.shared
     @State private var choosingLocation = false
@@ -129,13 +132,27 @@ struct ScreenTimeView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    Text("Choose distracting apps and block them for a focus session.")
+                if guided {
+                    Section {
+                        Text("Step \(setupStep + 1) of 4").font(.subheadline).foregroundStyle(.secondary)
+                        ProgressView(value: Double(setupStep + 1), total: 4).tint(.blue)
+                        Text(["Allow Screen Time", "Create your app groups", "Choose a location", "You’re ready"][setupStep]).font(.title2.bold())
+                        Text(["Give Planner permission to block distractions. You stay in control of which apps are included.", "Save groups such as Social media, Photos & video, or Games. Your agent can block each group separately.", "Optionally allow apps only at a place, or block them when you arrive. You can skip this step.", "Your agent can now use your saved groups during tasks. Website rules need no additional setup."][setupStep]).foregroundStyle(.secondary)
+                    }
                 }
-                if !model.authorized {
+                if (!guided || setupStep == 0) && !model.authorized {
                     Section { Button("Allow Screen Time access") { Task { await model.authorize() } }.disabled(model.authorizing) }
                 }
+                if guided && setupStep == 0 && model.authorized { Section { Label("Screen Time access allowed", systemImage: "checkmark.circle.fill").foregroundStyle(.green) } }
+                if !guided || setupStep == 1 {
                 Section("App groups") {
+                    if guided {
+                        HStack {
+                            ForEach(["Social media", "Photos & video", "Games"], id: \.self) { name in
+                                Button(name) { groupName = name }.buttonStyle(.bordered).font(.caption)
+                            }
+                        }
+                    }
                     TextField("Group name (e.g. Social media)", text: $groupName)
                     Button("Choose apps for new group") {
                         groupSelection = FamilyActivitySelection(includeEntireCategory: true)
@@ -152,6 +169,8 @@ struct ScreenTimeView: View {
                     }
                     Text("Select a saved group to use it for a session. The agent can combine multiple groups.").font(.footnote)
                 }.disabled(model.end != nil)
+                }
+                if !guided {
                 Section("Blocking options") {
                     Toggle("Block all apps", isOn: $model.policy.allApps)
                     Toggle("Block all websites", isOn: $model.policy.allWebsites)
@@ -164,6 +183,8 @@ struct ScreenTimeView: View {
                     }.disabled(model.authorizing || model.end != nil)
                     Text("\(model.selection.applicationTokens.count) apps · \(model.selection.categoryTokens.count) categories · \(model.selection.webDomainTokens.count) websites").font(.footnote).foregroundStyle(.secondary)
                 }
+                }
+                if !guided || setupStep == 2 {
                 Section("Location (optional)") {
                     Toggle("Use location rules", isOn: Binding(get: { location.enabled }, set: { location.setEnabled($0) }))
                         .disabled(model.end != nil)
@@ -208,6 +229,26 @@ struct ScreenTimeView: View {
                         }
                     }
                 }
+                }
+                if guided && setupStep == 3 {
+                    Section("Your setup") {
+                        LabeledContent("App groups", value: String(groups.count))
+                        ForEach(groups) { group in Label(group.name, systemImage: "square.stack.3d.up") }
+                        LabeledContent("Location", value: location.enabled ? (location.place?.name ?? "Not selected") : "No location restriction")
+                        Text("You can return here to add or remove groups and change your location preferences.").font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
+                if guided {
+                    Section {
+                        Button(setupStep == 3 ? "Finish setup" : (setupStep == 2 && !location.enabled ? "Skip location" : "Continue")) {
+                            if setupStep == 3 { dismiss() }
+                            else if setupStep == 2, location.enabled, let problem = location.validationError() { model.error = problem }
+                            else { model.error = nil; setupStep += 1 }
+                        }.buttonStyle(.borderedProminent).frame(maxWidth: .infinity).disabled(setupStep == 0 && !model.authorized)
+                        if setupStep > 0 { Button("Back") { model.error = nil; setupStep -= 1 } }
+                    }
+                }
+                if !guided {
                 if let end = model.end {
                     Section("Focus session") {
                         Text(end, style: .timer).font(.largeTitle).monospacedDigit()
@@ -221,6 +262,7 @@ struct ScreenTimeView: View {
                             do { model.policy.domains = try FocusBlockPolicy.domains(websites); model.policy.allowedDomains = try FocusBlockPolicy.domains(allowedWebsites); model.start(minutes: minutes) } catch { model.error = error.localizedDescription }
                         }.disabled(!model.authorized)
                     }
+                }
                 }
                 #if DEBUG
                 if ProcessInfo.processInfo.arguments.contains("-UITestPeriodicLocation") {
@@ -236,7 +278,9 @@ struct ScreenTimeView: View {
                 #endif
                 if let error = model.error { Section { Text(error).foregroundStyle(.red) } }
             }
-            .navigationTitle("Screen Time")
+            .navigationTitle(guided ? "Set up Screen Time" : "Screen Time")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { if guided { ToolbarItem(placement: .topBarTrailing) { Button("Close") { dismiss() } } } }
             .familyActivityPicker(isPresented: $picker, selection: $model.selection)
             .familyActivityPicker(isPresented: $groupPicker, selection: $groupSelection)
             .onChange(of: groupPicker) { wasOpen, isOpen in
@@ -251,7 +295,7 @@ struct ScreenTimeView: View {
             }
             .onChange(of: account) { _, _ in groups = FocusAppGroups.read(account); groupName = ""; groupSelection = FamilyActivitySelection(includeEntireCategory: true); model.selection = FamilyActivitySelection(includeEntireCategory: true); model.policy = FocusBlockPolicy(); websites = ""; allowedWebsites = ""; model.refresh() }
             .onAppear { groups = FocusAppGroups.read(account); websites = model.policy.domains.joined(separator: ", "); allowedWebsites = model.policy.allowedDomains.joined(separator: ", ") }
-            .onReceive(pickerRequest) { _ in Task { guard model.end == nil else{return};if await model.authorize() { picker = true } } }
+            .onReceive(pickerRequest) { _ in if guided { setupStep = 1 }; Task { guard model.end == nil else{return};if await model.authorize() { picker = true } } }
             .sheet(isPresented: $choosingLocation) { FocusLocationPicker(location: location) }
         }
         .onChange(of: model.selection) { _, _ in model.saveSelection() }

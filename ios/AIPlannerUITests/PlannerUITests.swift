@@ -1014,6 +1014,33 @@ final class PlannerUITests: XCTestCase {
         print("SIMULATOR_SCREEN_TIME_SETTINGS", settings.debugDescription)
         let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); shot.name = "Screen Time activity settings"; shot.lifetime = .keepAlways; add(shot)
     }
+    func testScreenTimeGuidedSetup() {
+        let app = launch()
+        let tab = app.webViews.buttons["Screen Time"]
+        XCTAssertTrue(tab.waitForExistence(timeout: 20)); tab.tap()
+        let setup = app.webViews.buttons["Set up Screen Time"]
+        XCTAssertTrue(setup.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["Cloud blocking"].exists)
+        setup.tap()
+        XCTAssertTrue(app.staticTexts["Step 1 of 4"].waitForExistence(timeout: 10))
+        let next = app.buttons["Continue"]
+        if next.isEnabled {
+            next.tap()
+            XCTAssertTrue(app.staticTexts["Create your app groups"].waitForExistence(timeout: 5))
+            app.buttons["Games"].tap()
+            XCTAssertTrue(app.buttons["Choose apps for new group"].isEnabled)
+            app.buttons["Choose apps for new group"].tap()
+            XCTAssertTrue(app.navigationBars["FamilyActivityPicker.navigationTitle"].waitForExistence(timeout: 3) || app.buttons["Done"].waitForExistence(timeout: 5))
+            app.buttons["Done"].firstMatch.tap()
+            next.tap()
+            XCTAssertTrue(app.staticTexts["Choose a location"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.switches["Use location rules"].exists)
+            app.buttons["Back"].tap()
+            XCTAssertTrue(app.staticTexts["Create your app groups"].waitForExistence(timeout: 5))
+        }
+        app.buttons["Close"].tap()
+        XCTAssertTrue(setup.waitForExistence(timeout: 5))
+    }
     func testScreenTimeRequiresLoginAndKeepsPlannerNavigation() {
         let app = launch(signedIn: false)
         XCTAssertTrue(app.buttons["Continue with Google"].waitForExistence(timeout: 20))

@@ -135,7 +135,18 @@ struct PlannerWebView: UIViewRepresentable {
         var relayOperationActive = false
         var screenTimeHost: UIHostingController<ScreenTimeView>?
         weak var taskScreenTimeHost: UIViewController?
+        func showScreenTimeSetup() throws {
+            guard WidgetTaskControl.defaults.string(forKey: "feedback-account") != nil, let parent = webView?.window?.rootViewController else { throw NativeError("Sign in before setting up Screen Time.") }
+            guard parent.presentedViewController == nil else { throw NativeError("Close the current menu first.") }
+            let host = UIHostingController(rootView: ScreenTimeView(guided: true))
+            screenTimeHost = host
+            host.modalPresentationStyle = .pageSheet
+            host.sheetPresentationController?.detents = [.large()]
+            host.sheetPresentationController?.prefersGrabberVisible = true
+            parent.present(host, animated: true)
+        }
         func hideScreenTime() {
+            if screenTimeHost?.presentingViewController != nil { screenTimeHost?.dismiss(animated: false) }
             if screenTimeHost?.presentedViewController != nil { screenTimeHost?.dismiss(animated: false) }
             screenTimeHost?.willMove(toParent: nil)
             screenTimeHost?.view.removeFromSuperview()
@@ -191,8 +202,8 @@ struct PlannerWebView: UIViewRepresentable {
                     case "plannerClientScreenTime":
                         guard let account=body["account"] as? String, account == WidgetTaskControl.defaults.string(forKey:"feedback-account"), let command=body["command"] as? [String:Any], let key=body["receiptKey"] as? String, let issued=body["issuedAt"] as? String else { throw NativeError("Sign into the same Planner account first.") }
                         if command["action"] as? String == "screen_time_pick_apps" {
-                            for _ in 0..<15 {if screenTimeHost != nil {break};try await Task.sleep(for:.milliseconds(100))}
-                            guard screenTimeHost != nil else {throw NativeError("Open the Screen Time tab before choosing apps.")}
+                            if screenTimeHost?.view.window == nil { try showScreenTimeSetup() }
+                            try await Task.sleep(for: .milliseconds(400))
                         }
                         replyHandler(try await PlannerClientScreenTime.run(account:account,command:command,key:key,issued:issued),nil);return
                     case "taskNotificationPermission":
@@ -291,6 +302,8 @@ struct PlannerWebView: UIViewRepresentable {
                         let host = UIHostingController(rootView: TaskScreenTimeView(account: account, task: task))
                         taskScreenTimeHost = host
                         parent.present(host, animated: true)
+                    case "screenTimeSetup":
+                        try showScreenTimeSetup()
                     case "screenTimePanel":
                         guard body["visible"] as? Bool == true else { hideScreenTime(); replyHandler(["ok": true], nil); return }
                         guard let bounds = body["rect"] as? [String: Double],
