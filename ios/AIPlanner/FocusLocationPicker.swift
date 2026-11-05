@@ -27,7 +27,14 @@ struct FocusLocationPicker: View {
                 }
                 if searching { ProgressView("Searching places…") }
                 if let error { Text(error).foregroundStyle(.red) }
-                if let error = location.error { Text(error).foregroundStyle(.red) }
+                if let error = location.error {
+                    Section {
+                        Text(error).foregroundStyle(.secondary)
+                        Button("Try current location again") {
+                            location.useCurrentPlace { place in if let place { location.setPlace(place); dismiss() } }
+                        }.disabled(location.locating)
+                    }
+                }
                 ForEach(Array(results.enumerated()), id: \.offset) { index, result in
                     Button {
                         let c = result.placemark.coordinate
@@ -47,6 +54,7 @@ struct FocusLocationPicker: View {
             .navigationTitle("Blocking location")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
         }
+        .onAppear { location.clearPlaceLookupError() }
         .onDisappear { searchID = UUID(); search?.cancel(); location.cancelCurrentPlaceRequest() }
     }
     private func findPlaces() {
@@ -55,6 +63,7 @@ struct FocusLocationPicker: View {
         search?.cancel(); let id = UUID(); searchID = id
         let request = MKLocalSearch.Request(); request.naturalLanguageQuery = text
         let next = MKLocalSearch(request: request); search = next
+        location.cancelCurrentPlaceRequest(); location.clearPlaceLookupError()
         searching = true; error = nil; results = []
         Task { @MainActor in
             do {

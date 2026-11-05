@@ -113,6 +113,7 @@ import CryptoKit
 
 struct ScreenTimeView: View {
     var guided = false
+    var onSetupChanged: (() -> Void)? = nil
     @State private var setupStep = 0
     @Environment(\.dismiss) private var dismiss
     @StateObject private var model = ScreenTimeModel()
@@ -281,7 +282,10 @@ struct ScreenTimeView: View {
                 if guided {
                     VStack(spacing: 12) {
                         Button {
-                            if setupStep == 3 { dismiss() }
+                            if setupStep == 3 {
+                                FocusShieldRules.defaults.set(true, forKey: "focus-setup-complete:" + account)
+                                onSetupChanged?(); dismiss()
+                            }
                             else if setupStep == 2, location.enabled, let problem = location.validationError() { model.error = problem }
                             else { model.error = nil; setupStep += 1 }
                         } label: {
@@ -308,6 +312,7 @@ struct ScreenTimeView: View {
             .onReceive(pickerRequest) { _ in if guided { setupStep = 1 }; Task { guard model.end == nil else{return};if await model.authorize() { picker = true } } }
             .sheet(isPresented: $choosingLocation) { FocusLocationPicker(location: location) }
         }
+        .onDisappear { if guided { onSetupChanged?() } }
         .onChange(of: model.selection) { _, _ in model.saveSelection() }
         .task(id: picker) {
             guard !picker else { return }

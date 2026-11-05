@@ -46,6 +46,9 @@ struct FocusPlace: Codable, Equatable {
     private var checkTask: Task<Void, Never>?
     private var burstTask: Task<Void, Never>?
     private var burstStartedAt: Date?
+    private var currentPlaceTimeout: Task<Void, Never>?
+    private var currentPlaceRetry: Task<Void, Never>?
+    private var currentPlaceAttempts = 0
     private var currentPlaceRequest: ((FocusPlace?) -> Void)?
     var activeSession: Bool { defaults.double(forKey: "focusEnd") > Date().timeIntervalSince1970 }
     var backgroundAuthorized: Bool { authorization == .authorizedAlways }
@@ -114,17 +117,37 @@ struct FocusPlace: Codable, Equatable {
     }
     func useCurrentPlace(_ completion: @escaping (FocusPlace?) -> Void) {
         guard !locating else { return }
-        currentPlaceRequest = completion; locating = true; error = nil
+        currentPlaceRequest = completion; locating = true; error = nil; currentPlaceAttempts = 0
+        currentPlaceTimeout = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(20))
+            guard !Task.isCancelled, let self, self.locating else { return }
+            self.error = Self.currentPlaceUnavailable
+            self.completeCurrentPlace(nil)
+        }
         switch manager.authorizationStatus {
         case .notDetermined: manager.requestWhenInUseAuthorization()
         case .authorizedAlways, .authorizedWhenInUse: manager.requestLocation()
         default: completeCurrentPlace(nil); error = "Allow location access in Settings to use your current location."
         }
     }
-    func cancelCurrentPlaceRequest() { currentPlaceRequest = nil; locating = false }
+    private static var currentPlaceUnavailable: String {
+        #if targetEnvironment(simulator)
+        return "No simulated location is available. Choose a location in Simulator’s Features → Location menu, or search for an address above."
+        #else
+        return "Couldn’t get a GPS fix. Try again, or search for an address above."
+        #endif
+    }
+    func clearPlaceLookupError() { if !locating { error = nil } }
+    func cancelCurrentPlaceRequest() {
+        currentPlaceTimeout?.cancel(); currentPlaceTimeout = nil
+        currentPlaceRetry?.cancel(); currentPlaceRetry = nil
+        currentPlaceRequest = nil; locating = false
+    }
     private func completeCurrentPlace(_ value: FocusPlace?) {
         let completion = currentPlaceRequest
-        currentPlaceRequest = nil; locating = false; completion?(value)
+        cancelCurrentPlaceRequest()
+        if value != nil { error = nil }
+        completion?(value)
     }
     private var region: CLCircularRegion? {
         guard let place, place.isValid, CLLocationManager.isMonitoringAvailable(for: CLCircularRegion.self), manager.maximumRegionMonitoringDistance >= place.radius else { return nil }
@@ -342,9 +365,20 @@ struct FocusPlace: Codable, Equatable {
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         guard locating || (enabled && activeSession) else { return }
         if let failure = error as? CLError, failure.code == .locationUnknown, armed, preciseTracking { return }
+        if locating, let failure = error as? CLError, failure.code == .locationUnknown, currentPlaceAttempts < 3 {
+            currentPlaceAttempts += 1
+            currentPlaceRetry?.cancel()
+            currentPlaceRetry = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(2))
+                guard !Task.isCancelled, let self, self.locating else { return }
+                self.manager.requestLocation()
+            }
+            return
+        }
+        let wasLocating = locating
         if locating { completeCurrentPlace(nil) }
         record("Location lookup failed: \((error as NSError).code)")
-        self.error = "Could not determine your location. Try again with Location Services enabled."
+        self.error = wasLocating ? ((error as? CLError)?.code == .denied ? "Location access is off. Allow it in Settings, or search for an address above." : Self.currentPlaceUnavailable) : "Could not verify your location. Check Location Services and try again."
         if enabled && activeSession { setInside(nil, force: true); if preciseTracking { endPreciseCheck() } }
     }
     func locationManager(_ manager: CLLocationManager, monitoringDidFailFor region: CLRegion?, withError error: Error) {

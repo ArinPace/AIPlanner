@@ -138,7 +138,9 @@ struct PlannerWebView: UIViewRepresentable {
         func showScreenTimeSetup() throws {
             guard WidgetTaskControl.defaults.string(forKey: "feedback-account") != nil, let parent = webView?.window?.rootViewController else { throw NativeError("Sign in before setting up Screen Time.") }
             guard parent.presentedViewController == nil else { throw NativeError("Close the current menu first.") }
-            let host = UIHostingController(rootView: ScreenTimeView(guided: true))
+            let host = UIHostingController(rootView: ScreenTimeView(guided: true, onSetupChanged: { [weak self] in
+                self?.webView?.evaluateJavaScript("window.dispatchEvent(new Event('plannerScreenTimeChanged'))", completionHandler: nil)
+            }))
             screenTimeHost = host
             host.modalPresentationStyle = .pageSheet
             host.sheetPresentationController?.detents = [.large()]
@@ -267,6 +269,13 @@ struct PlannerWebView: UIViewRepresentable {
                         if changed { ScreenTimeModel().stop(); FocusShieldRules.defaults.removeObject(forKey: "focusSelection"); FocusShieldRules.defaults.removeObject(forKey: "focusBlockPolicy"); clearChatGPT(); TaskFocusRules.clearAll(); taskScreenTimeHost?.dismiss(animated: false); WidgetTaskControl.clear() }
                         WidgetTaskControl.defaults.set(account, forKey: "feedback-account")
                         #if DEBUG
+                        if account != nil, !clientControlTestStarted, ProcessInfo.processInfo.arguments.contains("-UITestCurrentPlace") {
+                            clientControlTestStarted = true
+                            FocusLocationController.shared.useCurrentPlace { place in
+                                let result: [String: Any] = ["found":place != nil, "valid":place?.isValid ?? false, "error":FocusLocationController.shared.error ?? ""]
+                                if let data = try? JSONSerialization.data(withJSONObject: result), let folder = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first { try? data.write(to: folder.appendingPathComponent("CurrentPlaceQA.json"), options: .atomic) }
+                            }
+                        }
                         if let account,!clientControlTestStarted,ProcessInfo.processInfo.arguments.contains("-UITestClientControls") {
                             clientControlTestStarted=true
                             Task { @MainActor in
@@ -302,6 +311,11 @@ struct PlannerWebView: UIViewRepresentable {
                         let host = UIHostingController(rootView: TaskScreenTimeView(account: account, task: task))
                         taskScreenTimeHost = host
                         parent.present(host, animated: true)
+                    case "screenTimeStatus":
+                        guard let account = WidgetTaskControl.defaults.string(forKey: "feedback-account"), !account.isEmpty else { throw NativeError("Sign in to view Screen Time setup.") }
+                        let location = FocusLocationController.shared
+                        replyHandler(["completed": FocusShieldRules.defaults.bool(forKey: "focus-setup-complete:" + account), "authorized": ScreenTimeModel().authorized, "groups": FocusAppGroups.read(account).map { ["id":$0.id,"name":$0.name] }, "location": location.enabled ? (location.place?.name ?? "Choose a location") : NSNull()], nil)
+                        return
                     case "screenTimeSetup":
                         try showScreenTimeSetup()
                     case "screenTimePanel":

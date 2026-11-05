@@ -1018,7 +1018,7 @@ final class PlannerUITests: XCTestCase {
         let app = launch()
         let tab = app.webViews.buttons["Screen Time"]
         XCTAssertTrue(tab.waitForExistence(timeout: 20)); tab.tap()
-        let setup = app.webViews.buttons["Set up Screen Time"]
+        let setup = app.webViews.buttons.matching(NSPredicate(format: "label == %@ OR label == %@", "Set up Screen Time", "Edit setup")).firstMatch
         XCTAssertTrue(setup.waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["Cloud blocking"].exists)
         setup.tap()
@@ -1037,6 +1037,19 @@ final class PlannerUITests: XCTestCase {
             XCTAssertTrue(app.switches["Use location rules"].exists)
             app.buttons["Back"].tap()
             XCTAssertTrue(app.staticTexts["Create your app groups"].waitForExistence(timeout: 5))
+            next.tap()
+            let locationToggle = app.switches["Use location rules"]
+            let wasEnabled = (locationToggle.value as? String) == "1"
+            if wasEnabled { locationToggle.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap() }
+            app.buttons["Skip location"].tap()
+            XCTAssertTrue(app.staticTexts["You’re ready"].waitForExistence(timeout: 5))
+            app.buttons["Finish setup"].tap()
+            XCTAssertTrue(app.webViews.buttons["Edit setup"].waitForExistence(timeout: 10))
+            XCTAssertTrue(app.webViews.staticTexts["Your Screen Time setup"].exists)
+            app.webViews.buttons["Edit setup"].tap()
+            XCTAssertTrue(app.staticTexts["Step 1 of 4"].waitForExistence(timeout: 5))
+            next.tap(); next.tap()
+            if wasEnabled { app.switches["Use location rules"].coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap() }
         }
         app.buttons["Close"].tap()
         XCTAssertTrue(setup.waitForExistence(timeout: 5))
