@@ -165,7 +165,7 @@ struct ScreenTimeView: View {
                             Button("Remove", role: .destructive) {
                                 do { let next = groups.filter { $0.id != group.id }; try FocusAppGroups.write(next, account: account); groups = next } catch { model.error = error.localizedDescription }
                             }
-                        }
+                        }.buttonStyle(.borderless)
                     }
                     Text("Select a saved group to use it for a session. The agent can combine multiple groups.").font(.footnote)
                 }.disabled(model.end != nil)
@@ -238,14 +238,10 @@ struct ScreenTimeView: View {
                         Text("You can return here to add or remove groups and change your location preferences.").font(.footnote).foregroundStyle(.secondary)
                     }
                 }
-                if guided {
-                    Section {
-                        Button(setupStep == 3 ? "Finish setup" : (setupStep == 2 && !location.enabled ? "Skip location" : "Continue")) {
-                            if setupStep == 3 { dismiss() }
-                            else if setupStep == 2, location.enabled, let problem = location.validationError() { model.error = problem }
-                            else { model.error = nil; setupStep += 1 }
-                        }.buttonStyle(.borderedProminent).frame(maxWidth: .infinity).disabled(setupStep == 0 && !model.authorized)
-                        if setupStep > 0 { Button("Back") { model.error = nil; setupStep -= 1 } }
+                if guided, let end = model.end {
+                    Section("Blocking is active") {
+                        Text("Ends at \(end.formatted(date: .omitted, time: .shortened)). End this session before changing groups or locations.").font(.footnote)
+                        Button("End blocking", role: .destructive) { model.stop() }
                     }
                 }
                 if !guided {
@@ -281,6 +277,20 @@ struct ScreenTimeView: View {
             .navigationTitle(guided ? "Set up Screen Time" : "Screen Time")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { if guided { ToolbarItem(placement: .topBarTrailing) { Button("Close") { dismiss() } } } }
+            .safeAreaInset(edge: .bottom) {
+                if guided {
+                    VStack(spacing: 12) {
+                        Button {
+                            if setupStep == 3 { dismiss() }
+                            else if setupStep == 2, location.enabled, let problem = location.validationError() { model.error = problem }
+                            else { model.error = nil; setupStep += 1 }
+                        } label: {
+                            Text(setupStep == 3 ? "Finish setup" : (setupStep == 2 && !location.enabled ? "Skip location" : "Continue")).fontWeight(.semibold).frame(maxWidth: .infinity).padding(.vertical, 8)
+                        }.buttonStyle(.borderedProminent).disabled(setupStep == 0 && !model.authorized)
+                        if setupStep > 0 { Button("Back") { model.error = nil; setupStep -= 1 } }
+                    }.padding().background(.regularMaterial)
+                }
+            }
             .familyActivityPicker(isPresented: $picker, selection: $model.selection)
             .familyActivityPicker(isPresented: $groupPicker, selection: $groupSelection)
             .onChange(of: groupPicker) { wasOpen, isOpen in
