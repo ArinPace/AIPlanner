@@ -14,7 +14,7 @@ export interface PlannerFolder {
 }
 
 export interface PlannerTextFile {
-  systemRole?: 'goals'|'todo'
+  systemRole?: 'goals'|'todo'|'work'
   format?: 'note'
   richText?: string
   richTextSource?: string
@@ -29,6 +29,7 @@ export interface PlannerTextFile {
 }
 
 export interface FilesState {
+  partial?: boolean
   revision?: number
   storageLimitBytes?: number
   folders: PlannerFolder[]
@@ -115,7 +116,7 @@ export function validateFilesState(value: unknown, maxBytes = FILES_ACCOUNT_MAX_
     if (!file || typeof file !== 'object') throw new Error('Invalid text file.')
     if (new TextEncoder().encode(JSON.stringify(file)).length > FILES_ITEM_MAX_BYTES) throw new Error('This note exceeds the 3 MB per-note transfer limit. Split it into smaller notes.')
     if (file.format !== undefined && file.format !== 'note') throw new Error('Invalid note format.')
-    if(file.systemRole!==undefined&&(!['goals','todo'].includes(file.systemRole)||file.format!=='note'))throw new Error('Invalid permanent planning note.')
+    if(file.systemRole!==undefined&&(!['goals','todo','work'].includes(file.systemRole)||file.format!=='note'))throw new Error('Invalid permanent planning note.')
     if(file.pinned!==undefined && typeof file.pinned!=='boolean')throw new Error('Invalid pinned note.')
     if(file.tags!==undefined && (!Array.isArray(file.tags) || file.tags.length>20 || file.tags.some(t=>typeof t!=='string'||t.length>40)))throw new Error('Use up to 20 note tags, 40 characters each.')
     if(file.richText!==undefined){
@@ -146,6 +147,6 @@ export function validateFilesState(value: unknown, maxBytes = FILES_ACCOUNT_MAX_
 }
 
 // Keep the saved instruction snapshot available to agents without listing it in Files.
-export function isVisiblePlannerFile(file:{name:string;systemRole?:string;folderId?:string|null}){return !(file.name==='Work' && file.folderId===null) && file.systemRole!=='todo' && !/^to[ -]?do(?: list)?$/i.test(file.name.trim()) && file.name.trim().toLowerCase()!=='system prompt.txt'}
+export function isVisiblePlannerFile(file:{name:string;systemRole?:string;folderId?:string|null}){return file.systemRole!=='work' && !(file.name==='Work' && file.folderId===null) && file.systemRole!=='todo' && !/^to[ -]?do(?: list)?$/i.test(file.name.trim()) && file.name.trim().toLowerCase()!=='system prompt.txt'}
 
 export function isPermanentPlannerNote(file:{name:string;systemRole?:string;folderId?:string|null}){return Boolean(file.systemRole) || (file.name==='Work' && file.folderId===null)}

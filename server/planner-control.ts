@@ -1,3 +1,4 @@
+import {AGENT_FILE_POLICY} from './agent-file-policy.js'
 import {expandEvents} from '../src/lib/recurrence.js'
 import {normalizeEventFolders,removeEventSeries,eventRemovalIds} from '../src/lib/eventFolders.js'
 import {SUBJECT_ORGANIZATION} from './subject-folders.js'
@@ -15,6 +16,7 @@ export const plannerGuide={
  eventScheduling:EVENT_SCHEDULING_RULES,
  widgetReplanning:'Widget time changes are local previews, not live calendar writes. Prepare a full calendar stage, pass the exact widgetFeedback to stage_edit, and review the whole affected plan before one stage_publish. Preserve the task and its date-specific folder membership. Use draft removeIds for authorized cleanup; do not delete or replan live while a widget draft is active. Resolve new/worsened overlaps and duplicates. After publishing, record completion/learning with replan:false so there is no second calendar rewrite.',
  version:'2026-11-05',
+ fileOrganization:AGENT_FILE_POLICY,
  clientControl:{tool:'planner_client_control',rules:'Native Chat can execute this directly. Agent should use planner_device_command_submit and planner_device_command_read for phone acknowledgement; queued is not executed. Active native Chat can navigate tabs, calendar date/view and Settings, and control native focus sessions, per-task blocking, location policy and an already connected NextDNS denylist. The backend result is only a client command; require actual clientResult before claiming execution. Screen Time writes require a fresh device fingerprint. OS permission and opaque app selection still require the user. No tokens or credentials are exported.'},
  appSettings:{read:'planner_app_settings_read',write:'planner_app_settings_update',permissions:'User-owned display and notification preferences; OS authorization, account sign-in and app picker selections still require user interaction.'},
  memory:{read:'planner_memory_read',write:'planner_memory_write',rules:'Private persistent memory shared across this user\'s chats and scheduled runs, outside normal Files. Read at run start, use freely for durable factual context, update obsolete facts, distinguish uncertainty, never store credentials or hidden reasoning. User can ask to inspect/correct/forget. Reset Main Chat also clears this memory.'},

@@ -1,6 +1,6 @@
 import type {SourceAlert} from './sourceAlerts'
 import type {TaskNotificationSettings} from './taskNotifications'
-import {activateReplica,recordReplica,replicaContext,saveReplica} from './localReplica'
+import {activateReplica,recordReplica,replicaContext,saveReplica,readReplica} from './localReplica'
 import {isIPhoneApp,nativeRequest} from './platform'
 import type { StoredState } from '../types'
 import { DEFAULT_TAGS } from './storage'
@@ -97,10 +97,23 @@ export function emptyCalendar(): StoredState {
   return { events: [], tags: DEFAULT_TAGS, hiddenTagIds: [], zoom: 1 }
 }
 
-let filesCacheToken:string|null=null,filesBase:FilesState|null=null
+let filesCacheToken:string|null=null,filesBase:FilesState|null=null,filesCheckedAt=0
 let filesLoading:{token:string|null;promise:Promise<FilesState>}|null=null
 const filesItems=new Map<string,{etag:string;item:WorkspaceItem}>()
-function clearFilesCache(){filesBase=null;filesItems.clear();filesLoading=null;filesCacheToken=getToken()}
+function clearFilesCache(){filesCheckedAt=0;filesBase=null;filesItems.clear();filesLoading=null;filesCacheToken=getToken()}
+export function invalidateFilesCache(){filesCheckedAt=0}
+export function peekFilesCache(){return filesCacheToken===getToken()?filesBase:null}
+export async function warmFilesCache(username:string){
+ const token=getToken();if(filesCacheToken!==token)clearFilesCache()
+ if(filesBase)return filesBase
+ const replica=await readReplica();if(token!==getToken()||replica.account!==username)return null
+ const part=replica.parts.find(p=>p.kind==='files');if(!part)return null
+ const state=part.data as unknown as FilesState;validateFilesState(state,state.storageLimitBytes)
+ const manifest=part.data._manifest as FilesManifest|undefined
+ if(manifest)for(const entry of manifest.items){const item=(state[entry.section]||[]).find(item=>item.id===entry.id);if(item)filesItems.set(entry.section+':'+entry.id,{etag:entry.etag,item})}
+ if(!filesBase)filesBase=state
+ return filesBase
+}
 async function loadFilesParts():Promise<FilesState>{
  const token=getToken(),context=replicaContext()
  if(filesCacheToken!==token)clearFilesCache()
@@ -111,29 +124,27 @@ async function loadFilesParts():Promise<FilesState>{
   void saveReplica('files',state as unknown as Record<string,unknown>,context);return state
  }
  const manifest=response as FilesManifest
- if(filesBase?.revision===manifest.revision)return filesBase
+ filesCheckedAt=Date.now()
+ if(filesBase?.revision===manifest.revision){for(const entry of manifest.items){const item=(filesBase[entry.section]||[]).find(item=>item.id===entry.id);if(item)filesItems.set(entry.section+':'+entry.id,{etag:entry.etag,item})}return filesBase}
  const state:FilesState={revision:manifest.revision,storageLimitBytes:manifest.storageLimitBytes,files:[],folders:[],documents:[]}
- const values:WorkspaceItem[]=new Array(manifest.items.length)
+ const values=new Map<string,WorkspaceItem>(),missing:typeof manifest.items=[]
+ for(const entry of manifest.items){const key=entry.section+':'+entry.id,cached=filesItems.get(key),item=entry.value??(cached?.etag===entry.etag?cached.item:undefined);if(item)values.set(entry.id,item);else missing.push(entry)}
+ const batches:typeof missing[]=[];let batch:typeof missing=[],bytes=0
+ for(const entry of missing){const size=entry.bytes??3000000;if(batch.length&&(batch.length>=40||bytes+size>768000)){batches.push(batch);batch=[];bytes=0}batch.push(entry);bytes+=size}if(batch.length)batches.push(batch)
  let cursor=0
- async function consume(){
-  while(cursor<manifest.items.length){
-   const position=cursor++,entry=manifest.items[position],key=entry.section+':'+entry.id,cached=filesItems.get(key)
-   const item=entry.value??(cached&&cached.etag===entry.etag?cached.item:undefined)??(await request<{item:WorkspaceItem}>('/api/files/item?'+new URLSearchParams({section:entry.section,id:entry.id,index:String(entry.index),revision:String(manifest.revision)}))).item
-   if(item.id!==entry.id)throw new Error('Files changed while loading. Please retry.')
-   values[position]=item;filesItems.set(key,{etag:entry.etag,item})
-  }
- }
- await Promise.all(Array.from({length:4},consume))
- for(let i=0;i<values.length;i++)(state[manifest.items[i].section] as WorkspaceItem[]).push(values[i])
+ async function consume(){while(cursor<batches.length){const group=batches[cursor++];if(group.length===1){const e=group[0],item=(await request<{item:WorkspaceItem}>('/api/files/item?'+new URLSearchParams({section:e.section,id:e.id,index:String(e.index),revision:String(manifest.revision)}))).item;values.set(e.id,item)}else{const result=await request<{items:WorkspaceItem[]}>('/api/files/batch',{method:'POST',body:JSON.stringify({revision:manifest.revision,ids:group.map(e=>e.id)})});for(const item of result.items)values.set(item.id,item)}}}
+ await Promise.all(Array.from({length:2},consume))
+ for(const entry of manifest.items){const item=values.get(entry.id);if(!item||item.id!==entry.id)throw Error('Files changed while loading. Please retry.');filesItems.set(entry.section+':'+entry.id,{etag:entry.etag,item});(state[entry.section] as WorkspaceItem[]).push(item)}
  if(token!==getToken())throw new Error('Your account changed. Reload your current files.')
  validateFilesState(state,state.storageLimitBytes)
  if(filesBase?.revision!==undefined&&filesBase.revision>manifest.revision)return filesBase
  filesBase=state
  const keep=new Set(manifest.items.map(item=>item.section+':'+item.id));for(const key of filesItems.keys())if(!keep.has(key))filesItems.delete(key)
- void saveReplica('files',state as unknown as Record<string,unknown>,context)
+ void saveReplica('files',{...state,_manifest:manifest} as unknown as Record<string,unknown>,context)
  return state
 }
-export function loadFiles():Promise<FilesState>{
+export function loadFiles(options:{maxAge?:number}={}):Promise<FilesState>{
+ if(peekFilesCache()&&Date.now()-filesCheckedAt<(options.maxAge||0))return Promise.resolve(filesBase!)
  const token=getToken()
  if(filesLoading?.token===token)return filesLoading.promise
  const promise=loadFilesParts().catch(error=>{if(error instanceof Error&&error.message.startsWith('Files changed while loading'))return loadFilesParts();throw error}).finally(()=>{if(filesLoading?.promise===promise)filesLoading=null})
@@ -243,3 +254,5 @@ export function calendarDisplayRequest(patch?:Partial<import('./calendarDisplay'
 export function deviceCommandsRequest<T>(input:unknown){return request<T>('/api/device/commands',{method:'POST',body:JSON.stringify(input)})}
 
 export function cloudDNSRequest<T>(method='GET',input?:unknown){return request<T>('/api/screentime/dns',{method,...(input?{body:JSON.stringify(input)}:{})})}
+
+export function loadCanonicalNote(role:'todo'|'work'){return request<FilesState>('/api/files/system-note?role='+role)}

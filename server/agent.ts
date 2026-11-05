@@ -222,7 +222,9 @@ export function parseUpdates(value: unknown): { summary: string; needsLogin: boo
 export function mergeUpdates(calendarState: StoredState, filesState: FilesState, updates: Update[]) {
   const calendar: StoredState = structuredClone(calendarState), files: FilesState = structuredClone(filesState)
     const now = new Date().toISOString(), root = 'agent-synced-updates'
-    if (updates.length && !files.folders.some(x=>x.id===root)) files.folders.push({ id:root,parentId:null,name:'Agent updates',color:'#1a73e8',labels:['Synced'],updatedAt:now })
+    const agentRoot=files.folders.find(x=>x.parentId===null&&x.name.trim().toLowerCase()==='agent')?.id||'agent-root'
+    if(updates.length&&!files.folders.some(x=>x.id===agentRoot))files.folders.push({id:agentRoot,parentId:null,name:'Agent',color:'#f6bf26',labels:[],updatedAt:now})
+    if (updates.length && !files.folders.some(x=>x.id===root)) files.folders.push({ id:root,parentId:agentRoot,name:'Agent updates',color:'#1a73e8',labels:['Synced'],updatedAt:now })
     for (const update of updates) {
       const key = sha(update.source + ':' + update.url + ':' + update.title).slice(0,24), legacyId = 'agent-'+key
       const suppliedName=(update.course || update.source).trim()

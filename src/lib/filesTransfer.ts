@@ -1,7 +1,7 @@
 import type {FilesState,PlannerTextFile,PlannerFolder,PlannerDocument} from './files.js'
 export type FilesSection='files'|'folders'|'documents'
 export type WorkspaceItem=PlannerTextFile|PlannerFolder|PlannerDocument
-export type FilesManifest={format:'files-manifest';revision:number;storageLimitBytes:number;items:{section:FilesSection;id:string;index:number;etag:string;value?:WorkspaceItem}[]}
+export type FilesManifest={format:'files-manifest';revision:number;storageLimitBytes:number;items:{section:FilesSection;id:string;index:number;etag:string;bytes?:number;value?:WorkspaceItem}[]}
 export type FilesPatch={revision?:number;upserts?:Partial<Record<FilesSection,WorkspaceItem[]>>;removeIds?:string[]}
 export function applyFilesPatch(previous:FilesState,patch:FilesPatch):FilesState {
  if(!patch||typeof patch!=='object'||(patch.upserts!==undefined&&(!patch.upserts||typeof patch.upserts!=='object'||Object.keys(patch.upserts).some(key=>!['files','folders','documents'].includes(key))))|| (patch.removeIds!==undefined&&(!Array.isArray(patch.removeIds)||patch.removeIds.some(id=>typeof id!=='string'))))throw new Error('Invalid Files patch.')

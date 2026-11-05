@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {filesManifest,readFilesTransferItem} from './files-transfer.js'
 import {applyFilesPatch,filesPatches} from '../src/lib/filesTransfer.js'
-import {filesWorkspaceLimit,validateFilesState,FILES_ITEM_MAX_BYTES,type FilesState} from '../src/lib/files.js'
+import {isPermanentPlannerNote,isVisiblePlannerFile,filesWorkspaceLimit,validateFilesState,FILES_ITEM_MAX_BYTES,type FilesState} from '../src/lib/files.js'
 const note=(i:number,content='Note '+i)=>({id:'note-'+i,name:'Note '+i,folderId:null,format:'note' as const,content,updatedAt:'2026-11-03T00:00:00Z'})
 test('25MB allowance is arin-only and a large workspace transfers one changed note at a time',()=>{
  const original:FilesState={revision:7,folders:[],documents:[],files:Array.from({length:28},(_,i)=>note(i,'x'.repeat(900000)))}
@@ -107,4 +107,18 @@ test('workspace RPC sends owner/revision/delta and Bin metadata without a full c
  let sent:any
  globalThis.fetch=async(input,init)=>{const req=new Request(input,init);assert(req.url.endsWith('/rpc/planner_workspace_delta_commit'));sent=await req.json();return Response.json({revision:8,binId:null})}
  try{const {commitWorkspaceDelta}=await import('./files-transfer.js');assert.equal((await commitWorkspaceDelta('arin',7,{removeIds:['qa-note']},{remove:['00000000-0000-4000-8000-000000000001']})).revision,8);assert.equal(sent.p_username,'arin');assert.equal(sent.p_revision,7);assert.deepEqual(sent.p_remove_ids,['qa-note']);assert.equal(sent.p_state,undefined);assert(Buffer.byteLength(JSON.stringify(sent))<1000)}finally{globalThis.fetch=original;for(const key of keys){if(saved[key]===undefined)delete process.env[key];else process.env[key]=saved[key]}}
+})
+
+test('bounded batch reads preserve owner and revision guards and reject duplicate IDs',async()=>{
+ const {readFilesBatch}=await import('./files-transfer.js'),previous=globalThis.fetch,keys=['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','SUPABASE_SECRET_KEY'],env=Object.fromEntries(keys.map(k=>[k,process.env[k]]))
+ process.env.SUPABASE_URL='https://batch.test';process.env.SUPABASE_SERVICE_ROLE_KEY='service';delete process.env.SUPABASE_SECRET_KEY
+ let requests=0
+ globalThis.fetch=async(input,init)=>{const request=new Request(input,init),url=new URL(request.url);assert.equal(url.pathname,'/rest/v1/rpc/planner_files_batch');const data=await request.json() as any;assert.equal(data.p_username,'owner');requests++;return data.p_revision===3?Response.json({revision:3,items:[note(1),note(2)]}):Response.json({code:'P0001',message:'stale'},{status:400})}
+ try{const value=await readFilesBatch('owner',{revision:3,ids:['note-1','note-2']});assert.equal(value.items.length,2);await assert.rejects(()=>readFilesBatch('owner',{revision:2,ids:['note-1']}),/Files changed/);await assert.rejects(()=>readFilesBatch('owner',{revision:3,ids:['note-1','note-1']}),/unique/);assert.equal(requests,2)}finally{globalThis.fetch=previous;for(const k of keys){if(env[k]===undefined)delete process.env[k];else process.env[k]=env[k]}}
+})
+
+
+test('hidden Work remains protected and addressable after moving under Agent',()=>{
+ const state:FilesState={folders:[{id:'agent',parentId:null,name:'Agent',color:'#123456',labels:[],updatedAt:'2026-11-05'}],files:[{...note(1),name:'Work',folderId:'agent',systemRole:'work'}],documents:[]}
+ assert.doesNotThrow(()=>validateFilesState(state));assert(isPermanentPlannerNote(state.files[0]));assert.equal(isVisiblePlannerFile(state.files[0]),false)
 })

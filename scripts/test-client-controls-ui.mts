@@ -9,7 +9,7 @@ try{
  await page.goto('http://127.0.0.1:5174');await page.getByRole('button',{name:'Calendar',exact:true}).waitFor()
  const run=(command:any,account='planner_test')=>page.evaluate(async({command,account})=>{const {executeClientResults}=await import('/src/lib/clientControls.ts');return executeClientResults([{id:'client-test',result:{structuredContent:{result:{requiresClient:true,clientAction:{version:1,issuedAt:new Date().toISOString(),command}}}}}],[{id:'client-test',name:'planner_client_control'}],account,'11111111-1111-4111-8111-111111111111')},{command,account})
  for(const tab of ['files','todo','work','agent','chat','screentime','calendar']){
-  const result=await run({action:'ui_navigate',tab});assert.equal(result[0].result.executed,true,JSON.stringify(result));assert.equal(result[0].result.clientResult.tab,tab)
+  let result=await run({action:'ui_navigate',tab});for(let retry=0;retry<30&&result[0].result.isError&&/unsaved/.test(result[0].result.error||'');retry++){await page.waitForTimeout(100);result=await run({action:'ui_navigate',tab})}assert.equal(result[0].result.executed,true,JSON.stringify(result));assert.equal(result[0].result.clientResult.tab,tab)
  }
  const calendar=await run({action:'ui_navigate',tab:'calendar',view:'month',date:'2037-01-01'});assert.equal(calendar[0].result.clientResult.view,'month')
  const settings=await run({action:'ui_settings',open:true});assert.equal(settings[0].result.clientResult.settingsOpen,true);await page.getByRole('dialog',{name:'Settings',exact:true}).getByRole('switch',{name:'Scale month view to duration'}).waitFor({state:'visible'})

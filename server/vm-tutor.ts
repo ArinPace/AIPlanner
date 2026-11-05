@@ -2,7 +2,8 @@ import {db} from './cloud.js'
 import {storage} from './mcp-auth.js'
 import type {PlannerFolder} from '../src/lib/files.js'
 export function tutorSubjects(folders:Pick<PlannerFolder,'id'|'parentId'|'name'>[]){
- const roots=new Set(folders.filter(f=>!f.parentId&&f.name.trim().toLowerCase()==='subjects').map(f=>f.id))
+ const agents=new Set(folders.filter(f=>!f.parentId&&f.name.trim().toLowerCase()==='agent').map(f=>f.id))
+ const roots=new Set(folders.filter(f=>(!f.parentId||agents.has(f.parentId))&&f.name.trim().toLowerCase()==='subjects').map(f=>f.id))
  return folders.filter(f=>f.parentId&&roots.has(f.parentId)).sort((a,b)=>a.name.localeCompare(b.name))
 }
 export async function syncTutorChats(username:string,activate=false){

@@ -1,3 +1,4 @@
+import {AGENT_FILE_POLICY} from './agent-file-policy.js'
 import {Client} from '@modelcontextprotocol/sdk/client/index.js'
 import {InMemoryTransport} from '@modelcontextprotocol/sdk/inMemory.js'
 import {z} from 'zod'
@@ -15,7 +16,7 @@ Read planner_capabilities, planner_memory_read and relevant current app state be
 
 export async function deviceChatContext(username:string){
  const [personal,automation]=await Promise.all([readAgentInstructions(username),automationRow(username)])
- return {instructions:relayProtocol+'\n\nAccount instructions, revision '+personal.revision+':\n'+(personal.content||'Use built-in Planner behavior.')+'\n\nPlanner workflow and saved review rules:\n'+scheduledReviewMessage(automation?.schedule||DEFAULT_VM_SCHEDULE),revision:personal.revision}
+ return {instructions:relayProtocol+'\n\n'+AGENT_FILE_POLICY+'\n\nAccount instructions, revision '+personal.revision+':\n'+(personal.content||'Use built-in Planner behavior.')+'\n\nPlanner workflow and saved review rules:\n'+scheduledReviewMessage(automation?.schedule||DEFAULT_VM_SCHEDULE),revision:personal.revision}
 }
 
 export async function withDeviceTools<T>(username:string,run:(client:Client)=>Promise<T>){

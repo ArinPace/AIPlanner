@@ -1,6 +1,6 @@
 import { PlannerDate as Date } from '../lib/timezone.js'
 import { lazy, Suspense, useEffect, useRef, useState, type FormEvent, type DragEvent } from 'react'
-import { downloadPdf, loadFiles, saveFiles, uploadPdf, loadFileBin, fileBinAction, type FileBinEntry } from '../lib/api'
+import { downloadPdf, loadCanonicalNote, loadFiles, peekFilesCache, warmFilesCache, saveFiles, uploadPdf, loadFileBin, fileBinAction, type FileBinEntry } from '../lib/api'
 import { TAG_COLORS } from '../lib/colors'
 import { descendantIds, folderPath, validateFilesState, isVisiblePlannerFile, isPermanentPlannerNote, type FilesState, type PlannerFolder, type PlannerTextFile, type PlannerDocument } from '../lib/files'
 import { CloseIcon, TrashIcon } from './Icons'
@@ -80,7 +80,9 @@ function DocumentDialog({ document, folders, busy, error, onClose, onSave }: {
 }
 
 export function FilesView({ workMode = false, standaloneTodo = false, todoRequest = 0, active, username, sidebar, setSidebar, onUnsavedChange }: { workMode?: boolean; standaloneTodo?: boolean; todoRequest?: number; active: boolean; username: string; sidebar: boolean; setSidebar: (open:boolean)=>void; onUnsavedChange: (unsaved: boolean) => void }) {
-  const [state, setState] = useState<FilesState | null>(null)
+  const [state, setState] = useState<FilesState | null>(()=>peekFilesCache())
+  useEffect(()=>{let live=true;void warmFilesCache(username).then(data=>{if(live&&data)setState(current=>current??data)}).catch(()=>{});return()=>{live=false}},[username])
+  useEffect(()=>{if(!active||!standaloneTodo||state)return;let live=true;void loadCanonicalNote(workMode?'work':'todo').then(data=>{if(live){validateFilesState(data,data.storageLimitBytes);setState(current=>current??data)}}).catch(()=>{});return()=>{live=false}},[username,active,standaloneTodo,workMode])
   const [loadError, setLoadError] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -124,7 +126,7 @@ export function FilesView({ workMode = false, standaloneTodo = false, todoReques
   useEffect(()=>{
     if(!active || !state || !todoRequest || handledTodoRequest.current===todoRequest || busy)return
     handledTodoRequest.current=todoRequest
-    const note=workMode ? state.files.find(file=>file.format==='note' && file.folderId===null && file.name==='Work') ?? {id:crypto.randomUUID(),folderId:null,format:'note' as const,name:'Work',content:'# Work\n\nUpcoming assignments, homework, tests and quizzes for the next three weeks.\n\nAwaiting the first agent review of your course materials and connected sources.',updatedAt:new Date().toISOString()} : state.files.find(file=>file.systemRole==='todo') ?? state.files.find(file=>file.format==='note' && /^to[ -]?do(?: list)?$/i.test(file.name.trim()))
+    const note=workMode ? state.files.find(file=>file.format==='note' && (file.systemRole==='work'||file.folderId===null&&file.name==='Work')) ?? {id:crypto.randomUUID(),folderId:null,format:'note' as const,name:'Work',content:'# Work\n\nUpcoming assignments, homework, tests and quizzes for the next three weeks.\n\nAwaiting the first agent review of your course materials and connected sources.',updatedAt:new Date().toISOString()} : state.files.find(file=>file.systemRole==='todo') ?? state.files.find(file=>file.format==='note' && /^to[ -]?do(?: list)?$/i.test(file.name.trim()))
     if(!note){setError('Your To-do note could not be found in Files.');return}
     if(fileDraft?.id!==note.id && dirty && !window.confirm('Discard unsaved changes?'))return
     setBin(false);setSelecting(false);setSelectedIds([]);setFolderId(note.folderId);setNotesMode(true)
@@ -151,29 +153,30 @@ export function FilesView({ workMode = false, standaloneTodo = false, todoReques
       if (refreshing || document.visibilityState === 'hidden') return
       refreshing = true
       try {
-        const [data,deleted]=await Promise.all([loadFiles(),loadFileBin()]); validateFilesState(data)
+        const data=await loadFiles({maxAge:30000}); validateFilesState(data,data.storageLimitBytes)
         if (cancelled) return
-        setState(current => current && current.revision !== undefined && current.revision === data.revision ? current : data)
+        setState(current => current && !current.partial && current.revision !== undefined && current.revision === data.revision ? current : data)
         setFileDraft(current => current ? data.files.find(file => file.id === current.id) ?? null : null)
         setFolderId(current => current && data.folders.some(folder => folder.id === current) ? current : null)
         setLoadError('')
-        setBinItems(deleted.items)
+        if(bin){const deleted=await loadFileBin();if(!cancelled)setBinItems(deleted.items)}
       } catch (err) { if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Could not load your files.') }
       finally { refreshing = false }
     }
     void refresh()
-    const timer = window.setInterval(() => void refresh(), 15000)
+    const timer = window.setInterval(() => void refresh(), 60000)
     const resume=()=>{if(document.visibilityState==='visible')void refresh()}
     window.addEventListener('focus', refresh)
     document.addEventListener('visibilitychange',resume)
-    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener('focus', refresh);document.removeEventListener('visibilitychange',resume) }
-  }, [active, unsaved])
+    window.addEventListener('planner-files-refresh',refresh)
+    return()=>{cancelled=true;window.clearInterval(timer);window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',resume);window.removeEventListener('planner-files-refresh',refresh)}
+  }, [active, unsaved,bin])
 
   async function persist(next: FilesState): Promise<boolean> {
     if (saving.current) return false
     setError('')
     setNotice('')
-    try { validateFilesState(next) } catch (err) { setError(err instanceof Error ? err.message : 'Invalid files data.'); return false }
+    try { validateFilesState(next,next.storageLimitBytes) } catch (err) { setError(err instanceof Error ? err.message : 'Invalid files data.'); return false }
     saving.current = true
     setBusy(true)
     try {
@@ -210,7 +213,7 @@ export function FilesView({ workMode = false, standaloneTodo = false, todoReques
     event?.preventDefault()
     if (!state || !fileDraft) return
     let base=state
-    if(fileDraft.format==='note'){try{const latest=await loadFiles();const remote=latest.files.find(f=>f.id===fileDraft.id),before=state.files.find(f=>f.id===fileDraft.id);if(before && (!remote || remote.content!==before.content || remote.richText!==before.richText || remote.name!==before.name || remote.folderId!==before.folderId)){setError('This note changed elsewhere. Your local writing is preserved; copy it before reopening the latest version.');return}base=latest}catch(err){setError(err instanceof Error?err.message:'Could not load the latest notes.');return}}
+    if(fileDraft.format==='note'){try{const latest=await loadFiles({maxAge:5000});const remote=latest.files.find(f=>f.id===fileDraft.id),before=state.files.find(f=>f.id===fileDraft.id);if(before && (!remote || remote.content!==before.content || remote.richText!==before.richText || remote.name!==before.name || remote.folderId!==before.folderId)){setError('This note changed elsewhere. Your local writing is preserved; copy it before reopening the latest version.');return}base=latest}catch(err){setError(err instanceof Error?err.message:'Could not load the latest notes.');return}}
     const file = { ...fileDraft,...(fileDraft.format==='note'?{tags:[...new Set([...fileDraft.content.matchAll(/(?:^|\s)#([\p{L}\p{N}_-]{1,40})/gu)].map(m=>m[1]))].slice(0,20)}:{}), name: fileDraft.format==='note' ? fileDraft.name.trim() : fileDraft.name.trim().replace(/\.txt$/i, '') + '.txt', updatedAt: new Date().toISOString() }
     if (!fileDraft.name.trim() || file.name === '.txt') { setError('Enter a file name.'); return }
     if (await persist({ ...base, files: [...base.files.filter((item) => item.id !== file.id), file] })) setFileDraft(current=>current?.id===file.id && current.content===file.content && current.name===fileDraft.name && current.richText===file.richText?{...current,name:file.name,updatedAt:file.updatedAt,tags:file.tags}:current)
@@ -280,6 +283,7 @@ export function FilesView({ workMode = false, standaloneTodo = false, todoReques
   const searchTerms = search.split(/\s+/).filter(Boolean)
   const paths = new Map(state.folders.map((folder) => [folder.id, folderPath(state.folders, folder.id).map((part) => part.name).join(' / ')]))
   function matchesSearch(...values: string[]) {
+    if(!searchTerms.length)return true
     const text = values.join(' ').toLowerCase()
     return searchTerms.every((term) => text.includes(term))
   }
@@ -315,14 +319,15 @@ export function FilesView({ workMode = false, standaloneTodo = false, todoReques
     {label:'Add link',run:()=>{if(!mayLeaveEditor())return;setBin(false);setNotesMode(false);setFileDraft(null);if(window.innerWidth<=600)setSidebar(false);newLink()}},
   ]
   const pdfInput=<input ref={uploadRef} className="sr-only" type="file" accept="application/pdf,.pdf" aria-label="Upload PDF file" disabled={busy} onChange={event=>{const file=event.target.files?.[0];if(file)void addPdf(file);event.target.value=''}}/>
-  const folderSidebar=<>{pdfInput}{sidebar && <FilesSidebar selectedItemId={fileDraft?.id} onItem={id=>{const note=state.files.find(f=>f.id===id);if(note)openFile(note);else {const doc=state.documents?.find(d=>d.id===id);if(doc?.kind==='pdf')void getPdf(doc);else if(doc?.url)window.open(doc.url,'_blank','noopener,noreferrer')}if(window.innerWidth<=600)setSidebar(false)}} collapsed={collapsed} onCollapse={id=>setExpandedFolders(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next})} state={state} folderId={folderId} bin={bin} count={binItems.reduce((n,i)=>n+i.item_count,0)} busy={busy} onOpen={browse} onBin={()=>{if(mayLeaveEditor()){setNotesMode(false);setBin(true);setFileDraft(null);setSelectedIds([]);setError('');setNotice('');if(window.innerWidth<=600)setSidebar(false)}}} onClose={()=>setSidebar(false)} addButton={<FilesAddMenu compact busy={busy} actions={addActions}/>} onDrag={dragItem} onMove={(event,destination)=>void dropInto(event,destination)} onTrash={ids=>void binAction('trash',ids)}/>}{sidebar && <button className="files-sidebar-scrim" aria-label="Close Files sidebar" onClick={()=>setSidebar(false)}/>}</>
+  const folderSidebar=<>{pdfInput}{sidebar && <FilesSidebar selectedItemId={fileDraft?.id} onItem={id=>{const note=state.files.find(f=>f.id===id);if(note)openFile(note);else {const doc=state.documents?.find(d=>d.id===id);if(doc?.kind==='pdf')void getPdf(doc);else if(doc?.url)window.open(doc.url,'_blank','noopener,noreferrer')}if(window.innerWidth<=600)setSidebar(false)}} collapsed={collapsed} onCollapse={id=>setExpandedFolders(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next})} state={state} folderId={folderId} bin={bin} count={binItems.length||bin?binItems.reduce((n,i)=>n+i.item_count,0):undefined} busy={busy} onOpen={browse} onBin={()=>{if(mayLeaveEditor()){setNotesMode(false);setBin(true);setFileDraft(null);setSelectedIds([]);setError('');setNotice('');if(window.innerWidth<=600)setSidebar(false)}}} onClose={()=>setSidebar(false)} addButton={<FilesAddMenu compact busy={busy} actions={addActions}/>} onDrag={dragItem} onMove={(event,destination)=>void dropInto(event,destination)} onTrash={ids=>void binAction('trash',ids)}/>}{sidebar && <button className="files-sidebar-scrim" aria-label="Close Files sidebar" onClick={()=>setSidebar(false)}/>}</>
   const showSidebar=!sidebar && <button type="button" className="today-btn files-sidebar-toggle" aria-label="Show Files sidebar" onClick={()=>setSidebar(true)}><MenuIcon/>Folders</button>
   if(bin)return <main className="files-workspace">{folderSidebar}<section ref={contentRef} className="files-content" aria-label="Files Bin">{showSidebar}<button className="text-btn" onClick={()=>{setBin(false);setSelectedIds([])}}>Back to Files</button><h1>Bin</h1><p className="quiet">Deleted items are kept for 30 days, then permanently deleted. Items deleted together are restored together.</p><div className="files-bulk-toolbar"><label><input type="checkbox" aria-label="Select all Bin items" checked={binItems.length>0 && binItems.slice(0,100).every(i=>selectedIds.includes(i.id))} disabled={busy} onChange={e=>setSelectedIds(e.target.checked?binItems.slice(0,100).map(i=>i.id):[])}/>Select all (up to 100)</label><span>{selectedIds.length} selected</span><button className="today-btn" disabled={busy || !selectedIds.length} onClick={()=>void binAction('restore',selectedIds)}>Restore selected</button><button className="danger-btn" disabled={busy || !selectedIds.length} onClick={()=>void binAction('purge',selectedIds)}>Delete permanently</button></div>{error && <p role="alert" className="save-banner">{error}</p>}<p role="status">{busy?'Updating Bin...':notice}</p><div className="files-list">{binItems.map(item=><article className="document-row" key={item.id}>{selectBox({id:item.id,name:item.names.join(', ')})}<div className="document-info"><strong>{item.names.join(', ')}</strong><p className="quiet">{item.item_count} item(s) - Deleted {new Date(item.deleted_at).toLocaleString()} - {binDaysLeft(item.expires_at)} days left</p><button className="text-btn" disabled={busy} onClick={()=>void binAction('restore',[item.id])}>Restore</button></div></article>)}{!binItems.length && <p className="quiet">Bin is empty.</p>}</div></section></main>
   const folderModal=folderDraft && <FolderDialog key={folderDraft.id} folder={folderDraft} folders={state.folders} busy={busy} error={error} onClose={() => { setFolderDraft(null); setError('') }} onSave={async (folder) => { if (await persist({ ...state, folders: [...state.folders.filter((item) => item.id !== folder.id), folder] })) setFolderDraft(null) }} />
-  if(notesMode && (standaloneTodo || !fileDraft || isVisiblePlannerFile(fileDraft)))return <main className="files-workspace unified-notes-workspace">{!standaloneTodo && folderSidebar}<Suspense fallback={<p role="status">Opening Notes...</p>}><NotesWorkspace standalone={standaloneTodo} state={state} folderId={folderId} draft={fileDraft} busy={busy} dirty={dirty} error={error} notice={notice} onChange={setFileDraft} onSearch={search=>{if(standaloneTodo)return;if(mayLeaveEditor()){setNotesMode(false);setFileDraft(null);setQuery(search||'');requestAnimationFrame(()=>document.querySelector<HTMLInputElement>('.files-search input')?.focus())}}} onNew={()=>newFile(true)} onDelete={()=>void deleteFile()} onSave={()=>void saveFile()} onClose={()=>{if(mayLeaveEditor()){setNotesMode(false);setFileDraft(null)}}} onMove={id=>{setFolderId(id);setFileDraft(current=>current?{...current,folderId:id}:null)}}/></Suspense>{folderModal}</main>
-  return <main className="files-workspace">
-    {folderSidebar}
-    <section ref={contentRef} className="files-content" aria-label="File browser"><div className="files-view-toolbar">{showSidebar}<div className="files-layout-switch" role="group" aria-label="Files layout"><button type="button" aria-label="List view" aria-pressed={layout==='list'} onClick={()=>setLayout('list')}><svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="1.7"/></svg>List</button><button type="button" aria-label="Grid view" aria-pressed={layout==='grid'} onClick={()=>setLayout('grid')}><svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true"><path d="M3 3h5v5H3zM12 3h5v5h-5zM3 12h5v5H3zM12 12h5v5h-5z" stroke="currentColor" strokeWidth="1.5"/></svg>Grid</button></div></div>
+  const notePane=(notesMode && (standaloneTodo || !fileDraft || isVisiblePlannerFile(fileDraft)))?<Suspense fallback={<p role="status">Opening Notes...</p>}><NotesWorkspace standalone={standaloneTodo} state={state} folderId={folderId} draft={fileDraft} busy={busy} dirty={dirty} error={error} notice={notice} onChange={setFileDraft} onSearch={search=>{if(standaloneTodo)return;if(mayLeaveEditor()){setNotesMode(false);setFileDraft(null);setQuery(search||'');requestAnimationFrame(()=>document.querySelector<HTMLInputElement>('.files-search input')?.focus())}}} onNew={()=>newFile(true)} onDelete={()=>void deleteFile()} onSave={()=>void saveFile()} onClose={()=>{if(mayLeaveEditor()){setNotesMode(false);setFileDraft(null)}}} onMove={id=>{setFolderId(id);setFileDraft(current=>current?{...current,folderId:id}:null)}}/></Suspense>:null
+  return <main className={"files-workspace"+(notePane?" unified-notes-workspace":"")}>
+    {!standaloneTodo&&folderSidebar}
+    {notePane}
+    <section hidden={Boolean(notePane)} ref={contentRef} className="files-content" aria-label="File browser"><div className="files-view-toolbar">{showSidebar}<div className="files-layout-switch" role="group" aria-label="Files layout"><button type="button" aria-label="List view" aria-pressed={layout==='list'} onClick={()=>setLayout('list')}><svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="1.7"/></svg>List</button><button type="button" aria-label="Grid view" aria-pressed={layout==='grid'} onClick={()=>setLayout('grid')}><svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true"><path d="M3 3h5v5H3zM12 3h5v5h-5zM3 12h5v5H3zM12 12h5v5h-5z" stroke="currentColor" strokeWidth="1.5"/></svg>Grid</button></div></div>
       {path.length>0 && <nav className="files-breadcrumbs" aria-label="Folder path"><button type="button" onClick={() => openFolder(null)}>Files</button>{path.map((folder) => <span key={folder.id}><span aria-hidden="true">/</span><button type="button" onClick={() => openFolder(folder.id)} aria-current={folder.id === folderId ? 'page' : undefined}>{folder.name}</button></span>)}</nav>}
       <div className="files-title-row"><div className="files-heading">{currentFolder && <FolderIcon color={currentFolder.color} size={34} />}<div><h1>{currentFolder?.name ?? 'Files'}</h1><p className="quiet">{currentFolder ? 'Notes and documents, right where they belong.' : 'Notes, PDFs, and links, organized in one place.'}</p></div></div><div className="files-actions"><FilesAddMenu busy={busy} actions={addActions}/></div></div>
       {currentFolder && <div className="folder-details">{currentFolder.labels.map((label) => <span className="file-label" key={label}>{label}</span>)}<button type="button" className="text-btn" disabled={busy} onClick={() => { setError(''); setFolderDraft(currentFolder) }}>Edit folder · labels · color · location</button><button type="button" className="danger-btn" disabled={busy} onClick={() => void deleteFolder(currentFolder)}><TrashIcon size={16} />Delete folder</button></div>}

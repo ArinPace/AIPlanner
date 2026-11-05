@@ -158,6 +158,10 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   useVmActivity(username,!hideAgent&&tab!=='chat')
   const [todoRequest,setTodoRequest]=useState(0)
   const [filesUnsaved, setFilesUnsaved] = useState(false)
+  const fileDirty=useRef({files:false,todo:false,work:false})
+  const fileDirtyHandlers=useMemo(()=>Object.fromEntries((['files','todo','work'] as const).map(key=>[key,(value:boolean)=>{fileDirty.current[key]=value;setFilesUnsaved(Object.values(fileDirty.current).some(Boolean))}])) as Record<'files'|'todo'|'work',(value:boolean)=>void>,[])
+  const [visitedNotes,setVisitedNotes]=useState({todo:false,work:false})
+  useEffect(()=>{if(tab==='todo'||tab==='work')setVisitedNotes(previous=>previous[tab]?previous:{...previous,[tab]:true})},[tab])
   const [cursor, setCursor] = useState(() => new Date())
   const [view, setView] = useState<CalendarView>('week')
   const [filesSidebar,setFilesSidebar]=useState(()=>window.innerWidth>600)
@@ -461,7 +465,9 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
         }}
       />
 
-      <div className="files-tab-panel" hidden={tab !== 'files' && tab !== 'todo' && tab !== 'work'}><FilesView standaloneTodo={tab==='todo'||tab==='work'} workMode={tab==='work'} sidebar={filesSidebar} setSidebar={setFilesSidebar} username={username} active={tab === 'files' || tab === 'todo' || tab === 'work'} todoRequest={todoRequest} onUnsavedChange={setFilesUnsaved} /></div>
+      <div className="files-tab-panel" hidden={tab!=='files'}><FilesView sidebar={filesSidebar} setSidebar={setFilesSidebar} username={username} active={tab==='files'} onUnsavedChange={fileDirtyHandlers.files}/></div>
+      {(visitedNotes.todo||tab==='todo')&&<div className="files-tab-panel" hidden={tab!=='todo'}><FilesView standaloneTodo sidebar={false} setSidebar={setFilesSidebar} username={username} active={tab==='todo'} todoRequest={todoRequest||1} onUnsavedChange={fileDirtyHandlers.todo}/></div>}
+      {(visitedNotes.work||tab==='work')&&<div className="files-tab-panel" hidden={tab!=='work'}><FilesView standaloneTodo workMode sidebar={false} setSidebar={setFilesSidebar} username={username} active={tab==='work'} todoRequest={todoRequest||1} onUnsavedChange={fileDirtyHandlers.work}/></div>}
       {tab==='screentime' && <ScreenTimePanel/>}
       {!hideAgent&&<div className="agent-tab-panel" hidden={tab !== 'agent'}><AgentView username={username} sidebar={agentSidebar} setSidebar={setAgentSidebar} active={tab === 'agent'} /></div>}
       <div className="agent-tab-panel" hidden={tab!=='chat'}><SubscriptionChatView active={tab==='chat'} username={username} sidebar={subscriptionSidebar} setSidebar={setSubscriptionSidebar}/></div>

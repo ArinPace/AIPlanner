@@ -6,7 +6,7 @@ import {FileTypeIcon} from './FileTypeIcon'
 
 export const FILE_DRAG = 'application/x-ai-planner-items'
 export function FilesSidebar({ selectedItemId,state, folderId, bin, count, busy, collapsed, onCollapse, onOpen, onItem, onBin, addButton, onClose, onDrag, onTrash, onMove }: {
-  selectedItemId?: string; state: FilesState; folderId: string | null; bin: boolean; count: number; busy: boolean
+  selectedItemId?: string; state: FilesState; folderId: string | null; bin: boolean; count?: number; busy: boolean
   collapsed: Set<string>; onCollapse: (id: string) => void
   onOpen: (id: string | null) => void; onBin: () => void; addButton: ReactNode; onClose: () => void
   onItem: (id: string) => void
@@ -30,7 +30,7 @@ export function FilesSidebar({ selectedItemId,state, folderId, bin, count, busy,
           const known = new Set([...state.folders,...state.files,...(state.documents ?? [])].map(f=>f.id))
           if (Array.isArray(ids) && ids.length && ids.length<=100 && ids.every(id=>typeof id==='string' && known.has(id))) onTrash(ids)
         } catch { /* Ignore unrelated drops. */ }
-      }}><TrashIcon size={18}/><span>Bin ({count})</span></button>
+      }}><TrashIcon size={18}/><span>Bin{count===undefined?'':' ('+count+')'}</span></button>
     <nav className="folder-navigation" aria-label="Browse folders">{items.filter(item=>item.folderId===null).map(item=>fileRow(item,0))}{navigationFolders(state,collapsed).map(({folder,path}) => {
       const files=items.filter(item=>item.folderId===folder.id)
       const children=state.folders.some(f=>f.parentId===folder.id) || files.length>0

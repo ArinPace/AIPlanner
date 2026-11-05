@@ -3,7 +3,7 @@ import type {ChatMirror,ChatMirrorPlan} from '../lib/chatSync'
 import {prepareRelayFile,storeRelayFile,relayFileLink,downloadRelayFile,RELAY_BATCH_MAX,type RelayFile} from '../lib/relayFiles'
 import {nativeRequest} from '../lib/platform'
 import {useCallback,useEffect,useRef,useState} from 'react'
-import {subscriptionChatRequest} from '../lib/api'
+import {subscriptionChatRequest,invalidateFilesCache} from '../lib/api'
 import {useChatDraft} from '../lib/chatDraft'
 import {VM_SOURCES} from '../lib/vm'
 import type {SubscriptionChat,SubscriptionWorkspace} from '../lib/subscriptionChat'
@@ -145,7 +145,7 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
       setRelayText('');setRelayPhase('Using Planner tools…')
       const applied=await subscriptionChatRequest<{results:unknown[]}>(undefined,{action:'tool_call',chatId:id,turnId,calls})
       if(cancelRelay.current||scope!==epoch.current||!alive.current)return
-      window.dispatchEvent(new Event('planner-calendar-refresh'));window.dispatchEvent(new Event('planner-preferences-refresh'))
+      invalidateFilesCache();window.dispatchEvent(new Event('planner-files-refresh'));window.dispatchEvent(new Event('planner-calendar-refresh'));window.dispatchEvent(new Event('planner-preferences-refresh'))
       const executed=calls.some(call=>call.name==='planner_client_control')?await (await import('../lib/clientControls')).executeClientResults(applied.results,calls,username,turnId,()=>!cancelRelay.current&&scope===epoch.current&&alive.current):applied.results
       if(cancelRelay.current||scope!==epoch.current||!alive.current)return
       await nativeRequest({action:'chatGPTRelaySend',account:username,chatId:id,text:toolResultsMessage(executed,turnId),work:true,url:result.url,context:''})

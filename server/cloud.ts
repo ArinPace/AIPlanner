@@ -209,6 +209,8 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
       if (!rows.length) throw new ApiError(409, 'Your calendar changed during a sync or in another tab. Reload before saving.')
       return json({ ok: true, revision: rows[0].revision })
     }
+    if(path==='/api/files/system-note'&&method==='GET')return json(await (await import('./files-transfer.js')).readCanonicalNote(username,url.searchParams.get('role')))
+    if(path==='/api/files/batch'&&method==='POST')return json(await (await import('./files-transfer.js')).readFilesBatch(username,await body(request)))
     if(path==='/api/files/item'&&method==='GET')return json(await readFilesTransferItem(username,url))
     if (path === '/api/files' && method === 'GET') {
       const ensured=await db().rpc('planner_ensure_planning_notes',{p_username:username})

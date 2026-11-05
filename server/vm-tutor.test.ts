@@ -4,6 +4,7 @@ import {syncTutorChats,tutorSubjects} from './vm-tutor.js'
 test('Tutor maps only immediate Subjects children and reuses one owned conversation per folder',async()=>{
  const folders=[{id:'root',name:'Subjects',parentId:null},{id:'a',name:'Statistics',parentId:'root'},{id:'b',name:'Computer Science',parentId:'root'},{id:'nested',name:'Homework',parentId:'a'},{id:'else',name:'Personal',parentId:null}]
  assert.deepEqual(tutorSubjects(folders).map(f=>f.id),['b','a'])
+ const nested=[...folders.map(f=>f.id==='root'?{...f,parentId:'agent'}:f),{id:'agent',name:'Agent',parentId:null}];assert.deepEqual(tutorSubjects(nested).map(f=>f.id),['b','a'])
  const old=globalThis.fetch,keys=['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','SUPABASE_SECRET_KEY'],env=Object.fromEntries(keys.map(k=>[k,process.env[k]]));process.env.SUPABASE_URL='https://tutor.test';process.env.SUPABASE_SERVICE_ROLE_KEY='service';delete process.env.SUPABASE_SECRET_KEY
  let enabled=false,creates=0;const rows:any[]=[]
  globalThis.fetch=async(input,init)=>{const req=new Request(input,init),url=new URL(req.url),table=url.pathname.split('/').at(-1)

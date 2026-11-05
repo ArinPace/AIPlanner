@@ -1,3 +1,4 @@
+import {z} from 'zod'
 import {createHash} from 'node:crypto'
 import {filesWorkspaceLimit,type PlannerTextFile,type FilesState} from '../src/lib/files.js'
 import type {FilesManifest,FilesSection,WorkspaceItem} from '../src/lib/filesTransfer.js'
@@ -8,7 +9,7 @@ export function filesManifest(state:FilesState,username:string):FilesManifest{
  return {format:'files-manifest',revision:state.revision||0,storageLimitBytes:filesWorkspaceLimit(username),items:(['folders','files','documents'] as const).flatMap(section=>(state[section]||[]).map((value,index)=>{
   const text=JSON.stringify(value),inline=section!=='files'&&Buffer.byteLength(text)<2048&&inlineBytes<512*1024
   if(inline)inlineBytes+=Buffer.byteLength(text)
-  return {section,id:value.id,index,etag:createHash('md5').update(text).digest('hex'),...(inline?{value}: {})}
+  return {section,id:value.id,index,bytes:Buffer.byteLength(text),etag:createHash('md5').update(text).digest('hex'),...(inline?{value}: {})}
  }))}
 }
 export async function cloudFilesManifest(username:string):Promise<FilesManifest>{
@@ -64,4 +65,18 @@ export async function commitWorkspaceDelta(username:string,revision:number,patch
  const {data,error}=await db().rpc('planner_workspace_delta_commit',{p_username:username,p_revision:revision,p_upserts:patch.upserts||{},p_remove_ids:patch.removeIds||[],p_bin_add:bin.add??null,p_bin_remove:bin.remove||[],p_restore:bin.restore!==false})
  if(error){console.error('Workspace delta commit failed',{code:error.code});throw new ApiError(error.code==='P0001'?409:503,error.code==='P0001'?'Files or Bin changed. Read the latest revision before retrying.':'Could not commit this workspace change. Read current state before retrying.')}
  return data as {revision:number;binId?:string|null}
+}
+
+export async function readFilesBatch(username:string,input:unknown){
+ const args=z.object({revision:z.number().int().nonnegative(),ids:z.array(z.string().min(1).max(200)).min(1).max(40)}).parse(input)
+ if(new Set(args.ids).size!==args.ids.length)throw new ApiError(400,'Choose unique file IDs.')
+ const result=await db().rpc('planner_files_batch',{p_username:username,p_revision:args.revision,p_ids:args.ids})
+ if(result.error)throw new ApiError(result.error.code==='P0001'?409:400,result.error.code==='P0001'?'Files changed while loading. Please retry.':'Read fewer file items per batch.')
+ return result.data
+}
+
+export async function readCanonicalNote(username:string,role:unknown){
+ const key=z.enum(['todo','work']).parse(role),result=storage(await db().rpc('planner_canonical_note',{p_username:username,p_role:key}))
+ if(!result)throw new ApiError(404,'Canonical note not found.')
+ return {...result,storageLimitBytes:filesWorkspaceLimit(username)}
 }
