@@ -36,13 +36,59 @@ $sshTarget = $null
 $sshOptions = @()
 $ssh = Join-Path $env:WINDIR 'System32/OpenSSH/ssh.exe'
 $scp = Join-Path $env:WINDIR 'System32/OpenSSH/scp.exe'
+$diagnosticPath=Join-Path $repoRoot 'data/worker-update-install.log'
+New-Item -ItemType Directory -Path (Split-Path -Parent $diagnosticPath) -Force | Out-Null
+Set-Content -LiteralPath $diagnosticPath -Value ('Installer started '+[DateTime]::UtcNow.ToString('o'))
+function Invoke-BoundedNative([string]$File,[string[]]$Arguments,[int]$TimeoutSeconds=30) {
+  $info=[Diagnostics.ProcessStartInfo]::new()
+  $info.FileName=$File
+  # Windows argv quoting, including embedded quotes and trailing backslashes.
+  $info.Arguments=($Arguments | ForEach-Object {'"'+($_ -replace '(\\*)"','$1$1\"' -replace '(\\+)$','$1$1')+'"'}) -join ' '
+  $info.UseShellExecute=$false
+  $info.CreateNoWindow=$true
+  $info.RedirectStandardOutput=$true
+  $info.RedirectStandardError=$true
+  $info.RedirectStandardInput=$true
+  $process=[Diagnostics.Process]::new()
+  $process.StartInfo=$info
+  try {
+    [void]$process.Start()
+    $process.StandardInput.Close()
+    $stdout=$process.StandardOutput.ReadToEndAsync()
+    $stderr=$process.StandardError.ReadToEndAsync()
+    $watch=[Diagnostics.Stopwatch]::StartNew()
+    $nextNotice=15
+    $finished=$false
+    while ($watch.Elapsed.TotalSeconds -lt $TimeoutSeconds) {
+      if ($process.WaitForExit(1000)) {$finished=$true; break}
+      if ($watch.Elapsed.TotalSeconds -ge $nextNotice) {
+        Write-Host ('Still waiting for '+[IO.Path]::GetFileName($File)+' ('+[int]$watch.Elapsed.TotalSeconds+' seconds; limit '+$TimeoutSeconds+' seconds)...')
+        $nextNotice+=15
+      }
+    }
+    if (!$finished) {
+      $process.Kill(); $process.WaitForExit()
+      $details=$stderr.GetAwaiter().GetResult()
+      Add-Content -LiteralPath $diagnosticPath -Value $details
+      throw ('VM command timed out after '+$TimeoutSeconds+' seconds. Diagnostics: '+$diagnosticPath+"`n"+(($details -split "`n" | Select-Object -Last 12) -join "`n"))
+    }
+    $process.WaitForExit()
+    $out=$stdout.GetAwaiter().GetResult()
+    $err=$stderr.GetAwaiter().GetResult()
+    if($err){Add-Content -LiteralPath $diagnosticPath -Value $err}
+    if($out){Add-Content -LiteralPath $diagnosticPath -Value $out}
+    if($process.ExitCode -ne 0){throw ('VM command failed (exit '+$process.ExitCode+'): '+$err+"`n"+$out)}
+    return $out.TrimEnd()
+  } finally { $process.Dispose() }
+}
 function Invoke-Guest([string[]]$Command) {
-  $ErrorActionPreference='Continue'
-  if ($script:sshTarget) { $output=& $script:ssh @script:sshOptions $script:sshTarget ($Command -join ' ') 2>&1 }
-  else { $output=& $script:multipass exec $script:vmName -- @Command 2>&1 }
-  $code=$LASTEXITCODE
-  if ($code -ne 0) { throw ('VM command failed (exit '+$code+'): '+(($output|ForEach-Object {"$_"}) -join "`n")) }
-  $output | ForEach-Object {"$_"}
+  $timeout=30
+  if ($Command -contains 'bash') {$timeout=900}
+  $phase=($Command -join ' ')
+  Write-Host ('VM: '+$phase)
+  Add-Content -LiteralPath $diagnosticPath -Value ('VM: '+$phase)
+  if ($script:sshTarget) { Invoke-BoundedNative -File $script:ssh -Arguments (@($script:sshOptions)+@($script:sshTarget,$phase)) -TimeoutSeconds $timeout }
+  else { Invoke-BoundedNative -File $script:multipass -Arguments (@('exec',$script:vmName,'--')+$Command) -TimeoutSeconds $timeout }
 }
 try {
   Assert-Idle
@@ -57,17 +103,17 @@ try {
     $acl.AddAccessRule($rule)
   }
   Set-Acl -LiteralPath $stage -AclObject $acl
-  $vms = & $multipass list --format json | ConvertFrom-Json
-  if ($LASTEXITCODE -ne 0 -or !($vms.list | Where-Object {$_.name -eq $vmName -and $_.state -eq 'Running'})) { throw 'The existing VM must be running. This installer never creates a VM.' }
-  $ErrorActionPreference='Continue'
-  $hostname = & $multipass exec $vmName -- hostname 2>$null
-  $probeExit=$LASTEXITCODE
-  $ErrorActionPreference='Stop'
+  $vms = Invoke-BoundedNative -File $multipass -Arguments @('list','--format','json') -TimeoutSeconds 20 | ConvertFrom-Json
+  if (!($vms.list | Where-Object {$_.name -eq $vmName -and $_.state -eq 'Running'})) { throw 'The existing VM must be running. This installer never creates a VM.' }
+  $probeExit=0
+  try { $hostname=Invoke-BoundedNative -File $multipass -Arguments @('exec',$vmName,'--','hostname') -TimeoutSeconds 15 }
+  catch { $probeExit=1; Add-Content -LiteralPath $diagnosticPath -Value $_.Exception.Message }
   if ($probeExit -ne 0) {
     Write-Output 'Multipass management is unavailable; using authenticated SSH to the verified Hyper-V adapter.'
     $adapters=@(Get-VMNetworkAdapter -VMName $vmName)
     $macs=@($adapters | ForEach-Object {$_.MacAddress.Replace('-','').Replace(':','').ToUpperInvariant()})
     $addresses = @($adapters | ForEach-Object IPAddresses | Where-Object {$_ -match '^\d+\.\d+\.\d+\.\d+$'})
+    if (!$addresses.Count) { $addresses=@(Get-NetNeighbor -AddressFamily IPv4 | Where-Object {$macs -contains $_.LinkLayerAddress.Replace('-','').Replace(':','').ToUpperInvariant()} | ForEach-Object IPAddress) }
     if (!$addresses.Count) { $addresses = @(Resolve-DnsName $vmHost -Type A | ForEach-Object IPAddress | Where-Object {$_}) }
     $address=$null
     foreach ($candidate in ($addresses | Select-Object -Unique)) {
@@ -80,7 +126,7 @@ try {
     $keys=@($keyRoots | Where-Object {Test-Path -LiteralPath $_} | ForEach-Object {Get-ChildItem -LiteralPath $_ -Filter id_rsa -Recurse -File -ErrorAction SilentlyContinue})
     if (!$keys.Count) { throw 'Existing Multipass SSH key not found. No credentials were changed.' }
     $keyPath=Join-Path $stage 'temporary-ssh-key'
-    $sshOptions=@('-i',$keyPath,'-o','BatchMode=yes','-o','IdentitiesOnly=yes','-o','StrictHostKeyChecking=accept-new','-o','LogLevel=ERROR','-o',('UserKnownHostsFile='+(Join-Path $stage 'known_hosts')),'-o','ConnectTimeout=10')
+    $sshOptions=@('-v','-F','NUL','-T','-n','-i',$keyPath,'-o','BatchMode=yes','-o','IdentitiesOnly=yes','-o','StrictHostKeyChecking=accept-new','-o',('UserKnownHostsFile='+(Join-Path $stage 'known_hosts')),'-o','ConnectTimeout=10','-o','ServerAliveInterval=5','-o','ServerAliveCountMax=2')
     $sshTarget='ubuntu@'+$address
     $verified=$false
     foreach ($key in $keys) {
@@ -102,11 +148,10 @@ try {
     $text = [IO.File]::ReadAllText((Join-Path (Join-Path $repoRoot 'worker') $name)).Replace("`r`n", "`n")
     [IO.File]::WriteAllText($target,$text,[Text.UTF8Encoding]::new($false))
     if ($sshTarget) {
-      $ErrorActionPreference='Continue'
-      $transferOutput=& $scp @sshOptions $target ($sshTarget+':'+$remote+'/'+$name) 2>&1
-      $transferExit=$LASTEXITCODE
-      $ErrorActionPreference='Stop'
-      if ($transferExit -ne 0) { throw ('Updater transfer failed: '+($transferOutput -join "`n")) }
+      # -T/-n are ssh flags, not scp flags; scp uses its own batch transfer mode.
+      $transferOptions=@($sshOptions | Where-Object {$_ -notin @('-T','-n')})
+      Write-Host ('Transferring '+$name)
+      Invoke-BoundedNative -File $scp -Arguments ($transferOptions+@('-B',$target,($sshTarget+':'+$remote+'/'+$name))) -TimeoutSeconds 60
     } else {
       & $multipass transfer $target ($vmName+':'+$remote+'/'+$name)
       if ($LASTEXITCODE -ne 0) { throw 'Updater transfer failed.' }
