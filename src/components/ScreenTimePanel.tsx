@@ -1,8 +1,9 @@
+import {CloudScreenTime} from './CloudScreenTime'
 import {useLayoutEffect, useRef, useState} from 'react'
 import {nativeRequest} from '../lib/platform'
 
 /** The native controls occupy this panel; the signed-in web header remains interactive. */
-export function ScreenTimePanel(){
+function NativeScreenTimePanel(){
  const host=useRef<HTMLDivElement>(null)
  const [error,setError]=useState('')
  useLayoutEffect(()=>{
@@ -25,4 +26,9 @@ export function ScreenTimePanel(){
   }
  },[])
  return <div ref={host} className="agent-tab-panel" aria-label="Screen Time">{error&&<p role="alert" className="form-error">{error}</p>}</div>
+}
+
+export function ScreenTimePanel(){
+ const [mode,setMode]=useState<'cloud'|'native'>('cloud')
+ return <div className="agent-tab-panel"><div><button type="button" aria-pressed={mode==='cloud'} onClick={()=>setMode('cloud')}>Cloud blocking</button>{window.plannerNativeScreenTime&&<button type="button" aria-pressed={mode==='native'} onClick={()=>setMode('native')}>Apple Screen Time</button>}</div>{mode==='cloud'?<CloudScreenTime/>:<NativeScreenTimePanel/>}</div>
 }

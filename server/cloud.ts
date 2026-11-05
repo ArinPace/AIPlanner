@@ -155,6 +155,8 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
     if(path==='/api/agent/notifications')return await (await import('./notification-inbox.js')).notificationInbox(request,username)
     if(path==='/api/calendar/google-accounts'&&method==='GET')return json(await (await import('./agent.js')).googleCalendarStatus(username))
     if(path==='/api/calendar/display-settings'&&['GET','PATCH'].includes(method)){const {calendarDisplaySettings}=await import('./calendar-display.js');return json(await calendarDisplaySettings(username,method==='PATCH'?await body(request):undefined))}
+    if(path==='/api/screentime/dns')return await (await import('./cloud-dns.js')).handleCloudDNS(request,username)
+    if(path==='/api/device/commands')return await (await import('./device-commands.js')).handleDeviceCommands(request,username)
     if(path==='/api/subscription-chat')return await (await import('./subscription-chat.js')).handleSubscriptionChat(request,username)
     if(path==='/api/sources/status'&&method==='GET')return json(await (await import('./source-health.js')).sourceHealthStatus(username))
     if(path==='/api/notifications'&&['GET','PUT'].includes(method)){const {taskNotificationSettings}=await import('./task-notifications.js');return json(await taskNotificationSettings(username,method==='PUT'?await body(request):undefined))}
@@ -234,7 +236,7 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
       try{await (await import('./planning.js')).syncTodoCompletion(username)}catch{planningSyncError='Note saved; calendar completion sync is pending. Open Agent to retry.'}
       return json({ ok: true, revision: saved.revision, planningSyncError })
     }
-    if (['/api/files/upload/start','/api/files/upload/finish'].includes(path) && method==='POST')return handlePdfUpload(request,path,username)
+    if (['/api/files/upload/start','/api/files/upload/finish'].includes(path) && method==='POST')return await handlePdfUpload(request,path,username)
     if (path === '/api/files/upload/cancel' && method === 'POST') {
       const input = await body(request)
       const upload = await ownedUpload(username, String(input.id ?? ''))

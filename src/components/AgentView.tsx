@@ -68,7 +68,7 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
   const title = state?.chats.find(c => c.id === chat)?.title || (openMainOnLoad.current ? 'Main Chat' : 'New chat')
   const archived = state?.chats.find(c=>c.id===chat)?.archived || false
   const visibleChats = showBin ? state?.deletedChats || [] : state?.chats.filter(c=>Boolean(c.archived)===showArchived) || []
-  const [tutorOpen,setTutorOpen]=useState(()=>{try{return localStorage.getItem('planner-tutor-open:'+username)!=='false'}catch{return true}})
+  const [tutorOpen,setTutorOpen]=useState(false)
   const tutorChats=visibleChats.filter(c=>c.tutor_subject_id).sort((a,b)=>a.title.localeCompare(b.title))
   const regularChats=visibleChats.filter(c=>!c.tutor_subject_id)
   function toggleTutor(){setTutorOpen(value=>{const next=!value;try{localStorage.setItem('planner-tutor-open:'+username,String(next))}catch{/* Keep the folder usable. */}return next})}

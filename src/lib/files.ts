@@ -2,7 +2,7 @@
 export const FILES_WORKSPACE_MAX_BYTES = 4 * 1024 * 1024
 export const FILES_ACCOUNT_MAX_BYTES = 25 * 1024 * 1024
 export const FILES_ITEM_MAX_BYTES = 3 * 1024 * 1024
-export function filesWorkspaceLimit(username:string) { return username === 'arin' ? FILES_ACCOUNT_MAX_BYTES : FILES_WORKSPACE_MAX_BYTES }
+export function filesWorkspaceLimit(username:string) { return (username === 'arin'||username === 'arin2') ? FILES_ACCOUNT_MAX_BYTES : FILES_WORKSPACE_MAX_BYTES }
 
 export interface PlannerFolder {
   id: string

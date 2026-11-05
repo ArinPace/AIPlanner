@@ -3,7 +3,7 @@ import {z} from 'zod'
 import {ApiError,body,db,json} from './cloud.js'
 import {storage} from './mcp-auth.js'
 import {googleCalendarStatus} from './agent.js'
-const fields='id,provider_url,provider_snapshot,title,is_main,pinned,archived,deleted_at,created_at,updated_at'
+const fields='tutor_subject_id,tutor_retired,id,provider_url,provider_snapshot,title,is_main,pinned,archived,deleted_at,created_at,updated_at'
 async function owned(username:string,id:string){const chat=storage(await db().from('planner_subscription_chats').select(fields).eq('username',username).eq('id',id).maybeSingle());if(!chat)throw new ApiError(404,'Chat not found.');return chat}
 async function mainChat(username:string){
  const find=()=>db().from('planner_subscription_chats').select(fields).eq('username',username).eq('is_main',true).maybeSingle()
@@ -14,6 +14,7 @@ async function mainChat(username:string){
 export async function handleSubscriptionChat(request:Request,username:string){
  const url=new URL(request.url)
  if(request.method==='GET'){
+  storage(await db().rpc('planner_sync_subscription_tutors',{p_username:username}))
   const main=await mainChat(username)
   let id=url.searchParams.get('chat')||main.id
   if(!url.searchParams.has('chat')&&(main.archived||main.deleted_at)){const active=storage(await db().from('planner_subscription_chats').select(fields).eq('username',username).is('deleted_at',null).eq('archived',false).order('updated_at',{ascending:false}).limit(1).maybeSingle());if(active)id=active.id}
@@ -31,6 +32,8 @@ export async function handleSubscriptionChat(request:Request,username:string){
  }
  if(request.method!=='POST')throw new ApiError(405,'Use GET or POST.')
  const input=await body(request)
+ if(typeof input.action==='string'&&input.action.startsWith('schedule_'))return json(await (await import('./subscription-schedule.js')).subscriptionScheduleAction(username,input))
+ if(input.action==='tutor_sync')return json(storage(await db().rpc('planner_sync_subscription_tutors',{p_username:username})))
  if(typeof input.action==='string'&&input.action.startsWith('tool_'))return json(await (await import('./subscription-tools.js')).subscriptionTools(username,input))
  if(typeof input.action==='string'&&['file_start','file_finish','file_download'].includes(input.action))return await (await import('./subscription-files.js')).subscriptionFileAction(username,input)
  // Never fall back to API-key billing, the Agent VM, or a browser extension.

@@ -19,6 +19,7 @@ test('PDF tickets and finalization are owner scoped, preserve Files, and page re
  let upload:any=null,state:any={folders:[],files:[],documents:[]},revision=1
  globalThis.fetch=async(input,init)=>{
   const request=new Request(input,init),url=new URL(request.url),path=url.pathname
+  if(path==='/rest/v1/rpc/planner_workspace_delta_commit'){const data=await request.json() as any;assert.equal(data.p_username,'owner');assert.equal(data.p_revision,revision);for(const section of ['files','folders','documents'])if(data.p_upserts[section])state[section]=data.p_upserts[section];revision++;return Response.json({revision})}
   if(path==='/rest/v1/planner_files'){
    assert.equal(url.searchParams.get('username'),'eq.owner')
    if(request.method==='PATCH'){const patch=await request.json() as any;state=patch.state;revision=patch.revision;return Response.json([{revision}])}

@@ -8,6 +8,7 @@ test('subscription workspace is fresh and owner-scoped; never touches Agent jobs
  const chats:any[]=[];let requests=0
  globalThis.fetch=async(input,init)=>{
   const req=new Request(input,init),url=new URL(req.url),table=url.pathname.split('/').at(-1);requests++
+  if(table==='planner_sync_subscription_tutors'){assert.equal((await req.json() as any).p_username,'owner');return Response.json({count:0})}
   assert(!['planner_vm_jobs','planner_vm_hosts','planner_device_chats','planner_chat_web_relay'].includes(table||''),'New Chat cannot access VM jobs or legacy Chat data')
   if(req.method==='GET')assert.equal(url.searchParams.get('username'),'eq.owner')
   if(table==='planner_vm_settings')return Response.json({sources:[],google_account_id:null})

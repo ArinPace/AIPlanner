@@ -239,3 +239,7 @@ export function calendarAccounts<T>(){return request<T>('/api/calendar/google-ac
 export function notificationInboxRequest<T>(input?:{id:string;checked:boolean}){return request<T>('/api/agent/notifications',input?{method:'PATCH',body:JSON.stringify(input)}:{})}
 
 export function calendarDisplayRequest(patch?:Partial<import('./calendarDisplay').CalendarDisplay>){return request<import('./calendarDisplay').CalendarDisplay>('/api/calendar/display-settings',patch?{method:'PATCH',body:JSON.stringify(patch)}:{})}
+
+export function deviceCommandsRequest<T>(input:unknown){return request<T>('/api/device/commands',{method:'POST',body:JSON.stringify(input)})}
+
+export function cloudDNSRequest<T>(method='GET',input?:unknown){return request<T>('/api/screentime/dns',{method,...(input?{body:JSON.stringify(input)}:{})})}

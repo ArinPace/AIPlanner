@@ -1,3 +1,5 @@
+import {DeviceControlSync} from './components/DeviceControlSync'
+import {subscriptionChatRequest} from './lib/api'
 import {applyTheme,readTheme} from './lib/theme'
 import {useCalendarDisplay} from './lib/useCalendarDisplay'
 import {SubscriptionChatView} from './components/SubscriptionChatView'
@@ -151,7 +153,9 @@ export default function App() {
 function CalendarApp({ username, onLogout }: { username: string; onLogout: () => void }) {
   const calendarDisplay=useCalendarDisplay(username)
   const [tab, setTab] = useState<'calendar' | 'files' | 'todo' | 'work' | 'agent' | 'screentime' | 'chat'>(()=>sessionStorage.getItem(RECOVERY_TAB)===username?'agent':'calendar')
-  useVmActivity(username,tab!=='chat')
+  const [hideAgent,setHideAgent]=useState(false)
+  useEffect(()=>{let live=true;void subscriptionChatRequest<{agentHidden:boolean}>(undefined,{action:'schedule_read'}).then(value=>{if(live&&value)setHideAgent(value.agentHidden===true)}).catch(()=>{});return()=>{live=false}},[username])
+  useVmActivity(username,!hideAgent&&tab!=='chat')
   const [todoRequest,setTodoRequest]=useState(0)
   const [filesUnsaved, setFilesUnsaved] = useState(false)
   const [cursor, setCursor] = useState(() => new Date())
@@ -195,7 +199,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
         }else if(c.action==='ui_settings'){window.dispatchEvent(new CustomEvent('planner-client-settings',{detail:{open:c.open}}))}
         else if(c.action==='ui_navigate'){
           if((filesUnsaved||draft)&&c.tab!==tab)throw Error('Finish unsaved note/calendar edits before changing tabs.')
-          if(c.tab==='screentime'&&!window.plannerNativeScreenTime)throw Error('Screen Time is available in the iPhone app.')
+          if(c.tab==='agent'&&hideAgent)throw Error('Agent is hidden for this test account. Use Chat.')
           const date=c.date?new Date(c.date+'T12:00:00'):null
           if(date&&(!Number.isFinite(date.getTime())||date.getFullYear()!==Number(c.date.slice(0,4))||date.getMonth()+1!==Number(c.date.slice(5,7))||date.getDate()!==Number(c.date.slice(8,10))))throw Error('Invalid calendar date.')
           setTab(c.tab);if(c.tab==='todo'||c.tab==='work')setTodoRequest(n=>n+1)
@@ -206,7 +210,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
       }catch(error){d.reject(error)}
     }
     window.addEventListener('planner-client-ui',handle);return()=>window.removeEventListener('planner-client-ui',handle)
-  },[username,filesUnsaved,draft,tab,zoom,hiddenTypes])
+  },[username,filesUnsaved,draft,tab,zoom,hiddenTypes,hideAgent])
 
   const applyState = useCallback((state: StoredState) => {
     persistedCalendar.current = calendarFingerprint(state)
@@ -433,7 +437,8 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
     <div className="app-shell" inert={widgetSaving}>
       <TaskNotificationSync username={username} calendar={{events,tags,hiddenTagIds,zoom}}/>
       <WidgetTaskFeedback username={username} onApply={applyWidgetTime}/>
-      <Header
+      <DeviceControlSync username={username}/>
+      <Header hideAgent={hideAgent}
         tab={tab}
         onTabChange={next=>{if(next==='todo'||next==='work')setTodoRequest(n=>n+1);setTab(next)}}
         cursor={cursor}
@@ -458,7 +463,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
 
       <div className="files-tab-panel" hidden={tab !== 'files' && tab !== 'todo' && tab !== 'work'}><FilesView standaloneTodo={tab==='todo'||tab==='work'} workMode={tab==='work'} sidebar={filesSidebar} setSidebar={setFilesSidebar} username={username} active={tab === 'files' || tab === 'todo' || tab === 'work'} todoRequest={todoRequest} onUnsavedChange={setFilesUnsaved} /></div>
       {tab==='screentime' && <ScreenTimePanel/>}
-      <div className="agent-tab-panel" hidden={tab !== 'agent'}><AgentView username={username} sidebar={agentSidebar} setSidebar={setAgentSidebar} active={tab === 'agent'} /></div>
+      {!hideAgent&&<div className="agent-tab-panel" hidden={tab !== 'agent'}><AgentView username={username} sidebar={agentSidebar} setSidebar={setAgentSidebar} active={tab === 'agent'} /></div>}
       <div className="agent-tab-panel" hidden={tab!=='chat'}><SubscriptionChatView active={tab==='chat'} username={username} sidebar={subscriptionSidebar} setSidebar={setSubscriptionSidebar}/></div>
       <div className="app-body" hidden={tab !== 'calendar'}>
         <Sidebar

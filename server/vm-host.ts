@@ -7,10 +7,13 @@ function checked<T>({ data, error }: { data: T; error: unknown }): NonNullable<T
   if (error) throw new ApiError(503, 'Could not access private computer setup.')
   return data as NonNullable<T>
 }
+async function vmHidden(username:string){return checked(await db().from('planner_vm_settings').select('agent_hidden').eq('username',username).maybeSingle())?.agent_hidden===true}
 export async function queuePersonalVm(username: string) {
+  if(await vmHidden(username))return
   checked(await db().from('planner_vm_provisioning').upsert({ username }, { onConflict: 'username', ignoreDuplicates: true }))
 }
 export async function touchVmActivity(username: string) {
+  if(await vmHidden(username))return null
   const wakeUntil = new Date(Date.now() + 30 * 60000).toISOString()
   checked(await db().from('planner_vm_provisioning').upsert({ username, wake_until: wakeUntil }, { onConflict: 'username' }))
   return wakeUntil
