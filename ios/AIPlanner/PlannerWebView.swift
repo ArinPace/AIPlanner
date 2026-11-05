@@ -728,6 +728,13 @@ await pause(500);return {applied:true};
       if(other)break;if(node.querySelector(completionSelector)){turn=node;break}
     }
     const clean=last?.cloneNode(true);clean?.querySelectorAll('button,svg,script,style').forEach(node=>node.remove());
+    // Preserve machine JSON verbatim: rendered Markdown can remove escapes.
+    clean?.querySelectorAll('pre').forEach(pre=>{const code=pre.querySelector('code');if(!code)return;const text=code.textContent||'';let data;try{data=JSON.parse(text)}catch{return}if(typeof data.turn!=='string'||!Array.isArray(data.calls))return;
+      const marked=clean.textContent.includes('PLANNER_TOOL_REQUEST'),legacy=(code.className||'').includes('language-planner-tools');if(!marked&&!legacy)return;
+      const parent=pre.parentElement,others=parent?[...parent.childNodes].filter(n=>n!==pre&&(n.textContent||'').trim()):[];
+      const target=parent&&parent!==clean&&others.every(n=>/^(json|planner-tools)$/i.test((n.textContent||'').trim()))?parent:pre;
+      const nl=String.fromCharCode(10);target.replaceWith(document.createTextNode(nl+(marked?text:'PLANNER_TOOL_REQUEST'+nl+text+nl+'END_PLANNER_TOOL_REQUEST')+nl));
+    });
     const response=clean?(clean.innerText||clean.textContent||'').trim():'';
     const outputs=turn?[...turn.querySelectorAll('a[download],a[href^="sandbox:"],a[href*="/backend-api/files/"],a[href*="/backend-api/estuary/content"],button[aria-label^="Download "],button[aria-label="Save image"],[data-file-reference="true"][role="button"][aria-label^="Download "]')].map(node=>{node.dataset.plannerDownloadId ||= crypto.randomUUID();return {key:node.dataset.plannerDownloadId,name:(node.getAttribute('download')||node.innerText||node.getAttribute('aria-label')||'Download file').trim().slice(0,240)}}):[];
     return {files:outputs,ready:!!box,needsLogin:(!box&&guest)||(!secureForm&&!!document.querySelector('input[type="password"]')),guest,interaction,running,count:replies.length,text:response,final:!!turn?.querySelector(completionSelector),url:location.href};})()
