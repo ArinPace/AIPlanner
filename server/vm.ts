@@ -1,3 +1,4 @@
+import {WHOOP_SLEEP_REVIEW_RULE} from '../worker/whoop-sleep-review.mjs'
 import { randomBytes } from 'node:crypto'
 import { ApiError, body, db, json, handlePdfUpload } from './cloud.js'
 import { createPlannerMcp } from './mcp.js'
@@ -51,7 +52,7 @@ export async function handleVmWorker(request: Request, path: string) {
     const settings = checked(await db().from('planner_vm_settings').select('*').eq('username', host.username).single())
     const approvals=checked(await db().from('planner_vm_approvals').select('questions,answers,answered_at').eq('username',host.username).eq('host_id',host.id).not('answered_at','is',null).order('answered_at',{ascending:false}).limit(1000))
     const approvedBrowserTools=rememberedBrowserTools(approvals,settings.sources.includes('whatsapp')?settings.whatsapp_read_consent_at:null,settings.sources.includes('slack')?settings.message_read_consent?.slack:null)
-    return json({ tutorEnabled:settings.tutor_enabled===true,agentInstructions:await readAgentInstructions(host.username), sources: settings.sources, approvedBrowserTools, messageReadConsent:settings.message_read_consent, whatsappReadConsentAt: settings.whatsapp_read_consent_at, aiProvider: settings.ai_provider, credential: settings.credential ? openVmCredential(settings.credential) : null, personalChatGptAllowed: personalChatGptAllowed(host.username) })
+    return json({ accountBehaviorInstructions:host.username==='arin'?WHOOP_SLEEP_REVIEW_RULE:'',tutorEnabled:settings.tutor_enabled===true,agentInstructions:await readAgentInstructions(host.username), sources: settings.sources, approvedBrowserTools, messageReadConsent:settings.message_read_consent, whatsappReadConsentAt: settings.whatsapp_read_consent_at, aiProvider: settings.ai_provider, credential: settings.credential ? openVmCredential(settings.credential) : null, personalChatGptAllowed: personalChatGptAllowed(host.username) })
   }
   if(path.startsWith('/api/agent/vm/worker/pdf-upload/')){
     const jobId=request.headers.get('x-planner-job'),lease=request.headers.get('x-planner-lease')
