@@ -55,7 +55,8 @@ export async function handleVmPool(request: Request, path: string) {
         db().from('planner_vm_hosts').select('id').eq('username', computer.username).is('revoked_at', null).maybeSingle(),
         db().from('planner_subject_rollovers').select('next_at,last_queued_at').eq('username',computer.username).maybeSingle(),
       ])
-      const turnover=checked(rollover),rolloverAt=turnover?.next_at&&(!turnover.last_queued_at||Date.parse(turnover.next_at)>Date.parse(turnover.last_queued_at))?turnover.next_at:null
+      const turnover=checked(rollover);let rolloverAt=turnover?.next_at&&(!turnover.last_queued_at||Date.parse(turnover.next_at)>Date.parse(turnover.last_queued_at))?turnover.next_at:null
+      if(rolloverAt&&Date.parse(rolloverAt)<=Date.now()+120000){const main=checked(await db().from('planner_vm_chats').select('id').eq('username',computer.username).eq('is_main',true).maybeSingle());if(main&&jobs.data?.some(job=>job.chat_id===main.id&&job.status==='paused'))rolloverAt=null}
       decisions.push({ username: computer.username, shouldRun: Boolean(checked(host)) && shouldRunVm({ rolloverAt,wakeUntil: computer.wake_until, scheduled: checked(settings)?.schedule_enabled || false, schedule: settings.data?.schedule, jobs: checked(jobs) }) })
     }
     return json({ computers: decisions, capacity: pool.max_vms })
