@@ -4,9 +4,10 @@ export function requestClientUI(command:ClientControl,account:string):Promise<un
  return new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Planner UI did not acknowledge this action. Read UI state before retrying.')),8000)
  window.dispatchEvent(new CustomEvent('planner-client-ui',{detail:{account,command,resolve:(value:unknown)=>{clearTimeout(timer);resolve(value)},reject:(error:unknown)=>{clearTimeout(timer);reject(error)}}}))})
 }
-export async function executeClientResults(results:any[],calls:{id:string;name:string}[],account:string,turnId:string){
+export async function executeClientResults(results:any[],calls:{id:string;name:string}[],account:string,turnId:string,isActive:()=>boolean=()=>true){
  const output=[]
  for(const entry of results){
+  if(!isActive())throw Error('This Planner request stopped. Read current state before continuing.')
   const call=calls.find(c=>c.id===entry.id),payload=entry.result?.structuredContent?.result
   if(call?.name!=='planner_client_control'||!payload?.requiresClient||!payload?.clientAction){output.push(entry);continue}
   try{

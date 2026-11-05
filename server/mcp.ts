@@ -1,6 +1,6 @@
 import {registerClientControlTools} from './client-control-tools.js'
 import {registerAppSettingsTools} from './app-settings-tools.js'
-import {readFilesItemById,commitFileItem} from './files-transfer.js'
+import {readFilesItemById,commitFileItem,commitWorkspaceDelta,workspaceDelta} from './files-transfer.js'
 import {reportSourceHealth,sourceHealthStatus} from './source-health.js'
 import {readGoogleMail} from './google-mail.js'
 import {readAgentRunHistory} from './agent-run-history.js'
@@ -41,9 +41,9 @@ const labels = z.array(z.string().trim().min(1).max(40)).max(10)
 const color = z.string().regex(/^#[0-9a-f]{6}$/i)
 
 async function filesRow(username: string) { return storage(await db().from('planner_files').select('state,revision').eq('username',username).single()) }
-async function saveFiles(username: string, state: FilesState, revision: number, file?:FilesState['files'][number]) {
+async function saveFiles(username: string, state: FilesState, revision: number, file?:FilesState['files'][number],patch?:import('../src/lib/filesTransfer.js').FilesPatch) {
   try{validateFilesState(state,filesWorkspaceLimit(username))}catch(error){throw new ApiError(400,error instanceof Error?error.message:'Invalid Files workspace.')}
-  const rows = file?[await commitFileItem(username,revision,file)]:storage(await db().from('planner_files').update({state,revision:revision+1,updated_at:new Date().toISOString()}).eq('username',username).eq('revision',revision).select('revision'))
+  const rows = file?[await commitFileItem(username,revision,file)]:patch?[await commitWorkspaceDelta(username,revision,patch)]:storage(await db().from('planner_files').update({state,revision:revision+1,updated_at:new Date().toISOString()}).eq('username',username).eq('revision',revision).select('revision'))
   if (!rows.length) throw new ApiError(409,'Files changed while you were editing. Read them again before retrying.')
   let planningSyncError:string|undefined
   try{if(await hasWidgetDraft(username))planningSyncError='Files saved. Calendar completion cleanup is deferred until the widget draft is published.';else await (await import('./planning.js')).syncTodoCompletion(username)}catch{planningSyncError='Files saved, but calendar completion sync is pending. The Agent view retries automatically; report pending sync instead of claiming calendar cleanup succeeded.'}
@@ -68,7 +68,7 @@ export function createPlannerMcp(username: string, scopes: string[]) {
   add('planner_subject_rollover_schedule','Book the next one-time subject turnover after researching official term/course dates. Always replace it with the following turnover or an evidence-based retry during each execution. Pass runAt null only when the user wants to disable it. Preserves daily review times.',{expectedRevision:z.number().int().nonnegative(),runAt:iso.nullable(),basis:z.string().min(1).max(4000),sources:z.array(z.string().url()).min(1).max(10)},'planner:write',false,async args=> (await import('./subject-rollover.js')).scheduleSubjectRollover(username,args))
   registerPlannerControls(add,username)
   registerAppSettingsTools(add,username)
-  registerClientControlTools(add)
+  registerClientControlTools(add,username)
   registerPlanningTools(add,username)
   registerAgentMemory(add,username)
   registerAgentInstructions(add,username)
@@ -76,8 +76,8 @@ export function createPlannerMcp(username: string, scopes: string[]) {
   add('planner_bulk_update_items','Atomically edit up to 100 user-selected Files items: rename/move folders, notes, text files, PDFs and links; folder labels/color; note content, format, pins and tags. Each patch has the same fields as planner_update_item. Read current Files revision first. All edits succeed together or none do; unrelated contents and PDF bytes are preserved.',{revision:z.number().int().nonnegative(),items:z.array(z.object(plannerItemPatch)).min(1).max(100)},'planner:write',false,async args=>{
     const row=await filesRow(username)
     if(row.revision!==args.revision)throw new ApiError(409,'Read the latest Files revision before saving.')
-    const next=patchWorkspaceItems(row.state,args.items)
-    return {...await saveFiles(username,next.state,row.revision),items:next.items}
+    const next=patchWorkspaceItems(row.state,args.items,filesWorkspaceLimit(username))
+    return {...await saveFiles(username,next.state,row.revision,undefined,workspaceDelta(row.state,next.state)),items:next.items}
   })
   add('planner_schedule_read','Read the actual VM scheduled review: enabled state, timezone, daily times, instructions, enabled sources and connection status. Use this before changing it.',{},'planner:read',true,()=>readAutomationSettings(username))
   add('planner_schedule_update','Change this user’s VM review schedule, saved task instructions or enabled source list. Read planner_schedule_read first and pass its updatedAt. Omitted settings remain unchanged. Enabling a source does not sign into it. This changes future scheduled runs, not a note in Files.',{expectedUpdatedAt:iso,enabled:z.boolean().optional(),timezone:z.string().max(80).optional(),times:z.array(z.string()).min(1).max(6).optional(),instructions:z.string().max(12000).optional(),sources:z.array(z.enum(['brightspace','gradescope','gmail','calendar','drive','slack','instagram','x','albert','whatsapp','linkedin','whoop'])).max(12).optional()},'planner:write',false,args=>updateAutomationSettings(username,args))
@@ -114,7 +114,7 @@ export function createPlannerMcp(username: string, scopes: string[]) {
     }
     if(note){const {id:_id,revision:_revision,...patch}=args;const next=patchPlannerNote(note,patch);for(const key of Object.keys(note))delete note[key];Object.assign(note,next)}
     item.updatedAt=new Date().toISOString()
-    return {...await saveFiles(username,row.state,row.revision,note||undefined),item}
+    return {...await saveFiles(username,row.state,row.revision,note||undefined,note?undefined:{upserts:{[folder?'folders':'documents']:[item]}}),item}
   })
   add('planner_source_status','Read persistent connection and source-sync issues for this account. Check during every review. Do not claim complete coverage when any enabled source failed.',{},'planner:read',true,()=>sourceHealthStatus(username))
   add('planner_source_report','Immediately report a confirmed source access/sync failure, or clear it only after verified successful access. Use connectionKey browser for whole-site connection checks, browser:short-document-label for a specific page/reader problem, or the authorized Google account UUID for an API account. Clearing browser after a successful sign-in must not clear unrelated document-reader problems. Persist failures even if other sources succeed. Unknown reader failures are access problems, not proof of logout. Never include credentials, cookies or private tokens in the message.',{source:z.enum(VM_SOURCES_LIST),connectionKey:z.string().min(1).max(200),error:z.string().min(1).max(1000).nullable()},'planner:write',false,args=>reportSourceHealth(username,args.source,args.connectionKey,args.error).then(()=>({saved:true})))
@@ -139,7 +139,7 @@ export function createPlannerMcp(username: string, scopes: string[]) {
     const folderId = args.id || randomUUID(), old = row.state.folders.find((f:any)=>f.id===folderId)
     const folder = {id:folderId,name:args.name,parentId:args.parentId,color:args.color,labels:args.labels,updatedAt:new Date().toISOString()}
     if (old) Object.assign(old,folder); else row.state.folders.push(folder)
-    return {...await saveFiles(username,row.state,row.revision),folderId}
+    return {...await saveFiles(username,row.state,row.revision,undefined,{upserts:{folders:[folder]}}),folderId}
   })
   const textSchema={id:id.optional(),folderId:id.nullable(),name:title,content:z.string().max(1000000),revision:z.number().int().nonnegative()}
   async function saveText(args:any,format:'note'|'text'){
@@ -162,10 +162,10 @@ export function createPlannerMcp(username: string, scopes: string[]) {
     if (row.revision !== args.revision) throw new ApiError(409,'Read the latest Files revision before saving.')
     const documentId = args.id || randomUUID(), old = (row.state.documents || []).find((d:any)=>d.id===documentId)
     if (old && old.kind !== 'link') throw new ApiError(400,'A PDF cannot be replaced through this tool.')
-    const link = {id:documentId,folderId:args.folderId,name:args.name,url:args.url,kind:'link',updatedAt:new Date().toISOString()}
+    const link = {id:documentId,folderId:args.folderId,name:args.name,url:args.url,kind:'link' as const,updatedAt:new Date().toISOString()}
     row.state.documents ||= []
     if (old) Object.assign(old,link); else row.state.documents.push(link)
-    return {...await saveFiles(username,row.state,row.revision),documentId}
+    return {...await saveFiles(username,row.state,row.revision,undefined,{upserts:{documents:[link]}}),documentId}
   })
   add('planner_save_event','Create or partially edit an INTERNAL AI Planner calendar event, not Google Calendar. For updates pass the existing id and only changed fields. Omitted fields, tags and recurrence are preserved. For creation omit id and supply title/start/end and scheduleType fixed or planned. Fixed appointments/classes/deadline reminders wait for an agent-reviewed staging batch before export to selected OAuth Google primary; planned flexible work/routines/breaks do not. Explicit timezone dates and latest calendar revision required. Recurrence edits affect the whole series. excludedStarts lists exact skipped start instants; normally use planner_delete_events scope occurrence for a single removal. Saving may combine adjacent compatible blocks with identical titles/tags; use the returned eventId. Optional activityType break/buffer marks a new flexible block; buffers may reference an existing main activity with bufferForEventId. Do not reclassify commitments as disposable breaks.',eventPatch,'planner:write',false,args=>saveEvent(username,args))
   add('planner_bin_read','List this user’s recoverable Files Bin entries, retained for 30 days. Entry IDs differ from original file IDs. Use planner_restore_items to restore an entry.',{},'planner:read',true,async()=>{const response=await handleFilesBin(new Request(MCP_ORIGIN+'/api/files/bin'),'/api/files/bin',username);return response.json()})

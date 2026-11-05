@@ -2,7 +2,7 @@ import {z} from 'zod'
 const action=<T extends string>(name:T)=>z.literal(name)
 const expected=z.string().regex(/^[a-f0-9]{64}$/)
 const iso=z.string().datetime({offset:true})
-const task=z.object({id:z.string().min(1).max(500),sourceEventId:z.string().min(1).max(200),title:z.string().min(1).max(300),start:iso,end:iso}).strict()
+const task=z.object({id:z.string().min(1).max(500).optional(),sourceEventId:z.string().min(1).max(200),title:z.string().min(1).max(300),start:iso,end:iso}).strict()
 export const clientControlSchema=z.discriminatedUnion('action',[
  z.object({action:action('ui_read')}).strict(),
  z.object({action:action('ui_navigate'),tab:z.enum(['calendar','files','todo','work','agent','chat','screentime']),view:z.enum(['day','week','month','year']).optional(),date:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()}).strict(),

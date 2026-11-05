@@ -50,3 +50,18 @@ export async function commitFileItem(username:string,revision:number,file:Planne
  if(error){console.error('File item commit failed',{code:error.code});throw new ApiError(error.code==='P0001'?409:503,error.code==='P0001'?'Files changed. Read the latest revision before saving.':'Could not save this file. Read it back before retrying.')}
  return data as {revision:number}
 }
+
+export function workspaceDelta(previous:FilesState,next:FilesState):import('../src/lib/filesTransfer.js').FilesPatch{
+ const upserts:Partial<Record<import('../src/lib/filesTransfer.js').FilesSection,WorkspaceItem[]>>={},keep=new Set<string>()
+ for(const section of ['folders','files','documents'] as const){
+  const old=new Map((previous[section]||[]).map(item=>[item.id,JSON.stringify(item)]))
+  const changed=(next[section]||[]).filter(item=>{keep.add(item.id);return old.get(item.id)!==JSON.stringify(item)})
+  if(changed.length)upserts[section]=changed
+ }
+ return {upserts,removeIds:[...previous.folders,...previous.files,...(previous.documents||[])].filter(item=>!keep.has(item.id)).map(item=>item.id)}
+}
+export async function commitWorkspaceDelta(username:string,revision:number,patch:import('../src/lib/filesTransfer.js').FilesPatch,bin:{add?:unknown;remove?:string[];restore?:boolean}={}){
+ const {data,error}=await db().rpc('planner_workspace_delta_commit',{p_username:username,p_revision:revision,p_upserts:patch.upserts||{},p_remove_ids:patch.removeIds||[],p_bin_add:bin.add??null,p_bin_remove:bin.remove||[],p_restore:bin.restore!==false})
+ if(error){console.error('Workspace delta commit failed',{code:error.code});throw new ApiError(error.code==='P0001'?409:503,error.code==='P0001'?'Files or Bin changed. Read the latest revision before retrying.':'Could not commit this workspace change. Read current state before retrying.')}
+ return data as {revision:number;binId?:string|null}
+}

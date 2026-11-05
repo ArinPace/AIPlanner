@@ -499,7 +499,7 @@ private struct NextDNSSettings: View {
             guard account==WidgetTaskControl.defaults.string(forKey:"feedback-account") else {throw TaskFocusError("Your account changed. Read current state after signing in.")}
             let result:[String:Any]=["state":try state(account:account),"detail":detail]
             cache=(defaults.data(forKey:cacheKey).flatMap{try? JSONSerialization.jsonObject(with:$0)} as? [String:[String:Any]]) ?? [:];cache[key]=["digest":hash,"at":Date().timeIntervalSince1970,"result":result]
-            let ordered=cache.sorted{($0.value["at"] as? Double ?? 0)>($1.value["at"] as? Double ?? 0)};defaults.set(try bytes(Dictionary(uniqueKeysWithValues:ordered.prefix(100).map{($0.key,$0.value)})),forKey:cacheKey)
+            let ordered=cache.sorted{($0.value["at"] as? Double ?? 0)>($1.value["at"] as? Double ?? 0)};defaults.set(try bytes(Dictionary(uniqueKeysWithValues:ordered.filter{($0.value["at"] as? Double ?? 0)>Date().timeIntervalSince1970-7200}.map{($0.key,$0.value)})),forKey:cacheKey)
             return result
         }catch{
             // Failed/uncertain calls stay receipted. A fresh read is safe; automatic write replay is not.

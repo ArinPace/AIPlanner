@@ -1,4 +1,4 @@
-import {cloudFilesManifest,readFilesTransferItem,singleFilePatch,commitFileItem} from './files-transfer.js'
+import {cloudFilesManifest,readFilesTransferItem,singleFilePatch,commitFileItem,commitWorkspaceDelta,workspaceDelta} from './files-transfer.js'
 import {applyFilesPatch,type FilesPatch} from '../src/lib/filesTransfer.js'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { randomUUID } from 'node:crypto'
@@ -83,7 +83,7 @@ async function filesFor(username: string): Promise<FilesState> {
 async function setFiles(username: string, next: FilesState, previous: FilesState): Promise<FilesState> {
   validateFilesState(next,filesWorkspaceLimit(username))
   const { revision: _revision, storageLimitBytes:_quota, ...state } = next
-  const rows = dataResult(await db().from('planner_files').update({ state, revision: previous.revision! + 1, updated_at: new Date().toISOString() }).eq('username', username).eq('revision', previous.revision!).select('revision'))
+  const rows = [await commitWorkspaceDelta(username,previous.revision!,workspaceDelta(previous,state))]
   if (!rows.length) throw new ApiError(409, 'Files changed in another tab. Reload to see the latest version before saving again.')
   return { ...state, revision: rows[0].revision, storageLimitBytes:filesWorkspaceLimit(username) }
 }

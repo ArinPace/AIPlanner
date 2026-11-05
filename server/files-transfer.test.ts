@@ -91,3 +91,20 @@ test('single-note commits send only the validated note with owner/revision and p
  try{assert.deepEqual(await commitFileItem('arin',7,item),{revision:8});conflict=true;await assert.rejects(()=>commitFileItem('arin',7,item),error=>(error as {status:number}).status===409)}
  finally{globalThis.fetch=before;for(const key of keys){if(env[key]===undefined)delete process.env[key];else process.env[key]=env[key]}}
 })
+
+test('workspace deltas omit unchanged note bodies while preserving atomic moves and removals',async()=>{
+ const {workspaceDelta}=await import('./files-transfer.js')
+ const base:FilesState={folders:[{id:'folder',parentId:null,name:'Old',color:'#123456',labels:[],updatedAt:'2026-11-05T00:00:00Z'}],files:[note(1,'x'.repeat(900000)),note(2,'y'.repeat(900000))],documents:[{id:'link',folderId:null,name:'Link',kind:'link',url:'https://example.com',updatedAt:'2026-11-05T00:00:00Z'}]}
+ const next={...base,folders:[{...base.folders[0],name:'New'}],documents:[{...base.documents![0],folderId:'folder'}]}
+ const delta=workspaceDelta(base,next)
+ assert.equal(delta.upserts?.files,undefined);assert(Buffer.byteLength(JSON.stringify(delta))<1000)
+ assert.deepEqual(JSON.parse(JSON.stringify(applyFilesPatch(base,delta))),JSON.parse(JSON.stringify(next)))
+ const removed=workspaceDelta(base,{...base,files:[base.files[0]]});assert.deepEqual(removed.removeIds,['note-2']);assert.equal(removed.upserts?.files,undefined)
+})
+test('workspace RPC sends owner/revision/delta and Bin metadata without a full corpus',async()=>{
+ const original=globalThis.fetch,keys=['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','SUPABASE_SECRET_KEY'] as const,saved=Object.fromEntries(keys.map(k=>[k,process.env[k]]))
+ process.env.SUPABASE_URL='https://transfer.test';process.env.SUPABASE_SERVICE_ROLE_KEY='test';delete process.env.SUPABASE_SECRET_KEY
+ let sent:any
+ globalThis.fetch=async(input,init)=>{const req=new Request(input,init);assert(req.url.endsWith('/rpc/planner_workspace_delta_commit'));sent=await req.json();return Response.json({revision:8,binId:null})}
+ try{const {commitWorkspaceDelta}=await import('./files-transfer.js');assert.equal((await commitWorkspaceDelta('arin',7,{removeIds:['qa-note']},{remove:['00000000-0000-4000-8000-000000000001']})).revision,8);assert.equal(sent.p_username,'arin');assert.equal(sent.p_revision,7);assert.deepEqual(sent.p_remove_ids,['qa-note']);assert.equal(sent.p_state,undefined);assert(Buffer.byteLength(JSON.stringify(sent))<1000)}finally{globalThis.fetch=original;for(const key of keys){if(saved[key]===undefined)delete process.env[key];else process.env[key]=saved[key]}}
+})

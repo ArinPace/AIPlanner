@@ -1,3 +1,4 @@
+import {commitWorkspaceDelta,workspaceDelta} from './files-transfer.js'
 import { randomUUID } from 'node:crypto'
 import { ApiError, db, json, body, cleanupUploads } from './cloud.js'
 import { storage } from './mcp-auth.js'
@@ -19,7 +20,7 @@ export function buildTrash(state:FilesState,ids:string[]) {
   const removed=new Set([...snapshot.folders,...snapshot.files,...(snapshot.documents || [])].map(f=>f.id))
   return {state:{...state,folders:state.folders.filter(f=>!removed.has(f.id)),files:state.files.filter(f=>!removed.has(f.id)),documents:(state.documents || []).filter(f=>!removed.has(f.id))},entry:{names,snapshot,itemCount:removed.size}}
 }
-export function restoreFiles(current:FilesState,snapshots:FilesState[]) {
+export function restoreFiles(current:FilesState,snapshots:FilesState[],maxBytes?:number) {
   const state=structuredClone(current),folders=snapshots.flatMap(s=>s.folders),files=snapshots.flatMap(s=>s.files),documents=snapshots.flatMap(s=>s.documents || [])
   const ids=new Set([...state.folders,...state.files,...(state.documents || [])].map(i=>i.id))
   for(const item of [...folders,...files,...documents]){if(ids.has(item.id))throw new ApiError(409,'An item with the same ID already exists. Restore would overwrite it.');ids.add(item.id)}
@@ -44,15 +45,15 @@ export function restoreFiles(current:FilesState,snapshots:FilesState[]) {
     item.name=unique(item.name,[...state.files,...(state.documents || [])].filter(f=>f.folderId===item.folderId).map(f=>f.name))
     if('content' in item)state.files.push(item);else (state.documents ||= []).push(item)
   }
-  validateFilesState(state)
+  validateFilesState(state,maxBytes)
   return state
 }
-async function commit(username:string,revision:number,state:FilesState,add:unknown=null,remove:string[]=[],restore=true){
+async function commit(username:string,revision:number,state:FilesState,add:unknown=null,remove:string[]=[],restore=true,previous?:FilesState){
   const {revision:_revision,storageLimitBytes:_quota,...data}=state
   validateFilesState(data,filesWorkspaceLimit(username))
-  const result=await db().rpc('planner_files_bin_commit',{p_username:username,p_revision:revision,p_state:data,p_add:add,p_remove:remove,p_restore:restore})
-  if(result.error)throw new ApiError(result.error.code==='P0001'?409:503,result.error.code==='P0001'?result.error.message:'Could not update the Bin.')
-  return {...data,revision:result.data.revision} as FilesState
+  if(!previous)throw new ApiError(500,'Read the workspace before committing Bin changes.')
+  const result=await commitWorkspaceDelta(username,revision,workspaceDelta(previous,data),{add,remove,restore})
+  return {...data,revision:result.revision} as FilesState
 }
 export async function preserveRemovedFiles(username:string,next:FilesState,previous:FilesState){
   const keep=new Set([...next.folders,...next.files,...(next.documents || [])].map(i=>i.id))
@@ -63,7 +64,7 @@ export async function preserveRemovedFiles(username:string,next:FilesState,previ
   entry.snapshot.files=entry.snapshot.files.filter(i=>!keep.has(i.id))
   entry.snapshot.documents=entry.snapshot.documents?.filter(i=>!keep.has(i.id))
   entry.itemCount=ids.length
-  return commit(username,previous.revision!,next,entry)
+  return commit(username,previous.revision!,next,entry,[],true,previous)
 }
 export async function handleFilesBin(request:Request,path:string,username:string){
   if(request.method==='GET' && path==='/api/files/bin')return json({items:storage(await db().from('planner_file_bin').select('id,names,item_count,deleted_at,expires_at').eq('username',username).gt('expires_at',new Date().toISOString()).order('deleted_at',{ascending:false}).limit(1000))})
@@ -73,15 +74,15 @@ export async function handleFilesBin(request:Request,path:string,username:string
   if(!Number.isSafeInteger(input.revision) || input.revision!==row.revision)throw new ApiError(409,'Files changed. Refresh before trying again.')
   if(path==='/api/files/trash'){
     const removed=buildTrash(row.state,ids)
-    const saved=await commit(username,row.revision,removed.state,removed.entry)
+    const saved=await commit(username,row.revision,removed.state,removed.entry,[],true,row.state)
     return json(new URL(request.url).searchParams.has('summary')?{ok:true,revision:saved.revision}:saved)
   }
   if(!['/api/files/restore','/api/files/purge'].includes(path))throw new ApiError(404,'Unknown Bin action.')
   if(ids.some(id=>!uuid(id)))throw new ApiError(400,'Choose valid Bin items.')
   const rows=storage(await db().from('planner_file_bin').select('id,snapshot').eq('username',username).in('id',ids).gt('expires_at',new Date().toISOString()))
   if(rows.length!==ids.length)throw new ApiError(404,'Some Bin items are unavailable or expired. Refresh the Bin.')
-  const restore=path.endsWith('/restore'),next=restore?restoreFiles(row.state,rows.map(r=>r.snapshot)):row.state
-  const saved=await commit(username,row.revision,next,null,ids,restore)
+  const restore=path.endsWith('/restore'),next=restore?restoreFiles(row.state,rows.map(r=>r.snapshot),filesWorkspaceLimit(username)):row.state
+  const saved=await commit(username,row.revision,next,null,ids,restore,row.state)
   if(!restore)await cleanupUploads(username)
   return json(new URL(request.url).searchParams.has('summary')?{ok:true,revision:saved.revision}:saved)
 }

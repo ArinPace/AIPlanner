@@ -141,7 +141,7 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
       const applied=await subscriptionChatRequest<{results:unknown[]}>(undefined,{action:'tool_call',chatId:id,turnId,calls})
       if(cancelRelay.current||scope!==epoch.current||!alive.current)return
       window.dispatchEvent(new Event('planner-calendar-refresh'));window.dispatchEvent(new Event('planner-preferences-refresh'))
-      const executed=calls.some(call=>call.name==='planner_client_control')?await (await import('../lib/clientControls')).executeClientResults(applied.results,calls,username,turnId):applied.results
+      const executed=calls.some(call=>call.name==='planner_client_control')?await (await import('../lib/clientControls')).executeClientResults(applied.results,calls,username,turnId,()=>!cancelRelay.current&&scope===epoch.current&&alive.current):applied.results
       if(cancelRelay.current||scope!==epoch.current||!alive.current)return
       await nativeRequest({action:'chatGPTRelaySend',account:username,chatId:id,text:toolResultsMessage(executed,turnId),work:true,url:result.url,context:''})
       setRelayPhase('Working… Keep Planner open.');continue
