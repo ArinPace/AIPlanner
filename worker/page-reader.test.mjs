@@ -5,22 +5,23 @@ import { readBrowserPage } from './page-reader.mjs'
 import {readableUrl} from './browser-access.mjs'
 
 test('Albert reads allowed SIS frames while excluding sign-in and unrelated frames',async()=>{
-  const browser=await chromium.launch({channel:'msedge',headless:true})
+  const browser=await chromium.launch({...(process.env.PLANNER_TEST_CHROME?{executablePath:process.env.PLANNER_TEST_CHROME}:{channel:'msedge'}),headless:true})
   try{
-    const context=await browser.newContext()
+    const context=await browser.newContext({timezoneId:'America/New_York'})
     context.request.get=async()=>({ok:()=>false,headers:()=>({}),dispose:async()=>{}})
     await context.route('https://albert.nyu.edu/**',r=>r.fulfill({contentType:'text/html',body:'<h1>Albert</h1><iframe src="https://sis.nyu.edu/student"></iframe><iframe src="https://sis.nyu.edu/login"></iframe><iframe src="https://unrelated.test/"></iframe>'}))
     await context.route('https://sis.nyu.edu/student',r=>r.fulfill({contentType:'text/html',body:'Student Center My Class Schedule Biology 101'}))
     await context.route('https://sis.nyu.edu/login',r=>r.fulfill({contentType:'text/html',body:'Private login content <input type="password">'}))
     await context.route('https://unrelated.test/**',r=>r.fulfill({contentType:'text/html',body:'Unrelated frame content'}))
     const result=await readBrowserPage(context,'https://albert.nyu.edu/',{validate:url=>{if(!['albert.nyu.edu','sis.nyu.edu'].includes(new URL(url).hostname))throw Error('Outside enabled sources')}})
+    assert.equal(result.browserTimezone,'America/New_York')
     assert.match(result.text,/Biology 101/)
     assert.equal(result.frames.length,1)
     assert.doesNotMatch(result.text,/Private login|Unrelated frame/)
   }finally{await browser.close()}
 })
 test('Albert portal can be read after verifying the enabled source',async()=>{
- const browser=await chromium.launch({channel:'msedge',headless:true})
+ const browser=await chromium.launch({...(process.env.PLANNER_TEST_CHROME?{executablePath:process.env.PLANNER_TEST_CHROME}:{channel:'msedge'}),headless:true})
  try{
   const context=await browser.newContext()
   context.request.get=async()=>({ok:()=>false,headers:()=>({}),dispose:async()=>{}})
@@ -32,7 +33,7 @@ test('Albert portal can be read after verifying the enabled source',async()=>{
 })
 
 test('Slack reader waits beyond the app shell, returns messages and keeps existing tabs', async () => {
-  const browser = await chromium.launch({ channel: 'msedge', headless: true })
+  const browser = await chromium.launch({ ...(process.env.PLANNER_TEST_CHROME?{executablePath:process.env.PLANNER_TEST_CHROME}:{channel:'msedge'}), headless: true })
   try {
     const context = await browser.newContext()
     await context.route('https://app.slack.com/**', route => route.fulfill({ body: `<html><body>Loading Slack<script>setTimeout(()=>document.body.innerHTML='<div class="c-virtual_list__scroll_container"><div data-qa="message_container" data-msg-ts="123.456"><b data-qa="message_sender_name">Test sender</b><a data-ts="123.456" aria-label="Today at noon" href="https://example.test/message">Noon</a><p>Delayed channel message</p></div></div>',2500)</script></body></html>` }))

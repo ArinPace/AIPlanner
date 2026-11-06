@@ -92,6 +92,7 @@ export async function readBrowserPage(context, destination, { slackTimeout = 450
     }
     const result = {
       title: await page.title(), url: page.url(),
+      browserTimezone: await page.evaluate(()=>Intl.DateTimeFormat().resolvedOptions().timeZone),
       text: documentText?.text || (gmail ? (gmail.messages?.map(m=>m.text).join('\n\n') || gmail.rows.map(r=>r.preview).join('\n\n')).slice(0,50000) : messages ? messages.map(m => m.text).join('\n\n').slice(-40000) : ((await page.locator('body').innerText())+'\n'+shadowText+'\n'+frames.map(f=>f.text).join('\n')).slice(0, 50000)),
       ...(gmail || documentText ? {coverage:gmail?.coverage || documentText.coverage,...(gmail?{gmail}:{}),...(documentText?{document:{truncated:documentText.truncated}}:{})}:{}),
       ...(!documentText && new URL(page.url()).hostname==='docs.google.com' && /\/(?:document|spreadsheets)\//.test(new URL(page.url()).pathname)?{coverage:'Document body unavailable. This is rendered UI/shell text only, not a verified document read. Check document permissions and the selected Google account.',document:{unavailable:true}}:{}),
