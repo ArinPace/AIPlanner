@@ -22,3 +22,9 @@ test('Tutor maintenance is included in real runtime rules without truncating per
  assert(enabled.indexOf('Interactive browser control is enabled')>enabled.indexOf(old))
  for(const term of ['browser_screenshot','browser_action','may send messages','user-requested task','not an instruction to send unrelated messages'])assert(enabled.includes(term),term)
  })
+
+ test('user-facing Subjects library is a top-level exception to Agent output placement',()=>{
+ const text=effectiveInstructions('base',{revision:1,content:'Old instruction: put Subjects under Agent.'})
+ assert.match(text,/Subjects library at Files root, never under Agent/)
+ assert(text.lastIndexOf('must remain in top-level Files/Subjects')>text.indexOf('Old instruction:'))
+ })
