@@ -31,5 +31,5 @@ test('Tutor maintenance is included in real runtime rules without truncating per
 
 test('Tutor grade trackers stay compact and syllabuses use original Brightspace PDFs',()=>{
  const text=effectiveInstructions('base',{content:''})
- for(const term of ['Component | Weight | Current score','Current estimated grade','No essays','original official PDF','Brightspace','never manufacture a PDF from notes'])assert(text.includes(term),term)
+ for(const term of ['Component | Weight | Current score','Current percentage','Is an A possible?','Required percentage on remaining work to earn an A','No essays','original official PDF','Brightspace','never manufacture a PDF from notes'])assert(text.includes(term),term)
 })
