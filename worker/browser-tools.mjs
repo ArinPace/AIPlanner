@@ -154,7 +154,7 @@ server.registerTool('browser_view_image', {
   finally { if (connection) await connection.close() }
 }))
 server.registerTool('browser_import_pdf',{
- description:'Download actual PDF bytes using the signed-in browser for an enabled source and save them as a PDF in internal Planner Files. Accepts a direct PDF URL, Brightspace topic URL or Google Docs/Slides/Sheets/Drive file URL. This writes only to the user Files, not the source website. Read the Files tree first; reuse the correct subject/assessment subfolder under Agent for proactive imports and avoid duplicates. Requires an accessible original download, not a partial preview. After saving read all required pages via planner_read_file pagination. No cookies, tokens or PDF bytes are returned to the model.',
+ description:'Download actual PDF bytes using the signed-in browser for an enabled source and save them as a PDF in internal Planner Files. Accepts a direct PDF URL, Brightspace topic URL or Google Docs/Slides/Sheets/Drive file URL. This writes only to the user Files, not the source website. Read the Files tree first; reuse the correct subject/assessment subfolder under top-level Subjects for course materials; use Agent for other proactive imports and avoid duplicates. Requires an accessible original download, not a partial preview. After saving read all required pages via planner_read_file pagination. No cookies, tokens or PDF bytes are returned to the model.',
  inputSchema:{url:z.string().url().max(4000),folderId:z.string().min(1).max(200).nullable(),name:z.string().trim().min(5).max(200).regex(/\.pdf$/i)},annotations:{readOnlyHint:false,destructiveHint:false,openWorldHint:true},
 },async args=>queued(async()=>{
  let connection

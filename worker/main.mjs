@@ -1,3 +1,4 @@
+import {browserToolApprovals} from './tool-approvals.mjs'
 import { sources as sourceUrls } from './browser-sources.mjs'
 import { readFile, writeFile, mkdir, rename, unlink } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
@@ -78,7 +79,7 @@ async function chat(job, auth, remote) {
     'mcp_servers.browser.args': [path.join(root, 'browser-tools.mjs')],
     'mcp_servers.browser.env': { ...browserRuntimeEnv(dataDir), PLANNER_BROWSER_CONTROL:remote.browserControlEnabled===true?'1':'0', PLANNER_JOB_ID:job.id, PLANNER_JOB_LEASE:job.lease, PLANNER_ENABLED_SOURCES: JSON.stringify(remote.sources) },
     'mcp_servers.browser.env_vars': ['PLANNER_WORKER_TOKEN', 'PLANNER_ORIGIN'],
-    ...(remote.browserControlEnabled===true?Object.fromEntries(['browser_navigate','browser_action','browser_tabs','browser_snapshot','browser_screenshot','browser_import_pdf','browser_view_image','browser_read'].map(name=>['mcp_servers.browser.tools.'+name+'.approval_mode','approve'])):{}),
+    ...browserToolApprovals(remote.browserControlEnabled===true),
     ...(remote.approvedBrowserTools?.includes('browser_read_whatsapp_chat') && remote.whatsappReadConsentAt && remote.sources.includes('whatsapp') ? {'mcp_servers.browser.tools.browser_read_whatsapp_chat.approval_mode':'approve'} : {}),
     ...(remote.approvedBrowserTools?.includes('browser_read_slack_dm') && remote.messageReadConsent?.slack && remote.sources.includes('slack') ? {'mcp_servers.browser.tools.browser_read_slack_dm.approval_mode':'approve'} : {}),
   }
