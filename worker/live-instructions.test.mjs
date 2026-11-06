@@ -28,3 +28,8 @@ test('Tutor maintenance is included in real runtime rules without truncating per
  assert.match(text,/Subjects library at Files root, never under Agent/)
  assert(text.lastIndexOf('must remain in top-level Files/Subjects')>text.indexOf('Old instruction:'))
  })
+
+test('Tutor grade trackers stay compact and syllabuses use original Brightspace PDFs',()=>{
+ const text=effectiveInstructions('base',{content:''})
+ for(const term of ['Component | Weight | Current score','Current estimated grade','No essays','original official PDF','Brightspace','never manufacture a PDF from notes'])assert(text.includes(term),term)
+})
