@@ -10,6 +10,7 @@ test('Chat reviews stay held until explicit readiness, scope claims to owner Mai
  const main='11111111-1111-4111-8111-111111111111',run='22222222-2222-4222-8222-222222222222'
  globalThis.fetch=async(input,init)=>{const req=new Request(input,init),url=new URL(req.url),table=url.pathname.split('/').at(-1)
   if(req.method==='GET'||req.method==='PATCH')assert.equal(url.searchParams.get('username'),'eq.clone')
+  if(table==='planner_arm_whoop_review'||table==='planner_claim_whoop_chat')return Response.json(null)
   if(table==='planner_vm_settings'){
    if(req.method==='GET')return Response.json(row)
    const data=await req.json() as any;if(req.method==='POST'){assert.equal(data.username,'clone');return new Response(null,{status:201})}

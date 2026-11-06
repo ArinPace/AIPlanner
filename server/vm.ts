@@ -1,3 +1,4 @@
+import {whoopRetryMessage} from './whoop-review.js'
 import {WHOOP_SLEEP_REVIEW_RULE} from '../worker/whoop-sleep-review.mjs'
 import { randomBytes } from 'node:crypto'
 import { ApiError, body, db, json, handlePdfUpload } from './cloud.js'
@@ -103,8 +104,10 @@ export async function handleVmWorker(request: Request, path: string) {
       if(!active.length){
         const queued=await db().from('planner_vm_jobs').upsert({ username: host.username, host_id: host.id,chat_id:mainId,thread_id:main.thread_id, kind: 'sync', schedule_slot: slot, message: scheduledReviewMessage(settings.schedule || DEFAULT_VM_SCHEDULE) }, { onConflict: 'username,schedule_slot', ignoreDuplicates: true })
         if(queued.error?.code!=='23505')checked(queued)
+        checked(await db().rpc('planner_arm_whoop_review',{p_username:host.username,p_channel:'agent',p_episode:slot}))
       }
     }
+    checked(await db().rpc('planner_queue_whoop_review',{p_username:host.username,p_host:host.id,p_message:whoopRetryMessage()}))
     const job = checked(await db().rpc('planner_vm_claim', { p_host: host.id }))
     if(job?.kind==='chat'&&job.chat_id){
       const context=await db().from('planner_vm_chats').select('title,tutor_subject_id').eq('username',host.username).eq('id',job.chat_id).maybeSingle()

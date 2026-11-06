@@ -63,3 +63,9 @@ Logs: `journalctl -u planner-worker`; status and revision:
 server connectivity, not that every source integration works: each new site still
 needs a signed-in browser test. Old releases are retained for recovery; an operator
 may remove unused older directories during maintenance after inspecting state.
+
+### WHOOP sleep follow-ups
+
+Each scheduled review with WHOOP enabled arms an account/channel-scoped durable sleep check. The Agent worker claims one-time hourly follow-ups through service-only SQL functions; the host power decision includes due WHOOP work, without changing regular daily slots. Active/paused Main work prevents duplicate queue insertion; a paused Main does not wake the VM just for WHOOP. Fresh verified sleep plus published/read-back calendar reconciliation clears the retry. Missing/processing/stale or blocked data remains pending hourly; missing data is never interpreted as awake/asleep. Source access failures must be reported via the existing source-health tools. Retries do not bypass sign-in/MFA.
+
+Both providers receive the same freshness/reconciliation guidance and `planner_whoop_review_read/report` tools. Chat claims use the existing foreground scheduler and keep the existing readiness gate; this does not provide unattended ChatGPT subscription runs. Disabled schedules and unselected WHOOP remain off. CAS reports protect overlapping review results, source/timezone/sleep interval provenance is required for fresh results, and raw sleep observations stay in the private service-only table.

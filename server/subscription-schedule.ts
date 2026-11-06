@@ -1,3 +1,4 @@
+import {whoopRetryMessage} from './whoop-review.js'
 import {z} from 'zod'
 import {ApiError,db} from './cloud.js'
 import {storage} from './mcp-auth.js'
@@ -32,11 +33,16 @@ export async function subscriptionScheduleAction(username:string,input:Record<st
   const prefs=await subscriptionScheduleSettings(username)
   if(!prefs.enabled)return {due:false}
   const slot=scheduleSlot(new Date(),validateSchedule(prefs.schedule),false)
-  if(!slot)return {due:false}
-  const inserted=await db().from('planner_subscription_reviews').insert({username,slot}).select('id').single()
-  if(inserted.error?.code==='23505')return {due:false}
-  const run=storage(inserted)
-  return {due:true,runId:run.id,prompt:scheduledReviewMessage(prefs.schedule),label:'Scheduled planner review'}
+  if(slot){
+   const inserted=await db().from('planner_subscription_reviews').insert({username,slot}).select('id').single()
+   if(inserted.error?.code!=='23505'){
+    const run=storage(inserted)
+    storage(await db().rpc('planner_arm_whoop_review',{p_username:username,p_channel:'chat',p_episode:slot}))
+    return {due:true,runId:run.id,prompt:scheduledReviewMessage(prefs.schedule),label:'Scheduled planner review'}
+   }
+  }
+  const retry=storage(await db().rpc('planner_claim_whoop_chat',{p_username:username}))
+  return retry?{due:true,runId:retry,prompt:whoopRetryMessage(),label:'Scheduled WHOOP sleep check'}:{due:false}
  }
  if(input.action==='schedule_finish'){
   const args=z.object({runId:z.string().uuid(),completed:z.boolean()}).parse(input)
