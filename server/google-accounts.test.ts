@@ -40,7 +40,7 @@ test('Google accounts are owner scoped, tokens stay private, and Calendar uses t
       const form=new URLSearchParams(await request.text());assert.equal(form.get('grant_type'),'refresh_token');assert.equal(form.get('refresh_token'),'test-refresh');refreshed=true
       return Response.json({access_token:'fresh-access',expires_in:3600})
     }
-    if(url.hostname==='www.googleapis.com' && url.pathname.includes('/calendar/')){assert.equal(request.headers.get('authorization'),refreshed?'Bearer fresh-access':'Bearer test-access');return Response.json({timeZone:'UTC',items:[{id:'event',summary:'Verified event'}]})}
+    if(url.hostname==='www.googleapis.com' && url.pathname.includes('/calendar/')){assert.equal(request.headers.get('authorization'),refreshed?'Bearer fresh-access':'Bearer test-access');return Response.json({timeZone:'UTC',items:[{id:'event',summary:'Verified event'}],nextPageToken:url.searchParams.has('pageToken')?undefined:'next-page'})}
     if(url.href==='https://oauth2.googleapis.com/revoke'){assert.equal(new URLSearchParams(await request.text()).get('token'),'test-refresh');revoked=true;return Response.json({})}
     throw new Error('Unexpected test request '+url.origin+url.pathname)
   }
@@ -53,6 +53,7 @@ test('Google accounts are owner scoped, tokens stay private, and Calendar uses t
     await selectGoogleAccount('arin',account.id);assert.ok(selected)
     await assert.rejects(()=>selectGoogleAccount('arin','bb34ba25-54bc-44df-8515-f7e6784dfed1'),/not found/)
     const calendar=await readGoogleCalendar('arin',undefined,undefined,account.id);assert.equal(calendar.events[0].title,'Verified event')
+    assert.equal(calendar.nextPageToken,'next-page');const nextPage=await readGoogleCalendar('arin',calendar.timeMin,calendar.timeMax,account.id,calendar.nextPageToken);assert.equal(nextPage.hasMore,false)
     account.credentials=sealVmCredential({...tokens,expires_at:Date.now()-60000})
     const renewed=await readGoogleCalendar('arin',undefined,undefined,account.id)
     assert.equal(renewed.events[0].title,'Verified event');assert.ok(refreshed && persisted,'Offline access must renew and persist an expired access token without a browser')

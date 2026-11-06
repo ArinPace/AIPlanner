@@ -21,7 +21,7 @@ export async function downloadPdf(context,href,{enabled,sources}){
   try{if(response.ok()&&/json/i.test(response.headers()['content-type']||'')){const metadata=await response.json();if(metadata.Url)url=readableUrl(new URL(metadata.Url,original.origin).href,enabled,sources)}}finally{await response.dispose()}
  }
  const u=new URL(url),doc=u.hostname==='docs.google.com'&&u.pathname.match(/^\/(document|presentation|spreadsheets)\/(?:u\/\d+\/)?d\/([\w-]+)/)
- if(doc&&enabled.includes('drive')){const exportUrl=new URL('/'+doc[1]+'/d/'+doc[2]+'/export',u.origin);exportUrl.searchParams.set('format','pdf');if(u.searchParams.has('authuser'))exportUrl.searchParams.set('authuser',u.searchParams.get('authuser'));url=exportUrl.href}
+ if(doc&&enabled.includes('drive')){const exportUrl=new URL('/'+doc[1]+'/d/'+doc[2]+'/export',u.origin);exportUrl.searchParams.set('format','pdf');if(u.searchParams.has('authuser'))exportUrl.searchParams.set('authuser',u.searchParams.get('authuser'));else{const account=u.pathname.match(/^\/(?:document|presentation|spreadsheets)\/u\/(\d+)\/d\//)?.[1];if(account!==undefined)exportUrl.searchParams.set('authuser',account)}url=exportUrl.href}
  const drive=u.hostname==='drive.google.com'&&u.pathname.match(/^\/file\/d\/([\w-]+)/)
  if(drive&&enabled.includes('drive'))url='https://drive.google.com/uc?export=download&id='+drive[1]
  for(let redirects=0;redirects<6;redirects++){

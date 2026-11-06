@@ -1,3 +1,4 @@
+import {applyBrowserTimezone} from './browser-timezone.mjs'
 import { chromium } from 'playwright'
 import { spawn } from 'node:child_process'
 import http from 'node:http'
@@ -43,6 +44,7 @@ export async function browser(dataDir) {
     })
     context.on('close', () => { context = null })
   }
+  await applyBrowserTimezone(context)
   return context
 }
 export const liveBrowserOpen = () => Boolean(live)

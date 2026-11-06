@@ -4,7 +4,7 @@ import {ApiError,db} from './cloud.js'
 import {storage} from './mcp-auth.js'
 import {googleCalendarSession,googleCalendarStatus} from './agent.js'
 import {datetime} from './planner-workspace.js'
-export const googleEventPatch={accountId:z.string().uuid().optional(),eventId:z.string().min(1).max(1024).optional(),etag:z.string().max(300).optional(),requestId:z.string().uuid().optional(),scope:z.enum(['event','series']).optional(),title:z.string().trim().min(1).max(300).optional(),description:z.string().max(20000).optional(),location:z.string().max(2000).optional(),start:datetime.optional(),end:datetime.optional(),allDay:z.boolean().optional()}
+export const googleEventPatch={accountId:z.string().uuid().optional(),eventId:z.string().min(1).max(1024).optional(),etag:z.string().max(300).optional(),requestId:z.string().uuid().optional(),scope:z.enum(['event','series']).optional(),excludeOccurrenceStart:datetime.optional(),title:z.string().trim().min(1).max(300).optional(),description:z.string().max(20000).optional(),location:z.string().max(2000).optional(),start:datetime.optional(),end:datetime.optional(),allDay:z.boolean().optional()}
 type Patch=z.infer<z.ZodObject<typeof googleEventPatch>>
 export async function readGoogleEvent(username:string,args:{eventId:string;accountId?:string}){
  const status=await googleCalendarStatus(username)
@@ -39,6 +39,11 @@ async function saveGoogleEventUnchecked(username:string,args:Patch){
  const time=(value:string)=>allDay?{date:value.slice(0,10)}:{dateTime:value,timeZone:'America/New_York'}
  const patch:Record<string,any>={}
  for(const [input,output] of [['title','summary'],['description','description'],['location','location']] as const)if(args[input]!==undefined)patch[output]=args[input]
+ if(args.excludeOccurrenceStart){
+  if(!before||!Array.isArray(before.recurrence)||!before.recurrence.some((line:string)=>line.startsWith('RRULE:'))||args.scope!=='series')throw new ApiError(400,'Exclude an occurrence only from an existing recurring series with scope series.')
+  const exdate='EXDATE:'+new Date(args.excludeOccurrenceStart).toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z$/,'Z')
+  patch.recurrence=[...new Set([...before.recurrence,exdate])]
+ }
  if(args.start)patch.start=time(args.start)
  if(args.end)patch.end=time(args.end)
  const merged={...before,...patch}

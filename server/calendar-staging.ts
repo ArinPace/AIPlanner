@@ -1,3 +1,4 @@
+import {expandEvents} from '../src/lib/recurrence.js'
 import {withSourceHealth} from './source-health.js'
 import {resizeWidgetOccurrence,verifyFreeTimeRequest,type TaskFeedback} from '../src/lib/widgetTaskFeedback.js'
 import {widgetDraftProblems} from './widget-draft-review.js'
@@ -83,9 +84,20 @@ export function stageIssues(calendar:StoredState,google:Stage['payload']['google
    issues.push({id:'google-overlap:'+event.id+':'+remote.id,message:'An unlinked Google event overlaps this fixed base event: '+event.title+' / '+(remote.summary||remote.id)+'. Reconcile duplicates, details, or actual timing conflicts before publishing.'})
   }
  }
- // This check covers base times only; the agent must review expanded recurrence.
- const timed=fixed.filter(e=>!e.allDay&&!e.reminder).sort((a,b)=>Date.parse(a.start)-Date.parse(b.start))
- for(let i=0;i<timed.length;i++)for(let j=i+1;j<timed.length&&Date.parse(timed[j].start)<Date.parse(timed[i].end);j++)issues.push({id:'overlap:'+timed[i].id+':'+timed[j].id,message:'Fixed base event times overlap: '+timed[i].title+' / '+timed[j].title+'. Check actual occurrences and whether this is intentional.'})
+ // Expand the complete tree so folder recurrence and inherited exclusions apply.
+ const candidates=fixed.filter(e=>!e.allDay&&!e.reminder),ids=new Set(candidates.map(e=>e.id))
+ if(candidates.length){
+  const start=Date.parse(google.timeMin),end=Date.parse(google.timeMax)
+  const from=new Date(Number.isFinite(start)?start:Math.min(...candidates.map(e=>Date.parse(e.start))))
+  const until=new Date(Number.isFinite(end)?end:Math.max(...candidates.map(e=>Date.parse(e.end)))+1)
+  const timed=expandEvents(calendar.events,from,until).filter(o=>ids.has(o.event.id)).sort((a,b)=>a.start.getTime()-b.start.getTime()),seen=new Set<string>()
+  for(let i=0;i<timed.length;i++)for(let j=i+1;j<timed.length&&timed[j].start<timed[i].end;j++){
+   if(timed[i].event.id===timed[j].event.id)continue
+   const pair=[timed[i].event.id,timed[j].event.id].sort(),id='overlap:'+pair.join(':')
+   if(seen.has(id))continue;seen.add(id)
+   issues.push({id,message:'Fixed occurrences overlap at '+timed[j].start.toISOString()+': '+timed[i].event.title+' / '+timed[j].event.title+'. Verify whether this is intentional.'})
+  }
+ }
  return issues
 }
 export async function prepareCalendarStage(username:string,refresh=false){
@@ -98,7 +110,7 @@ export async function prepareCalendarStage(username:string,refresh=false){
  if(!storage(saved)?.length)throw new ApiError(409,'Staging changed while preparing. Read it again.')
  return stageSummary(stage)
 }
-function stageSummary(stage:Stage){return {id:stage.id,version:stage.version,status:stage.status,baseRevision:stage.base_revision,approvedRevision:stage.approved_revision,accountId:stage.account_id,issues:stage.payload.issues,resolutions:stage.payload.resolutions,calendarEvents:stage.payload.calendar.events.length,googleEvents:stage.payload.google.events.length+(stage.payload.google.sources||[]).reduce((n,s)=>n+s.events.length,0),sourceAccounts:(stage.payload.google.sources||[]).map(({accountId,identity,events})=>({accountId,identity,events:events.length,readOnly:true})),widgetFeedback:stage.payload.widgetFeedback||[],googleDecisions:stage.payload.googleDecisions||{},googleWindow:{timeMin:stage.payload.google.timeMin,timeMax:stage.payload.google.timeMax},coverage:'Google series/occurrences in the stated window plus every linked Google event; overlap hints cover base times only. Review recurrence and all sources explicitly.',download:'/api/calendar/staging.json'}}
+function stageSummary(stage:Stage){return {id:stage.id,version:stage.version,status:stage.status,baseRevision:stage.base_revision,approvedRevision:stage.approved_revision,accountId:stage.account_id,issues:stage.payload.issues,resolutions:stage.payload.resolutions,calendarEvents:stage.payload.calendar.events.length,googleEvents:stage.payload.google.events.length+(stage.payload.google.sources||[]).reduce((n,s)=>n+s.events.length,0),sourceAccounts:(stage.payload.google.sources||[]).map(({accountId,identity,events})=>({accountId,identity,events:events.length,readOnly:true})),widgetFeedback:stage.payload.widgetFeedback||[],googleDecisions:stage.payload.googleDecisions||{},googleWindow:{timeMin:stage.payload.google.timeMin,timeMax:stage.payload.google.timeMax},coverage:'Google series/occurrences in the stated window plus every linked Google event; internal overlap checks expand recurrence and folder exclusions within the stated window; Google overlap hints still require explicit recurrence review.',download:'/api/calendar/staging.json'}}
 export async function readCalendarStage(username:string,section='summary',offset=0,limit=100){
  const stage=await stagingRow(username);if(!stage)throw new ApiError(404,'Prepare a calendar draft first.')
  const items=section==='google'?[...stage.payload.google.events.map(e=>({...e,accountId:stage.account_id,exportTarget:true})),...(stage.payload.google.sources||[]).flatMap(source=>source.events.map(e=>({...e,accountId:source.accountId,accountIdentity:source.identity,exportTarget:false})))]:stage.payload.calendar.events

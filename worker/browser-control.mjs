@@ -111,7 +111,7 @@ export class InteractiveBrowser {
    })
    frames.push({frame:frameIndex,url:frame.url(),text:data.text.slice(offset,offset+16000),totalCharacters:data.text.length,hasMoreText:offset+16000<data.text.length,elements:nodes})
   }
-  return {tabId,url:page.url(),title:await page.title(),viewport:page.viewportSize()||await page.evaluate(()=>({width:innerWidth,height:innerHeight})),frames,elementOffset,totalElements:total,hasMoreElements:elementOffset+250<total}
+  return {tabId,url:page.url(),title:await page.title(),browserTimezone:await page.evaluate(()=>Intl.DateTimeFormat().resolvedOptions().timeZone),viewport:page.viewportSize()||await page.evaluate(()=>({width:innerWidth,height:innerHeight})),frames,elementOffset,totalElements:total,hasMoreElements:elementOffset+250<total}
  }
  snapshot(args){return this.use(args.tabId,(page,entry)=>this.snapshotPage(page,entry,args.tabId,args))}
  screenshot(args){return this.use(args.tabId,async(page)=>{

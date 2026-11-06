@@ -148,11 +148,11 @@ export async function removeGoogleAccount(username:string,id:string) {
   if(!response.ok && response.status!==400) throw new ApiError(502,'Google could not revoke this account. Try removing it again.')
   check(await db().from('planner_google_accounts').delete().eq('id',id).eq('username',username))
 }
-export async function readGoogleCalendar(username:string,timeMin?:string,timeMax?:string,accountId?:string){
+export async function readGoogleCalendar(username:string,timeMin?:string,timeMax?:string,accountId?:string,pageToken?:string){
  const status=await googleCalendarStatus(username)
- return withSourceHealth(username,'calendar',accountId||status.activeAccountId||'export',()=>readGoogleCalendarUnchecked(username,timeMin,timeMax,accountId))
+ return withSourceHealth(username,'calendar',accountId||status.activeAccountId||'export',()=>readGoogleCalendarUnchecked(username,timeMin,timeMax,accountId,pageToken))
 }
-async function readGoogleCalendarUnchecked(username: string, timeMin?: string, timeMax?: string, accountId?:string) {
+async function readGoogleCalendarUnchecked(username: string, timeMin?: string, timeMax?: string, accountId?:string,pageToken?:string) {
   const status = await googleCalendarStatus(username)
   const selected=status.accounts.find(a=>a.id===(accountId || status.activeAccountId))
   if (!selected?.connected) throw new ApiError(409,'Connect Google Calendar through Add sites first.')
@@ -163,10 +163,11 @@ async function readGoogleCalendarUnchecked(username: string, timeMin?: string, t
   const {tokens,identity}=await googleCalendarSession(username,selected.id)
   const url = new URL('https://www.googleapis.com/calendar/v3/calendars/primary/events')
   url.search = new URLSearchParams({singleEvents:'true',orderBy:'startTime',maxResults:'250',timeMin:new Date(start).toISOString(),timeMax:new Date(end).toISOString()}).toString()
+  if(pageToken){if(pageToken.length>4096)throw new ApiError(400,'Invalid calendar page token.');url.searchParams.set('pageToken',pageToken)}
   const response = await fetch(url,{headers:{Authorization:`Bearer ${tokens.access_token}`},signal:AbortSignal.timeout(15000)})
   if (!response.ok) throw new ApiError(response.status===401?401:502,'Google Calendar could not be read. Reconnect the Google account and try again.')
   const data = await response.json() as Record<string,any>
-  return {identity,accountId:selected.id,timeMin:start,timeMax:end,timeZone:data.timeZone,events:(data.items || []).map((e:any)=>({id:e.id,title:e.summary,description:e.description,start:e.start,end:e.end,location:e.location,url:e.htmlLink,status:e.status,etag:e.etag,recurringEventId:e.recurringEventId,originalStartTime:e.originalStartTime})),hasMore:Boolean(data.nextPageToken)}
+  return {identity,accountId:selected.id,timeMin:start,timeMax:end,timeZone:data.timeZone,events:(data.items || []).map((e:any)=>({id:e.id,title:e.summary,description:e.description,start:e.start,end:e.end,location:e.location,url:e.htmlLink,status:e.status,etag:e.etag,recurringEventId:e.recurringEventId,originalStartTime:e.originalStartTime})),hasMore:Boolean(data.nextPageToken),nextPageToken:data.nextPageToken||null}
 }
 export async function googleCalendarSession(username:string,accountId?:string,write=false){
  const status=await googleCalendarStatus(username),selected=status.accounts.find(a=>a.id===(accountId||status.activeAccountId))

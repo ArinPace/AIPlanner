@@ -1,3 +1,4 @@
+import {applyBrowserTimezone} from './browser-timezone.mjs'
 import path from 'node:path'
 import {registerBrowserControl} from './browser-control.mjs'
 import { messageImages } from './message-images.mjs'
@@ -28,7 +29,8 @@ async function connectBrowser(destination,profiles) {
   const endpoint=browserEndpoint(destination,profiles)
   if(new URL(endpoint).port==='9223')await googleBrowser(dataDir)
   else await browser(dataDir)
-  return chromium.connectOverCDP(endpoint)
+  const connection=await chromium.connectOverCDP(endpoint)
+  try{await applyBrowserTimezone(connection.contexts()[0]);return connection}catch(error){await connection.close();throw error}
 }
 
 const enabled = JSON.parse(process.env.PLANNER_ENABLED_SOURCES || '[]')

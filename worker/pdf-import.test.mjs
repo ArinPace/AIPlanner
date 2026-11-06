@@ -41,3 +41,9 @@ test('Google Docs exports PDF, checks each redirect and only reports verified re
  assert.match(urls[0],/export\?format=pdf/);assert.deepEqual(result.bytes,pdf)
  await assert.rejects(()=>importPdf({request:{get:async()=>response()}},{url:'https://brightspace.nyu.edu/file.pdf',name:'x.pdf',folderId:null},{enabled,sources,workerCall:async action=>action==='start'?{id:'doc',uploadUrl:'https://storage.test/upload'}:{documents:[]},upload:async()=>({ok:true})}),/not registered/)
 })
+
+test('PDF exports preserve an explicitly selected Google account in /u/ paths',async()=>{
+ const urls=[]
+ await downloadPdf({request:{get:async url=>{urls.push(url);return response()}}},'https://docs.google.com/document/u/1/d/doc123/edit',{enabled,sources})
+ assert.equal(new URL(urls[0]).searchParams.get('authuser'),'1')
+})

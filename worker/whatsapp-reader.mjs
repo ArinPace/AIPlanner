@@ -1,8 +1,15 @@
+export const normalizeChatName=value=>value.normalize('NFC').replace(/\s+/g,' ').trim().toLowerCase()
+export function resolveChatName(names,requested){
+ const normalized=normalizeChatName(requested),matches=names.map((name,index)=>({name,index})).filter(row=>normalizeChatName(row.name)===normalized)
+ if(matches.length!==1)throw new Error('No unique exact WhatsApp chat was found. Supply its full displayed name. No messages were read.')
+ return matches[0]
+}
+
 import { whatsappSignedInPage, whatsappSearchSelector } from './whatsapp-status.mjs'
 
 export async function waitForWhatsAppChat(page,chatName,timeout=15000){
   await page.waitForFunction(name=>{
-    const normalize=value=>value.normalize('NFC').replace(/\s+/g,' ').trim()
+    const normalize=value=>value.normalize('NFC').replace(/\s+/g,' ').trim().toLowerCase()
     const visible=nodes=>[...nodes].filter(n=>n.getClientRects().length && getComputedStyle(n).visibility!=='hidden')
     const current=visible(document.querySelectorAll('#main header [data-testid="conversation-info-header-chat-title"]'))
     const fallback=current.length?current:visible(document.querySelectorAll('#main header [data-testid="conversation-info-header-chat-title-name"],#main header span[title]'))
@@ -25,11 +32,14 @@ export async function readWhatsApp(context, { chatName, timeout = 45000, inspect
   const search = page.locator(whatsappSearchSelector).filter({ visible: true }).first()
   await search.fill(chatName)
   try {
-    const match = page.locator('#pane-side [title], [data-testid="chat-list"] [title]').filter({ visible: true }).filter({ hasText: new RegExp('^' + chatName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$') })
-    await match.first().waitFor({ timeout: Math.min(timeout, 15000) })
-    const exact = await match.evaluateAll((nodes, name) => nodes.filter(n => n.getAttribute('title') === name).length, chatName)
-    if (exact !== 1) throw new Error('No unique exact WhatsApp chat was found. Supply its full displayed name.')
-    await match.first().click()
+    await page.waitForFunction(name=>{
+      const normalize=value=>value.normalize('NFC').replace(/\s+/g,' ').trim().toLowerCase()
+      return [...document.querySelectorAll('#pane-side [title], [data-testid="chat-list"] [title]')].some(node=>node.getClientRects().length&&getComputedStyle(node).visibility!=='hidden'&&normalize(node.getAttribute('title')||'')===normalize(name))
+    },chatName,{timeout:Math.min(timeout,15000)}).catch(()=>{throw new Error('No unique exact WhatsApp chat was found. Supply its full displayed name. No messages were read.')})
+    const candidates=page.locator('#pane-side [title], [data-testid="chat-list"] [title]').filter({visible:true})
+    const names=await candidates.evaluateAll(nodes=>nodes.map(node=>node.getAttribute('title')||''))
+    const resolved=resolveChatName(names,chatName)
+    await candidates.nth(resolved.index).click()
     await page.locator('#main header').waitFor({ timeout: 15000 })
     await waitForWhatsAppChat(page,chatName,Math.min(timeout,15000))
     await page.locator('#main [data-pre-plain-text]').first().waitFor({ timeout: 15000 }).catch(() => {})

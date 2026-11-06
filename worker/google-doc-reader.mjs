@@ -7,7 +7,9 @@ export async function readGoogleDocument(context,href) {
   exportUrl.searchParams.set('format',sheet?'csv':'txt')
   const gid=source.searchParams.get('gid') || new URLSearchParams(source.hash.slice(1)).get('gid') || null
   if(sheet && gid!==null){if(!/^\d+$/.test(gid))return null;exportUrl.searchParams.set('gid',gid)}
+  const accountIndex=source.pathname.match(/^\/(?:document|spreadsheets)\/u\/(\d+)\/d\//)?.[1]
   if(source.searchParams.has('authuser'))exportUrl.searchParams.set('authuser',source.searchParams.get('authuser'))
+  else if(accountIndex!==undefined)exportUrl.searchParams.set('authuser',accountIndex)
   let url=exportUrl.href
   for(let attempt=0;attempt<4;attempt++){
     const u=new URL(url)

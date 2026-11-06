@@ -1,3 +1,4 @@
+import {applyBrowserTimezone} from './browser-timezone.mjs'
 import { chromium } from 'playwright'
 import { spawn } from 'node:child_process'
 import { mkdir } from 'node:fs/promises'
@@ -8,7 +9,7 @@ export { googleSources, googleCdp } from './browser-routing.mjs'
 let connection, starting, processHandle
 
 export async function googleBrowser(dataDir) {
-  if(connection?.isConnected())return connection.contexts()[0]
+  if(connection?.isConnected())return applyBrowserTimezone(connection.contexts()[0])
   if(starting)return starting
   starting=(async()=>{
     const profile=path.join(dataDir,'google-browser')
@@ -34,7 +35,7 @@ export async function googleBrowser(dataDir) {
       if(!ready){processHandle.kill('SIGTERM');throw new Error('The standard Google Chrome browser could not start. Check the private computer browser installation.')}
     }
     connection=await chromium.connectOverCDP(googleCdp)
-    return connection.contexts()[0]
+    return applyBrowserTimezone(connection.contexts()[0])
   })()
   try{return await starting}finally{starting=null}
 }

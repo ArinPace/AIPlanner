@@ -1,10 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { chromium } from 'playwright-core'
-import { readWhatsApp, waitForWhatsAppChat } from './whatsapp-reader.mjs'
+import { readWhatsApp, waitForWhatsAppChat, resolveChatName } from './whatsapp-reader.mjs'
 
 test('WhatsApp reuses its saved tab, waits for controls, and reads only the selected chat', async () => {
-  const browser = await chromium.launch({ channel: 'msedge', headless: true })
+  const browser = await chromium.launch({ ...(process.env.PLANNER_TEST_CHROME?{executablePath:process.env.PLANNER_TEST_CHROME}:{channel:'msedge'}), headless: true })
   try {
     const context = await browser.newContext()
     await context.route('https://web.whatsapp.com/**', route => route.fulfill({ contentType: 'text/html', body: '<body></body>' }))
@@ -14,7 +14,7 @@ test('WhatsApp reuses its saved tab, waits for controls, and reads only the sele
     assert.equal(status.connected, true)
     assert.ok(!JSON.stringify(status).includes('Private preview'))
     assert.equal(context.pages().length, 1)
-    const result = await readWhatsApp(context, { chatName: 'Course group', timeout: 1000 })
+    const result = await readWhatsApp(context, { chatName: 'course GROUP', timeout: 1000 })
     assert.match(result.text, /Selected homework update/)
     assert.ok(!result.text.includes('Private preview'))
     assert.ok(!result.text.includes('Do not send'))
@@ -31,7 +31,7 @@ test('WhatsApp reuses its saved tab, waits for controls, and reads only the sele
 })
 
 test('WhatsApp waits for the real header title and rejects stale, ambiguous or unrelated labels',async()=>{
- const browser=await chromium.launch({channel:'msedge',headless:true})
+ const browser=await chromium.launch({...(process.env.PLANNER_TEST_CHROME?{executablePath:process.env.PLANNER_TEST_CHROME}:{channel:'msedge'}),headless:true})
  try{
   const page=await browser.newPage()
   await page.setContent('<div id="main"><header><div title="Profile details"></div><div data-testid="conversation-info-header-chat-title-name"><span data-testid="conversation-info-header-chat-title">Old chat</span></div></header></div>')
@@ -44,4 +44,11 @@ test('WhatsApp waits for the real header title and rejects stale, ambiguous or u
   await page.setContent('<div id="main"><header><span data-testid="conversation-info-header-chat-title" hidden>Other</span><span data-testid="conversation-info-header-chat-title">Arnav</span></header></div>')
   await waitForWhatsAppChat(page,'Arnav',500)
  }finally{await browser.close()}
+})
+
+test('normalized WhatsApp exact-name lookup rejects ambiguous and partial names',()=>{
+ assert.equal(resolveChatName(['Nitin/Papa','Other'],'nitin/papa').name,'Nitin/Papa')
+ assert.throws(()=>resolveChatName(['Arnav','ARNAV'],'arnav'),/unique/)
+ assert.throws(()=>resolveChatName(['Nitin/Papa'],'Papa'),/unique/)
+ assert.equal(resolveChatName(['  Course  Group '],'course group').index,0)
 })
