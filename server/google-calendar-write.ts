@@ -40,7 +40,7 @@ async function saveGoogleEventUnchecked(username:string,args:Patch){
  const patch:Record<string,any>={}
  for(const [input,output] of [['title','summary'],['description','description'],['location','location']] as const)if(args[input]!==undefined)patch[output]=args[input]
  if(args.excludeOccurrenceStart){
-  if(!before||!Array.isArray(before.recurrence)||!before.recurrence.some((line:string)=>line.startsWith('RRULE:'))||args.scope!=='series')throw new ApiError(400,'Exclude an occurrence only from an existing recurring series with scope series.')
+  if(!before?.start?.dateTime||!Array.isArray(before.recurrence)||!before.recurrence.some((line:string)=>line.startsWith('RRULE:'))||args.scope!=='series')throw new ApiError(400,'Exclude an occurrence only from an existing timed recurring series with scope series.')
   const exdate='EXDATE:'+new Date(args.excludeOccurrenceStart).toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z$/,'Z')
   patch.recurrence=[...new Set([...before.recurrence,exdate])]
  }

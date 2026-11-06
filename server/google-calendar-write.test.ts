@@ -57,5 +57,7 @@ test('Google edits require owner consent/current etag, save a backup first, pres
   const excluded=await saveGoogleEvent('arin',{eventId:'existing',etag:'v1',scope:'series',excludeOccurrenceStart:'2026-11-12T14:00:00-05:00'})
   assert.deepEqual(excluded.event.recurrence,['RRULE:FREQ=WEEKLY','EXDATE:20261112T190000Z'])
   assert.equal(excluded.event.start.dateTime,event.start.dateTime)
+  event.etag='v1';event.start={date:'2026-11-12'};event.end={date:'2026-11-13'}
+  await assert.rejects(()=>saveGoogleEvent('arin',{eventId:'existing',etag:'v1',scope:'series',excludeOccurrenceStart:'2026-11-12T14:00:00-05:00'}),/timed recurring series/)
  }finally{globalThis.fetch=originalFetch;for(const key of keys){if(saved[key]===undefined)delete process.env[key];else process.env[key]=saved[key]}}
 })
