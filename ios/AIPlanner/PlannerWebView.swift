@@ -733,7 +733,6 @@ return {url:location.origin+location.pathname,name:projectName,created};
 """# }
     // END_CHAT_PROJECT_SCRIPT
     private func ensureRelayProject() async throws -> URL? {
-        guard account == "arin" else { return nil }
         let current = try await snapshot()
         guard current["guest"] as? Bool != true else { return nil }
         let key = "chatgpt-project:" + account + ":Test"
@@ -983,6 +982,9 @@ await pause(500);return {applied:true};
         let cold = loadedChat != chatId && stored == nil
         let text = cold && !context.isEmpty ? "Conversation context for this Planner chat (earlier files may need restoring):\n" + String(context.suffix(24000)) + "\n\nCurrent user message:\n" + text : text
         traceRelay("project-start"); let project = try await ensureRelayProject(); traceRelay("project-ready")
+        if let project, let stored, !Self.belongsToProject(stored, project: project) {
+            throw NativeError("This linked ChatGPT conversation is outside Test. Move it into the Test project in ChatGPT before continuing. No message was sent and no replacement chat was created.")
+        }
         let target = stored.flatMap { $0.scheme == "https" && $0.host == "chatgpt.com" && $0.path.contains("/c/") ? $0 : nil } ?? project ?? URL(string: "https://chatgpt.com/")!
         if stored == nil && project != nil && browser.url?.absoluteString != target.absoluteString { documentCommitted = false; browser.load(URLRequest(url: target, timeoutInterval: 30)) }
         else if stored != nil && browser.url?.absoluteString != target.absoluteString { documentCommitted = false; browser.load(URLRequest(url: target, timeoutInterval: 30)) }
@@ -1066,6 +1068,8 @@ await pause(500);return {applied:true};
         #endif
         traceRelay("submit-start"); browser.becomeFirstResponder()
         let result = try await browser.callAsyncJavaScript("""
+        const inProject=()=>{const id=path=>{const parts=path.split('/');return parts[1]==='g'?(parts[2]?.match(/^g-p-[0-9a-f]{32}(?=-|$)/)?.[0]||parts[2]):null};const parts=location.pathname.split('/');return id(location.pathname)===id(projectPath)&&((parts.length===4&&parts[3]==='project')||(parts.length===5&&parts[3]==='c'&&/^[A-Za-z0-9_-]+$/.test(parts[4])))};
+        if(projectPath && !inProject())throw Error('ChatGPT left the Test project. No message was sent.');
         const box=window.__plannerComposer();
         if(!box)throw Error('ChatGPT composer is unavailable.');
         if(clearTestDraft&&text==='Reply with exactly: Planner relay works.'&&window.__plannerComposerText(box).trim()===text){
@@ -1087,16 +1091,30 @@ await pause(500);return {applied:true};
           await new Promise(resolve=>setTimeout(resolve,100));
         }
         if(!send)throw Error('ChatGPT Send button is unavailable. Draft retained in the session.');
+        if(projectPath && !inProject())throw Error('ChatGPT left the Test project. Draft retained; no message was sent.');
         send.click();await new Promise(resolve=>setTimeout(resolve,500));
         const working=[...document.querySelectorAll('button')].some(n=>n.getClientRects().length&&/^(Stop|Stop generating|Stop streaming|Pause task|Stop task)$/i.test(n.getAttribute('aria-label')||n.innerText||''));
         if(window.__plannerComposerText(box).trim()===text.trim()&&!working)throw Error('ChatGPT did not confirm submission. The draft remains in its session; inspect it before retrying.');
         return true;
-        """, arguments: ["text": text, "clearTestDraft": clearTestDraft], in: nil, contentWorld: .page)
+        """, arguments: ["text": text, "clearTestDraft": clearTestDraft, "projectPath": project?.deletingLastPathComponent().path ?? ""], in: nil, contentWorld: .page)
         guard result as? Bool == true else { throw NativeError("Message submission was not confirmed.") }
         preparedFileFingerprint = nil
         traceRelay("submit-confirmed"); submittedDraftFingerprint=SHA256.hash(data:Data(text.trimmingCharacters(in:.whitespacesAndNewlines).utf8)).map{String(format:"%02x",$0)}.joined()
         _ = try? await browser.evaluateJavaScript("window.__plannerHumanDraft=false")
         pendingChat = chatId; pendingURL = target.path.contains("/c/") ? target.path : nil; baseline = state["count"] as? Int ?? 0; baselineReplyKey = state["replyKey"] as? String ?? ""; baselineReplyText = state["text"] as? String ?? ""; sawRunning = false; lastText = ""; changedAt = Date(); startedAt = Date()
+    }
+    // ChatGPT adds a human-readable slug after the stable project identifier.
+    // Compare the complete stable ID, never a loose pathname prefix.
+    private static func belongsToProject(_ conversation: URL, project: URL) -> Bool {
+        func identifier(_ url: URL) -> String? {
+            let parts = url.path.split(separator: "/")
+            guard parts.count >= 2, parts[0] == "g" else { return nil }
+            let value = String(parts[1])
+            if let range = value.range(of: "^g-p-[0-9a-f]{32}(?=-|$)", options: .regularExpression) { return String(value[range]) }
+            return value
+        }
+        guard conversation.host == "chatgpt.com", project.host == "chatgpt.com", let expected = identifier(project) else { return false }
+        return identifier(conversation) == expected
     }
     private func canonicalConversation(_ value: String?) -> URL? {
         guard let value, let url = URL(string: value), url.scheme == "https", url.host == "chatgpt.com", url.user == nil,
@@ -1117,6 +1135,9 @@ await pause(500);return {applied:true};
         guard let chatId = pendingChat else { state["phase"] = "idle"; return state }
         state["phase"] = "working"
         if let parsed = canonicalConversation(state["url"] as? String) {
+            if let value = UserDefaults.standard.string(forKey: "chatgpt-project:" + account + ":Test"), let project = URL(string: value), !Self.belongsToProject(parsed, project: project) {
+                state["phase"] = "attention"; state["text"] = ""; state["message"] = "ChatGPT left the Test project. Move this conversation back into Test before continuing."; return state
+            }
             if let expected = pendingURL, URL(fileURLWithPath: expected).lastPathComponent != parsed.lastPathComponent { state["phase"] = "attention"; state["text"] = ""; state["message"] = "ChatGPT changed conversations. Open the session to check before retrying."; return state }
             pendingURL = parsed.path
         }
@@ -1130,7 +1151,7 @@ await pause(500);return {applied:true};
         if text != lastText { lastText = text; changedAt = Date() }
         if (state["guest"] as? Bool == true || canonicalConversation(state["url"] as? String) != nil), newReply, (!text.isEmpty || !(state["files"] as? [[String: Any]] ?? []).isEmpty), state["running"] as? Bool != true, (sawRunning || state["final"] as? Bool == true), Date().timeIntervalSince(changedAt) >= 3 {
             state["phase"] = "completed"; pendingChat = nil
-            if account == "arin", let fingerprint=submittedDraftFingerprint, let value=UserDefaults.standard.string(forKey:"chatgpt-project:"+account+":Test"), let projectURL=URL(string:value), let current=canonicalConversation(state["url"] as? String), current.path.hasPrefix(projectURL.deletingLastPathComponent().path) {
+            if let fingerprint=submittedDraftFingerprint, let value=UserDefaults.standard.string(forKey:"chatgpt-project:"+account+":Test"), let projectURL=URL(string:value), let current=canonicalConversation(state["url"] as? String), Self.belongsToProject(current, project: projectURL) {
                 let key="chatgpt-confirmed-project-drafts:"+account+":Test"
                 var values=UserDefaults.standard.stringArray(forKey:key) ?? [];values.removeAll{$0==fingerprint};values.append(fingerprint);UserDefaults.standard.set(Array(values.suffix(20)),forKey:key)
             }
