@@ -1,3 +1,4 @@
+import {readDownloadedDocx} from './downloaded-docx.mjs'
 import {applyBrowserTimezone} from './browser-timezone.mjs'
 import path from 'node:path'
 import {registerBrowserControl} from './browser-control.mjs'
@@ -172,6 +173,10 @@ server.registerTool('browser_import_pdf',{
  }catch(error){return {isError:true,content:[{type:'text',text:error.message||'PDF import failed.'}]}}
  finally{if(connection)await connection.close()}
 }))
+if(process.env.PLANNER_BROWSER_CONTROL==='1')server.registerTool('browser_read_downloaded_docx',{
+ description:'Read the actual Word DOCX saved by browser_action waitForDownload, including document text, comments and footnotes. Use this when an original syllabus or marked essay is Word rather than PDF; never manufacture a source PDF. Only files in browser-downloads are readable. Paginate until hasMore=false; text extraction is not visual/layout review.',
+ inputSchema:{localFile:z.string().min(1).max(500),offset:z.number().int().min(0).optional(),limit:z.number().int().min(1).max(30000).optional()},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false},
+},async args=>queued(async()=>{try{return {content:[{type:'text',text:JSON.stringify(await readDownloadedDocx(path.join(process.env.PLANNER_DATA_DIR||'/var/lib/planner','workspace'),args))}]}}catch(error){return {isError:true,content:[{type:'text',text:error.message||'DOCX read failed.'}]}}}))
 if(process.env.PLANNER_BROWSER_CONTROL==='1')registerBrowserControl(server,{queued,enabled,sources,connect:connectBrowser,profiles:async()=>(await siteLaunches(process.env.PLANNER_DATA_DIR||'/var/lib/planner')).browserProfiles,resolveUrl:async url=>selectedBrowserDestination(url,await siteLaunches(process.env.PLANNER_DATA_DIR||'/var/lib/planner')),workspace:path.join(process.env.PLANNER_DATA_DIR||'/var/lib/planner','workspace')})
 
 await server.connect(new StdioServerTransport())
