@@ -50,6 +50,7 @@ Live settings checked November 8:
 
 - **arin:** Agent reviews enabled at **07:00 and 17:00 America/New_York**; Chat reviews disabled. Existing times and enabled states were preserved.
 - **arin2:** Agent reviews disabled; Chat reviews disabled. The sign-in/readiness hold remains. Its separate copied personal/scheduled settings are not arin's live editable rows.
+- The separate legacy Browser Use scheduled-collector flag is **off** for arin; it is not a second active daily collector.
 - Enabled website choices, successful sign-in, OAuth consent, scheduled-task enablement and actual source coverage are separate states.
 
 ## User-triggered and conversation prompts

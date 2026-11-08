@@ -12,10 +12,11 @@ export class ResourceCache<T>{
  private async prune(){
   let bytes=[...this.entries.values()].reduce((n,e)=>n+(e.resource?.bytes||0),0)
   for(const [key,entry] of [...this.entries].sort((a,b)=>a[1].usedAt-b[1].usedAt)){
+   if(this.entries.get(key)!==entry)continue
    if(entry.users||!entry.resource)continue
    if(this.now()-entry.usedAt<this.ttl&&bytes<=this.maxBytes&&this.entries.size<=this.maxEntries)continue
    this.entries.delete(key);bytes-=entry.resource.bytes
-   await Promise.resolve(entry.resource.dispose()).catch(()=>{})
+   try{await entry.resource.dispose()}catch{/* A failed cleanup must not break the next authorized read. */}
   }
  }
  async use<R>(key:string,load:()=>Promise<Resource<T>>,read:(value:T)=>Promise<R>):Promise<R>{
