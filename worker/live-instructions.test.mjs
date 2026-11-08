@@ -33,3 +33,8 @@ test('Tutor grade trackers stay compact and syllabuses use original Brightspace 
  const text=effectiveInstructions('base',{content:''})
  for(const term of ['Component | Weight | Current score','Current percentage','Is an A possible?','Required percentage on remaining work to earn an A','No essays','original official PDF','Brightspace','never manufacture a PDF from notes'])assert(text.includes(term),term)
 })
+
+test('prefilled sign-in controls are used on all enabled websites without exposing secrets or broadening consent',()=>{
+ const text=effectiveInstructions('base',{content:''},{browserControl:true})
+ for(const term of ['every enabled or user-requested website','already autofilled','click its visible Sign In','Do not read, copy, log','OAuth permissions are separate','read-only school calendar'])assert(text.includes(term),term)
+})

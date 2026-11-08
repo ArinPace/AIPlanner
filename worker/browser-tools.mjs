@@ -2,7 +2,7 @@ import {applyBrowserTimezone} from './browser-timezone.mjs'
 import path from 'node:path'
 import {registerBrowserControl} from './browser-control.mjs'
 import { messageImages } from './message-images.mjs'
-import {importPdf,pdfWorkerCall} from './pdf-import.mjs'
+import {importPdf,importDownloadedPdf,pdfWorkerCall} from './pdf-import.mjs'
 import { browserQueue } from './browser-queue.mjs'
 const queued=browserQueue()
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
@@ -156,16 +156,18 @@ server.registerTool('browser_view_image', {
   finally { if (connection) await connection.close() }
 }))
 server.registerTool('browser_import_pdf',{
- description:'Download actual PDF bytes using the signed-in browser for an enabled source and save them as a PDF in internal Planner Files. Accepts a direct PDF URL, Brightspace topic URL or Google Docs/Slides/Sheets/Drive file URL. This writes only to the user Files, not the source website. Read the Files tree first; reuse the correct subject/assessment subfolder under top-level Subjects for course materials; use Agent for other proactive imports and avoid duplicates. Requires an accessible original download, not a partial preview. After saving read all required pages via planner_read_file pagination. No cookies, tokens or PDF bytes are returned to the model.',
- inputSchema:{url:z.string().url().max(4000),folderId:z.string().min(1).max(200).nullable(),name:z.string().trim().min(5).max(200).regex(/\.pdf$/i)},annotations:{readOnlyHint:false,destructiveHint:false,openWorldHint:true},
+ description:'Download actual PDF bytes using the signed-in browser for an enabled source and save them as a PDF in internal Planner Files. Accepts an original PDF up to 50 MB: direct PDF URL, Brightspace topic URL, Google export, or localFile returned by browser_action waitForDownload. For a linked external original (e.g. a provider storage URL or course reading), include sourcePageUrl of the open enabled page exposing that exact link. External redirects are still checked. This writes only to the user Files, not the source website. Read the Files tree first; reuse the correct subject/assessment subfolder under top-level Subjects for course materials; use Agent for other proactive imports and avoid duplicates. Requires an accessible original download, not a partial preview. After saving read all required pages via planner_read_file pagination. No cookies, tokens or PDF bytes are returned to the model.',
+ inputSchema:{url:z.string().url().max(4000).optional(),sourcePageUrl:z.string().url().max(4000).optional(),localFile:z.string().min(1).max(500).optional(),folderId:z.string().min(1).max(200).nullable(),name:z.string().trim().min(5).max(200).regex(/\.pdf$/i)},annotations:{readOnlyHint:false,destructiveHint:false,openWorldHint:true},
 },async args=>queued(async()=>{
  let connection
  try{
   const saved=await siteLaunches(process.env.PLANNER_DATA_DIR||'/var/lib/planner')
-  const destination=readableUrl(args.url,enabled,sources)
-  connection=await connectBrowser(destination,saved.browserProfiles)
+  if(Boolean(args.url)===Boolean(args.localFile))throw Error('Choose either url or localFile from a browser download, not both.')
+  if(args.localFile&&process.env.PLANNER_BROWSER_CONTROL!=='1')throw Error('Local browser downloads require interactive browser access.')
+  const destination=args.localFile?null:readableUrl(args.sourcePageUrl||args.url,enabled,sources)
+  if(destination)connection=await connectBrowser(destination,saved.browserProfiles)
   const workerCall=(action,input)=>pdfWorkerCall(process.env.PLANNER_ORIGIN,{token:process.env.PLANNER_WORKER_TOKEN,jobId:process.env.PLANNER_JOB_ID,lease:process.env.PLANNER_JOB_LEASE},action,input)
-  const result=await importPdf(connection.contexts()[0],args,{enabled,sources,workerCall})
+  const result=args.localFile?await importDownloadedPdf(path.join(process.env.PLANNER_DATA_DIR||'/var/lib/planner','workspace'),args,{workerCall}):await importPdf(connection.contexts()[0],args,{enabled,sources,workerCall})
   return {content:[{type:'text',text:JSON.stringify(result)}]}
  }catch(error){return {isError:true,content:[{type:'text',text:error.message||'PDF import failed.'}]}}
  finally{if(connection)await connection.close()}

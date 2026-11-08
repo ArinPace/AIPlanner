@@ -32,7 +32,7 @@ async function googleSnapshot(username:string,window?:{timeMin:string;timeMax:st
  return withSourceHealth(username,'calendar','staging',()=>googleSnapshotUnchecked(username,window))
 }
 async function googleSnapshotUnchecked(username:string,window?:{timeMin:string;timeMax:string}){
- const session=await googleCalendarSession(username,undefined,true)
+ const session=await googleCalendarSession(username)
  const mappings=storage(await db().from('planner_google_fixed_events').select('*').eq('username',username).eq('account_id',session.accountId))
  const local=await calendarRow(username)
  const fixed=local.state.events.filter(e=>e.eventKind!=='folder'&&eventType(e,local.state.tags)==='fixed')
@@ -174,6 +174,8 @@ export async function publishCalendarStage(username:string,args:{id:string;versi
  if(current.revision!==stage.base_revision)throw new ApiError(409,'Calendar changed. Prepare a fresh draft before publishing.')
  const problems=widgetDraftProblems(current.state,stage.payload.calendar,stage.payload.widgetFeedback||[])
  if(problems.length)throw new ApiError(409,'The revised plan is not ready. Fix draft conflicts before publishing: '+problems.join('; '))
+ // A read-only grant can prepare/review a draft; publishing still requires export consent.
+ await googleCalendarSession(username,stage.account_id,true)
  const fresh=await googleSnapshot(username,stage.payload.google)
  if(fresh.accountId!==stage.account_id||reviewSnapshotKey(fresh.google)!==reviewSnapshotKey(stage.payload.google)){
   storage(await db().from('planner_calendar_staging').update({status:'stale'}).eq('username',username).eq('id',stage.id).eq('version',stage.version))

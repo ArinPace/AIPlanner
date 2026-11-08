@@ -1,3 +1,4 @@
+import {PDF_MAX_BYTES} from '../src/lib/files.js'
 import {filesManifest} from './files-transfer.js'
 import {applyFilesPatch,type FilesPatch} from '../src/lib/filesTransfer.js'
 import {filesWorkspaceLimit,type FilesState} from '../src/lib/files.js'
@@ -56,13 +57,13 @@ function bearerToken(req: IncomingMessage): string | null {
 }
 
 async function readUpload(req: IncomingMessage): Promise<Buffer> {
-  const limit = 25 * 1024 * 1024
+  const limit = PDF_MAX_BYTES
   const chunks: Buffer[] = []
   let size = 0
   for await (const chunk of req) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
     size += buffer.length
-    if (size > limit) throw new Error('PDFs must be 25 MB or smaller.')
+    if (size > limit) throw new Error('PDFs must be 50 MB or smaller.')
     chunks.push(buffer)
   }
   return Buffer.concat(chunks)

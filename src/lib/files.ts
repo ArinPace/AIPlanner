@@ -1,3 +1,4 @@
+export const PDF_MAX_BYTES = 50 * 1024 * 1024
 // Leave headroom below the hosting function payload ceiling for JSON wrappers.
 export const FILES_WORKSPACE_MAX_BYTES = 4 * 1024 * 1024
 export const FILES_ACCOUNT_MAX_BYTES = 25 * 1024 * 1024
@@ -141,7 +142,7 @@ export function validateFilesState(value: unknown, maxBytes = FILES_ACCOUNT_MAX_
       try { url = new URL(document.url ?? '') } catch { throw new Error('Enter a valid web link starting with https:// or http://.') }
       if (!['https:', 'http:'].includes(url.protocol) || document.url!.length > 4000 || url.username || url.password) throw new Error('Use a web link starting with https:// or http://, without embedded credentials.')
     } else if (document.kind === 'pdf') {
-      if (!/^[0-9a-f-]{36}$/.test(document.id) || !Number.isInteger(document.size) || document.size! < 1 || document.size! > 25 * 1024 * 1024) throw new Error('Invalid PDF document.')
+      if (!/^[0-9a-f-]{36}$/.test(document.id) || !Number.isInteger(document.size) || document.size! < 1 || document.size! > PDF_MAX_BYTES) throw new Error('Invalid PDF document.')
     } else throw new Error('Unsupported document type.')
   }
 }

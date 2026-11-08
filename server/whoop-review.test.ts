@@ -12,6 +12,13 @@ test('WHOOP reports require fresh provenance and never equate missing sleep with
  assert(!whoopReportSchema.safeParse({...fresh,sleepEnd:new Date(+now-72*3600000).toISOString()}).success)
  assert(!whoopReportSchema.safeParse({...fresh,sourceUrl:'https://app.whoop.com.evil.test'}).success)
  assert(!whoopReportSchema.safeParse({...fresh,actualSleepMinutes:600}).success)
+ const date=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(now)
+ const metrics={...base,status:'fresh',sleepDate:date,actualSleepMinutes:462,sourceUrl:'https://app.whoop.com/athlete/123/sleep/1d/'+date+'/record',timezone:'America/New_York'}
+ assert(whoopReportSchema.safeParse(metrics).success,'Fresh dated metrics remain reportable without invented endpoints')
+ assert(!whoopReportSchema.safeParse({...metrics,reconciled:true}).success)
+ assert(!whoopReportSchema.safeParse({...metrics,sleepDate:'2020-01-01'}).success)
+ assert(!whoopReportSchema.safeParse({...metrics,actualSleepMinutes:undefined}).success)
+ assert(!whoopReportSchema.safeParse({...metrics,sourceUrl:'https://app.whoop.com/athlete/123/1d/today'}).success)
  assert.match(scheduledReviewMessage({timezone:'America/New_York',times:['07:00']}),/planner_whoop_review_report/)
  assert.match(WHOOP_RETRY_INSTRUCTIONS,/Missing, stale or processing.*pending, never proof/)
  assert(shouldRunVm({scheduled:true,whoopAt:now.toISOString(),jobs:[]},now))

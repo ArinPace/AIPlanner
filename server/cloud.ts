@@ -1,3 +1,4 @@
+import {PDF_MAX_BYTES} from '../src/lib/files.js'
 import {cloudFilesManifest,readFilesTransferItem,singleFilePatch,commitFileItem,commitWorkspaceDelta,workspaceDelta} from './files-transfer.js'
 import {applyFilesPatch,type FilesPatch} from '../src/lib/filesTransfer.js'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
@@ -120,7 +121,7 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
       result(await db().from('planner_accounts').select('username', { head: true, count: 'exact' }).limit(1))
       const bucket = dataResult(await db().storage.getBucket(BUCKET))
       if (bucket.public) throw new ApiError(503, 'PDF storage must be private.')
-      return json({ ok: true, database: 'supabase', pdfStorage: 'private', maxPdfBytes: 25 * 1024 * 1024 })
+      return json({ ok: true, database: 'supabase', pdfStorage: 'private', maxPdfBytes: PDF_MAX_BYTES })
     }
     if ((path === '/api/login' || path === '/api/register') && method === 'POST') {
       const input = await body(request)

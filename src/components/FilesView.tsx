@@ -1,3 +1,4 @@
+import {PDF_MAX_BYTES} from '../lib/files'
 import { PlannerDate as Date } from '../lib/timezone.js'
 import { lazy, Suspense, useEffect, useRef, useState, type FormEvent, type DragEvent } from 'react'
 import { downloadPdf, loadCanonicalNote, loadFiles, peekFilesCache, warmFilesCache, saveFiles, uploadPdf, loadFileBin, fileBinAction, type FileBinEntry } from '../lib/api'
@@ -230,7 +231,7 @@ export function FilesView({ workMode = false, standaloneTodo = false, todoReques
   }
   async function addPdf(file: File) {
     if (saving.current) return
-    if (file.size > 25 * 1024 * 1024) { setError('PDFs must be 25 MB or smaller.'); return }
+    if (file.size > PDF_MAX_BYTES) { setError('PDFs must be 50 MB or smaller.'); return }
     if (!file.name.toLowerCase().endsWith('.pdf')) { setError('Choose a PDF file.'); return }
     saving.current = true; setBusy(true); setError(''); setNotice('')
     try { const next = await uploadPdf(folderId, file); validateFilesState(next); setState(next); setNotice('PDF uploaded and saved') }

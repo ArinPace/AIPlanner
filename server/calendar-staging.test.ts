@@ -11,14 +11,14 @@ test('staging is private to the owner, edits are isolated, conflicts require res
  process.env.SUPABASE_URL='https://calendar-staging.test';process.env.SUPABASE_SERVICE_ROLE_KEY='service';delete process.env.SUPABASE_SECRET_KEY;process.env.CONNECTION_ENCRYPTION_KEY='ab'.repeat(32)
  const original=globalThis.fetch,accountId='ee34ba25-54bc-44df-8515-f7e6784dfed1'
  const event:CalendarEvent={id:'class',title:'Old location',description:'Room 1',start:'2026-11-02T10:00:00-05:00',end:'2026-11-02T11:00:00-05:00',allDay:false,tagIds:[],scheduleType:'fixed',recurrence:{frequency:'weekly',interval:2,until:'2026-12-01'},excludedStarts:['2026-11-16T10:00:00-05:00']}
- let calendar:{revision:number;state:StoredState}={revision:4,state:{events:[event,{...event,id:'study',scheduleType:'planned'},{...event,id:'rest',title:'Rest',scheduleType:'planned',tagIds:['break'],start:'2026-11-02T11:00:00-05:00',end:'2026-11-02T11:10:00-05:00',recurrence:{frequency:'none',interval:1,until:null}}],tags:[{id:'break',name:'Breaks',color:'#999999'}],hiddenTagIds:[]}},stage:Stage|null=null,published=0
+ let calendar:{revision:number;state:StoredState}={revision:4,state:{events:[event,{...event,id:'study',scheduleType:'planned'},{...event,id:'rest',title:'Rest',scheduleType:'planned',tagIds:['break'],start:'2026-11-02T11:00:00-05:00',end:'2026-11-02T11:10:00-05:00',recurrence:{frequency:'none',interval:1,until:null}}],tags:[{id:'break',name:'Breaks',color:'#999999'}],hiddenTagIds:[]}},stage:Stage|null=null,published=0,canEdit=false
  const remote={id:'remote',etag:'v1',...fixedEventPayload({...event,title:'Verified room update'})}
  globalThis.fetch=async(input,init)=>{
   const request=new Request(input,init),url=new URL(request.url),table=url.pathname.split('/').at(-1),method=request.method
   if(url.hostname==='www.googleapis.com'){assert.equal(method,'GET','Preparing/reviewing/publishing a draft must not directly write Google');return Response.json({items:[remote]})}
   if(url.searchParams.has('username'))assert.equal(url.searchParams.get('username'),'eq.owner')
   if(table==='planner_vm_settings')return Response.json({google_account_id:accountId})
-  if(table==='planner_google_accounts'){const account={id:accountId,identity:'owner@example.com',credentials:sealVmCredential({access_token:'private',scope:GOOGLE_CALENDAR_SCOPE+' '+GOOGLE_CALENDAR_WRITE_SCOPE,expires_at:Date.now()+3600000})};return Response.json(url.searchParams.has('id')?account:[account])}
+  if(table==='planner_google_accounts'){const account={id:accountId,identity:'owner@example.com',credentials:sealVmCredential({access_token:'private',scope:GOOGLE_CALENDAR_SCOPE+(canEdit?' '+GOOGLE_CALENDAR_WRITE_SCOPE:''),expires_at:Date.now()+3600000})};return Response.json(url.searchParams.has('id')?account:[account])}
   if(table==='planner_google_fixed_events')return Response.json([{local_id:'class',remote_id:'remote',managed:false}])
   if(table==='planner_calendars'){assert.equal(method,'GET');return Response.json(calendar)}
   if(table==='planner_calendar_staging'){
@@ -44,6 +44,8 @@ test('staging is private to the owner, edits are isolated, conflicts require res
   const download=await calendarDownload('owner',true);assert.equal(download.format,'ai-planner-calendar-stage')
   await assert.rejects(()=>publishCalendarStage('owner',{id:first.id,version:1,reviewSummary:'Reviewed verified room details and recurrence.'}),/Resolve every/)
   const edited=await editCalendarStage('owner',{id:first.id,version:1,events:[{id:'class',title:'Verified room update'}],resolutions:[{issueId:'different:class',decision:'Use the verified Google room update; retain recurrence and original ID.'}]})
+  await assert.rejects(()=>publishCalendarStage('owner',{id:first.id,version:edited.version,reviewSummary:'Review prepared with read-only Google permission.'}),/read-only/)
+  assert.equal(published,0);canEdit=true
   assert.equal(calendar.state.events[0].title,'Old location','Editing staging never changes live state')
   assert.equal(stage!.payload.calendar.events[0].recurrence.interval,2);assert.deepEqual(stage!.payload.calendar.events[0].excludedStarts,event.excludedStarts)
   await assert.rejects(()=>editCalendarStage('owner',{id:first.id,version:1,events:[]}),/current staging/)

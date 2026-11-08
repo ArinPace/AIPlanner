@@ -1,3 +1,4 @@
+import {PDF_MAX_BYTES} from '../src/lib/files.js'
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { ApiError, db } from './cloud.js'
@@ -75,7 +76,7 @@ export async function readPdf(username:string,id:string,pageStart:number,pageCou
   const download=await db().storage.from('planner-pdfs').download(upload.storage_path)
   if(download.error || !download.data)throw new ApiError(503,'Could not read the saved PDF.')
   const blob=download.data
-  if(blob.size>25*1024*1024)throw new ApiError(413,'PDF exceeds the supported size.')
+  if(blob.size>PDF_MAX_BYTES)throw new ApiError(413,'PDF exceeds the supported size.')
   const {getDocument}=await import('pdfjs-dist/legacy/build/pdf.mjs')
   // Import explicitly so serverless tracing includes the parser worker as well.
   const worker=await import('pdfjs-dist/legacy/build/pdf.worker.mjs')

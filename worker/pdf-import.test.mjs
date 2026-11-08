@@ -1,6 +1,9 @@
+import {mkdtemp,mkdir,writeFile,rm,symlink} from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {downloadPdf,importPdf,pdfWorkerCall} from './pdf-import.mjs'
+import {downloadPdf,importPdf,importDownloadedPdf,pdfWorkerCall} from './pdf-import.mjs'
 const sources={brightspace:'https://brightspace.nyu.edu',drive:'https://drive.google.com'}
 const enabled=['brightspace','drive']
 const pdf=Buffer.from('%PDF-1.7\nreal bytes fixture')
@@ -27,7 +30,7 @@ test('Brightspace topic resolves its original file; upload transfers exact PDF b
 
 test('preview/login HTML, unsafe redirects and oversized files cannot be imported',async()=>{
  const url='https://brightspace.nyu.edu/file.pdf'
- for(const output of [response(Buffer.from('<html>Sign in</html>')),response(pdf,302,{location:'http://127.0.0.1/private'}),response(pdf,200,{'content-length':String(26*1024*1024)})]){
+ for(const output of [response(Buffer.from('<html>Sign in</html>')),response(pdf,302,{location:'http://127.0.0.1/private'}),response(pdf,200,{'content-length':String(51*1024*1024)})]){
   let uploads=0
   await assert.rejects(()=>importPdf({request:{get:async()=>output}},{url,name:'x.pdf',folderId:null},{enabled,sources,workerCall:async()=>{uploads++}}))
   assert.equal(uploads,0)
@@ -46,4 +49,32 @@ test('PDF exports preserve an explicitly selected Google account in /u/ paths',a
  const urls=[]
  await downloadPdf({request:{get:async url=>{urls.push(url);return response()}}},'https://docs.google.com/document/u/1/d/doc123/edit',{enabled,sources})
  assert.equal(new URL(urls[0]).searchParams.get('authuser'),'1')
+})
+
+test('original PDFs between 25 and 50 MB use the direct storage upload path',async()=>{
+ const large=Buffer.alloc(26*1024*1024);pdf.copy(large)
+ const result=await importPdf({request:{get:async()=>response(large,200,{'content-length':String(large.length)})}},{url:'https://brightspace.nyu.edu/file.pdf',name:'Lecture10.pdf',folderId:null},{enabled,sources,workerCall:async(action,input)=>action==='start'?{id:'large',uploadUrl:'https://storage.test/upload'}:{documents:[{id:'large',kind:'pdf'}]},upload:async(url,init)=>{assert.equal(init.body.length,large.length);return {ok:true}}})
+ assert(result.saved)
+})
+
+test('external originals require an exact observed link on an enabled page; arbitrary redirects remain rejected',async()=>{
+ const source='https://brightspace.nyu.edu/readings',href='https://users.aalto.fi/~ave/ROS.pdf'
+ const context={pages:()=>[{url:()=>source,locator:()=>({evaluateAll:async(fn,target)=>target===href})}],request:{get:async()=>response()}}
+ assert.deepEqual((await downloadPdf(context,href,{enabled,sources,sourcePageUrl:source})).bytes,pdf)
+ await assert.rejects(()=>downloadPdf(context,href+'?unobserved=1',{enabled,sources,sourcePageUrl:source}),/not observed/)
+ await assert.rejects(()=>downloadPdf(context,'https://127.0.0.1/file.pdf',{enabled,sources,sourcePageUrl:source}),/public HTTPS/)
+ context.request.get=async()=>response(pdf,302,{location:'https://unobserved.test/private.pdf'})
+ await assert.rejects(()=>downloadPdf(context,href,{enabled,sources,sourcePageUrl:source}),/enabled/)
+})
+test('browser-downloaded originals can be registered without refetching signed provider URLs; traversal and symlinks are denied',async()=>{
+ const root=await mkdtemp(path.join(os.tmpdir(),'planner-pdf-'))
+ try{
+  await mkdir(path.join(root,'browser-downloads'));await writeFile(path.join(root,'browser-downloads','original.pdf'),pdf)
+  await writeFile(path.join(root,'other.pdf'),pdf);await symlink(path.join(root,'other.pdf'),path.join(root,'browser-downloads','escape.pdf'))
+  let uploads=0
+  const config={workerCall:async action=>action==='start'?{id:'saved',uploadUrl:'https://storage.test/upload'}:{documents:[{id:'saved',kind:'pdf'}]},upload:async(url,init)=>{assert.deepEqual(init.body,pdf);uploads++;return {ok:true}}}
+  assert((await importDownloadedPdf(root,{localFile:'browser-downloads/original.pdf',name:'Original.pdf',folderId:null},config)).saved)
+  for(const localFile of ['../other.pdf','browser-downloads/escape.pdf'])await assert.rejects(()=>importDownloadedPdf(root,{localFile,name:'x.pdf',folderId:null},config),/working folder/)
+  assert.equal(uploads,1)
+ }finally{await rm(root,{recursive:true,force:true})}
 })
