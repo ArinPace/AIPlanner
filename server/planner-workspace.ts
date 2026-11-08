@@ -1,3 +1,5 @@
+import {ResourceCache} from './resource-cache.js'
+import type {PDFDocumentProxy} from 'pdfjs-dist'
 import {PDF_MAX_BYTES} from '../src/lib/files.js'
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
@@ -70,20 +72,22 @@ export function searchFiles(state:FilesState,args:{query?:string;folderId?:strin
   return {items:items.slice(offset,offset+limit),total:items.length,offset,hasMore:offset+limit<items.length,searches:'Folder paths/labels, note contents, link URLs and PDF filenames. Read PDFs individually for their contents.'}
 }
 
+const pdfCache=new ResourceCache<PDFDocumentProxy>()
 export async function readPdf(username:string,id:string,pageStart:number,pageCount:number) {
   const upload=storage(await db().from('planner_uploads').select('storage_path,status').eq('username',username).eq('id',id).maybeSingle())
   if(!upload || upload.status!=='complete' || upload.storage_path!==`${username}/${id}.pdf`)throw new ApiError(404,'PDF not available in this account.')
-  const download=await db().storage.from('planner-pdfs').download(upload.storage_path)
-  if(download.error || !download.data)throw new ApiError(503,'Could not read the saved PDF.')
-  const blob=download.data
-  if(blob.size>PDF_MAX_BYTES)throw new ApiError(413,'PDF exceeds the supported size.')
-  const {getDocument}=await import('pdfjs-dist/legacy/build/pdf.mjs')
-  // Import explicitly so serverless tracing includes the parser worker as well.
-  const worker=await import('pdfjs-dist/legacy/build/pdf.worker.mjs')
-  ;(globalThis as typeof globalThis & {pdfjsWorker?:unknown}).pdfjsWorker=worker
-  const task=getDocument({data:new Uint8Array(await blob.arrayBuffer()),useSystemFonts:true})
-  try {
-    const pdf=await task.promise
+  return pdfCache.use(username+':'+id,async()=>{
+    const download=await db().storage.from('planner-pdfs').download(upload.storage_path)
+    if(download.error || !download.data)throw new ApiError(503,'Could not read the saved PDF.')
+    const blob=download.data
+    if(blob.size>PDF_MAX_BYTES)throw new ApiError(413,'PDF exceeds the supported size.')
+    const {getDocument}=await import('pdfjs-dist/legacy/build/pdf.mjs')
+    const worker=await import('pdfjs-dist/legacy/build/pdf.worker.mjs')
+    ;(globalThis as typeof globalThis & {pdfjsWorker?:unknown}).pdfjsWorker=worker
+    const task=getDocument({data:new Uint8Array(await blob.arrayBuffer()),useSystemFonts:true})
+    try{return {value:await task.promise,bytes:blob.size,dispose:()=>task.destroy()}}
+    catch(error){await task.destroy();throw error}
+  },async pdf=>{
     if(pageStart>pdf.numPages)throw new ApiError(400,'Page is beyond the end of this PDF.')
     const pages=[];let remaining=80000
     for(let n=pageStart;n<=Math.min(pdf.numPages,pageStart+pageCount-1);n++) {
@@ -94,5 +98,5 @@ export async function readPdf(username:string,id:string,pageStart:number,pageCou
       if(!remaining)break
     }
     return {pageCount:pdf.numPages,pages,nextPage:pages.at(-1)!.page<pdf.numPages?pages.at(-1)!.page+1:null,needsVisualReview:pages.some(p=>!p.text.trim()),notice:'Extracted text can omit diagrams or scanned content. Do not claim to have read images or unread pages.'}
-  } finally {await task.destroy()}
+  })
 }

@@ -16,7 +16,7 @@ function fixturePdf(){
 test('PDF tickets and finalization are owner scoped, preserve Files, and page reads reach page three',async()=>{
  const originalFetch=globalThis.fetch,pdf=fixturePdf(),id='11111111-1111-4111-8111-111111111111'
  process.env.SUPABASE_URL='https://pdf.test';process.env.SUPABASE_SERVICE_ROLE_KEY='test-only'
- let upload:any=null,state:any={folders:[],files:[],documents:[]},revision=1
+ let upload:any=null,state:any={folders:[],files:[],documents:[]},revision=1,downloads=0
  globalThis.fetch=async(input,init)=>{
   const request=new Request(input,init),url=new URL(request.url),path=url.pathname
   if(path==='/rest/v1/rpc/planner_workspace_delta_commit'){const data=await request.json() as any;assert.equal(data.p_username,'owner');assert.equal(data.p_revision,revision);for(const section of ['files','folders','documents'])if(data.p_upserts[section])state[section]=data.p_upserts[section];revision++;return Response.json({revision})}
@@ -34,7 +34,7 @@ test('PDF tickets and finalization are owner scoped, preserve Files, and page re
   if(path.includes('/storage/v1/object/upload/sign/'))return Response.json({url:'/object/upload/sign/planner-pdfs/owner/'+id+'.pdf?token=test'})
   if(path.includes('/storage/v1/object/info/'))return Response.json({size:pdf.length})
   if(path.includes('/storage/v1/object/sign/')&&request.method==='POST')return Response.json({signedURL:'/object/sign/planner-pdfs/owner/'+id+'.pdf?token=test'})
-  if(path.includes('/storage/v1/object/'))return new Response(pdf,{headers:{'Content-Type':'application/pdf'}})
+  if(path.includes('/storage/v1/object/')){downloads++;return new Response(pdf,{headers:{'Content-Type':'application/pdf'}})}
   throw Error('Unexpected PDF test route '+path)
  }
  const request=(input:unknown)=>new Request('https://planner.test/upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)})
@@ -44,8 +44,9 @@ test('PDF tickets and finalization are owner scoped, preserve Files, and page re
   Object.assign(upload,{status:'pending',expires_at:'2099-01-01T00:00:00Z'})
   await handlePdfUpload(request({id:ticket.id}),'/api/files/upload/finish','owner')
   assert.equal(state.documents[0].id,ticket.id);assert.equal(upload.status,'complete')
+  downloads=0
   const first=await readPdf('owner',ticket.id,1,2);assert.equal(first.nextPage,3);assert.equal(first.pageCount,3)
-  const last=await readPdf('owner',ticket.id,3,2);assert.equal(last.nextPage,null);assert.match(last.pages[0].text,/Verified page 3/)
+  const last=await readPdf('owner',ticket.id,3,2);assert.equal(last.nextPage,null);assert.match(last.pages[0].text,/Verified page 3/);assert.equal(downloads,1,'Sequential page batches reuse one authorized PDF download')
   await assert.rejects(()=>readPdf('other',ticket.id,1,2),/not available/)
   await assert.rejects(()=>handlePdfUpload(request({id:ticket.id}),'/api/files/upload/finish','other'),/PDF/)
  }finally{globalThis.fetch=originalFetch}

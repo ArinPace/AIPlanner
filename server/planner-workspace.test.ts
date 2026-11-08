@@ -1,3 +1,4 @@
+import {filesManifest} from './files-transfer.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
@@ -35,13 +36,26 @@ test('internal calendar and all Files: scoped partial edits, hierarchy, paginati
     const request=new Request(input,init),u=new URL(request.url)
     assert.equal(u.hostname,'workspace.test')
     if(u.pathname.startsWith('/storage/')){downloads++;assert.ok(u.pathname.endsWith('/arin/82400000-0000-4000-8000-000000000000.pdf'));return new Response(pdfFixture(),{headers:{'Content-Type':'application/pdf'}})}
+    if(u.pathname.includes('/rpc/')){
+      const body=await request.json() as any;assert.equal(body.p_username,'arin')
+      if(u.pathname.endsWith('/planner_files_manifest'))return Response.json(filesManifest({...files.state,revision:files.revision},'arin'))
+      assert.equal(body.p_revision,files.revision)
+      if(u.pathname.endsWith('/planner_save_file_item'))files.state.files=files.state.files.filter(f=>f.id!==body.p_item.id).concat(body.p_item)
+      else if(u.pathname.endsWith('/planner_workspace_delta_commit')){
+        for(const section of ['folders','files','documents'] as const)for(const item of body.p_upserts[section]||[])(files.state[section] as any[]).splice(0,files.state[section].length,...(files.state[section] as any[]).filter(f=>f.id!==item.id),item)
+      }else throw Error('Unexpected test RPC')
+      files.revision++;return Response.json({revision:files.revision})
+    }
     assert.equal(u.searchParams.get('username'),'eq.arin')
     if(u.pathname.endsWith('/planner_calendar_staging'))return Response.json(null)
     if(u.pathname.endsWith('/planner_planning'))return Response.json({started_at:'2026-10-18T00:00:00Z'});
     if(u.pathname.endsWith('/planner_uploads'))return Response.json(u.searchParams.get('id')==='eq.missing'?null:{storage_path:'arin/82400000-0000-4000-8000-000000000000.pdf',status:'complete'})
     const isCalendar=u.pathname.endsWith('/planner_calendars')
     assert.ok(isCalendar || u.pathname.endsWith('/planner_files'))
-    if(request.method==='GET')return Response.json(isCalendar?calendar:files)
+    if(request.method==='GET'){
+      const item=u.searchParams.get('select')?.match(/item:state->(files|folders|documents)->(\d+)/)
+      return Response.json(item?{revision:files.revision,item:(files.state[item[1] as keyof typeof files.state] as any[])[Number(item[2])]}:isCalendar?calendar:files)
+    }
     const row=isCalendar?calendar:files
     assert.equal(u.searchParams.get('revision'),'eq.'+row.revision)
     if(conflict)return Response.json([])
