@@ -8,7 +8,17 @@ export async function readGoogleMail(username:string,args:{accountId:string;quer
 export async function googleMailFailure(response:Response):Promise<ApiError>{
  const payload=await response.json().catch(()=>null) as any
  const reasons=[...(payload?.error?.errors||[]).map((e:any)=>e.reason),...(payload?.error?.details||[]).map((e:any)=>e.reason)].filter((v:unknown)=>typeof v==='string')
- if(reasons.some((r:string)=>['SERVICE_DISABLED','accessNotConfigured'].includes(r)))return new ApiError(502,'Gmail API is disabled for the Planner Google Cloud project. Enable Gmail API in Google Cloud Console; signing into Gmail or reconnecting alone does not enable the API.')
+ if(reasons.some((r:string)=>['SERVICE_DISABLED','accessNotConfigured'].includes(r))){
+  let setup='https://console.cloud.google.com/apis/library/gmail.googleapis.com'
+  for(const detail of payload?.error?.details||[])try{
+   const url=new URL(detail.metadata?.activationUrl)
+   if(['console.cloud.google.com','console.developers.google.com'].includes(url.hostname)&&url.protocol==='https:'&&url.pathname.includes('gmail.googleapis.com')){
+    const project=url.searchParams.get('project');if(project&&/^[a-zA-Z0-9:-]{1,100}$/.test(project))setup+='?project='+encodeURIComponent(project)
+    break
+   }
+  }catch{}
+  return new ApiError(502,'Gmail API is disabled for the Planner Google Cloud project. Enable Gmail API: '+setup+'. Signing into Gmail or reconnecting alone does not enable the API.')
+ }
  if(reasons.some((r:string)=>['ACCESS_TOKEN_SCOPE_INSUFFICIENT','insufficientPermissions'].includes(r)))return new ApiError(403,'Reconnect this Google account and approve read-only email access; the current token lacks the required Gmail scope.')
  if(response.status===429||reasons.some((r:string)=>/rateLimit|quota/i.test(r)))return new ApiError(503,'Google temporarily rate-limited email reads. Retry later; do not repeatedly sign in.')
  if(response.status===401)return new ApiError(401,'Google rejected this email authorization. Reconnect this account to renew access.')

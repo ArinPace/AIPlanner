@@ -11,7 +11,7 @@ Current routes in `src/App.tsx` are `AgentView` and `SubscriptionChatView`. The 
 ### Agent runtime instructions
 
 1. **Worker base instructions — `worker/main.mjs`, `instructions`.** Tool choice, authenticated websites, source verification, original files, scoped reads/writes, and preservation. This is the Agent's starting application instruction text.
-2. **Detailed planner guidance — `worker/planner-guidance.mjs`, `plannerGuidance`.** Descriptions and tags, urgency, folders, Work/To-do completion, dates/timezones, browser/source coverage, prerequisite planning, goals, memory, histories, settings and app control. This is approximately 46,069 characters of application guidance.
+2. **Detailed planner guidance — `worker/planner-guidance.mjs`, `plannerGuidance`.** Descriptions and tags, urgency, folders, Work/To-do completion, dates/timezones, browser/source coverage, prerequisite planning, goals, memory, histories, settings and app control. This is approximately 46,125 characters of application guidance.
 3. **Live personal instructions — `planner_agent_instructions.content`; `server/agent-instructions.ts`.** The user's editable account layer. For arin, revision 33 has 19,992 characters. It contains accumulated decisions about task load, library work, commutes, grouping, free time, sleep, deadlines, Work formatting and remaining allocations. Settings → personal agent instructions and `planner_instructions_read/update` control this layer. Saving a similarly named file does not change it. Updates affect later runs/resumed turns, not a currently executing turn.
 4. **Account-specific behavior — `worker/whoop-sleep-review.mjs`, supplied by `server/vm.ts`.** arin's scheduled WHOOP freshness/reconciliation requirement. This is distinct from the general retry rules below.
 5. **Effective application wrapper — `worker/live-instructions.mjs`, `effectiveInstructions`.** Agent output placement, top-level Subjects exception, fixed/planned event types, mandatory staged publication, current personal revision, ownership boundaries, and shared rules below.
@@ -23,7 +23,7 @@ Current routes in `src/App.tsx` are `AgentView` and `SubscriptionChatView`. The 
 
 `worker/main.mjs` passes the assembled result as Codex `developerInstructions`. The Claude route in `worker/claude.mjs` uses the same application layers through `--append-system-prompt`. `worker/runtime-instructions.mjs` hashes the current assembled rules and refreshes changed app-owned developer instructions for resumed Codex threads. This is separate from the conversation's user-message history.
 
-A measured representative arin developer assembly is **84,858 characters**, excluding dynamic account/permission text, the current job, conversation history, attachments and MCP material. This is a character count, not a token count. The base worker portion is 5,402 characters. These layers overlap substantially; the app currently does not load a single small consolidated prompt.
+A measured representative arin developer assembly is **85,151 characters**, excluding dynamic account/permission text, the current job, conversation history, attachments and MCP material. This is a character count, not a token count. The base worker portion is 5,639 characters. These layers overlap substantially; the app currently does not load a single small consolidated prompt.
 
 ### MCP instructions and tool descriptions
 
