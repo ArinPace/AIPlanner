@@ -25,6 +25,10 @@ Current routes in `src/App.tsx` are `AgentView` and `SubscriptionChatView`. The 
 
 A measured representative arin developer assembly is **85,151 characters**, excluding dynamic account/permission text, the current job, conversation history, attachments and MCP material. This is a character count, not a token count. The base worker portion is 5,639 characters. These layers overlap substantially; the app currently does not load a single small consolidated prompt.
 
+### General instructions recovered from Main Chat
+
+The November 9 history audit adds `worker/general-planner-rules.mjs` to the live Agent developer assembly and native/older device Chat packets. It consolidates the non-personal corrections from the saved Main history; prompted and scheduled Agent runs share this layer. See [the 48-group coverage inventory](GENERAL-INSTRUCTION-AUDIT.md) for retained rules, superseded wording and excluded personal facts. Earlier November 8 character counts below/above are historical measurements, not the new assembled prompt size.
+
 ### MCP instructions and tool descriptions
 
 - **MCP server instructions — `server/mcp.ts`, `instructions` and `createPlannerMcp`.** Calendar staging and event rules, source-health reporting, Notes/Files/history, real schedule/settings tools, subject ownership and verified source updates. This is separate from the worker's developer prompt.

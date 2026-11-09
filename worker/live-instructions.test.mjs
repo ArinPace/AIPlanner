@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import {GENERAL_PLANNER_RULES} from './general-planner-rules.mjs'
 import {effectiveInstructions} from './live-instructions.mjs'
 test('live personal rules are in the actual prompt; clearing supersedes old resumed rules',()=>{
  const updated=effectiveInstructions('Built-in planner rules',{revision:2,content:'Plan errands on Friday.'})
@@ -11,6 +12,8 @@ test('live personal rules are in the actual prompt; clearing supersedes old resu
 test('Tutor maintenance is included in real runtime rules without truncating personal instructions',()=>{
  const personal='P'.repeat(19970),prompt=effectiveInstructions('Tutor enabled for this account: yes',{revision:30,content:personal})
  assert(prompt.includes(personal))
+ assert(prompt.includes(GENERAL_PLANNER_RULES),'the full shared rules must reach the worker without truncation')
+ assert(prompt.indexOf(GENERAL_PLANNER_RULES)>prompt.indexOf(personal),'current general rules follow historical personal context')
  for(const term of ['homework/assignments','quizzes','tests/exams','recordings','recitations','Grades and A-track','actual graded denominator','ungraded work as zero','Main Chat and its ordinary scheduled subject reviews must read','must not edit, reorganize, download into, or refresh','Only the corresponding Tutor conversation','separately booked subject-turnover automation'])assert(prompt.includes(term),term)
 })
 

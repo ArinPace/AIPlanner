@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import {GENERAL_PLANNER_RULES} from '../worker/general-planner-rules.mjs'
 import {subscriptionTools} from './subscription-tools.js'
 import {toolResultsMessage,relayCalls,relayVisible} from '../src/lib/subscriptionTools.js'
 
@@ -40,6 +41,7 @@ test('subscription tools require active owned turns, use real MCP schemas and re
   await assert.rejects(()=>run('tool_call',{calls:[{id:'x',name:'planner_save_tag',arguments:{}}]}),/no longer active/)
   await assert.rejects(()=>run('tool_begin',{chatId:'33333333-3333-4333-8333-333333333333',prompt:'Hello'}),/owned/)
   const setup:any=await run('tool_begin',{prompt:'Create a tag'})
+  assert(setup.instructions.includes(GENERAL_PLANNER_RULES),'native Chat receives the complete shared general policy');
   assert.match(setup.instructions,/Personal owner instruction/);assert.match(setup.instructions,/CONTEXT ONLY/)
   const catalog:any=await run('tool_call',{calls:[{id:'list',name:'relay_list_tools',arguments:{}}]})
   assert(catalog.results[0].result.some((t:any)=>t.name==='planner_app_settings_update'))
