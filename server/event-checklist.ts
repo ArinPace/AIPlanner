@@ -20,7 +20,7 @@ function patchNote(note:PlannerTextFile,index:number,itemId:string,checked:boole
  const lines=copy.content.split('\n');let line=lines[row.line]
  if(!row.id)line=line.replace(/(\[[ xX]\]\s+(?:\[urgency:\d{1,2}\]\s*)?)/,`$1[item:${itemId}] `)
  if(checked!==undefined)line=line.replace(/^(\s*(?:[-+*]|\d+[.)])\s+\[)[ xX](\])/,'$1'+(checked?'x':' ')+'$2')
- lines[row.line]=line;copy.content=lines.join('\n');copy.updatedAt=now
+ lines[row.line]=line;copy.content=lines.join('\n')
  if(copy.richText&&copy.richTextSource===note.content){
   const doc=JSON.parse(copy.richText);let ordinal=0
   const walk=(node:{type:string;attrs?:Record<string,unknown>;content?:typeof node[]})=>{
@@ -28,6 +28,7 @@ function patchNote(note:PlannerTextFile,index:number,itemId:string,checked:boole
    for(const child of node.content||[])walk(child)
   };walk(doc);copy.richText=JSON.stringify(doc);copy.richTextSource=copy.content
  }
+ if(copy.content!==note.content||copy.richText!==note.richText||copy.richTextSource!==note.richTextSource)copy.updatedAt=now
  return copy
 }
 export function linkChecklistBlocks(calendar:StoredState,note:PlannerTextFile,args:z.infer<typeof linkArgs>,now=new Date().toISOString()){
@@ -37,7 +38,7 @@ export function linkChecklistBlocks(calendar:StoredState,note:PlannerTextFile,ar
  const events=structuredClone(calendar.events),selected=events.filter(e=>args.eventIds.includes(e.id))
  if(selected.length!==new Set(args.eventIds).size||selected.some(e=>e.eventKind==='folder'||e.reminder||e.allDay))throw new ApiError(400,'Link existing timed activity blocks, not folders or reminders.')
  const itemId=row.id||randomUUID(),link={noteId:note.id,itemId}
- for(const event of selected)event.checklistLinks=[...(args.replaceLinks?[]:event.checklistLinks||[]).filter(old=>old.noteId!==note.id||old.itemId!==itemId),link]
+ for(const event of selected){if(!args.replaceLinks&&event.checklistLinks?.some(old=>old.noteId===note.id&&old.itemId===itemId))continue;event.checklistLinks=[...(args.replaceLinks?[]:event.checklistLinks||[]).filter(old=>old.noteId!==note.id||old.itemId!==itemId),link]}
  return {calendar:{...calendar,events},note:patchNote(note,args.itemIndex,itemId,undefined,now),itemId,linked:selected.length}
 }
 export function completeChecklistBlocks(calendar:StoredState,notes:PlannerTextFile[],args:z.infer<typeof doneArgs>,now=new Date().toISOString()){
@@ -65,14 +66,15 @@ async function context(username:string){
  const [calendar,planning,todo,work]=await Promise.all([calendarRow(username),db().from('planner_planning').select('state,revision').eq('username',username).single(),readCanonicalNote(username,'todo') as Promise<FilesState>,readCanonicalNote(username,'work') as Promise<FilesState>])
  if(todo.revision!==work.revision)throw new ApiError(409,'Files changed. Retry with current notes.')
  const saved=storage(planning)
- return {calendar,planning:{profile:{...structuredClone(DEFAULT_PLANNING),...saved.state} as PlanningProfile,revision:Number(saved.revision)},filesRevision:todo.revision!,notes:[...todo.files,...work.files]}
+ return {calendar,planning:{rawState:saved.state,profile:{...structuredClone(DEFAULT_PLANNING),...saved.state} as PlanningProfile,revision:Number(saved.revision)},filesRevision:todo.revision!,notes:[...todo.files,...work.files]}
 }
 async function commit(username:string,c:Awaited<ReturnType<typeof context>>,calendar:StoredState,notes:PlannerTextFile[],syncTasks=false){
  const files={folders:[],files:c.notes.map(n=>notes.find(v=>v.id===n.id)||n)}
- const profile=structuredClone(c.planning.profile)
+ const profile=structuredClone(c.planning.profile),stored=structuredClone(c.planning.rawState)
  if(syncTasks){const done=completedTodoTasks(files,profile.tasks);for(const task of profile.tasks)if(done.has(task.id))task.status='done'}
- const {data,error}=await db().rpc('planner_commit_event_checks',{p_username:username,p_calendar_revision:c.calendar.revision,p_files_revision:c.filesRevision,p_planning_revision:c.planning.revision,p_calendar:calendar,p_notes:notes,p_planning:profile})
- if(error)throw new ApiError(error.code==='P0001'?409:503,error.code==='P0001'?'Your calendar or checklist changed. Refresh and retry.':'Could not save completion. Read current state before retrying.')
+ if(syncTasks&&JSON.stringify(profile.tasks)!==JSON.stringify(c.planning.profile.tasks))stored.tasks=profile.tasks
+ const {data,error}=await db().rpc('planner_commit_event_checks',{p_username:username,p_calendar_revision:c.calendar.revision,p_files_revision:c.filesRevision,p_planning_revision:c.planning.revision,p_calendar:calendar,p_notes:notes,p_planning:stored})
+ if(error){console.error('Checklist transaction failed',{code:error.code});throw new ApiError(error.code==='P0001'?409:503,error.code==='P0001'?'Your calendar or checklist changed. Refresh and retry.':error.code==='57014'?'Saving this batch timed out. Read current state and retry with fewer event IDs.':'Could not save completion. Read current state before retrying.'+(error.code&&/^[A-Z0-9]{5,8}$/.test(error.code)?' ['+error.code+']':''))}
  return data as {calendarRevision:number;filesRevision:number}
 }
 export async function readChecklistLinks(username:string,noteId:string){const c=await context(username),note=c.notes.find(n=>n.id===noteId);if(!note)throw new ApiError(404,'Choose the canonical Work or To-do note.');return {calendarRevision:c.calendar.revision,filesRevision:c.filesRevision,noteId,items:checklistItems(note.content)}}

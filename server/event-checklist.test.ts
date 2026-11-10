@@ -40,6 +40,7 @@ test('recurring folder records only selected occurrence and never completes infi
 test('link installs stable invisible ID preserving rich formatting and checks survive label/time changes',()=>{
  const n={...note,content:'- [ ] [urgency:90] Original',richTextSource:'- [ ] [urgency:90] Original',richText:JSON.stringify({type:'doc',content:[{type:'taskList',content:[{type:'taskItem',attrs:{checked:false,urgency:90},content:[{type:'paragraph',content:[{type:'text',text:'Original',marks:[{type:'bold'}]}]}]}]}]})}
  const linked=linkChecklistBlocks(state({...event('a'),checklistLinks:undefined}),n,{calendarRevision:1,filesRevision:1,noteId:'work',itemIndex:0,itemText:'Original',eventIds:['a']})
+ const repeated=linkChecklistBlocks(linked.calendar,linked.note,{calendarRevision:2,filesRevision:2,noteId:'work',itemIndex:0,itemText:'Original',eventIds:['a']},'2030-01-01T00:00:00Z');assert.deepEqual(repeated.calendar,linked.calendar);assert.deepEqual(repeated.note,linked.note)
  const doc=JSON.parse(linked.note.richText!);assert.equal(doc.content[0].content[0].attrs.checklistId,linked.itemId);assert.equal(doc.content[0].content[0].content[0].content[0].marks[0].type,'bold')
  const renamed={...linked.note,content:linked.note.content.replace('Original','Renamed — 20 minutes remaining')};delete renamed.richText;delete renamed.richTextSource
  const result=completeChecklistBlocks(linked.calendar,[renamed],done('a'));assert.equal(checklistItems(result.notes[0].content)[0].checked,true)
