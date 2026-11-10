@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto'
 import { hostOnline, safeWorkerStatus, safeDeviceAuthorization, uuid, vmMessage } from './vm-validation.js'
 import { sealVmCredential, openVmCredential } from './vm-vault.js'
 import { handleCloudRequest } from './cloud.js'
-import { scheduleSlot, shouldRunVm, validateSchedule, scheduledReviewMessage } from './vm-power.js'
+import { deferredReviewSlot, scheduleSlot, shouldRunVm, validateSchedule, scheduledReviewMessage } from './vm-power.js'
 
 test('offline-user schedules wake only around New York slots, then stop after the slot completes', () => {
   const now = new Date('2026-10-15T10:59:00Z')
@@ -91,4 +91,12 @@ test('scheduled review is an execute-now request around saved instructions and r
  assert(message.includes('sources actually checked and coverage'))
  assert(message.includes('An acknowledgement or promise of future action is not a completed review.'))
  assert(message.includes('never imply unperformed checks succeeded'))
+})
+
+test('a long user job retains the review that came due before the normal claim window closed', () => {
+ const end = new Date('2026-11-10T23:30:00Z')
+ const schedule = {timezone: 'America/New_York', times: ['07:00','17:00']}
+ assert.equal(scheduleSlot(end, schedule, false), null)
+ assert.equal(deferredReviewSlot(new Date('2026-11-10T21:45:00Z'), end, schedule), '2026-11-10 17')
+ assert.equal(deferredReviewSlot(new Date('2026-11-10T23:15:00Z'), end, schedule), null)
 })

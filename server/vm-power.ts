@@ -22,6 +22,17 @@ export function scheduleSlot(now = new Date(), schedule = DEFAULT_VM_SCHEDULE, p
   if (!time) return null
   return `${p('year')}-${p('month')}-${p('day')} ${time.endsWith(':00') ? time.slice(0,2) : time}`
 }
+export function deferredReviewSlot(start: Date, end: Date, schedule: VmSchedule): string | null {
+  const hour = 60 * 60000
+  // Each due slot is discoverable for one hour. Bound catch-up to one day
+  // and coalesce missed reviews into the most recent applicable slot.
+  const earliest = Math.max(start.getTime(), end.getTime() - 24 * hour)
+  for (let at = end.getTime(); at >= earliest; at -= hour) {
+    const slot = scheduleSlot(new Date(at), schedule, false)
+    if (slot) return slot
+  }
+  return scheduleSlot(new Date(earliest), schedule, false)
+}
 export function shouldRunVm(input: { wakeUntil?: string | null; rolloverAt?:string|null; whoopAt?:string|null; jobs: { chat_id?:string|null; status: string; kind: string; result?: { expiresAt?: string }; schedule_slot?: string | null; finished_at?: string | null }[]; scheduled: boolean; schedule?: VmSchedule }, now = new Date()): boolean {
   if (input.wakeUntil && Date.parse(input.wakeUntil) > now.getTime()) return true
   if (input.jobs.some(j => ['queued', 'running'].includes(j.status) || (j.status==='waiting' && !input.jobs.some(p=>p.status==='paused' && p.chat_id===j.chat_id)))) return true

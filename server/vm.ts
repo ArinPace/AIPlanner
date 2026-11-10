@@ -6,7 +6,7 @@ import { createPlannerMcp } from './mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { hostOnline, safeWorkerStatus, safeDeviceAuthorization, uuid, vmHash, vmMessage } from './vm-validation.js'
 import { openVmCredential, sealVmCredential } from './vm-vault.js'
-import { DEFAULT_VM_SCHEDULE, scheduleSlot, validateSchedule, scheduledReviewMessage } from './vm-power.js'
+import { DEFAULT_VM_SCHEDULE, scheduleSlot, deferredReviewSlot, validateSchedule, scheduledReviewMessage, type VmSchedule } from './vm-power.js'
 import { touchVmActivity } from './vm-host.js'
 import { VM_SOURCES,type VmJob } from '../src/lib/vm.js'
 import { googleCalendarStatus, readGoogleCalendar, startGoogleCalendar, selectGoogleAccount, removeGoogleAccount, setGoogleReadEnabled } from './agent.js'
@@ -22,6 +22,14 @@ function checked<T>({ data, error }: { data: T; error: { code?: string } | null 
   return data as NonNullable<T>
 }
 const publicJob = 'id,chat_id,kind,status,message,reply,error,created_at,started_at,finished_at,result,attachments,is_welcome'
+async function queueScheduledReview(username: string, hostId: string, schedule: VmSchedule, slot: string) {
+  const mainId = await ensureMainChat(username)
+  checked(await db().from('planner_vm_jobs').upsert({
+    username, host_id: hostId, chat_id: mainId, kind: 'sync', status: 'waiting',
+    schedule_slot: slot, message: scheduledReviewMessage(schedule),
+  }, {onConflict: 'username,schedule_slot', ignoreDuplicates: true}))
+}
+
 const publicHost = 'id,label,heartbeat_at,capabilities,created_at'
 async function confirmBrowserConnection(username:string,source:string){
   checked(await db().from('planner_vm_jobs').update({result:{connected:true,source,connectedAt:new Date().toISOString()}}).eq('username',username).eq('kind','browser_login').eq('status','completed').in('message',[source,'open:'+source,'manage:'+source]).not('result->liveUrl','is',null))
@@ -98,16 +106,11 @@ export async function handleVmWorker(request: Request, path: string) {
     checked(await db().rpc('planner_queue_subject_rollover',{p_username:host.username,p_host:host.id,p_message:(await import('./subject-rollover.js')).subjectRolloverMessage()}))
     const slot = scheduleSlot(new Date(), settings.schedule || DEFAULT_VM_SCHEDULE, false)
     if (settings.schedule_enabled && settings.sources.length && slot) {
-      const mainId=await ensureMainChat(host.username)
-      const main=checked(await db().from('planner_vm_chats').select('thread_id').eq('id',mainId).eq('username',host.username).single())
-      const active=checked(await db().from('planner_vm_jobs').select('id').eq('username',host.username).eq('chat_id',mainId).in('status',['queued','running','paused']).limit(1))
-      if(!active.length){
-        const queued=await db().from('planner_vm_jobs').upsert({ username: host.username, host_id: host.id,chat_id:mainId,thread_id:main.thread_id, kind: 'sync', schedule_slot: slot, message: scheduledReviewMessage(settings.schedule || DEFAULT_VM_SCHEDULE) }, { onConflict: 'username,schedule_slot', ignoreDuplicates: true })
-        if(queued.error?.code!=='23505')checked(queued)
-        checked(await db().rpc('planner_arm_whoop_review',{p_username:host.username,p_channel:'agent',p_episode:slot}))
-      }
+      await queueScheduledReview(host.username, host.id, settings.schedule || DEFAULT_VM_SCHEDULE, slot)
     }
-    checked(await db().rpc('planner_queue_whoop_review',{p_username:host.username,p_host:host.id,p_message:whoopRetryMessage()}))
+    if (settings.schedule_enabled && settings.sources.includes('whoop')) {
+      checked(await db().rpc('planner_queue_whoop_review',{p_username:host.username,p_host:host.id,p_message:whoopRetryMessage()}))
+    }
     const job = checked(await db().rpc('planner_vm_claim', { p_host: host.id }))
     if(job?.kind==='chat'&&job.chat_id){
       const context=await db().from('planner_vm_chats').select('title,tutor_subject_id').eq('username',host.username).eq('id',job.chat_id).maybeSingle()
@@ -120,7 +123,9 @@ export async function handleVmWorker(request: Request, path: string) {
     const finished = path.endsWith('/finish')
     let reply = typeof input.reply === 'string' ? input.reply.slice(0, 80000) : ''
     const error = typeof input.error === 'string' ? input.error.slice(0, 1000) : null
-    if(finished&&error&&!reply){const previous=checked(await db().from('planner_vm_jobs').select('reply').eq('id',input.id).eq('username',host.username).eq('host_id',host.id).eq('lease',input.lease).maybeSingle());reply=previous?.reply||''}
+    const finishedJob = finished ? checked(await db().from('planner_vm_jobs').select('reply,kind,started_at')
+      .eq('id', input.id).eq('username', host.username).eq('host_id', host.id).eq('lease', input.lease).maybeSingle()) : null
+    if (error && !reply) reply = finishedJob?.reply || ''
     const threadId = uuid(input.threadId) ? input.threadId : null
     const output: Record<string, unknown> = {}
     if (input.result && typeof input.result === 'object') {
@@ -140,6 +145,23 @@ export async function handleVmWorker(request: Request, path: string) {
     if (finished && !error && input.result && typeof input.result === 'object' && 'sites' in input.result) {
       const settings = checked(await db().from('planner_vm_settings').select('sources').eq('username',host.username).single())
       await observeAccounts(host.username, (input.result as { sites: Record<string,{ready?:boolean;identity?:unknown}> }).sites, settings.sources)
+    }
+    if (finishedJob?.kind === 'chat' && finishedJob.started_at) {
+      // The worker cannot poll for a review while it is executing a long chat.
+      // Catch the most recent slot that became due during that chat.
+      try {
+        const now = new Date()
+        if (now.getTime() - Date.parse(finishedJob.started_at) >= 60 * 60000) {
+          const settings = checked(await db().from('planner_vm_settings').select('schedule_enabled,schedule,sources')
+            .eq('username', host.username).single())
+          const schedule = settings.schedule || DEFAULT_VM_SCHEDULE
+          const slot = settings.schedule_enabled && settings.sources.length
+            ? deferredReviewSlot(new Date(finishedJob.started_at), now, schedule) : null
+          if (slot) await queueScheduledReview(host.username, host.id, schedule, slot)
+        }
+      } catch {
+        console.error('Could not check for a deferred calendar review after a worker run.')
+      }
     }
     if (finished && !error && output.sites) for(const [source,site] of Object.entries(output.sites as Record<string,{ready:boolean}>))if(site.ready)await confirmBrowserConnection(host.username,source)
     return json({ ok: true })
@@ -193,6 +215,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
     const before=url.searchParams.get('before')
     const compact=url.searchParams.get('compact')==='1'
     let query=db().from('planner_vm_jobs').select(compact?publicJob.replace(',result,',',display_steered:result->steered,'):publicJob).eq('username',username).eq('chat_id',chatId)
+      .or('kind.neq.sync,status.neq.waiting')
     if(before){
       if(!uuid(before))throw new ApiError(400,'Choose a valid message cursor.')
       const cursor=checked(await db().from('planner_vm_jobs').select('id,created_at').eq('username',username).eq('chat_id',chatId).eq('id',before).maybeSingle())

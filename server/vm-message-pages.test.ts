@@ -14,7 +14,9 @@ test('chat pages are bounded, owner scoped and hide scheduled instructions witho
    assert.equal(url.searchParams.get('chat_id'),'eq.'+chat)
    if(url.searchParams.get('id'))return Response.json({id:cursor,created_at:'2026-10-21T00:00:00+00:00'})
    assert.equal(url.searchParams.get('limit'),'21')
-   assert.equal(Boolean(url.searchParams.get('or')),older)
+   const filters = url.searchParams.getAll('or')
+   assert.ok(filters.includes('(kind.neq.sync,status.neq.waiting)'))
+   assert.equal(filters.length, older ? 2 : 1)
    assert.equal(url.searchParams.get('order'),'created_at.desc,id.desc')
    return Response.json(Array.from({length:21},(_,i)=>({id:String(i),kind:i===0?'sync':'chat',status:'completed',message:i===0?'INTERNAL FULL REVIEW INSTRUCTIONS':'hello',created_at:new Date(2026,0,22-i).toISOString()})))
   }
