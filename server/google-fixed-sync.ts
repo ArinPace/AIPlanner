@@ -1,3 +1,4 @@
+import {calendarScheduleIdentity} from '../src/lib/eventChecklist.js'
 import {stagingRow,preparePendingStage,assertStageEvent,sameGoogleEvent} from './calendar-staging.js'
 import {db,ApiError} from './cloud.js'
 import {storage} from './mcp-auth.js'
@@ -26,8 +27,8 @@ export async function processFixedSync(onlyUsername?:string){
  try{
   const session=await googleCalendarSession(username,undefined,true),row=await calendarRow(username)
   const stage=await stagingRow(username)
-  if(!stage||stage.status!=='approved'||stage.approved_revision!==row.revision||stage.account_id!==session.accountId)throw new ApiError(409,'A fresh agent-reviewed calendar draft is required before Google writes.')
-  const ensureCurrent=async()=>{if(storage(await db().from('planner_calendars').select('revision').eq('username',username).single()).revision!==stage.approved_revision)throw new ApiError(409,'Planner changed during publishing. Review a fresh draft before continuing.')}
+  if(!stage||stage.status!=='approved'||(stage.approved_revision!==row.revision&&(!stage.payload.calendar||calendarScheduleIdentity(stage.payload.calendar)!==calendarScheduleIdentity(row.state)))||stage.account_id!==session.accountId)throw new ApiError(409,'A fresh agent-reviewed calendar draft is required before Google writes.')
+  const ensureCurrent=async()=>{const current=storage(await db().from('planner_calendars').select('revision').eq('username',username).single());if(current.revision!==row.revision&&calendarScheduleIdentity((await calendarRow(username)).state)!==calendarScheduleIdentity(row.state))throw new ApiError(409,'Planner changed during publishing. Review a fresh draft before continuing.')}
   const mappings=storage(await db().from('planner_google_fixed_events').select('*').eq('username',username).eq('account_id',session.accountId))
   const fixed=row.state.events.filter(e=>e.eventKind!=='folder'&&eventType(e,row.state.tags)==='fixed'),ids=new Set(fixed.map(e=>e.id))
   const headers={Authorization:'Bearer '+session.tokens.access_token,'Content-Type':'application/json'}
@@ -90,7 +91,7 @@ export async function processFixedSync(onlyUsername?:string){
    storage(await db().from('planner_google_fixed_events').delete().eq('username',username).eq('account_id',session.accountId).eq('local_id',mapping.local_id));processed++
   }
   if(!unfinished)storage(await db().from('planner_calendar_staging').update({status:'published'}).eq('username',username).eq('id',stage.id).eq('status','approved'))
-  storage(await db().from('planner_google_fixed_sync').update({...(unfinished?{}:{completed_revision:row.revision,synced_at:new Date().toISOString()}),lease_until:new Date(0).toISOString(),retry_at:new Date().toISOString(),error:null}).eq('username',username).eq('lease',claimed.lease))
+  storage(await db().from('planner_google_fixed_sync').update({...(unfinished?{}:{completed_revision:claimed.requested_revision,synced_at:new Date().toISOString()}),lease_until:new Date(0).toISOString(),retry_at:new Date().toISOString(),error:null}).eq('username',username).eq('lease',claimed.lease))
   return {processed,pending:unfinished}
  }catch(error){
   if(error instanceof ApiError&&error.status===409)storage(await db().from('planner_calendar_staging').update({status:'stale'}).eq('username',username).eq('status','approved'))

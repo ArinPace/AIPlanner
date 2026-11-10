@@ -16,3 +16,8 @@ export function repeatsWithAncestors(event:CalendarEvent,events:CalendarEvent[])
  while(current&&!seen.has(current.id)){seen.add(current.id);if(current.recurrence.frequency!=='none')return true;current=events.find(e=>e.id===current!.folderId)}
  return false
 }
+// Ignore only internal progress metadata. Every other change still needs review.
+export function calendarScheduleIdentity(state:import('../types.js').StoredState){
+ const canonical=(value:unknown):unknown=>Array.isArray(value)?value.map(canonical):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b)).map(([key,item])=>[key,canonical(item)])):value
+ return JSON.stringify(canonical({...state,events:state.events.map(({checklistLinks:_links,completedStarts:_done,...event})=>event)}))
+}

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {completeChecklistBlocks,linkChecklistBlocks} from './event-checklist.js'
 import {checklistItems} from '../src/lib/checklistItems.js'
 import {mergeAdjacentEvents} from '../src/lib/eventFolders.js'
+import {calendarScheduleIdentity} from '../src/lib/eventChecklist.js'
 import {todoChecklist} from './todo-completion.js'
 import type {CalendarEvent,StoredState} from '../src/types.js'
 import type {PlannerTextFile} from '../src/lib/files.js'
@@ -52,4 +53,11 @@ test('stable marker does not change existing To-do source hash and merges cannot
  const base={...note,id:'todo',systemRole:'todo' as const,content:'- [ ] Original'}
  const a=todoChecklist({folders:[],files:[base]})[0],b=todoChecklist({folders:[],files:[{...base,content:`- [ ] [item:${item}] Original`}]})[0];assert.equal(a.source,b.source);assert.equal(b.title,'Original')
  const e=event('a'),next=event('b',e.end,'2026-11-10T15:00:00Z');next.completedStarts=[next.start];assert.equal(mergeAdjacentEvents([e,next]).length,2)
+})
+
+test('Google review identity ignores progress only, never timing, tags or task identity',()=>{
+ const original=state(event('a')),progress=structuredClone(original);progress.events[0].completedStarts=[progress.events[0].start];progress.events[0].checklistLinks=[]
+ assert.equal(calendarScheduleIdentity(original),calendarScheduleIdentity(progress))
+ progress.events[0].end='2026-11-10T15:00:00Z';assert.notEqual(calendarScheduleIdentity(original),calendarScheduleIdentity(progress))
+ progress.events[0].end=original.events[0].end;progress.events[0].tagIds=['other'];assert.notEqual(calendarScheduleIdentity(original),calendarScheduleIdentity(progress))
 })
