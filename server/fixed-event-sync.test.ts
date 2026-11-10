@@ -22,17 +22,18 @@ test('queued Google export excludes planned work, deduplicates originals, retrie
  const keys=['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','SUPABASE_SECRET_KEY','CONNECTION_ENCRYPTION_KEY'] as const,env=Object.fromEntries(keys.map(k=>[k,process.env[k]])),originalFetch=globalThis.fetch
  process.env.SUPABASE_URL='https://fixed-sync.test';process.env.SUPABASE_SERVICE_ROLE_KEY='service';delete process.env.SUPABASE_SECRET_KEY;process.env.CONNECTION_ENCRYPTION_KEY='ab'.repeat(32)
  const accountId='ee34ba25-54bc-44df-8515-f7e6784dfed1',mappings:any[]=[],audits:any[]=[],remote=new Map<string,any>()
+ let calendarRevision=10,approvedCalendar:any=null
  let stageId=0,cancellationDecisions:Record<string,string>={},staleStageWrites=0
- const reviewed=()=>{stageId++;return processFixedSync('owner')}
+ const reviewed=()=>{stageId++;approvedCalendar=structuredClone({events,tags:[],hiddenTagIds:[]});return processFixedSync('owner')}
  let events=[event('class'),event('homework',{scheduleType:'planned'}),event('existing'),event('visual-folder',{eventKind:'folder'})],writes=0,deletes=0,canEdit=true,uncertain=false,lastQueue:any
  remote.set('original',{id:'original',etag:'v1',...fixedEventPayload(event('existing')),recurringEventId:'original-series',attendees:[{email:'friend@example.com'}]})
  const reply=(value:unknown)=>Response.json(value)
  globalThis.fetch=async(input,init)=>{
   const request=new Request(input,init),url=new URL(request.url),method=request.method
   if(url.hostname==='fixed-sync.test'){
-   if(url.pathname.endsWith('/rpc/planner_claim_fixed_sync')){assert.deepEqual(await request.json(),{p_username:'owner'});return reply([{username:'owner',lease:'lease-1'}])}
+   if(url.pathname.endsWith('/rpc/planner_claim_fixed_sync')){assert.deepEqual(await request.json(),{p_username:'owner'});return reply([{username:'owner',lease:'lease-1',requested_revision:10}])}
    if(url.searchParams.has('username'))assert.equal(url.searchParams.get('username'),'eq.owner')
-   if(url.pathname.endsWith('/planner_calendars'))return reply({state:{events,tags:[],hiddenTagIds:[]},revision:10})
+   if(url.pathname.endsWith('/planner_calendars'))return reply({state:{events,tags:[],hiddenTagIds:[]},revision:calendarRevision})
    if(url.pathname.endsWith('/planner_vm_settings'))return reply({google_account_id:accountId})
    if(url.pathname.endsWith('/planner_google_accounts')){const a={id:accountId,identity:'owner@example.com',credentials:sealVmCredential({access_token:'private',scope:GOOGLE_CALENDAR_SCOPE+(canEdit?' '+GOOGLE_CALENDAR_WRITE_SCOPE:''),expires_at:Date.now()+3600000})};return reply(url.searchParams.has('id')?a:[a])}
    if(url.pathname.endsWith('/planner_google_fixed_events')){
@@ -41,7 +42,7 @@ test('queued Google export excludes planned work, deduplicates originals, retrie
     if(method==='DELETE'){mappings.splice(mappings.findIndex(m=>'eq.'+m.local_id===url.searchParams.get('local_id')),1);return new Response(null,{status:204})}
    }
    if(url.pathname.endsWith('/planner_calendar_history')){const body=await request.json() as any;if(method==='POST'){audits.push(body);return reply({id:audits.length})}return new Response(null,{status:204})}
-   if(url.pathname.endsWith('/planner_calendar_staging')){if(method==='GET')return reply({id:'stage-'+stageId,status:'approved',approved_revision:10,account_id:accountId,payload:{google:{events:[...remote.values()]},googleDecisions:cancellationDecisions,resolutions:Object.fromEntries(Object.keys(cancellationDecisions).map(id=>['missing:'+id,'Reviewed the cancellation and its intended disposition.']))}});const update=await request.json() as any;if(update.status==='stale')staleStageWrites++;return new Response(null,{status:204})}
+   if(url.pathname.endsWith('/planner_calendar_staging')){if(method==='GET')return reply({id:'stage-'+stageId,status:'approved',approved_revision:10,account_id:accountId,payload:{calendar:approvedCalendar,google:{events:[...remote.values()]},googleDecisions:cancellationDecisions,resolutions:Object.fromEntries(Object.keys(cancellationDecisions).map(id=>['missing:'+id,'Reviewed the cancellation and its intended disposition.']))}});const update=await request.json() as any;if(update.status==='stale')staleStageWrites++;return new Response(null,{status:204})}
    if(url.pathname.endsWith('/planner_google_fixed_sync')&&method==='GET')return reply([])
    if(url.pathname.endsWith('/planner_google_fixed_sync')){lastQueue=await request.json();return new Response(null,{status:204})}
   }
@@ -64,6 +65,12 @@ test('queued Google export excludes planned work, deduplicates originals, retrie
   await reviewed();assert.equal(writes,1) // A fresh review adopts the verified uncertain create without rewriting it.
   assert.equal(mappings.length,2);assert.equal(mappings.find(m=>m.local_id==='existing').managed,false);assert.equal(remote.size,2)
   await reviewed();assert.equal(writes,1);assert.equal(lastQueue.completed_revision,10)
+  // A later internal checkmark revision may use the same exact approved schedule.
+  events=events.map(e=>e.id==='homework'?{...e,completedStarts:[e.start],checklistLinks:[{noteId:'work',itemId:'item'}]}:e);calendarRevision=11
+  assert.equal((await processFixedSync('owner')).error,undefined);assert.equal(lastQueue.completed_revision,10)
+  const progressEvents=events;events=events.map(e=>e.id==='class'?{...e,end:'2026-10-26T12:00:00-04:00'}:e)
+  assert.match((await processFixedSync('owner')).error!,/fresh agent-reviewed/);assert.equal(writes,1)
+  events=progressEvents;calendarRevision=10;staleStageWrites=0
   events=events.map(e=>e.id==='existing'?{...e,title:'Updated appointment'}:e)
   await reviewed();assert.equal(writes,2);assert.deepEqual(remote.get('original').attendees,[{email:'friend@example.com'}])
   const ownId=fixedGoogleId('owner','class'),beforeCancellation=writes
