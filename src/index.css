@@ -2345,3 +2345,11 @@ html, body { touch-action: pan-x pan-y; }
 .assistant-tutor-heading > button:first-child { flex: 1; font-weight: 600; }
 .assistant-tutor-heading > button:last-child { width: 36px; flex: 0 0 36px; padding: 6px; }
 .assistant-tutor-subjects { border-left: 1px solid var(--line); margin-left: 18px; padding-left: 6px; }
+
+.calendar-completion-action{display:inline-flex;align-items:center;position:relative;flex-shrink:0;align-self:stretch}
+.calendar-done-button{border:1px solid #dadce0;border-radius:7px;background:white;color:#166534;padding:6px 10px;margin:3px;min-height:32px;white-space:nowrap;font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+.calendar-done-button:hover:not(:disabled){background:#ecfdf5;border-color:#86b99b}
+.calendar-done-button:disabled{cursor:default}.calendar-done-button.is-done{color:#5f6368;background:#f1f3f4}
+.calendar-completion-error{position:absolute;right:0;top:100%;z-index:20;background:#fff1f2;color:#9f1239;border:1px solid #fecdd3;border-radius:6px;padding:8px;width:240px;font-size:12px}
+.calendar-task-with-actions>.event-chip{flex:1;min-width:0}.folder-event-header>.calendar-completion-action{align-items:center}
+.timed-event-with-actions{position:absolute}.timed-event-with-actions>.calendar-completion-action{position:absolute;right:2px;top:2px;z-index:3}.timed-event-with-actions:has(.calendar-completion-action)>.timed-event{padding-right:70px}

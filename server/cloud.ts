@@ -161,6 +161,7 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
     if(path==='/api/subscription-chat')return await (await import('./subscription-chat.js')).handleSubscriptionChat(request,username)
     if(path==='/api/sources/status'&&method==='GET')return json(await (await import('./source-health.js')).sourceHealthStatus(username))
     if(path==='/api/notifications'&&['GET','PUT'].includes(method)){const {taskNotificationSettings}=await import('./task-notifications.js');return json(await taskNotificationSettings(username,method==='PUT'?await body(request):undefined))}
+    if(path==='/api/calendar/checklist-done'&&method==='POST')return json(await (await import('./event-checklist.js')).completeEventChecklist(username,await body(request)))
     if (path === '/api/planning') return await handlePlanning(request,username)
     if(path==='/api/agent/instructions'){
       if(method==='GET')return json(await readAgentInstructions(username))

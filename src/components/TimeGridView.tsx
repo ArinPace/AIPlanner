@@ -1,3 +1,4 @@
+import {CalendarDoneButton} from './CalendarDoneButton'
 import {durationHeight} from '../lib/calendarDisplay'
 import {TaskScreenTimeButton} from './TaskScreenTimeButton'
 import {taskScreenTimeWindow} from '../lib/taskScreenTime'
@@ -34,6 +35,7 @@ type TimeGridViewProps = {
   occurrences: Occurrence[]
   tags: Tag[]
   onSlotClick: (date: Date, allDay?: boolean) => void
+  onEventDone: (event:CalendarEvent,start:Date)=>Promise<string>
   onEventClick: (event: CalendarEvent, occurrenceStart: Date) => void
 }
 
@@ -50,7 +52,7 @@ function clipToDay(item: Occurrence, day: Date): { start: Date; end: Date } | nu
   }
 }
 
-export function TimeGridView({ scaleToDuration=false, active=true,cursor, view, zoom, occurrences, busyOccurrences, tags, onSlotClick, onEventClick }: TimeGridViewProps) {
+export function TimeGridView({ scaleToDuration=false, active=true,cursor, view, zoom, occurrences, busyOccurrences, tags, onSlotClick, onEventClick, onEventDone }: TimeGridViewProps) {
   const days = view === 'day' ? [startOfDay(cursor)] : getWeekDays(cursor)
   const scrollRef = useRef<HTMLDivElement>(null)
   const weekScrollRef=useRef<HTMLDivElement>(null)
@@ -105,9 +107,11 @@ export function TimeGridView({ scaleToDuration=false, active=true,cursor, view, 
   }, [active,view,dayKey,todayKey,mobileWeek,hourHeight,containsToday,scaleToDuration])
 
   const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 60) * hourHeight
+  function completionLeaves(item:Occurrence):Occurrence[]{return item.event.eventKind==='folder'?(busyGrouped.children.get(folderOccurrenceKey(item))||[]).flatMap(completionLeaves):item.event.checklistLinks?.length?[item]:[]}
+  const doneButton=(item:Occurrence)=><CalendarDoneButton item={item} leaves={completionLeaves(item)} onDone={onEventDone}/>
   function dayFolderBody(item:Occurrence,day:Date):ReactNode{
     const open=folderOpen(item),children=(grouped.children.get(folderOccurrenceKey(item))||[]).filter(child=>clipToDay(child,day))
-    return <><div className="folder-event-header"><button type="button" className="folder-grid-toggle" aria-expanded={open} onClick={()=>toggleFolder(item)} style={eventAppearance(eventColor(item.event,tags))}>{open?'▾':'▸'} ▣ {item.event.title}<small>{formatTimeCompact(item.start)}–{formatTimeCompact(item.end)} · {children.length} {children.length===1?'item':'items'}</small></button><button type="button" className="folder-edit-button" aria-label={'Edit folder '+item.event.title} onClick={()=>onEventClick(item.event,item.start)}>Edit</button></div>{open&&<div className="folder-day-children">{folderChildren(item,day).map(child=>child.event.eventKind==='folder'?<div className="nested-day-folder" key={child.event.id}>{dayFolderBody(child,day)}</div>:<button type="button" key={child.event.id} className="event-chip folder-child-event" onClick={()=>child.freeTime?onSlotClick(child.start):onEventClick(child.event,child.start)} style={child.freeTime?freeTimeAppearance:eventAppearance(eventColor(child.event,tags),child.event.reminder)}><span>{formatTimeCompact(child.start)}–{formatTimeCompact(child.end)}</span><strong>{child.event.title}</strong></button>)}</div>}</>
+    return <><div className="folder-event-header"><button type="button" className="folder-grid-toggle" aria-expanded={open} onClick={()=>toggleFolder(item)} style={eventAppearance(eventColor(item.event,tags))}>{open?'▾':'▸'} ▣ {item.event.title}<small>{formatTimeCompact(item.start)}–{formatTimeCompact(item.end)} · {children.length} {children.length===1?'item':'items'}</small></button>{doneButton(item)}<button type="button" className="folder-edit-button" aria-label={'Edit folder '+item.event.title} onClick={()=>onEventClick(item.event,item.start)}>Edit</button></div>{open&&<div className="folder-day-children">{folderChildren(item,day).map(child=>child.event.eventKind==='folder'?<div className="nested-day-folder" key={child.event.id}>{dayFolderBody(child,day)}</div>:<div key={child.event.id} className="calendar-task-with-actions"><button type="button" className="event-chip folder-child-event" onClick={()=>child.freeTime?onSlotClick(child.start):onEventClick(child.event,child.start)} style={child.freeTime?freeTimeAppearance:eventAppearance(eventColor(child.event,tags),child.event.reminder)}><span>{formatTimeCompact(child.start)}–{formatTimeCompact(child.end)}</span><strong>{child.event.title}</strong></button>{!child.freeTime&&doneButton(child)}</div>)}</div>}</>
   }
   function agendaRows(items:ScheduleRow[],day:Date,showNow:boolean,nested=false):ReactNode{
     const currentFolder=items.find(item=>item.event.eventKind==='folder'&&item.start<=now&&now<item.end)
@@ -120,7 +124,7 @@ export function TimeGridView({ scaleToDuration=false, active=true,cursor, view, 
         <span className="event-title">{folder&&(open?'▾ ▣ ':'▸ ▣ ')}{item.event.urgency!=null&&<span className="event-urgency-badge" style={urgencyColor(item.event.urgency)}>{item.event.urgency}</span>}{item.event.title||'(No title)'}</span>
         {folder&&<small className="folder-event-count">{children.length} {children.length===1?'item':'items'}</small>}
       </button>
-      return <Fragment key={item.event.id+item.start.toISOString()}>{showNow&&!currentFolder&&index===next&&marker}{folder?<div className="agenda-event-folder"><div className="folder-event-header">{chip}<button type="button" className="folder-edit-button" aria-label={'Edit folder '+item.event.title} onClick={()=>onEventClick(item.event,item.start)}>Edit</button></div>{open&&<div className="folder-agenda-children">{children.length?agendaRows(folderChildren(item,day),day,showNow&&currentFolder===item,true):<><p className="quiet">No visible events in this folder.</p>{showNow&&currentFolder===item&&marker}</>}</div>}</div>:!item.freeTime&&!item.event.reminder&&!item.event.allDay&&supportsScreenTime()?<div className="calendar-task-with-actions">{chip}<TaskScreenTimeButton task={taskScreenTimeWindow(item.event,item.start,item.end)}/></div>:chip}</Fragment>
+      return <Fragment key={item.event.id+item.start.toISOString()}>{showNow&&!currentFolder&&index===next&&marker}{folder?<div className="agenda-event-folder"><div className="folder-event-header">{chip}{doneButton(item)}<button type="button" className="folder-edit-button" aria-label={'Edit folder '+item.event.title} onClick={()=>onEventClick(item.event,item.start)}>Edit</button></div>{open&&<div className="folder-agenda-children">{children.length?agendaRows(folderChildren(item,day),day,showNow&&currentFolder===item,true):<><p className="quiet">No visible events in this folder.</p>{showNow&&currentFolder===item&&marker}</>}</div>}</div>:!item.freeTime&&!item.event.reminder&&!item.event.allDay?<div className="calendar-task-with-actions">{chip}{doneButton(item)}{supportsScreenTime()&&<TaskScreenTimeButton task={taskScreenTimeWindow(item.event,item.start,item.end)}/>}</div>:chip}</Fragment>
     })}{showNow&&!currentFolder&&next===-1&&marker}</>
   }
 
@@ -229,19 +233,18 @@ export function TimeGridView({ scaleToDuration=false, active=true,cursor, view, 
                   }
 
                   return (
-                    <button
-                      key={`${item.event.id}-${item.start.toISOString()}`}
+                    <div key={`${item.event.id}-${item.start.toISOString()}`} className="timed-event-with-actions" style={{top,height,width,left}}><button
                       type="button"
                       className={`timed-event ${item.event.reminder?'reminder-event':''} ${height<32?'is-short':''} ${height<14?'is-tiny':''}`} 
                       data-layout-key={key}
                       title={`${item.event.reminder?'Reminder: ':''}${item.event.title} - ${formatTimeCompact(item.start)}${item.event.reminder?'':' - '+formatTimeCompact(item.end)}`}
                       style={{
-                        top,
+                        top:0,
                         height,
                         minHeight:0,
                         maxHeight:height,
-                        width,
-                        left,
+                        width:'100%',
+                        left:0,
                         ...(item.freeTime?freeTimeAppearance:eventAppearance(color,item.event.reminder)),
                       }}
                       onClick={() => item.freeTime?onSlotClick(item.start):onEventClick(item.event, item.start)}
@@ -251,7 +254,7 @@ export function TimeGridView({ scaleToDuration=false, active=true,cursor, view, 
                         {item.event.title || '(No title)'}
                       </span>
                       <span className="event-time">{item.event.reminder?'Reminder \u00b7 '+formatTimeCompact(item.start):formatTimeCompact(item.start)+' \u2013 '+formatTimeCompact(item.end)}</span>
-                    </button>
+                    </button>{!item.freeTime&&!item.event.reminder&&doneButton(item)}</div>
                   )
                 })}
               </div>

@@ -1,3 +1,4 @@
+import {registerEventChecklistTools} from './event-checklist.js'
 import {PDF_MAX_BYTES} from '../src/lib/files.js'
 import {plannerToolError} from './tool-errors.js'
 import {registerWhoopReviewTools} from './whoop-review.js'
@@ -73,6 +74,7 @@ export function createPlannerMcp(username: string, scopes: string[]) {
   registerAppSettingsTools(add,username)
   registerWhoopReviewTools(add,username)
   registerClientControlTools(add,username)
+  registerEventChecklistTools(add,username)
   registerPlanningTools(add,username)
   registerAgentMemory(add,username)
   registerAgentInstructions(add,username)

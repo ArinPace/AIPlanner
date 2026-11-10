@@ -1,9 +1,10 @@
+import {checklistLabel} from '../src/lib/checklistItems.js'
 import {createHash} from 'node:crypto'
 import type {FilesState} from '../src/lib/files.js'
 import type {PlanningTask} from '../src/lib/planning.js'
 import type {CalendarEvent} from '../src/types.js'
 
-function plain(text:string){return text.replace(/\[urgency:\d{1,2}\]\s*/g,'').replace(/\[([^\]]+)\]\([^)]*\)/g,'$1').replace(/[*_`~]/g,'').trim().replace(/\s+/g,' ').toLowerCase()}
+function plain(text:string){return checklistLabel(text).replace(/\[urgency:\d{1,2}\]\s*/g,'').replace(/\[([^\]]+)\]\([^)]*\)/g,'$1').replace(/[*_`~]/g,'').trim().replace(/\s+/g,' ').toLowerCase()}
 export function todoChecklist(files:FilesState){
  const note=files.files.find(file=>file.systemRole==='todo')
  if(!note)return []
@@ -16,7 +17,7 @@ export function todoChecklist(files:FilesState){
   if(!match)continue
   const title=plain(match[2]);if(!title)continue
   const urgency=match[2].match(/\[urgency:(\d{1,2})\]/)
-  rows.push({title:match[2].replace(/\[urgency:\d{1,2}\]\s*/g,'').trim(),normalized:title,checked:match[1].toLowerCase()==='x',urgency:urgency?Number(urgency[1]):null,source:'todo:'+note.id+':'+createHash('sha256').update(title).digest('hex')})
+  rows.push({title:checklistLabel(match[2]),normalized:title,checked:match[1].toLowerCase()==='x',urgency:urgency?Number(urgency[1]):null,source:'todo:'+note.id+':'+createHash('sha256').update(title).digest('hex')})
  }
  return rows
 }

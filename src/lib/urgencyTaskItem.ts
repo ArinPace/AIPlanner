@@ -25,19 +25,22 @@ export const UrgencyTaskItem=TaskItem.extend({
    return true
   }}
  },
- addAttributes(){return {...this.parent?.(),urgency:{default:null,keepOnSplit:false,parseHTML:element=>urgency(element.getAttribute('data-urgency')),renderHTML:attrs=>attrs.urgency==null?{}:{'data-urgency':attrs.urgency}}}},
+ addAttributes(){return {...this.parent?.(),checklistId:{default:null,keepOnSplit:false,parseHTML:element=>element.getAttribute('data-checklist-id'),renderHTML:attrs=>attrs.checklistId?{'data-checklist-id':attrs.checklistId}:{}},urgency:{default:null,keepOnSplit:false,parseHTML:element=>urgency(element.getAttribute('data-urgency')),renderHTML:attrs=>attrs.urgency==null?{}:{'data-urgency':attrs.urgency}}}},
  parseMarkdown(token,helpers){
   const parsed=this.parent!(token,helpers)
   if(!parsed || Array.isArray(parsed))return parsed
   const first=parsed.content?.[0]?.content?.[0]
   const match=first?.type==='text' && first.text?.match(/^\[urgency:(\d{1,2})\]\s*/)
   if(match){parsed.attrs={...parsed.attrs,urgency:Number(match[1])};first.text=first.text!.slice(match[0].length);if(!first.text)parsed.content![0].content!.shift()}
+  const item=first?.type==='text' && first.text?.match(/^\[item:([0-9a-f-]{36})\]\s*/i)
+  if(item){parsed.attrs={...parsed.attrs,checklistId:item[1]};first.text=first.text!.slice(item[0].length);if(!first.text)parsed.content![0].content!.shift()}
   return parsed
  },
  renderMarkdown(node,helpers,context){
   const text=this.parent?.(node,helpers,context) || ''
   const n=urgency(node.attrs?.urgency)
-  return n==null?text:text.replace(/^(- \[[ x]\] )/,`$1[urgency:${n}] `)
+  const tagged=node.attrs?.checklistId?text.replace(/^(- \[[ x]\] )/,`$1[item:${node.attrs.checklistId}] `):text
+  return n==null?tagged:tagged.replace(/^(- \[[ x]\] )/,`$1[urgency:${n}] `)
  },
  addNodeView(){
   const create=this.parent?.()

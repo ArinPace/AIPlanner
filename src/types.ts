@@ -19,6 +19,8 @@ export interface Tag {
 }
 
 export interface CalendarEvent {
+  checklistLinks?: {noteId:string;itemId:string}[]
+  completedStarts?: string[]
   detachedFrom?: string
   excludedStarts?: string[]
   inheritedExcludedStarts?: string[]

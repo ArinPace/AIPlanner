@@ -76,7 +76,7 @@ export function saveEventGroup(events:CalendarEvent[],event:CalendarEvent,childr
 
 export function mergeAdjacentEvents(events:CalendarEvent[]):CalendarEvent[]{
  const result:CalendarEvent[]=[],redirects=new Map<string,string>()
- const comparable=(event:CalendarEvent)=>JSON.stringify([event.title,[...event.tagIds].sort(),event.folderId||null,event.scheduleType||null,event.planning||null,event.recurrence,[...(event.excludedStarts||[])].map(Date.parse).sort(),[...(event.inheritedExcludedStarts||[])].map(Date.parse).sort()])
+ const comparable=(event:CalendarEvent)=>JSON.stringify([event.title,[...event.tagIds].sort(),event.folderId||null,event.scheduleType||null,event.planning||null,event.checklistLinks||[],event.completedStarts||[],event.recurrence,[...(event.excludedStarts||[])].map(Date.parse).sort(),[...(event.inheritedExcludedStarts||[])].map(Date.parse).sort()])
  for(const event of [...events].sort((a,b)=>Date.parse(a.start)-Date.parse(b.start))){
   const previous=[...result].reverse().find(item=>Date.parse(item.end)===Date.parse(event.start)&&!item.allDay&&!item.reminder&&item.eventKind!=='folder'&&comparable(item)===comparable(event)&&(event.recurrence.frequency==='none'||toDateInput(new PlannerDate(item.start))===toDateInput(new PlannerDate(event.start))))
   if(previous&&!event.allDay&&!event.reminder&&event.eventKind!=='folder'){

@@ -1,3 +1,4 @@
+import {completeCalendarBlock} from './lib/api'
 import {DeviceControlSync} from './components/DeviceControlSync'
 import {subscriptionChatRequest} from './lib/api'
 import {applyTheme,readTheme} from './lib/theme'
@@ -303,6 +304,20 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
     return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener('focus', refresh);document.removeEventListener('visibilitychange',resume);window.removeEventListener('planner-calendar-refresh',refresh) }
   }, [tab, loaded, loadError, draft, events, tags, hiddenTagIds, zoom, applyState])
 
+  async function markCalendarDone(event:CalendarEvent,start:Date){
+    if(draft)throw new Error('Close the event editor before marking work done.')
+    await saveQueue.current
+    const baseline=calendarFingerprint(latestCalendar.current)
+    if(baseline!==persistedCalendar.current)throw new Error('Calendar changes are still saving. Try again in a moment.')
+    const current=await loadCalendar({adopt:false})
+    const result=await completeCalendarBlock({revision:current.revision!,eventId:event.id,occurrenceStart:start.toISOString()})
+    const remote=await loadCalendar({adopt:false})
+    if(calendarFingerprint(latestCalendar.current)===baseline){adoptCalendarRevision(remote.revision);applyState(remote)}
+    else setSaveError('Completion saved. You also edited the calendar; reconcile those edits before saving again.')
+    const open=result.progress.filter(item=>!item.checked)
+    return open.length?'Block saved. '+open.map(item=>item.recurring?'Recurring checklist stays open.':`${item.completed} of ${item.total} required blocks done.`).join(' '):'Block saved and linked checklist item checked off.'
+  }
+
   useDatePinch(mainRef, setView, loaded && tab === 'calendar')
 
   useEffect(() => {
@@ -531,6 +546,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
           ) : (
             <TimeGridView
               scaleToDuration={calendarDisplay.settings.week}
+              onEventDone={markCalendarDone}
               active={tab==='calendar'}
               cursor={cursor}
               view={view}
