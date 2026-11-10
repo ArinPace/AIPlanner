@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from 'react'
 import {planningRequest} from '../lib/api'
-import {intensityDescription,type PlanningProfile} from '../lib/planning'
+import {intensityDescription,personalTaskLimit,type PlanningProfile} from '../lib/planning'
 import {PlannerDate as Date} from '../lib/timezone'
 import {toDateInput} from '../lib/dates'
 
@@ -16,7 +16,7 @@ export function PlanningSettings({date,onClose}:{date?:string;onClose:()=>void})
   const {enabled,intensity,weekdays,overrides}=row.profile
   const patch={enabled,intensity,weekdays,overrides}
   const result=await planningRequest<Row & {replanError?:string|null;plan?:{warnings:string[]}}>({revision:row.revision,patch})
-  setRow(result);setNotice(result.replanError?'Preferences saved; replanning needs attention.':result.plan?'Saved and remaining week replanned.'+(result.plan.warnings.length?' Some tasks did not fit; review them in Main Chat.':''):'Saved. Continue setup in Main Chat, then press Start planning my calendar when you are ready.');if(result.replanError)setError(result.replanError);window.dispatchEvent(new Event('planner-calendar-refresh'))
+  setRow(result);setNotice(result.replanError?'Preferences saved; replanning needs attention.':result.plan?'Saved and remaining week replanned.'+(result.plan.warnings.length?' Some tasks did not fit; review them in Main Chat.':''):'Saved. Continue setup in Main Chat, then press Start planning my calendar when you are ready.');if(result.replanError)setError(result.replanError);window.dispatchEvent(new Event('planner-calendar-refresh'));window.dispatchEvent(new Event('planner-intensity-refresh'))
  }catch(e){setError(e instanceof Error?e.message:'Could not save preferences.')}finally{setBusy(false)}}
  return <dialog ref={dialog} className="files-dialog planning-dialog" onCancel={event=>{event.preventDefault();if(!busy)onClose()}}>
   <div className="files-dialog-head"><h2>{date?'Day intensity':'Planning & intensity'}</h2><button type="button" className="icon-btn" aria-label="Close planning settings" disabled={busy} onClick={onClose}>×</button></div>
@@ -35,7 +35,16 @@ export function PlanningSettings({date,onClose}:{date?:string;onClose:()=>void})
   </>}
  </dialog>
 }
-export function PlanningButton({date,dayNumber}:{date:string;dayNumber?:number}){
- const [open,setOpen]=useState(false)
- return <><button type="button" className={dayNumber===undefined?'day-intensity-button':'num day-intensity-date'} title={'Adjust intensity for '+date} aria-label={'Adjust intensity for '+date} onClick={e=>{e.stopPropagation();setOpen(true)}}>{dayNumber??'Intensity'}</button>{open&&<PlanningSettings date={date} onClose={()=>setOpen(false)}/>}</>
+export function PlanningButton({date, dayNumber, intensity}: {date: string; dayNumber?: number; intensity?: number}) {
+ const [open, setOpen] = useState(false)
+ const limit = intensity === undefined ? undefined : personalTaskLimit(intensity)
+ return <>
+  <button type="button" className={dayNumber === undefined ? 'day-intensity-button' : 'num day-intensity-date'} title={'Adjust intensity for ' + date} aria-label={'Adjust intensity for ' + date} onClick={event => { event.stopPropagation(); setOpen(true) }}>
+   {dayNumber ?? <>
+    <strong>{intensity === undefined ? 'Intensity' : `Intensity ${intensity}`}</strong>
+    {limit !== undefined && <small>{limit === 1 ? '1 medium To-do/day' : `Up to ${limit} core To-dos/day`}</small>}
+   </>}
+  </button>
+  {open && <PlanningSettings date={date} onClose={() => setOpen(false)} />}
+ </>
 }

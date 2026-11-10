@@ -1,3 +1,5 @@
+import {planningRequest} from '../lib/api'
+import {intensityFor, type PlanningProfile} from '../lib/planning'
 import {canCompleteChecklistBlock} from '../lib/eventChecklist'
 import {CalendarDoneButton} from './CalendarDoneButton'
 import {durationHeight} from '../lib/calendarDisplay'
@@ -54,6 +56,20 @@ function clipToDay(item: Occurrence, day: Date): { start: Date; end: Date } | nu
 }
 
 export function TimeGridView({ scaleToDuration=false, active=true,cursor, view, zoom, occurrences, busyOccurrences, tags, onSlotClick, onEventClick, onEventDone }: TimeGridViewProps) {
+  const [planning, setPlanning] = useState<PlanningProfile>()
+  useEffect(() => {
+    if (!active) return
+    let live = true
+    function refresh() {
+      void planningRequest<{profile: PlanningProfile}>().then(({profile}) => {
+        if (live) setPlanning(profile)
+      }).catch(() => {})
+    }
+    refresh()
+    window.addEventListener('planner-intensity-refresh', refresh)
+    return () => { live = false; window.removeEventListener('planner-intensity-refresh', refresh) }
+  }, [active])
+  const dayIntensity = (day: Date) => planning && intensityFor(planning, toDateInput(day), day.getDay())
   const days = view === 'day' ? [startOfDay(cursor)] : getWeekDays(cursor)
   const scrollRef = useRef<HTMLDivElement>(null)
   const weekScrollRef=useRef<HTMLDivElement>(null)
@@ -144,7 +160,7 @@ export function TimeGridView({ scaleToDuration=false, active=true,cursor, view, 
           return <section className="mobile-week-day" key={day.toISOString()}>
             <div className="mobile-week-heading">
               <h3 className={isToday(day) ? 'is-today' : ''}>{day.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</h3>
-              <PlanningButton date={toDateInput(day)}/>
+              <PlanningButton date={toDateInput(day)} intensity={dayIntensity(day)}/>
               <button type="button" className="text-btn" aria-label={'Add event on ' + day.toDateString()} onClick={() => onSlotClick(startOfDay(day), true)}>+</button>
             </div>
             {items.length === 0 && <p className="mobile-week-empty">No events</p>}
@@ -158,7 +174,7 @@ export function TimeGridView({ scaleToDuration=false, active=true,cursor, view, 
         {days.map((day) => (
           <div key={day.toISOString()} className={`time-day-head ${isToday(day) ? 'is-today' : ''}`}>
             <span className="dow">{day.toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase()}</span>
-            {view==='week'?<PlanningButton date={toDateInput(day)} dayNumber={day.getDate()}/>:<><span className="num">{day.getDate()}</span><PlanningButton date={toDateInput(day)}/></>}
+            {view==='week'?<PlanningButton date={toDateInput(day)} dayNumber={day.getDate()}/>:<><span className="num">{day.getDate()}</span><PlanningButton date={toDateInput(day)} intensity={dayIntensity(day)}/></>}
           </div>
         ))}
       </div>

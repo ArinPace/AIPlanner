@@ -193,13 +193,26 @@ export async function uploadPdf(folderId: string | null, file: File) {
   }
 }
 
-export async function downloadPdf(id: string, name: string) {
+export async function loadPdfSource(id: string, signal?: AbortSignal) {
   const token = getToken()
-  const response = await fetch(`/api/files/documents/${encodeURIComponent(id)}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
-  if (!response.ok) throw new Error('Could not download this PDF. Please try again.')
-  const blob = response.headers.get('Content-Type')?.includes('application/json')
-    ? await fetch((await response.json() as { downloadUrl: string }).downloadUrl).then((download) => { if (!download.ok) throw new Error('Could not download PDF.'); return download.blob() })
-    : await response.blob()
+  const response = await fetch(`/api/files/documents/${encodeURIComponent(id)}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {}, signal,
+  })
+  if (!response.ok) throw new Error('Could not open this PDF. Please try again.')
+  if (response.headers.get('Content-Type')?.includes('application/json')) {
+    return { url: (await response.json() as { downloadUrl: string }).downloadUrl }
+  }
+  return { data: new Uint8Array(await response.arrayBuffer()) }
+}
+
+export async function downloadPdf(id: string, name: string) {
+  const source = await loadPdfSource(id)
+  const blob = source.url
+    ? await fetch(source.url).then(response => {
+        if (!response.ok) throw new Error('Could not download PDF.')
+        return response.blob()
+      })
+    : new Blob([source.data!], {type: 'application/pdf'})
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url

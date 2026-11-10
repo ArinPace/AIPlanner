@@ -3,7 +3,7 @@ import {randomUUID} from 'node:crypto'
 import {PlannerDate as Date} from '../src/lib/timezone.js'
 import {addDays,toDateInput} from '../src/lib/dates.js'
 import {expandEvents} from '../src/lib/recurrence.js'
-import {intensityFor,type PlanningProfile,type PlanningTask} from '../src/lib/planning.js'
+import {intensityFor,personalTaskLimit,type PlanningProfile,type PlanningTask} from '../src/lib/planning.js'
 import type {CalendarEvent} from '../src/types.js'
 import {eventType} from '../src/lib/eventType.js'
 import {normalizeEventFolders} from '../src/lib/eventFolders.js'
@@ -37,7 +37,7 @@ export function buildDayPlan(profile:PlanningProfile,events:CalendarEvent[],date
    ...profile.meals.map(meal=>({...meal,start:clock(meal.time),end:clock(meal.time)+meal.minutes*minute})),
   ].filter(routine=>routine.end>routine.start).sort((a,b)=>a.start-b.start)
   const focus=120,rest=10,buffer=Math.round(10-intensity*.07)
-  const coreLimit=intensity<50?1:intensity<75?2:3,coreTasks=new Set<string>(),tinyTasks=new Set<string>()
+  const coreLimit=personalTaskLimit(intensity),coreTasks=new Set<string>(),tinyTasks=new Set<string>()
   for(const event of retained.filter(e=>Date.parse(e.end)>Math.max(day.getTime(),now.getTime())&&Date.parse(e.start)<dayEnd)){
    const task=profile.tasks.find(task=>task.id===event.planning?.taskId)
    if(task&&task.status==='todo'&&personal(task))(task.minutes<=15?tinyTasks:coreTasks).add(task.id)

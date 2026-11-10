@@ -465,7 +465,6 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
         zoom={zoom}
         calendarDisplay={calendarDisplay}
         username={username}
-        onViewChange={setView}
         onNavigate={navigate}
         onToday={() => setCursor(new Date())}
         onToggleSidebar={() => {if(tab==='files'||tab==='todo'||tab==='work')setFilesSidebar(v=>!v);else if(tab==='agent')setAgentSidebar(v=>!v);else if(tab==='chat')setSubscriptionSidebar(v=>!v);else setSidebarOpen(v=>!v)}}
@@ -488,6 +487,8 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
       <div className="agent-tab-panel" hidden={tab!=='chat'}><SubscriptionChatView active={tab==='chat'} username={username} sidebar={subscriptionSidebar} setSidebar={setSubscriptionSidebar}/></div>
       <div className="app-body" hidden={tab !== 'calendar'}>
         <Sidebar
+          view={view}
+          onViewChange={next => { setView(next); if (window.innerWidth <= 860) setSidebarOpen(false) }}
           events={events}
           open={sidebarOpen}
           cursor={cursor}

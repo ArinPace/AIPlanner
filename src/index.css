@@ -2353,3 +2353,21 @@ html, body { touch-action: pan-x pan-y; }
 .calendar-completion-error{position:absolute;right:0;top:100%;z-index:20;background:#fff1f2;color:#9f1239;border:1px solid #fecdd3;border-radius:6px;padding:8px;width:240px;font-size:12px}
 .calendar-task-with-actions>.event-chip{flex:1;min-width:0}.folder-event-header>.calendar-completion-action{align-items:center}
 .timed-event-with-actions{position:absolute}.timed-event-with-actions>.calendar-completion-action{position:absolute;right:2px;top:2px;z-index:3}.timed-event-with-actions:has(.calendar-completion-action)>.timed-event{padding-right:70px}
+
+.sidebar-view-switch { display: flex; width: fit-content; max-width: 100%; margin: 0 0 8px; }
+.sidebar-view-switch button { padding-inline: 8px; }
+.sidebar-history { margin-bottom: 12px; }
+.day-intensity-button strong, .day-intensity-button small { display: block; }
+.day-intensity-button small { margin-top: 2px; font-size: 10px; }
+.document-open-icon, .document-open-name { background: none; border: 0; color: inherit; cursor: pointer; padding: 0; }
+.document-open-name { font: inherit; font-weight: 650; text-align: left; overflow-wrap: anywhere; }
+.document-open-name:hover { text-decoration: underline; }
+.pdf-thumbnail { overflow: hidden; }
+.pdf-thumbnail canvas { width: 100%; height: 100%; object-fit: contain; background: white; }
+.files-dialog.content-preview { box-sizing: border-box; width: min(94vw, 900px); max-width: none; padding: 0; }
+.files-dialog.content-preview[open] { display: flex; flex-direction: column; max-height: 88dvh; }
+.content-preview .files-dialog-head { flex: none; padding: 12px 16px; gap: 8px; }
+.content-preview .files-dialog-head h2 { min-width: 0; overflow-wrap: anywhere; flex: 1; }
+.pdf-preview-page { min-height: 0; overflow: auto; display: grid; justify-items: center; padding: 12px; background: var(--line); }
+.pdf-preview-page canvas { max-width: 100%; height: auto; }
+.pdf-preview-pages { flex: none; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 8px; background: var(--panel); }

@@ -24,6 +24,15 @@ struct PlannerWebView: UIViewRepresentable {
         config.allowsInlineMediaPlayback = true
         config.userContentController.addScriptMessageHandler(context.coordinator, contentWorld: .page, name: "plannerNative")
         config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeScreenTime=true;window.plannerNativeChatGPTPortal=true;window.plannerNativeChatGPTRelayVersion=6;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true'});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        config.userContentController.addUserScript(WKUserScript(source: """
+            document.addEventListener('click', event => {
+              const link = event.target instanceof Element && event.target.closest('a[href]');
+              if (event.defaultPrevented || !link || link.hasAttribute('download') || !/^https?:/i.test(link.href)) return;
+              if (link.origin === location.origin || localStorage.getItem('planner-open-links-in-browser') !== 'true') return;
+              event.preventDefault();
+              window.webkit.messageHandlers.plannerNative.postMessage({action:'openExternalLink',url:link.href}).catch(() => window.open(link.href, '_blank', 'noopener,noreferrer'));
+            });
+        """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-UITestSignedRelayDiagnostics") {
             config.userContentController.addUserScript(WKUserScript(source: """
@@ -383,6 +392,10 @@ struct PlannerWebView: UIViewRepresentable {
                     case "googleConnection":
                         guard let raw = body["url"] as? String, let url = URL(string: raw) else { throw NativeError("Missing connection URL.") }
                         try await authentication?.connectGoogle(url)
+                    case "openExternalLink":
+                        guard let raw = body["url"] as? String, let url = URL(string: raw),
+                              ["https", "http"].contains(url.scheme ?? "") else { throw NativeError("Invalid web address.") }
+                        guard await UIApplication.shared.open(url) else { throw NativeError("Could not open browser.") }
                     case "downloadText":
                         guard let text = body["text"] as? String, let name = body["name"] as? String, let data = text.data(using: .utf8), data.count <= 30 * 1024 * 1024 else { throw NativeError("File is missing or too large to share.") }
                         let url = try destination(name)
@@ -442,7 +455,7 @@ struct PlannerWebView: UIViewRepresentable {
         func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
             if let url = navigationAction.request.url {
                 if AppConfiguration.isPlanner(url) || url.scheme == "blob" { webView.load(navigationAction.request) }
-                else if url.scheme == "https" { model.browser = BrowserDestination(url: url) }
+                else if ["https", "http"].contains(url.scheme ?? "") { model.browser = BrowserDestination(url: url) }
             }
             return nil
         }

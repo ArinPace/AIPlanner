@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from 'react'
 import type { CalendarView } from '../types'
 import { formatRangeLabel } from '../lib/dates'
 import { SettingsPanel } from './SettingsPanel'
-import {CalendarHistory} from './CalendarHistory'
 import { CalendarMark, ChevronIcon, MenuIcon, PlusIcon, SettingsIcon } from './Icons'
 
 type HeaderProps = {
@@ -15,7 +14,6 @@ type HeaderProps = {
   view: CalendarView
   zoom: number
   username: string
-  onViewChange: (view: CalendarView) => void
   onNavigate: (direction: -1 | 1) => void
   onToday: () => void
   onToggleSidebar: () => void
@@ -23,8 +21,6 @@ type HeaderProps = {
   onVisualZoomChange: (zoom: number) => void
   onLogout: () => void
 }
-
-const VIEWS: CalendarView[] = ['day', 'week', 'month', 'year']
 
 export function Header({
   hideAgent=false,
@@ -34,7 +30,6 @@ export function Header({
   view,
   zoom,
   username,
-  onViewChange,
   onNavigate,
   onToday,
   onToggleSidebar,
@@ -44,7 +39,6 @@ export function Header({
   calendarDisplay,
 }: HeaderProps) {
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [historyOpen,setHistoryOpen]=useState(false)
   const settingsRef = useRef<HTMLDivElement>(null)
   useEffect(()=>{const handle=(event:Event)=>{const open=(event as CustomEvent).detail?.open;if(typeof open==='boolean')setSettingsOpen(open)};window.addEventListener('planner-client-settings',handle);return()=>window.removeEventListener('planner-client-settings',handle)},[])
 
@@ -83,7 +77,6 @@ export function Header({
         <button type="button" className="today-btn" onClick={onToday}>
           Today
         </button>
-        <button type="button" className="icon-btn" aria-label="Calendar history" title="Calendar history" onClick={()=>setHistoryOpen(true)}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M3 11a9 9 0 1 1 2 7M3 4v7h7M12 7v5l3 2"/></svg></button>
         <div className="nav-group">
           <button type="button" className="icon-btn" aria-label="Previous" onClick={() => onNavigate(-1)}>
             <ChevronIcon />
@@ -97,20 +90,6 @@ export function Header({
       </div>
 
       <div className="header-right">
-        {tab === 'calendar' && <div className="view-switch" role="tablist" aria-label="Calendar view">
-          {VIEWS.map((option) => (
-            <button
-              key={option}
-              type="button"
-              role="tab"
-              aria-selected={view === option}
-              className={view === option ? 'is-active' : ''}
-              onClick={() => onViewChange(option)}
-            >
-              {option[0].toUpperCase() + option.slice(1)}
-            </button>
-          ))}
-        </div>}
         <div className="settings-wrap" ref={settingsRef}>
           <button
             type="button"
@@ -125,6 +104,7 @@ export function Header({
             <SettingsPanel
               calendarDisplay={calendarDisplay}
               zoom={zoom}
+              onLogout={onLogout}
               onZoomChange={onVisualZoomChange}
               onClose={() => setSettingsOpen(false)}
             />
@@ -132,12 +112,8 @@ export function Header({
         </div>
         <div className="user-chip">
           <span>{username}</span>
-          <button type="button" className="text-btn" onClick={onLogout}>
-            Log out
-          </button>
         </div>
       </div>
-    {historyOpen&&<CalendarHistory onClose={()=>setHistoryOpen(false)}/>}
     </header>
   )
 }

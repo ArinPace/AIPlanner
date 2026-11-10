@@ -1,6 +1,7 @@
+import {CalendarHistory} from './CalendarHistory'
 import { TagChart } from './TagChart'
 import { useState, type FormEvent } from 'react'
-import type { CalendarEvent, Tag } from '../types'
+import type { CalendarEvent, CalendarView, Tag } from '../types'
 import { nextTagColor, TAG_COLORS } from '../lib/colors'
 import { PlusIcon, TrashIcon } from './Icons'
 import { MiniCalendar } from './MiniCalendar'
@@ -9,6 +10,8 @@ import {FixedCalendarSync} from './FixedCalendarSync'
 
 type SidebarProps = {
   open: boolean
+  view: CalendarView
+  onViewChange: (view: CalendarView) => void
   cursor: Date
   onCursorChange: (date: Date) => void
   onCreate: () => void
@@ -25,6 +28,8 @@ type SidebarProps = {
 
 export function Sidebar({
   open,
+  view,
+  onViewChange,
   cursor,
   onCursorChange,
   onCreate,
@@ -38,6 +43,7 @@ export function Sidebar({
   onUpdateTag,
   onDeleteTag,
 }: SidebarProps) {
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [chart, setChart] = useState(false)
   const [adding, setAdding] = useState(false)
   const [editing,setEditing]=useState<string|null>(null)
@@ -66,6 +72,15 @@ export function Sidebar({
         Create
       </button>
 
+      <div className="view-switch sidebar-view-switch" role="group" aria-label="Calendar view">
+        {(['day', 'week', 'month', 'year'] as const).map(option => (
+          <button key={option} type="button" aria-pressed={view === option} className={view === option ? 'is-active' : ''} onClick={() => onViewChange(option)}>
+            {option[0].toUpperCase() + option.slice(1)}
+          </button>
+        ))}
+      </div>
+      <button type="button" className="text-btn sidebar-history" onClick={() => setHistoryOpen(true)}>Calendar history</button>
+      {historyOpen && <CalendarHistory onClose={() => setHistoryOpen(false)} />}
       <MiniCalendar cursor={cursor} onCursorChange={onCursorChange} />
       <section className="event-type-filter" aria-label="Event visibility">
         <h2>Show events</h2>

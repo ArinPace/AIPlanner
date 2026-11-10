@@ -1,3 +1,5 @@
+import {isIPhoneApp} from '../lib/platform'
+import {externalLinks, setExternalLinks} from '../lib/linkPreference'
 import type {useCalendarDisplay} from '../lib/useCalendarDisplay'
 import {TaskNotificationSettings} from './TaskNotificationSettings'
 import {LocalCopySettings} from './LocalCopySettings'
@@ -13,13 +15,15 @@ type SettingsPanelProps = {
   zoom: number
   onZoomChange: (zoom: number) => void
   onClose: () => void
+  onLogout: () => void
 }
 
 function shortcutMod(): string {
   return /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl'
 }
 
-export function SettingsPanel({ calendarDisplay, zoom, onZoomChange, onClose }: SettingsPanelProps) {
+export function SettingsPanel({ calendarDisplay, zoom, onZoomChange, onClose, onLogout }: SettingsPanelProps) {
+  const [openExternally, setOpenExternally] = useState(externalLinks)
   const [downloadError,setDownloadError]=useState('')
   const mod = shortcutMod()
   const [theme, setTheme] = useState(readTheme)
@@ -50,6 +54,13 @@ export function SettingsPanel({ calendarDisplay, zoom, onZoomChange, onClose }: 
           applyTheme(next)
         }} />
       </label>
+      {isIPhoneApp() && <label className="settings-theme">
+        <span>Open links in browser</span>
+        <input type="checkbox" role="switch" checked={openExternally} onChange={event => {
+          setOpenExternally(event.target.checked)
+          setExternalLinks(event.target.checked)
+        }} />
+      </label>}
       <button type="button" className="today-btn" onClick={()=>setPlanningOpen(true)}>Planning & intensity</button>
       {planningOpen&&<PlanningSettings onClose={()=>setPlanningOpen(false)}/>}
       <button type="button" className="today-btn" onClick={()=>void downloadCalendarJson().catch(e=>setDownloadError(e.message))}>Download calendar JSON</button>
@@ -83,6 +94,7 @@ export function SettingsPanel({ calendarDisplay, zoom, onZoomChange, onClose }: 
       <p className="quiet settings-hint">
         Visual zoom: {mod} + / {mod} −. Reset with {mod} 0.
       </p>
+      <button type="button" className="text-btn" onClick={onLogout}>Log out</button>
     </div>
   )
 }

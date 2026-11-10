@@ -22,3 +22,7 @@ export function intensityFor(profile:PlanningProfile,date:string,weekday:number)
  return value
 }
 export function intensityDescription(value:number){return value<=30?'Gentle':value>=75?'Focused':'Balanced'}
+
+export function personalTaskLimit(intensity: number): number {
+ return intensity < 50 ? 1 : intensity < 75 ? 2 : 3
+}
