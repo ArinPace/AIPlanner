@@ -1,14 +1,12 @@
 import {randomUUID} from 'node:crypto'
 import {z} from 'zod'
 import {ApiError,db} from './cloud.js'
-import {calendarRow} from './planner-workspace.js'
 import {storage} from './mcp-auth.js'
 import {DEFAULT_PLANNING,type PlanningProfile} from '../src/lib/planning.js'
-import {readCanonicalNote} from './files-transfer.js'
 import {checklistItems} from '../src/lib/checklistItems.js'
 import {checklistLeaves,occurrenceChecked,repeatsWithAncestors} from '../src/lib/eventChecklist.js'
 import {completedTodoTasks} from './todo-completion.js'
-import type {PlannerTextFile,FilesState} from '../src/lib/files.js'
+import type {PlannerTextFile} from '../src/lib/files.js'
 import type {StoredState} from '../src/types.js'
 const iso=z.string().datetime({offset:true})
 const linkArgs=z.object({calendarRevision:z.number().int().nonnegative(),filesRevision:z.number().int().nonnegative(),noteId:z.string().min(1).max(100),itemIndex:z.number().int().nonnegative(),itemText:z.string().min(1).max(2000),eventIds:z.array(z.string().min(1).max(100)).min(1).max(200),replaceLinks:z.boolean().optional()}).strict()
@@ -63,11 +61,12 @@ export function completeChecklistBlocks(calendar:StoredState,notes:PlannerTextFi
  return {calendar:copy,notes:[...updates.values()],progress,changed,blocks:leaves.length}
 }
 async function context(username:string){
- const [calendar,planning,todo,work]=await Promise.all([calendarRow(username),db().from('planner_planning').select('state,revision').eq('username',username).single(),readCanonicalNote(username,'todo') as Promise<FilesState>,readCanonicalNote(username,'work') as Promise<FilesState>])
- if(todo.revision!==work.revision)throw new ApiError(409,'Files changed. Retry with current notes.')
- const saved=storage(planning)
- return {calendar,planning:{rawState:saved.state,profile:{...structuredClone(DEFAULT_PLANNING),...saved.state} as PlanningProfile,revision:Number(saved.revision)},filesRevision:todo.revision!,notes:[...todo.files,...work.files]}
+ const result=await db().rpc('planner_event_check_context',{p_username:username})
+ if(result.error){console.error('Checklist context read failed',{code:result.error.code});throw new ApiError(result.error.code==='P0002'?404:503,result.error.code==='P0002'?'Canonical Work/To-do workspace not found.':'Could not read current completion links. Retry after the current save finishes.')}
+ const row=storage(result) as {calendar:{state:StoredState;revision:number};planning:{state:PlanningProfile;revision:number};filesRevision:number;notes:PlannerTextFile[]}
+ return {calendar:row.calendar,planning:{rawState:row.planning.state,profile:{...structuredClone(DEFAULT_PLANNING),...row.planning.state},revision:Number(row.planning.revision)},filesRevision:row.filesRevision,notes:row.notes}
 }
+
 async function commit(username:string,c:Awaited<ReturnType<typeof context>>,calendar:StoredState,notes:PlannerTextFile[],syncTasks=false){
  const files={folders:[],files:c.notes.map(n=>notes.find(v=>v.id===n.id)||n)}
  const profile=structuredClone(c.planning.profile),stored=structuredClone(c.planning.rawState)
