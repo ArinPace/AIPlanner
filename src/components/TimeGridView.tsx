@@ -1,3 +1,4 @@
+import {canCompleteChecklistBlock} from '../lib/eventChecklist'
 import {CalendarDoneButton} from './CalendarDoneButton'
 import {durationHeight} from '../lib/calendarDisplay'
 import {TaskScreenTimeButton} from './TaskScreenTimeButton'
@@ -107,7 +108,14 @@ export function TimeGridView({ scaleToDuration=false, active=true,cursor, view, 
   }, [active,view,dayKey,todayKey,mobileWeek,hourHeight,containsToday,scaleToDuration])
 
   const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 60) * hourHeight
-  function completionLeaves(item:Occurrence):Occurrence[]{return item.event.eventKind==='folder'?(busyGrouped.children.get(folderOccurrenceKey(item))||[]).flatMap(completionLeaves):item.event.checklistLinks?.length?[item]:[]}
+  const busyEvents = busyOccurrences.map(item => item.event)
+  function completionLeaves(item: Occurrence): Occurrence[] {
+    if (item.event.eventKind === 'folder') {
+      const children = busyGrouped.children.get(folderOccurrenceKey(item)) || []
+      return children.flatMap(completionLeaves)
+    }
+    return canCompleteChecklistBlock(item.event, busyEvents) ? [item] : []
+  }
   const doneButton=(item:Occurrence)=><CalendarDoneButton item={item} leaves={completionLeaves(item)} onDone={onEventDone}/>
   function dayFolderBody(item:Occurrence,day:Date):ReactNode{
     const open=folderOpen(item),children=(grouped.children.get(folderOccurrenceKey(item))||[]).filter(child=>clipToDay(child,day))

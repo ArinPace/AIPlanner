@@ -22,7 +22,7 @@ test('same titles never imply a link; stale or ambiguous item IDs make no change
  const other=event('other');other.checklistLinks=[{noteId:'work',itemId:'22222222-2222-4222-8222-222222222222'}]
  assert.throws(()=>completeChecklistBlocks(state(other),[note],done('other')),/removed or changed/)
  assert.throws(()=>completeChecklistBlocks(state(event('a')),[{...note,content:note.content+'\n'+note.content}],done('a')),/removed or changed/)
- const unlinked=event('u');delete unlinked.checklistLinks;assert.throws(()=>completeChecklistBlocks(state(unlinked),[note],done('u')),/no current checklist link/)
+ const unlinked=event('u');delete unlinked.checklistLinks;assert.throws(()=>completeChecklistBlocks(state(unlinked),[note],done('u')),/one-off activities linked/)
 })
 test('folder Done checks linked leaves but not unrelated blocks; outside required blocks stay pending',()=>{
  const folder={...event('folder'),eventKind:'folder' as const,end:'2026-11-10T16:00:00Z',checklistLinks:undefined}
@@ -30,12 +30,16 @@ test('folder Done checks linked leaves but not unrelated blocks; outside require
  const result=completeChecklistBlocks(state(folder,child,other),[note],done('folder'))
  assert.equal(result.blocks,1);assert.equal(result.progress[0].checked,false);assert.equal(result.calendar.events.find(e=>e.id==='outside')!.completedStarts,undefined)
 })
-test('recurring folder records only selected occurrence and never completes infinite routine',()=>{
- const folder={...event('folder'),eventKind:'folder' as const,recurrence:{frequency:'daily' as const,interval:1,until:null},checklistLinks:undefined}
- const child={...event('child'),folderId:'folder'}
- const result=completeChecklistBlocks(state(folder,child),[note],done('folder','2026-11-11T13:00:00Z'))
- assert.equal(result.notes.length,0);assert.equal(result.progress[0].recurring,true);assert.deepEqual(result.calendar.events[1].completedStarts!.map(Date.parse),[Date.parse('2026-11-11T13:00:00.000Z')])
- assert.throws(()=>completeChecklistBlocks(state(folder,child),[note],done('folder','2026-11-11T13:01:00Z')),/no current checklist/)
+test('Done rejects recurring tasks and activities inside recurring folders', () => {
+ const recurrence = {frequency: 'daily' as const, interval: 1, until: null}
+ const routine = {...event('routine'), recurrence}
+ const folder = {...event('folder'), eventKind: 'folder' as const, recurrence, checklistLinks: undefined}
+ const child = {...event('child'), folderId: 'folder'}
+ const calendar = state(routine, folder, child)
+ for (const id of ['routine', 'folder', 'child']) {
+  assert.throws(() => completeChecklistBlocks(calendar, [note], done(id, '2026-11-11T13:00:00Z')), /one-off activities linked/)
+ }
+ assert.ok(calendar.events.every(event => event.completedStarts === undefined))
 })
 test('link installs stable invisible ID preserving rich formatting and checks survive label/time changes',()=>{
  const n={...note,content:'- [ ] [urgency:90] Original',richTextSource:'- [ ] [urgency:90] Original',richText:JSON.stringify({type:'doc',content:[{type:'taskList',content:[{type:'taskItem',attrs:{checked:false,urgency:90},content:[{type:'paragraph',content:[{type:'text',text:'Original',marks:[{type:'bold'}]}]}]}]}]})}
