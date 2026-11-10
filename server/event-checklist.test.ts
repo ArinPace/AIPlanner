@@ -52,7 +52,7 @@ test('automatic completion remains authoritative without manually checking every
 test('stable marker does not change existing To-do source hash and merges cannot erase check state',()=>{
  const base={...note,id:'todo',systemRole:'todo' as const,content:'- [ ] Original'}
  const a=todoChecklist({folders:[],files:[base]})[0],b=todoChecklist({folders:[],files:[{...base,content:`- [ ] [item:${item}] Original`}]})[0];assert.equal(a.source,b.source);assert.equal(b.title,'Original')
- const e=event('a'),next=event('b',e.end,'2026-11-10T15:00:00Z');next.completedStarts=[next.start];assert.equal(mergeAdjacentEvents([e,next]).length,2)
+ const e=event('a'),next=event('b',e.end,'2026-11-10T15:00:00Z');next.completedStarts=[next.start];assert.equal(mergeAdjacentEvents([e,next]).length,2);assert.equal(mergeAdjacentEvents([e,{...next,completedStarts:undefined}]).length,2,'individually linked blocks retain their independent Done controls')
 })
 
 test('Google review identity ignores progress only, never timing, tags or task identity',()=>{
