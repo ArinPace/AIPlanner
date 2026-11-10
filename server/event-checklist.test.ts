@@ -62,3 +62,8 @@ test('Google review identity ignores progress only, never timing, tags or task i
  progress.events[0].end='2026-11-10T15:00:00Z';assert.notEqual(calendarScheduleIdentity(original),calendarScheduleIdentity(progress))
  progress.events[0].end=original.events[0].end;progress.events[0].tagIds=['other'];assert.notEqual(calendarScheduleIdentity(original),calendarScheduleIdentity(progress))
 })
+
+test('prerequisite-only or incompletely mapped parent cannot complete from its current blocks',()=>{
+ const e=event('prerequisite');e.checklistLinks![0].completionReady=false
+ const result=completeChecklistBlocks(state(e),[note],done(e.id));assert.equal(result.progress[0].blocked,true);assert.equal(result.progress[0].checked,false);assert.equal(result.notes.length,0)
+})

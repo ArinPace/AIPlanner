@@ -258,4 +258,4 @@ export function cloudDNSRequest<T>(method='GET',input?:unknown){return request<T
 
 export function loadCanonicalNote(role:'todo'|'work'){return request<FilesState>('/api/files/system-note?role='+role)}
 
-export async function completeCalendarBlock(input:{revision:number;eventId:string;occurrenceStart:string}){const result=await request<{saved:boolean;revision:number;progress:{checked:boolean;completed:number;total:number;recurring:boolean}[]}>('/api/calendar/checklist-done',{method:'POST',body:JSON.stringify(input)});invalidateFilesCache();window.dispatchEvent(new Event('planner-files-refresh'));window.dispatchEvent(new Event('planner-preferences-refresh'));return result}
+export async function completeCalendarBlock(input:{revision:number;eventId:string;occurrenceStart:string}){const result=await request<{saved:boolean;revision:number;progress:{checked:boolean;completed:number;total:number;recurring:boolean;blocked?:boolean}[]}>('/api/calendar/checklist-done',{method:'POST',body:JSON.stringify(input)});invalidateFilesCache();window.dispatchEvent(new Event('planner-files-refresh'));window.dispatchEvent(new Event('planner-preferences-refresh'));return result}

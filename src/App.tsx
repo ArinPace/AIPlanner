@@ -315,7 +315,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
     if(calendarFingerprint(latestCalendar.current)===baseline){adoptCalendarRevision(remote.revision);applyState(remote)}
     else setSaveError('Completion saved. You also edited the calendar; reconcile those edits before saving again.')
     const open=result.progress.filter(item=>!item.checked)
-    return open.length?'Block saved. '+open.map(item=>item.recurring?'Recurring checklist stays open.':`${item.completed} of ${item.total} required blocks done.`).join(' '):'Block saved and linked checklist item checked off.'
+    return open.length?'Block saved. '+open.map(item=>item.blocked?'Additional required work is not yet fully mapped.':item.recurring?'Recurring checklist stays open.':`${item.completed} of ${item.total} required blocks done.`).join(' '):'Block saved and linked checklist item checked off.'
   }
 
   useDatePinch(mainRef, setView, loaded && tab === 'calendar')

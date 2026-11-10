@@ -19,7 +19,7 @@ export interface Tag {
 }
 
 export interface CalendarEvent {
-  checklistLinks?: {noteId:string;itemId:string}[]
+  checklistLinks?: {noteId:string;itemId:string;completionReady?:boolean}[]
   completedStarts?: string[]
   detachedFrom?: string
   excludedStarts?: string[]

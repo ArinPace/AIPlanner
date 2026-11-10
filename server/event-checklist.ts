@@ -9,7 +9,7 @@ import {completedTodoTasks} from './todo-completion.js'
 import type {PlannerTextFile} from '../src/lib/files.js'
 import type {StoredState} from '../src/types.js'
 const iso=z.string().datetime({offset:true})
-const linkArgs=z.object({calendarRevision:z.number().int().nonnegative(),filesRevision:z.number().int().nonnegative(),noteId:z.string().min(1).max(100),itemIndex:z.number().int().nonnegative(),itemText:z.string().min(1).max(2000),eventIds:z.array(z.string().min(1).max(100)).min(1).max(200),replaceLinks:z.boolean().optional()}).strict()
+const linkArgs=z.object({calendarRevision:z.number().int().nonnegative(),filesRevision:z.number().int().nonnegative(),noteId:z.string().min(1).max(100),itemIndex:z.number().int().nonnegative(),itemText:z.string().min(1).max(2000),eventIds:z.array(z.string().min(1).max(100)).min(1).max(200),replaceLinks:z.boolean().optional(),completionReady:z.boolean().optional()}).strict()
 const doneArgs=z.object({revision:z.number().int().nonnegative(),eventId:z.string().min(1).max(100),occurrenceStart:iso}).strict()
 // Preserve all rich formatting: change the target task item's attributes, not its document.
 function patchNote(note:PlannerTextFile,index:number,itemId:string,checked:boolean|undefined,now:string){
@@ -35,8 +35,8 @@ export function linkChecklistBlocks(calendar:StoredState,note:PlannerTextFile,ar
  if(row.id&&rows.filter(item=>item.id===row.id).length!==1)throw new ApiError(409,'Duplicate checklist item IDs; correct the note before linking.')
  const events=structuredClone(calendar.events),selected=events.filter(e=>args.eventIds.includes(e.id))
  if(selected.length!==new Set(args.eventIds).size||selected.some(e=>e.eventKind==='folder'||e.reminder||e.allDay))throw new ApiError(400,'Link existing timed activity blocks, not folders or reminders.')
- const itemId=row.id||randomUUID(),link={noteId:note.id,itemId}
- for(const event of selected){if(!args.replaceLinks&&event.checklistLinks?.some(old=>old.noteId===note.id&&old.itemId===itemId))continue;event.checklistLinks=[...(args.replaceLinks?[]:event.checklistLinks||[]).filter(old=>old.noteId!==note.id||old.itemId!==itemId),link]}
+ const itemId=row.id||randomUUID(),link={noteId:note.id,itemId,...(args.completionReady===undefined?{}:{completionReady:args.completionReady})}
+ for(const event of selected){const old=event.checklistLinks?.find(l=>l.noteId===note.id&&l.itemId===itemId);if(!args.replaceLinks&&old){if(args.completionReady!==undefined)old.completionReady=args.completionReady;continue}event.checklistLinks=[...(args.replaceLinks?[]:event.checklistLinks||[]).filter(old=>old.noteId!==note.id||old.itemId!==itemId),link]}
  return {calendar:{...calendar,events},note:patchNote(note,args.itemIndex,itemId,undefined,now),itemId,linked:selected.length}
 }
 export function completeChecklistBlocks(calendar:StoredState,notes:PlannerTextFile[],args:z.infer<typeof doneArgs>,now=new Date().toISOString()){
@@ -52,11 +52,12 @@ export function completeChecklistBlocks(calendar:StoredState,notes:PlannerTextFi
  const updates=new Map<string,PlannerTextFile>(),progress=[]
  for(const link of links.values()){
   const required=copy.events.filter(e=>e.eventKind!=='folder'&&e.checklistLinks?.some(l=>l.noteId===link.noteId&&l.itemId===link.itemId))
+  const blocked=required.some(e=>e.checklistLinks?.some(l=>l.noteId===link.noteId&&l.itemId===link.itemId&&l.completionReady===false))
   const recurring=required.some(e=>repeatsWithAncestors(e,copy.events))
   const completed=required.filter(e=>!repeatsWithAncestors(e,copy.events)&&occurrenceChecked(e,new Date(e.start))).length
   const note=updates.get(link.noteId)||notes.find(n=>n.id===link.noteId)!,row=checklistItems(note.content).find(r=>r.id===link.itemId)!
-  if(!recurring&&completed===required.length&&!row.checked){updates.set(note.id,patchNote(note,row.index,link.itemId,true,now));changed=true}
-  progress.push({...link,completed,total:required.length,checked:row.checked||(!recurring&&completed===required.length),recurring})
+  if(!recurring&&!blocked&&completed===required.length&&!row.checked){updates.set(note.id,patchNote(note,row.index,link.itemId,true,now));changed=true}
+  progress.push({...link,completed,total:required.length,checked:row.checked||(!recurring&&!blocked&&completed===required.length),recurring,blocked})
  }
  return {calendar:copy,notes:[...updates.values()],progress,changed,blocks:leaves.length}
 }
@@ -93,5 +94,5 @@ export async function completeEventChecklist(username:string,input:unknown){
 }
 export function registerEventChecklistTools(add:(name:string,description:string,schema:z.ZodRawShape,scope:string,readOnly:boolean,execute:(args:any)=>Promise<unknown>)=>void,username:string){
  add('planner_checklist_read','Read stable checklist IDs, row indices, labels, checked state and current calendar/Files revisions for the canonical Work or To-do note. Use before explicitly linking blocks; never guess from similar titles.',{noteId:z.string().min(1).max(100)},'planner:read',true,args=>readChecklistLinks(username,args.noteId))
- add('planner_link_event_checklist','Link every real required homework/preparation/To-do activity block to its exact Work or To-do checklist row. Read checklist first; pass exact itemText and itemIndex plus both revisions. The tool installs an invisible stable item ID, preserving formatting. Multiple blocks can share a row; the Done button checks the parent only when ALL linked non-recurring blocks are done. Link all required blocks before use, not just the current one. Link both Work and To-do when applicable; preserve item markers on note rewrites. No date/time or checkmarks change. Folders are containers: link their real children. Recurring routines record individual occurrences without permanently completing a series.',linkArgs.shape,'planner:write',false,args=>linkEventChecklist(username,args))
+ add('planner_link_event_checklist','Link every real required homework/preparation/To-do activity block to its exact Work or To-do checklist row. Read checklist first; pass exact itemText and itemIndex plus both revisions. The tool installs an invisible stable item ID, preserving formatting. Multiple blocks can share a row; the Done button checks the parent only when ALL linked non-recurring blocks are done. Link all required blocks before use, not just the current one. Set completionReady=false on a parent with unscheduled/unknown required steps or prerequisite-only work; those blocks can record progress but cannot complete the parent. Only set true for every linked block once its complete required work is accounted for, not merely a booking/research prerequisite. Link both Work and To-do when applicable; preserve item markers on note rewrites. No date/time or checkmarks change. Folders are containers: link their real children. Recurring routines record individual occurrences without permanently completing a series.',linkArgs.shape,'planner:write',false,args=>linkEventChecklist(username,args))
 }
