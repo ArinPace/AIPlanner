@@ -270,7 +270,7 @@ export function TimeGridView({ onWeekNavigate, weekLayout = 'list', scaleToDurat
                   const color = completed(item) ? '#000' : eventColor(item.event, tags)
 
                   if(item.event.eventKind==='folder'){
-                    return <div key={key} className={'timed-event-folder'+(folderOpen(item)?' is-expanded':' is-collapsed')} style={{top,height,width,left,borderColor:color,backgroundColor:completed(item)?'#fff':color}}>{dayFolderBody(item,day)}</div>
+                    return <div key={key} className={'timed-event-folder'+(folderOpen(item)?' is-expanded':' is-collapsed')} style={{top,height,width,left,...appearance(item),borderColor:completed(item)?'var(--calendar-free-border, #000)':eventAppearance(color).background}}>{dayFolderBody(item,day)}</div>
                   }
 
                   return (

@@ -2,6 +2,12 @@
 .settings-theme input { width: 36px; height: 20px; accent-color: var(--blue); cursor: pointer; }
 :root[data-theme='dark'] {
   color-scheme: dark;
+  --calendar-color-strength: 45%;
+  --calendar-color-base: #202329;
+  --calendar-event-text: #f5f6f8;
+  --calendar-free-fill: #1c1f24;
+  --calendar-free-text: #d8dce3;
+  --calendar-free-border: #626975;
   --bg: #17191d;
   --panel: #202329;
   --text: #eceef2;

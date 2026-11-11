@@ -2,7 +2,7 @@ import { PlannerDate } from './timezone'
 import type { Occurrence } from '../types'
 
 export type ScheduleRow = Occurrence & { freeTime?: true }
-export const freeTimeAppearance = { background: '#fff', color: '#000', border: '1px solid #000' }
+export const freeTimeAppearance = { background: 'var(--calendar-free-fill, #fff)', color: 'var(--calendar-free-text, #000)', border: '1px solid var(--calendar-free-border, #000)' }
 
 /** Display-only gaps: never saved as events or sent to external calendars. */
 export function freeTimeGaps(busy: Occurrence[], start: Date, end: Date): ScheduleRow[] {
