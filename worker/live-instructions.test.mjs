@@ -14,7 +14,7 @@ test('Tutor maintenance is included in real runtime rules without truncating per
  assert(prompt.includes(personal))
  assert(prompt.includes(GENERAL_PLANNER_RULES),'the full shared rules must reach the worker without truncation')
  assert(prompt.indexOf(GENERAL_PLANNER_RULES)>prompt.indexOf(personal),'current general rules follow historical personal context')
- for(const term of ['homework/assignments','quizzes','tests/exams','recordings','recitations','Grades and A-track','actual graded denominator','ungraded work as zero','Main Chat and its ordinary scheduled subject reviews must read','must not edit, reorganize, download into, or refresh','Only the corresponding Tutor conversation','separately booked subject-turnover automation'])assert(prompt.includes(term),term)
+ for(const term of ['homework/assignments','quizzes','tests/exams','recordings','recitations','Grades and A-track','Homework 1 (18/20)','Quiz 2 (92%)','actual graded denominator','ungraded work as zero','Main Chat and its ordinary scheduled subject reviews must read','must not edit, reorganize, download into, or refresh','Only the corresponding Tutor conversation','separately booked subject-turnover automation'])assert(prompt.includes(term),term)
 })
 
  test('interactive browser permission is explicit, account-scoped and supersedes old blanket write bans',()=>{
