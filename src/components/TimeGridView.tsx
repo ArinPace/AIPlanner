@@ -29,6 +29,7 @@ import {PlanningButton} from './PlanningSettings'
 import {toDateInput} from '../lib/dates'
 
 type TimeGridViewProps = {
+  weekLayout?: 'list' | 'grid'
   scaleToDuration?:boolean
   active?:boolean
   cursor: Date
@@ -55,7 +56,7 @@ function clipToDay(item: Occurrence, day: Date): { start: Date; end: Date } | nu
   }
 }
 
-export function TimeGridView({ scaleToDuration=false, active=true,cursor, view, zoom, occurrences, busyOccurrences, tags, onSlotClick, onEventClick, onEventDone }: TimeGridViewProps) {
+export function TimeGridView({ weekLayout = 'list', scaleToDuration=false, active=true,cursor, view, zoom, occurrences, busyOccurrences, tags, onSlotClick, onEventClick, onEventDone }: TimeGridViewProps) {
   const [planning, setPlanning] = useState<PlanningProfile>()
   useEffect(() => {
     if (!active) return
@@ -97,10 +98,11 @@ export function TimeGridView({ scaleToDuration=false, active=true,cursor, view, 
   const visibleDurations=grouped.top.filter(item=>item.event.eventKind!=='folder'&&!item.event.allDay&&!item.event.reminder&&days.some(day=>clipToDay(item,day))).map(item=>(item.end.getTime()-item.start.getTime())/60000).filter(minutes=>minutes>=1)
   const shortest=Math.min(30,...visibleDurations)
   const folderHeight=Math.max(0,...grouped.top.filter(item=>item.event.eventKind==='folder').map(item=>folderRows(item)*36*3600000/Math.max(60000,item.end.getTime()-item.start.getTime())))
-  const hourHeight = Math.max(Math.round(BASE_HOUR_HEIGHT * zoom),Math.ceil(22*60/shortest),Math.ceil(folderHeight))
+  const regularWeek = view === 'week' && weekLayout === 'grid'
+  const hourHeight = regularWeek ? Math.round(BASE_HOUR_HEIGHT * zoom) : Math.max(Math.round(BASE_HOUR_HEIGHT * zoom),Math.ceil(22*60/shortest),Math.ceil(folderHeight))
 
   const dayKey=toDateInput(cursor)
-  const todayKey=toDateInput(now),mobileWeek=view==='week'
+  const todayKey=toDateInput(now),mobileWeek=view==='week' && !regularWeek
   const containsToday=days.some(day=>toDateInput(day)===todayKey)
   useLayoutEffect(() => {
     if(!active){previousLayout.current=null;return}
@@ -163,8 +165,8 @@ export function TimeGridView({ scaleToDuration=false, active=true,cursor, view, 
   }
 
   return (
-    <div ref={weekScrollRef} data-layout={mobileWeek?'agenda':'grid'} className={`time-view-scroll ${view === 'week' ? 'has-mobile-week' : ''}`}>
-      {view === 'week' && <div className={'mobile-week'+(scaleToDuration?' is-duration-scaled':'')}>
+    <div ref={weekScrollRef} data-layout={mobileWeek?'agenda':'grid'} className={`time-view-scroll ${mobileWeek ? 'has-mobile-week' : regularWeek ? 'week-time-grid' : ''}`}>
+      {mobileWeek && <div className={'mobile-week'+(scaleToDuration?' is-duration-scaled':'')}>
         {days.map(day => {
           const items = withFreeTime(grouped.top.filter(item => clipToDay(item, day)), busyGrouped.top, startOfDay(day), addDays(startOfDay(day),1))
           return <section className="mobile-week-day" key={day.toISOString()}>
@@ -228,7 +230,8 @@ export function TimeGridView({ scaleToDuration=false, active=true,cursor, view, 
           </div>
 
           {days.map((day) => {
-            const timed = withFreeTime(grouped.top.filter((item) => !item.event.allDay && clipToDay(item, day)), busyGrouped.top, startOfDay(day), addDays(startOfDay(day),1))
+            const dayEvents = grouped.top.filter(item => !item.event.allDay && clipToDay(item, day))
+            const timed: ScheduleRow[] = regularWeek ? dayEvents : withFreeTime(dayEvents, busyGrouped.top, startOfDay(day), addDays(startOfDay(day),1))
             const laidOut = layoutTimeCards(timed.map(item=>{
               const clipped=clipToDay(item,day)!
               const top=(clipped.start.getHours()*60+clipped.start.getMinutes()+clipped.start.getSeconds()/60)/60*hourHeight

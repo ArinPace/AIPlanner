@@ -165,6 +165,13 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   useEffect(()=>{if(tab==='todo'||tab==='work')setVisitedNotes(previous=>previous[tab]?previous:{...previous,[tab]:true})},[tab])
   const [cursor, setCursor] = useState(() => new Date())
   const [view, setView] = useState<CalendarView>('week')
+  const [weekLayout, setWeekLayout] = useState<'list' | 'grid'>(() =>
+    localStorage.getItem('planner-week-layout:' + username) === 'grid' ? 'grid' : 'list')
+  function changeWeekLayout(layout: 'list' | 'grid') {
+    setWeekLayout(layout)
+    localStorage.setItem('planner-week-layout:' + username, layout)
+    if (window.innerWidth <= 860) setSidebarOpen(false)
+  }
   const [filesSidebar,setFilesSidebar]=useState(()=>window.innerWidth>600)
   const [subscriptionSidebar,setSubscriptionSidebar]=useState(()=>window.innerWidth>700)
   const [agentSidebar,setAgentSidebar]=useState(()=>window.innerWidth>700)
@@ -508,6 +515,8 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
       <div className="agent-tab-panel" hidden={tab!=='chat'}><SubscriptionChatView active={tab==='chat'} username={username} sidebar={subscriptionSidebar} setSidebar={setSubscriptionSidebar}/></div>
       <div className="app-body" hidden={tab !== 'calendar'}>
         <Sidebar
+          weekLayout={weekLayout}
+          onWeekLayoutChange={changeWeekLayout}
           view={view}
           onViewChange={next => { setView(next); if (window.innerWidth <= 860) setSidebarOpen(false) }}
           events={events}
@@ -567,6 +576,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
             />
           ) : (
             <TimeGridView
+              weekLayout={weekLayout}
               scaleToDuration={calendarDisplay.settings.week}
               onEventDone={markCalendarDone}
               active={tab==='calendar'}

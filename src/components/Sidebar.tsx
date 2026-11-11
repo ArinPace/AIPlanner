@@ -10,6 +10,8 @@ import {FixedCalendarSync} from './FixedCalendarSync'
 
 type SidebarProps = {
   open: boolean
+  weekLayout?: 'list' | 'grid'
+  onWeekLayoutChange?: (layout: 'list' | 'grid') => void
   view: CalendarView
   onViewChange: (view: CalendarView) => void
   cursor: Date
@@ -29,6 +31,8 @@ type SidebarProps = {
 export function Sidebar({
   open,
   view,
+  weekLayout = 'list',
+  onWeekLayoutChange,
   onViewChange,
   cursor,
   onCursorChange,
@@ -79,6 +83,13 @@ export function Sidebar({
           </button>
         ))}
       </div>
+      {view === 'week' && onWeekLayoutChange && <fieldset className="week-layout-picker">
+        <legend>Week layout</legend>
+        <div className="view-switch">
+          <button type="button" aria-pressed={weekLayout === 'list'} className={weekLayout === 'list' ? 'is-active' : ''} onClick={() => onWeekLayoutChange('list')}>List</button>
+          <button type="button" aria-pressed={weekLayout === 'grid'} className={weekLayout === 'grid' ? 'is-active' : ''} onClick={() => onWeekLayoutChange('grid')}>Time grid</button>
+        </div>
+      </fieldset>}
       <button type="button" className="text-btn sidebar-history" onClick={() => setHistoryOpen(true)}>Calendar history</button>
       {historyOpen && <CalendarHistory onClose={() => setHistoryOpen(false)} />}
       <MiniCalendar cursor={cursor} onCursorChange={onCursorChange} />
