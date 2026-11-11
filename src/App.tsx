@@ -1,4 +1,4 @@
-import {getToken,completeCalendarBlock} from './lib/api'
+import {completeCalendarBlock} from './lib/api'
 import {DeviceControlSync} from './components/DeviceControlSync'
 import {subscriptionChatRequest} from './lib/api'
 import {applyTheme,readTheme} from './lib/theme'

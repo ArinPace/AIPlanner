@@ -32,7 +32,7 @@ test('parallel Done requests retry atomically and widget completion uses the sam
    return Response.json(snapshot)
   }
   if (path.endsWith('planner_commit_event_checks')) {
-   const args = await request.json()
+   const args = await request.json() as {p_calendar_revision: number; p_calendar: StoredState; p_notes: typeof notes}
    if (args.p_calendar_revision !== revision) {
     conflicts++
     return Response.json({code: 'P0001', message: 'fixture revision conflict'}, {status: 409})
