@@ -2,6 +2,10 @@ import SwiftUI
 import SafariServices
 
 @MainActor final class PlannerModel: ObservableObject {
+    @Published var darkMode = UserDefaults.standard.bool(forKey: "planner-dark-mode")
+    var backgroundColor: UIColor {
+        darkMode ? UIColor(red: 23 / 255, green: 25 / 255, blue: 29 / 255, alpha: 1) : .white
+    }
     @Published var loading = true
     @Published var error: String?
     @Published var sharedFile: SharedFile?
@@ -17,7 +21,7 @@ struct PlannerScreen: View {
     @StateObject private var model = PlannerModel()
     var body: some View {
         ZStack {
-            Color(uiColor: .systemBackground)
+            Color(uiColor: model.backgroundColor).ignoresSafeArea()
             PlannerWebView(model: model)
             if let error = model.error {
                 VStack(spacing: 16) {
@@ -32,6 +36,7 @@ struct PlannerScreen: View {
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
             }
         }
+        .preferredColorScheme(model.darkMode ? .dark : .light)
         .onChange(of: scenePhase) { _, phase in if phase == .active { model.resume?() } }
         .sheet(item: $model.sharedFile) { item in ShareSheet(url: item.url) }
         .sheet(item: $model.browser) { item in SiteBrowser(url: item.url).ignoresSafeArea() }

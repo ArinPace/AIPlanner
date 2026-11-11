@@ -33,6 +33,14 @@ struct PlannerWebView: UIViewRepresentable {
               window.webkit.messageHandlers.plannerNative.postMessage({action:'openExternalLink',url:link.href}).catch(() => window.open(link.href, '_blank', 'noopener,noreferrer'));
             });
         """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        config.userContentController.addUserScript(WKUserScript(source: """
+        function syncPlannerTheme() {
+            const dark = document.documentElement.dataset.theme === 'dark';
+            window.webkit.messageHandlers.plannerNative.postMessage({action:'plannerTheme',dark}).catch(()=>{});
+        }
+        document.addEventListener('DOMContentLoaded', syncPlannerTheme);
+        window.addEventListener('planner-theme-refresh', syncPlannerTheme);
+        """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-UITestSignedRelayDiagnostics") {
             config.userContentController.addUserScript(WKUserScript(source: """
@@ -69,7 +77,10 @@ struct PlannerWebView: UIViewRepresentable {
         web.allowsBackForwardNavigationGestures = true
         web.scrollView.contentInsetAdjustmentBehavior = .never
         web.scrollView.keyboardDismissMode = .interactive
-        web.isOpaque = false; web.backgroundColor = .systemBackground
+        web.isOpaque = false
+        web.backgroundColor = model.backgroundColor
+        web.scrollView.backgroundColor = model.backgroundColor
+        web.underPageBackgroundColor = model.backgroundColor
         context.coordinator.webView = web
         context.coordinator.authentication = NativeAuthentication(webView: web)
         model.reload = { [weak web, weak coordinator = context.coordinator] in
@@ -86,7 +97,11 @@ struct PlannerWebView: UIViewRepresentable {
         web.load(URLRequest(url: AppConfiguration.origin))
         return web
     }
-    func updateUIView(_ web: WKWebView, context: Context) {}
+    func updateUIView(_ web: WKWebView, context: Context) {
+        web.backgroundColor = model.backgroundColor
+        web.scrollView.backgroundColor = model.backgroundColor
+        web.underPageBackgroundColor = model.backgroundColor
+    }
     static func dismantleUIView(_ web: WKWebView, coordinator: Coordinator) {
         web.configuration.userContentController.removeScriptMessageHandler(forName: "plannerNative", contentWorld: .page)
         coordinator.hideScreenTime()
@@ -202,6 +217,10 @@ struct PlannerWebView: UIViewRepresentable {
             Task { @MainActor in
                 do {
                     switch action {
+                    case "plannerTheme":
+                        guard let dark = body["dark"] as? Bool else { throw NativeError("Invalid theme.") }
+                        model.darkMode = dark
+                        UserDefaults.standard.set(dark, forKey: "planner-dark-mode")
                     #if DEBUG
                     case "relayNetworkDiagnostic":
                         if ProcessInfo.processInfo.arguments.contains("-UITestSignedRelayDiagnostics"), let folder=FileManager.default.urls(for:.cachesDirectory,in:.userDomainMask).first {
