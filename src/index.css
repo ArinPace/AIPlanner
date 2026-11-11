@@ -2354,9 +2354,9 @@ html, body { touch-action: pan-x pan-y; }
 .calendar-task-with-actions>.event-chip{flex:1;min-width:0}.folder-event-header>.calendar-completion-action{align-items:center}
 .timed-event-with-actions{position:absolute}.timed-event-with-actions>.calendar-completion-action{position:absolute;right:2px;top:2px;z-index:3}.timed-event-with-actions:has(.calendar-completion-action)>.timed-event{padding-right:70px}
 
-.sidebar-view-switch { display: flex; width: fit-content; max-width: 100%; margin: 0 0 8px; }
-.sidebar-view-switch button { padding-inline: 8px; }
-.sidebar-history { margin-bottom: 12px; }
+.sidebar-view-switch { display: flex; width: calc(100% - 32px); margin: 16px 16px 8px; box-sizing: border-box; }
+.sidebar-view-switch button { flex: 1; min-width: 0; padding-inline: 8px; }
+.sidebar-history { margin: 0 16px 12px; }
 .day-intensity-button strong, .day-intensity-button small { display: block; }
 .day-intensity-button small { margin-top: 2px; font-size: 10px; }
 .document-open-icon, .document-open-name { background: none; border: 0; color: inherit; cursor: pointer; padding: 0; }
@@ -2376,3 +2376,21 @@ html, body { touch-action: pan-x pan-y; }
 .is-completed-free-time.folder-grid-toggle { text-decoration: line-through; }
 .is-completed-free-time .event-urgency-badge { display: none; }
 .is-completed-free-time .event-title::before { content: 'Free time · '; text-decoration: none; display: inline-block; margin-right: 4px; }
+
+.calendar-navigation { display: flex; align-items: center; gap: 4px; }
+@media (max-width: 600px) {
+  .app-header.is-calendar { column-gap: 4px; }
+  .app-header.is-calendar .header-left { gap: 4px; }
+  .app-header.is-calendar .header-left .brand { display: none; }
+  .app-header.is-calendar .header-left > .icon-btn,
+  .app-header.is-calendar .header-right .icon-btn { width: 32px; flex-shrink: 0; }
+  .app-header.is-calendar .calendar-navigation .icon-btn { width: 30px; }
+  .app-header.is-calendar .calendar-navigation .today-btn { padding: 0 8px; }
+  .app-header.is-calendar .header-right { flex-wrap: nowrap; }
+}
+@media (max-width: 380px) {
+  .app-header.is-calendar .header-left { grid-column: 1; grid-row: 1; }
+  .app-header.is-calendar .header-right { grid-column: 2; grid-row: 1; }
+  .app-header.is-calendar .header-center { grid-row: 2; }
+  .app-header.is-calendar .user-chip { display: none; }
+}

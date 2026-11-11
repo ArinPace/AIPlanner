@@ -55,7 +55,7 @@ export function Header({
   }, [settingsOpen])
 
   return (
-    <header className="app-header">
+    <header className={'app-header'+(tab === 'calendar' ? ' is-calendar' : '')}>
       <div className="header-left">
         <button type="button" hidden={tab==='todo'||tab==='work'||tab==='screentime'} className="icon-btn menu-btn" title="Show or hide sidebar" aria-label="Toggle sidebar" onClick={onToggleSidebar}>
           <MenuIcon />
@@ -68,12 +68,7 @@ export function Header({
           <PlusIcon />
           Create
         </button>
-      </div>
-
-      <div className="header-center">
-        <nav className="workspace-tabs" aria-label="Workspace"><button type="button" aria-current={tab === 'calendar' ? 'page' : undefined} className={tab === 'calendar' ? 'is-active' : ''} onClick={() => onTabChange('calendar')}>Calendar</button><button type="button" aria-current={tab === 'files' ? 'page' : undefined} className={tab === 'files' ? 'is-active' : ''} onClick={() => onTabChange('files')}>Files</button><button type="button" aria-current={tab === 'todo' ? 'page' : undefined} className={tab === 'todo' ? 'is-active' : ''} onClick={() => onTabChange('todo')}>To-do</button><button type="button" aria-current={tab === 'work' ? 'page' : undefined} className={tab === 'work' ? 'is-active' : ''} onClick={() => onTabChange('work')}>Work</button><button hidden={hideAgent} type="button" aria-current={tab === 'agent' ? 'page' : undefined} className={tab === 'agent' ? 'is-active' : ''} onClick={() => onTabChange('agent')}>Agent</button>{<button type="button" aria-current={tab==='screentime'?'page':undefined} className={tab==='screentime'?'is-active':''} onClick={()=>onTabChange('screentime')}>Screen Time</button>}{<button type="button" aria-current={tab === 'chat' ? 'page' : undefined} className={tab === 'chat' ? 'is-active' : ''} onClick={() => onTabChange('chat')}>Chat</button>}</nav>
-        {tab === 'calendar' && <>
-
+        {tab === 'calendar' && <div className="calendar-navigation">
         <button type="button" className="today-btn" onClick={onToday}>
           Today
         </button>
@@ -85,6 +80,13 @@ export function Header({
             <ChevronIcon className="flip" />
           </button>
         </div>
+        </div>}
+      </div>
+
+      <div className="header-center">
+        <nav className="workspace-tabs" aria-label="Workspace"><button type="button" aria-current={tab === 'calendar' ? 'page' : undefined} className={tab === 'calendar' ? 'is-active' : ''} onClick={() => onTabChange('calendar')}>Calendar</button><button type="button" aria-current={tab === 'files' ? 'page' : undefined} className={tab === 'files' ? 'is-active' : ''} onClick={() => onTabChange('files')}>Files</button><button type="button" aria-current={tab === 'todo' ? 'page' : undefined} className={tab === 'todo' ? 'is-active' : ''} onClick={() => onTabChange('todo')}>To-do</button><button type="button" aria-current={tab === 'work' ? 'page' : undefined} className={tab === 'work' ? 'is-active' : ''} onClick={() => onTabChange('work')}>Work</button><button hidden={hideAgent} type="button" aria-current={tab === 'agent' ? 'page' : undefined} className={tab === 'agent' ? 'is-active' : ''} onClick={() => onTabChange('agent')}>Agent</button>{<button type="button" aria-current={tab==='screentime'?'page':undefined} className={tab==='screentime'?'is-active':''} onClick={()=>onTabChange('screentime')}>Screen Time</button>}{<button type="button" aria-current={tab === 'chat' ? 'page' : undefined} className={tab === 'chat' ? 'is-active' : ''} onClick={() => onTabChange('chat')}>Chat</button>}</nav>
+        {tab === 'calendar' && <>
+
         <h1 className="range-title">{formatRangeLabel(cursor, view)}</h1><span className="calendar-timezone" title="America/New_York ? adjusts for daylight saving">New York (ET)</span>
         </>}
       </div>
