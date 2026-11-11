@@ -147,10 +147,10 @@ enum WidgetBackgroundDelivery {
     }
     @MainActor private static var refreshing = false
     @MainActor private static var lastRefresh: (Credentials, Date)?
-    @MainActor static func refresh() async {
+    @MainActor static func refresh(force: Bool = false) async {
         guard !refreshing else { return }
         guard let auth = credentials(), auth.account == WidgetTaskControl.defaults.string(forKey: "feedback-account") else { return }
-        if let previous = lastRefresh, previous.0 == auth, Date().timeIntervalSince(previous.1) < 45 { return }
+        if !force, let previous = lastRefresh, previous.0 == auth, Date().timeIntervalSince(previous.1) < 45 { return }
         refreshing = true
         defer { refreshing = false }
         do {
@@ -196,6 +196,7 @@ final class WidgetFeedbackUpload: NSObject, URLSessionTaskDelegate, @unchecked S
         guard error == nil, let response = task.response as? HTTPURLResponse, (200..<300).contains(response.statusCode),
               let auth = WidgetBackgroundDelivery.credentials(), auth.account == WidgetTaskControl.defaults.string(forKey: "feedback-account"),
               task.originalRequest?.value(forHTTPHeaderField: "Authorization") == "Bearer " + auth.token else { return }
+        Task { @MainActor in await WidgetBackgroundDelivery.refresh(force: true) }
         WidgetTaskControl.defaults.set("sent", forKey: "widget-delivery:" + id)
         if let pending = WidgetTaskControl.pending(), pending.id == id {
             WidgetTaskControl.defaults.removeObject(forKey: "task-feedback")

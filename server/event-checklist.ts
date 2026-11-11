@@ -1,3 +1,4 @@
+import {expandEvents} from '../src/lib/recurrence.js'
 import {randomUUID} from 'node:crypto'
 import {z} from 'zod'
 import {ApiError,db} from './cloud.js'
@@ -84,13 +85,55 @@ export async function linkEventChecklist(username:string,input:unknown){
  const note=c.notes.find(n=>n.id===args.noteId);if(!note)throw new ApiError(404,'Choose the canonical Work or To-do note.')
  const result=linkChecklistBlocks(c.calendar.state,note,args);const saved=await commit(username,c,result.calendar,[result.note]);return {saved:true,...saved,itemId:result.itemId,linked:result.linked}
 }
-export async function completeEventChecklist(username:string,input:unknown){
- const args=doneArgs.parse(input),c=await context(username)
- if(c.calendar.revision!==args.revision)throw new ApiError(409,'Calendar changed. Refresh before checking this block.')
- const result=completeChecklistBlocks(c.calendar.state,c.notes,args)
- if(!result.changed)return {saved:true,duplicate:true,revision:c.calendar.revision,progress:result.progress}
- const saved=await commit(username,c,result.calendar,result.notes,true)
- return {saved:true,revision:saved.calendarRevision,progress:result.progress,blocks:result.blocks}
+export async function completeEventChecklist(
+ username: string,
+ input: unknown,
+ widget?: {feedbackId: string; expectedEnd: number},
+) {
+ const args = doneArgs.parse(input)
+ for (let attempt = 0; attempt < 4; attempt++) {
+  const c = await context(username)
+  if (!widget && attempt === 0 && c.calendar.revision !== args.revision) {
+   throw new ApiError(409, 'Calendar changed. Retry this completion.')
+  }
+  const start = new Date(args.occurrenceStart)
+  const widgetOccurrence = widget
+   ? expandEvents(c.calendar.state.events, new Date(start.getTime() - 1), new Date(widget.expectedEnd * 1000 + 1))
+      .find(item => item.event.id === args.eventId && item.start.getTime() === start.getTime())
+   : undefined
+  if (widget && (!widgetOccurrence || widgetOccurrence.event.eventKind === 'folder'
+      || widgetOccurrence.event.allDay || widgetOccurrence.event.reminder
+      || Math.abs(widgetOccurrence.end.getTime() - widget.expectedEnd * 1000) > 1000)) {
+   throw new ApiError(409, 'This widget activity changed. Refresh the widget before completing it.')
+  }
+  const leaves = checklistLeaves(c.calendar.state.events, args.eventId, new Date(args.occurrenceStart))
+  let result: ReturnType<typeof completeChecklistBlocks>
+  if (leaves.length) {
+   result = completeChecklistBlocks(c.calendar.state, c.notes, args)
+  } else if (widget) {
+   const calendar = structuredClone(c.calendar.state)
+   const event = calendar.events.find(item => item.id === args.eventId)!
+   const changed = !occurrenceChecked(event, start)
+   if (changed) event.completedStarts = [...(event.completedStarts || []), start.toISOString()]
+   result = {calendar, notes: [], progress: [], changed, blocks: 1}
+  } else {
+   throw new ApiError(409, 'Done is available for one-off activities linked to Work or To-do.')
+  }
+  if (widget) {
+   if (!result.calendar.resolvedWidgetFeedbackIds?.includes(widget.feedbackId)) {
+    result.calendar.resolvedWidgetFeedbackIds = [...(result.calendar.resolvedWidgetFeedbackIds || []), widget.feedbackId].slice(-200)
+    result.changed = true
+   }
+  }
+  if (!result.changed) return {saved: true, duplicate: true, revision: c.calendar.revision, progress: result.progress}
+  try {
+   const saved = await commit(username, c, result.calendar, result.notes, true)
+   return {saved: true, revision: saved.calendarRevision, progress: result.progress, blocks: result.blocks}
+  } catch (error) {
+   if (!(error instanceof ApiError) || error.status !== 409 || attempt === 3) throw error
+  }
+ }
+ throw new ApiError(409, 'The calendar is busy. Retry this completion.')
 }
 export function registerEventChecklistTools(add:(name:string,description:string,schema:z.ZodRawShape,scope:string,readOnly:boolean,execute:(args:any)=>Promise<unknown>)=>void,username:string){
  add('planner_checklist_read','Read stable checklist IDs, row indices, labels, checked state and current calendar/Files revisions for the canonical Work or To-do note. Use before explicitly linking blocks; never guess from similar titles.',{noteId:z.string().min(1).max(100)},'planner:read',true,args=>readChecklistLinks(username,args.noteId))

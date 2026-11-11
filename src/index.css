@@ -2371,3 +2371,8 @@ html, body { touch-action: pan-x pan-y; }
 .pdf-preview-page { min-height: 0; overflow: auto; display: grid; justify-items: center; padding: 12px; background: var(--line); }
 .pdf-preview-page canvas { max-width: 100%; height: auto; }
 .pdf-preview-pages { flex: none; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 8px; background: var(--panel); }
+
+.is-completed-free-time .event-title,
+.is-completed-free-time.folder-grid-toggle { text-decoration: line-through; }
+.is-completed-free-time .event-urgency-badge { display: none; }
+.is-completed-free-time .event-title::before { content: 'Free time · '; text-decoration: none; display: inline-block; margin-right: 4px; }

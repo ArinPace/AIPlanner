@@ -1,3 +1,4 @@
+import {completeEventChecklist} from './event-checklist.js'
 import {ApiError,body,json} from './cloud.js'
 import {calendarRow} from './planner-workspace.js'
 import {widgetFeedbackSchema} from './calendar-staging.js'
@@ -14,8 +15,16 @@ export async function handleWidgetBackground(request:Request,path:string,usernam
  }
  if(request.method!=='POST')throw new ApiError(405,'Use POST.')
  const item=widgetFeedbackSchema.parse(await body(request))
- const {state}=await calendarRow(username)
+ const {state,revision}=await calendarRow(username)
  if(state.resolvedWidgetFeedbackIds?.includes(item.id))return json({ok:true,merged:true})
+ if (item.done && item.kind !== 'fillFreeTime') {
+  const separator = item.task.id.lastIndexOf('@')
+  const eventId = separator < 0 ? item.task.id : item.task.id.slice(0, separator)
+  await completeEventChecklist(username, {
+   revision, eventId, occurrenceStart: new Date(item.task.start * 1000).toISOString(),
+  }, {feedbackId: item.id, expectedEnd: item.task.end})
+  return json({ok: true, merged: true})
+ }
  const calendar=item.kind==='fillFreeTime'?verifyFreeTimeRequest(state.events,state.tags,item):{applied:false,end:new Date((item.requestedEnd??item.reportedAt+item.remainingMinutes*60)*1000).toISOString(),note:'Widget preview only. Prepare a complete revised draft; do not mutate the live calendar until publication.'}
  const base=new URL(request.url).origin
  const chatId=await ensureMainChat(username)

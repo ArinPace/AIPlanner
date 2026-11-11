@@ -123,14 +123,19 @@ enum WidgetTimeOverrides {
     static func task(_ original: WidgetTask, end: Double) -> WidgetTask {
         WidgetTask(id: original.id, title: original.title, start: original.start, end: max(original.start + 0.001, end), color: original.color, planningTaskId: original.planningTaskId, isFreeTime: original.isFreeTime, sourceEventId: original.sourceEventId)
     }
+    static func completedFreeTime(_ feedback: WidgetTaskFeedback) -> WidgetTask {
+        WidgetTask(id: feedback.task.id, title: "Free time", start: feedback.task.start,
+                   end: feedback.task.end, color: "#ffffff", planningTaskId: nil,
+                   isFreeTime: true, sourceEventId: feedback.task.sourceEventId)
+    }
     static func applying(to schedule: WidgetSchedule) -> WidgetSchedule {
         let records = load().values
         var events = schedule.events.map { event in
             guard let change = records.filter({ matches($0.task, event) }).max(by: { $0.reportedAt < $1.reportedAt }) else { return event }
-            return task(event, end: end(change))
+            return change.done ? completedFreeTime(change) : task(event, end: end(change))
         }
         for change in records where !events.contains(where: { matches($0, change.task) }) && end(change) > schedule.generatedAt {
-            events.append(task(change.task, end: end(change)))
+            events.append(change.done ? completedFreeTime(change) : task(change.task, end: end(change)))
         }
         return WidgetSchedule(version: schedule.version, generatedAt: schedule.generatedAt, validUntil: schedule.validUntil, events: events)
     }
@@ -140,10 +145,8 @@ enum WidgetTimeOverrides {
         let records = load().values
         guard let change = records.filter({ $0.task.start <= now }).max(by: { $0.reportedAt < $1.reportedAt }) else { return nil }
         if change.done {
-            let completed = records.filter(\.done)
-            let remaining = WidgetSchedule(version: schedule.version, generatedAt: schedule.generatedAt, validUntil: schedule.validUntil,
-                events: schedule.events.filter { event in !completed.contains(where: { matches($0.task, event) }) })
-            return remaining.current(at: date) ?? remaining.next(after: date)
+            if let active = schedule.current(at: date), active.isFreeTime != true { return active }
+            return now < change.task.end ? completedFreeTime(change) : nil
         }
         return task(change.task, end: end(change))
     }

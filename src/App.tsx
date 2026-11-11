@@ -1,4 +1,4 @@
-import {completeCalendarBlock} from './lib/api'
+import {getToken,completeCalendarBlock} from './lib/api'
 import {DeviceControlSync} from './components/DeviceControlSync'
 import {subscriptionChatRequest} from './lib/api'
 import {applyTheme,readTheme} from './lib/theme'
@@ -304,13 +304,34 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
     return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener('focus', refresh);document.removeEventListener('visibilitychange',resume);window.removeEventListener('planner-calendar-refresh',refresh) }
   }, [tab, loaded, loadError, draft, events, tags, hiddenTagIds, zoom, applyState])
 
-  async function markCalendarDone(event:CalendarEvent,start:Date){
+  const completionQueue = useRef<Promise<unknown>>(Promise.resolve())
+  function markCalendarDone(event: CalendarEvent, start: Date): Promise<string> {
+    const token = getToken()
+    const queued = completionQueue.current.catch(() => {}).then(() => {
+      if (token !== getToken()) throw new Error('Your account changed. Open your current calendar.')
+      return saveCalendarDone(event, start)
+    })
+    completionQueue.current = queued
+    return queued
+  }
+
+  async function saveCalendarDone(event:CalendarEvent,start:Date){
     if(draft)throw new Error('Close the event editor before marking work done.')
     await saveQueue.current
     const baseline=calendarFingerprint(latestCalendar.current)
     if(baseline!==persistedCalendar.current)throw new Error('Calendar changes are still saving. Try again in a moment.')
     const current=await loadCalendar({adopt:false})
-    const result=await completeCalendarBlock({revision:current.revision!,eventId:event.id,occurrenceStart:start.toISOString()})
+    let result
+    for (let attempt = 0; ; attempt++) {
+      try {
+        result = await completeCalendarBlock({revision:current.revision!,eventId:event.id,occurrenceStart:start.toISOString()})
+        break
+      } catch (error) {
+        if (attempt >= 3 || !(error instanceof Error) || !/calendar.*changed|checklist changed/i.test(error.message)) throw error
+        const refreshed = await loadCalendar({adopt:false})
+        current.revision = refreshed.revision
+      }
+    }
     const remote=await loadCalendar({adopt:false})
     if(calendarFingerprint(latestCalendar.current)===baseline){adoptCalendarRevision(remote.revision);applyState(remote)}
     else setSaveError('Completion saved. You also edited the calendar; reconcile those edits before saving again.')

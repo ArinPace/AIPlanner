@@ -1,7 +1,7 @@
 import {widgetFeedbackMessage} from '../lib/widgetFeedbackMessage'
 import {useEffect, useRef, useState} from 'react'
 import {agentRequest} from '../lib/agent'
-import {getToken} from '../lib/api'
+import {getToken,sendWidgetCompletion} from '../lib/api'
 import {isIPhoneApp, nativeRequest} from '../lib/platform'
 
 import type {TaskFeedback, TaskTimeResult} from '../lib/widgetTaskFeedback'
@@ -13,6 +13,16 @@ export function WidgetTaskFeedback({username,onApply}:{username:string;onApply:(
   const token=getToken(),key='planner-widget-feedback:'+username+':'+item.id
   sending.current=true;setBusy(true);setStatus('Sending task feedback…')
   try {
+   if (item.done && item.kind !== 'fillFreeTime') {
+    await sendWidgetCompletion(item)
+    if (token !== getToken()) throw new Error('Your account changed. Reopen Planner to sync.')
+    localStorage.setItem(key, 'sent')
+    await nativeRequest({action: 'ackTaskFeedback', id: item.id, account: username})
+    window.dispatchEvent(new Event('planner-calendar-refresh'))
+    setPending(null)
+    setStatus('Activity completed. Its remaining time is free time.')
+    return
+   }
    const calendar=await onApply(item)
    if(token!==getToken())throw new Error('Your account changed. Reopen Planner to sync.')
 
