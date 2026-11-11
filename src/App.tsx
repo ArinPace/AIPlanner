@@ -399,10 +399,11 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   }, [events, view, range.end, range.start])
 
   function navigate(direction: -1 | 1) {
-    if (view === 'year') setCursor(addYears(cursor, direction))
-    else if (view === 'month') setCursor(addMonths(cursor, direction))
-    else if (view === 'week') setCursor(addDays(cursor, direction * 7))
-    else setCursor(addDays(cursor, direction))
+    setCursor(current => {
+      if (view === 'year') return addYears(current, direction)
+      if (view === 'month') return addMonths(current, direction)
+      return addDays(current, direction * (view === 'week' ? 7 : 1))
+    })
   }
 
   function openCreate(date: Date, options?: { timed?: boolean; allDay?: boolean }) {
@@ -576,6 +577,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
             />
           ) : (
             <TimeGridView
+              onWeekNavigate={direction => setCursor(current => addDays(current, direction * 7))}
               weekLayout={weekLayout}
               scaleToDuration={calendarDisplay.settings.week}
               onEventDone={markCalendarDone}

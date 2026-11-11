@@ -1,3 +1,4 @@
+import {useWeekSwipe} from '../lib/useWeekSwipe'
 import {planningRequest} from '../lib/api'
 import {intensityFor, type PlanningProfile} from '../lib/planning'
 import {occurrenceChecked,repeatsWithAncestors} from '../lib/eventChecklist'
@@ -29,6 +30,7 @@ import {PlanningButton} from './PlanningSettings'
 import {toDateInput} from '../lib/dates'
 
 type TimeGridViewProps = {
+  onWeekNavigate?: (direction: -1 | 1) => void
   weekLayout?: 'list' | 'grid'
   scaleToDuration?:boolean
   active?:boolean
@@ -56,7 +58,7 @@ function clipToDay(item: Occurrence, day: Date): { start: Date; end: Date } | nu
   }
 }
 
-export function TimeGridView({ weekLayout = 'list', scaleToDuration=false, active=true,cursor, view, zoom, occurrences, busyOccurrences, tags, onSlotClick, onEventClick, onEventDone }: TimeGridViewProps) {
+export function TimeGridView({ onWeekNavigate, weekLayout = 'list', scaleToDuration=false, active=true,cursor, view, zoom, occurrences, busyOccurrences, tags, onSlotClick, onEventClick, onEventDone }: TimeGridViewProps) {
   const [planning, setPlanning] = useState<PlanningProfile>()
   useEffect(() => {
     if (!active) return
@@ -74,6 +76,7 @@ export function TimeGridView({ weekLayout = 'list', scaleToDuration=false, activ
   const days = view === 'day' ? [startOfDay(cursor)] : getWeekDays(cursor)
   const scrollRef = useRef<HTMLDivElement>(null)
   const weekScrollRef=useRef<HTMLDivElement>(null)
+  useWeekSwipe(weekScrollRef, active && view === 'week' && Boolean(onWeekNavigate), onWeekNavigate)
   const mobileNowRef=useRef<HTMLDivElement>(null)
   const [,setClockTick]=useState(0)
   useEffect(()=>{
@@ -81,7 +84,7 @@ export function TimeGridView({ weekLayout = 'list', scaleToDuration=false, activ
     const timer=window.setInterval(()=>setClockTick(tick=>tick+1),30000)
     return()=>window.clearInterval(timer)
   },[active])
-  const previousLayout = useRef<{key:string;hourHeight:number}|null>(null)
+  const previousLayout = useRef<{key:string;hourHeight:number;gridWeek:boolean}|null>(null)
   const bodyRef=useRef<HTMLDivElement>(null)
   const [openedFolders,setOpenedFolders]=useState<Set<string>>(()=>new Set())
   const now=new Date(),grouped=occurrenceFolderGroups(occurrences),busyGrouped=occurrenceFolderGroups(busyOccurrences)
@@ -109,7 +112,8 @@ export function TimeGridView({ weekLayout = 'list', scaleToDuration=false, activ
     const node = mobileWeek?weekScrollRef.current:scrollRef.current
     if (!node) return
     const key=view+'/'+dayKey+'/'+todayKey+'/'+(mobileWeek?'mobile':'grid')+'/'+(mobileWeek&&scaleToDuration),previous=previousLayout.current
-    if(previous?.key!==key){
+    const keepGridPosition = regularWeek && previous?.gridWeek
+    if(previous?.key!==key && !keepGridPosition){
       if(mobileWeek){
         const marker=mobileNowRef.current
         node.scrollTop=marker?Math.max(0,node.scrollTop+marker.getBoundingClientRect().top-node.getBoundingClientRect().top-node.clientHeight*.25):0
@@ -118,12 +122,12 @@ export function TimeGridView({ weekLayout = 'list', scaleToDuration=false, activ
         const target=showNow?(current.getHours()+current.getMinutes()/60)*hourHeight:8*hourHeight
         node.scrollTop=Math.max(0,target-(showNow?node.clientHeight*.25:16))
       }
-    }else if(!mobileWeek&&previous.hourHeight!==hourHeight){
+    }else if(previous && !mobileWeek&&previous.hourHeight!==hourHeight){
       const midpoint=node.scrollTop+node.clientHeight/2
       node.scrollTop=midpoint/previous.hourHeight*hourHeight-node.clientHeight/2
     }
-    previousLayout.current={key,hourHeight}
-  }, [active,view,dayKey,todayKey,mobileWeek,hourHeight,containsToday,scaleToDuration])
+    previousLayout.current={key,hourHeight,gridWeek:regularWeek}
+  }, [active,view,dayKey,todayKey,mobileWeek,hourHeight,containsToday,scaleToDuration,regularWeek])
 
   const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 60) * hourHeight
   const busyEvents = busyOccurrences.map(item => item.event)

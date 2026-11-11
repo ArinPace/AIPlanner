@@ -2407,3 +2407,5 @@ html, body { touch-action: pan-x pan-y; }
 .week-time-grid .timed-event-folder .folder-grid-toggle { flex: 1 1 100%; }
 .week-time-grid .calendar-done-button { padding: 2px 4px; min-height: 24px; font-size: 10px; }
 .week-time-grid .timed-event-with-actions:has(.calendar-completion-action) > .timed-event { padding-right: 44px; }
+
+.time-view-scroll { overscroll-behavior-x: contain; }
