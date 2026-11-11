@@ -71,3 +71,14 @@ test('prerequisite-only or incompletely mapped parent cannot complete from its c
  const e=event('prerequisite');e.checklistLinks![0].completionReady=false
  const result=completeChecklistBlocks(state(e),[note],done(e.id));assert.equal(result.progress[0].blocked,true);assert.equal(result.progress[0].checked,false);assert.equal(result.notes.length,0)
 })
+
+test('folder Done releases its unlinked buffers as well as linked work without adding checklist requirements', () => {
+ const folder = {...event('folder'), eventKind: 'folder' as const, end: '2026-11-10T16:00:00Z', checklistLinks: undefined}
+ const work = {...event('work'), folderId: folder.id}
+ const buffer = {...event('buffer', '2026-11-10T14:00:00Z', '2026-11-10T14:15:00Z'), folderId: folder.id, checklistLinks: undefined}
+ const result = completeChecklistBlocks(state(folder, work, buffer), [note], done('folder'))
+ assert.equal(result.blocks, 2)
+ assert.ok(result.calendar.events.filter(event => event.eventKind !== 'folder').every(event => event.completedStarts?.length === 1))
+ assert.equal(result.progress[0].total, 1)
+ assert.equal(result.progress[0].checked, true)
+})

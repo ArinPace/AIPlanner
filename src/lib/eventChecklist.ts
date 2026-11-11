@@ -8,16 +8,13 @@ export function checklistLeaves(events:CalendarEvent[],id:string,start:Date):Occ
  const expanded=expandEvents(events,new Date(start.getTime()-1),new Date(rangeEnd.getTime()+1))
  const root=expanded.find(item=>item.event.id===id&&item.start.getTime()===start.getTime());if(!root)return []
  const groups=occurrenceFolderGroups(expanded),result:Occurrence[]=[]
- function visit(item:Occurrence){if(item.event.eventKind==='folder')for(const child of groups.children.get(folderOccurrenceKey(item))||[])visit(child);else if(canCompleteChecklistBlock(item.event,events))result.push(item)}
- visit(root);return result
+ function visit(item:Occurrence){if(item.event.eventKind==='folder')for(const child of groups.children.get(folderOccurrenceKey(item))||[])visit(child);else if(!repeatsWithAncestors(item.event,events)&&(source!.eventKind==='folder'||item.event.checklistLinks?.length))result.push(item)}
+ visit(root);return result.some(item=>item.event.checklistLinks?.length)?result:[]
 }
 export function repeatsWithAncestors(event:CalendarEvent,events:CalendarEvent[]){
  let current:CalendarEvent|undefined=event;const seen=new Set<string>()
  while(current&&!seen.has(current.id)){seen.add(current.id);if(current.recurrence.frequency!=='none')return true;current=events.find(e=>e.id===current!.folderId)}
  return false
-}
-export function canCompleteChecklistBlock(event: CalendarEvent, events: CalendarEvent[]): boolean {
- return Boolean(event.checklistLinks?.length) && !repeatsWithAncestors(event, events)
 }
 // Ignore only internal progress metadata. Every other change still needs review.
 export function calendarScheduleIdentity(state:import('../types.js').StoredState){

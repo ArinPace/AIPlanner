@@ -1,6 +1,6 @@
 import {planningRequest} from '../lib/api'
 import {intensityFor, type PlanningProfile} from '../lib/planning'
-import {occurrenceChecked,canCompleteChecklistBlock} from '../lib/eventChecklist'
+import {occurrenceChecked,repeatsWithAncestors} from '../lib/eventChecklist'
 import {CalendarDoneButton} from './CalendarDoneButton'
 import {durationHeight} from '../lib/calendarDisplay'
 import {TaskScreenTimeButton} from './TaskScreenTimeButton'
@@ -125,12 +125,13 @@ export function TimeGridView({ scaleToDuration=false, active=true,cursor, view, 
 
   const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 60) * hourHeight
   const busyEvents = busyOccurrences.map(item => item.event)
-  function completionLeaves(item: Occurrence): Occurrence[] {
+  function completionLeaves(item: Occurrence, insideFolder = false): Occurrence[] {
     if (item.event.eventKind === 'folder') {
       const children = busyGrouped.children.get(folderOccurrenceKey(item)) || []
-      return children.flatMap(completionLeaves)
+      const leaves = children.flatMap(child => completionLeaves(child, true))
+      return insideFolder || leaves.some(leaf => leaf.event.checklistLinks?.length) ? leaves : []
     }
-    return canCompleteChecklistBlock(item.event, busyEvents) ? [item] : []
+    return !repeatsWithAncestors(item.event, busyEvents) && (insideFolder || item.event.checklistLinks?.length) ? [item] : []
   }
   function completed(item: Occurrence): boolean {
     if (occurrenceChecked(item.event, item.start)) return true
