@@ -977,7 +977,7 @@ return {sliders:ranges,summary:(trigger()?.innerText||'ChatGPT model settings').
     const replies=raw.filter(n=>!raw.some(other=>other!==n&&other.contains(n)));
     const last=replies.at(-1);let turn=last?.closest('[data-testid^="conversation-turn"],article,li')||last;
     const completionSelector='[data-testid="copy-turn-action-button"],button[aria-label="Copy response"],button[aria-label="Copy message"],button[aria-label="Copy"],button[aria-label="Good response"],button[aria-label="Read aloud"]';
-    for(let node=last,depth=0;node&&depth<6;node=node.parentElement,depth++){
+    for(let node=last,depth=0;node&&depth<18;node=node.parentElement,depth++){
       const other=[...node.querySelectorAll('[data-message-author-role="assistant"],[data-markdown-text-style="assistant-message"]')].some(n=>n!==last&&!n.contains(last)&&!last.contains(n));
       if(other)break;if(node.querySelector(completionSelector)){turn=node;break}
     }
