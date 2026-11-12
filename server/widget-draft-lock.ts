@@ -1,7 +1,8 @@
 import {ApiError,db} from './cloud.js'
 import {storage} from './mcp-auth.js'
 export async function hasWidgetDraft(username:string){
- const row=storage(await db().from('planner_calendar_staging').select('status,feedback:payload->widgetFeedback').eq('username',username).in('status',['draft','stale']).order('created_at',{ascending:false}).limit(1).maybeSingle())
+ const calendar=storage(await db().from('planner_calendars').select('revision').eq('username',username).single())
+ const row=storage(await db().from('planner_calendar_staging').select('status,feedback:payload->widgetFeedback').eq('username',username).in('status',['draft','stale']).gte('base_revision',calendar.revision).order('created_at',{ascending:false}).limit(1).maybeSingle())
  return Boolean(row&&['draft','stale'].includes(row.status)&&Array.isArray(row.feedback)&&row.feedback.length)
 }
 export async function requireNoWidgetDraft(username:string){
