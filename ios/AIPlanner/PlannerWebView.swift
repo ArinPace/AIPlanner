@@ -23,7 +23,7 @@ struct PlannerWebView: UIViewRepresentable {
         config.websiteDataStore = .default()
         config.allowsInlineMediaPlayback = true
         config.userContentController.addScriptMessageHandler(context.coordinator, contentWorld: .page, name: "plannerNative")
-        config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeScreenTime=true;window.plannerNativeChatGPTPortal=true;window.plannerNativeChatGPTRelayVersion=7;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true'});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeScreenTime=true;window.plannerNativeChatGPTPortal=true;window.plannerNativeChatGPTRelayVersion=8;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true'});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.userContentController.addUserScript(WKUserScript(source: """
             document.addEventListener('click', event => {
               const link = event.target instanceof Element && event.target.closest('a[href]');
@@ -244,7 +244,7 @@ struct PlannerWebView: UIViewRepresentable {
                         guard let account = body["account"] as? String, let value = body["settings"], JSONSerialization.isValidJSONObject(value) else { throw NativeError("Missing notification settings.") }
                         let options = try JSONDecoder().decode(TaskNotificationOptions.self, from: JSONSerialization.data(withJSONObject: value))
                         try await PlannerTaskNotifications.shared.configure(account: account, options: options)
-                    case "chatGPTPortal", "chatGPTSiteSignIn", "chatGPTRelayStatus", "chatGPTRelaySend", "chatGPTRelayStop", "chatGPTRelayDraft", "chatGPTRelayClearDraft", "chatGPTRelayDownload", "chatGPTRelayMirror", "chatGPTRelayModel":
+                    case "chatGPTPortal", "chatGPTSiteSignIn", "chatGPTRelayStatus", "chatGPTRelaySend", "chatGPTRelayStop", "chatGPTRelayDraft", "chatGPTRelayClearDraft", "chatGPTRelayDownload", "chatGPTRelayMirror", "chatGPTRelayModel", "chatGPTRelayFind":
                         guard let account = body["account"] as? String else { throw NativeError("Sign into Planner first.") }
                         let controller = try relay(account: account)
                         if action == "chatGPTRelayStatus" {
@@ -257,6 +257,12 @@ struct PlannerWebView: UIViewRepresentable {
                             guard !relayOperationActive, controller.pendingChat == nil, chatGPTPortal?.presentingViewController == nil else { throw NativeError("Finish the current reply or secure sign-in before changing models.") }
                             relayOperationActive = true; attachRelayForRun(); defer { relayOperationActive = false; parkRelay() }
                             replyHandler(try await controller.modelMenu(operation:body["operation"] as? String ?? "open",id:body["id"] as? String,value:body["value"] as? Int,url:body["url"] as? String,newChat:body["newChat"] as? Bool ?? false),nil);return
+                        }
+                        if action == "chatGPTRelayFind" {
+                            guard !relayOperationActive,controller.pendingChat == nil,chatGPTPortal?.presentingViewController == nil,let title=body["title"] as? String,!title.isEmpty,title.count<=120 else {throw NativeError("Finish the current reply or sign-in before syncing chats.")}
+                            relayOperationActive=true;attachRelayForRun();defer{relayOperationActive=false;parkRelay()}
+                            let url=try await controller.findTestConversation(title:title)
+                            replyHandler(["url":url as Any? ?? NSNull()],nil);return
                         }
                         if action == "chatGPTRelayMirror" {
                             guard !relayOperationActive, chatGPTPortal?.presentingViewController == nil else { throw NativeError("Return to Planner and wait for the current operation before syncing chats.") }
@@ -1263,7 +1269,7 @@ return {sliders:ranges,summary:(trigger()?.innerText||'ChatGPT model settings').
         sawRunning = sawRunning || state["running"] as? Bool == true
         let text = state["text"] as? String ?? ""
         if text != lastText { lastText = text; changedAt = Date() }
-        if (state["guest"] as? Bool == true || canonicalConversation(state["url"] as? String) != nil), newReply, (!text.isEmpty || !(state["files"] as? [[String: Any]] ?? []).isEmpty), state["running"] as? Bool != true, (sawRunning || state["final"] as? Bool == true), Date().timeIntervalSince(changedAt) >= 3 {
+        if (state["guest"] as? Bool == true || canonicalConversation(state["url"] as? String) != nil), newReply, (!text.isEmpty || !(state["files"] as? [[String: Any]] ?? []).isEmpty), state["running"] as? Bool != true, (state["final"] as? Bool == true || (state["guest"] as? Bool == true && sawRunning)), Date().timeIntervalSince(changedAt) >= 3 {
             state["phase"] = "completed"; pendingChat = nil
             if let fingerprint=submittedDraftFingerprint, let value=UserDefaults.standard.string(forKey:"chatgpt-project:"+account+":Test"), let projectURL=URL(string:value), let current=canonicalConversation(state["url"] as? String), Self.belongsToProject(current, project: projectURL) {
                 let key="chatgpt-confirmed-project-drafts:"+account+":Test"
@@ -1273,6 +1279,33 @@ return {sliders:ranges,summary:(trigger()?.innerText||'ChatGPT model settings').
 
         } else if Date().timeIntervalSince(startedAt) > 900 { state["phase"] = "attention"; state["message"] = "Reply completion could not be verified. Open ChatGPT before sending again." }
         return state
+    }
+    // BEGIN_PROJECT_CHAT_LOOKUP
+    private static var projectChatLookup: String { #"""
+const pause=ms=>new Promise(r=>setTimeout(r,ms));
+if(location.origin!=='https://chatgpt.com'||!location.pathname.endsWith('/project'))throw Error('The Test project was not loaded. No conversation was created.');
+let main=null;for(let i=0;i<60;i++){main=document.querySelector('main,[role="main"]');if(main&&!main.querySelector('[aria-busy="true"],[role="progressbar"]'))break;await pause(200)}
+if(!main)throw Error('ChatGPT did not expose the Test project conversation list.');await pause(1200);
+const normalized=t=>t.trim().replace(/\s+/g,' ');
+const links=[...main.querySelectorAll('a[href]')].filter(n=>[n.getAttribute('aria-label'),n.getAttribute('title'),n.querySelector('h1,h2,h3,[data-testid="chat-title"],[data-thread-title],.truncate')?.textContent,(n.innerText||n.textContent||'').split('\n')[0]].some(t=>t&&normalized(t)===normalized(title)));
+const urls=[...new Set(links.map(n=>{const u=new URL(n.href,location.href);if(u.origin!==location.origin)return null;const projectId=p=>p.split('/')[2]?.match(/^g-p-[0-9a-f]{32}/)?.[0]||p.split('/')[2];if(u.pathname.startsWith('/g/')&&projectId(u.pathname)!==projectId(location.pathname))return null;const id=u.pathname.match(/\/c\/([A-Za-z0-9_-]+)$/)?.[1];return id?location.origin+location.pathname.replace(/\/project$/,'')+'/c/'+id:null}).filter(Boolean))];
+if(urls.length>1)throw Error('Several Test conversations have this name. Choose the existing chat before syncing; no duplicate was created.');
+return {url:urls[0]||null};
+"""# }
+    // END_PROJECT_CHAT_LOOKUP
+    func findTestConversation(title:String) async throws -> String? {
+        guard pendingChat == nil else {throw NativeError("Finish the current reply before syncing chats.")}
+        let state=try await snapshot()
+        guard state["ready"] as? Bool == true,state["guest"] as? Bool != true,state["running"] as? Bool != true,state["interaction"] as? Bool != true else {throw NativeError("Finish signing in or the current ChatGPT reply before syncing chats.")}
+        try await requireCleanDraft("Review the unsent ChatGPT draft before syncing chats.")
+        guard let project=try await ensureRelayProject() else {throw NativeError("Sign into ChatGPT to create saved conversations in Test.")}
+        if browser.url?.path != project.path{documentCommitted=false;browser.load(URLRequest(url:project,timeoutInterval:30))}
+        var ready=false;for _ in 0..<60{if documentCommitted,!browser.isLoading,browser.url?.path == project.path{ready=true;break};try await Task.sleep(for:.milliseconds(500))}
+        guard ready else {throw NativeError("The Test project did not load. No conversation was created.")}
+        setInteractive(true);defer{setInteractive(false)}
+        let result=try await browser.callAsyncJavaScript(Self.projectChatLookup,arguments:["title":title],in:nil,contentWorld:.page) as? [String:Any]
+        guard let raw=result?["url"] as? String,let url=canonicalConversation(raw),Self.belongsToProject(url,project:project) else{return nil}
+        return url.absoluteString
     }
     func mirrorConversation(url: String, patch: [String: Any], expected: [String: Any]?) async throws -> [String: Any] {
         guard pendingChat == nil, let target = URL(string: url), target.scheme == "https", target.host == "chatgpt.com", target.query == nil, target.fragment == nil, target.user == nil,

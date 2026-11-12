@@ -27,12 +27,20 @@ test('subscription workspace is fresh and owner-scoped; never touches Agent jobs
  try{
   const response=await handleSubscriptionChat(new Request('https://planner.test/api/subscription-chat'),'owner'),data=await response.json() as any
   assert.equal(data.chat.id,main);assert.equal(data.connection.connected,false);assert.deepEqual(data.messages,[]);assert.equal(data.chats.length,1)
+  await post({action:'relay_bind',chatId:main,url:'https://chatgpt.com/g/test/c/main'})
+  const mainPlan=await (await post({action:'relay_mirror',chatId:main,expectedUpdatedAt:data.chat.updated_at,url:'https://chatgpt.com/g/test/c/main',observed:{title:'Auto title',archived:false,deleted:false}})).json() as any
+  assert.deepEqual(mainPlan.plan.push,{title:'Main Chat'})
+  const mainAck=await (await post({action:'relay_mirror',chatId:main,expectedUpdatedAt:data.chat.updated_at,url:'https://chatgpt.com/g/test/c/main',observed:{title:'Auto title',archived:false,deleted:false},applied:{title:'Main Chat',archived:false,deleted:false}})).json() as any
+  const retitle=await (await post({action:'relay_mirror',chatId:main,expectedUpdatedAt:mainAck.updated_at,url:'https://chatgpt.com/g/test/c/main',observed:{title:'Unwanted automatic title',archived:false,deleted:false}})).json() as any
+  assert.deepEqual(retitle.plan.push,{});assert.deepEqual(retitle.plan.pull,{title:'Unwanted automatic title'})
   const mark=tables.length;await handleSubscriptionChat(new Request('https://planner.test/api/subscription-chat?fast=1'),'owner');assert(!tables.slice(mark).some(t=>['planner_sync_subscription_tutors','planner_vm_settings','planner_google_accounts'].includes(t)),'Fast subscription transcript must not wait on Tutor or Google settings')
   await assert.rejects(()=>handleSubscriptionChat(new Request('https://planner.test/api/subscription-chat?chat='+foreign),'owner'),/not found/)
   const created=await (await post({action:'create'})).json() as any;assert.equal(created.id,extra)
   const renamed=await (await post({action:'update',id:extra,title:'Independent Chat'})).json() as any;assert.equal(renamed.title,'Independent Chat')
   await assert.rejects(()=>post({action:'update',id:main,pinned:false}),/stays pinned/)
   await post({action:'relay_bind',chatId:extra,url:'https://chatgpt.com/c/test-mapped'})
+  await post({action:'relay_bind',chatId:extra,url:'https://chatgpt.com/c/test-mapped'})
+  await assert.rejects(()=>post({action:'relay_bind',chatId:extra,url:'https://chatgpt.com/c/unrelated'}),/already linked/)
   await assert.rejects(()=>post({action:'relay_mirror',chatId:extra,expectedUpdatedAt:created.updated_at,url:'https://chatgpt.com/c/another',observed:{title:'Independent Chat',archived:false,deleted:false}}),/link changed/)
   await assert.rejects(()=>post({action:'relay_mirror',chatId:extra,expectedUpdatedAt:'old',url:'https://chatgpt.com/c/test-mapped',observed:{title:'Independent Chat',archived:false,deleted:false}}),/chat changed/)
   const plan=await (await post({action:'relay_mirror',chatId:extra,expectedUpdatedAt:renamed.updated_at,url:'https://chatgpt.com/c/test-mapped',observed:{title:'Auto title',archived:false,deleted:false}})).json() as any

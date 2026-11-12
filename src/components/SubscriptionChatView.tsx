@@ -29,6 +29,7 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
  const workspaceRef=useRef(workspace);workspaceRef.current=workspace
  const selected=useRef<string|null>(cachedWorkspace?.chat.id||null),epoch=useRef(0),alive=useRef(true)
  const native=Boolean(window.plannerNativeChatGPTPortal)
+ const [relayIdle,setRelayIdle]=useState(false)
  const [relayReady,setRelayReady]=useState(false),[relayPrompt,setRelayPrompt]=useState(''),[relayText,setRelayText]=useState(''),[relayPhase,setRelayPhase]=useState(''),[remoteDraft,setRemoteDraft]=useState<string|null>(null)
  type Recovery={chatId:string;turnId:string;prompt:string;reply:string;outputs?:{key:string;name:string}[];providerUrl?:string;toolTurnId?:string}
  const recoveryKey='planner-relay-recovery:'+username
@@ -37,7 +38,7 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
  const [interaction,setInteraction]=useState(false)
  const [syncing,setSyncing]=useState(false),[syncNotice,setSyncNotice]=useState('')
  const [syncConflict,setSyncConflict]=useState<{chat:SubscriptionChat;remote:ChatMirror}|null>(null)
- useEffect(()=>{if(!native||!active)return;let stopped=false;const read=async()=>{try{const state=await nativeRequest<{ready?:boolean;needsLogin?:boolean;interaction?:boolean}>({action:'chatGPTRelayStatus',account:username,peek:true});if(!stopped)setRelayReady((state.ready===true||state.interaction===true)&&!state.needsLogin)}catch{if(!stopped)setRelayReady(false)}};void read();const timer=setInterval(()=>void read(),5000);return()=>{stopped=true;clearInterval(timer)}},[native,active,username])
+ useEffect(()=>{if(!native||!active)return;let stopped=false;const read=async()=>{try{const state=await nativeRequest<{ready?:boolean;needsLogin?:boolean;interaction?:boolean;running?:boolean;phase?:string;guest?:boolean}>({action:'chatGPTRelayStatus',account:username,peek:true});if(!stopped){setRelayReady((state.ready===true||state.interaction===true)&&!state.needsLogin);setRelayIdle(state.ready===true&&!state.guest&&!state.interaction&&!state.running&&state.phase==='idle')}}catch{if(!stopped){setRelayReady(false);setRelayIdle(false)}}};void read();const timer=setInterval(()=>void read(),5000);return()=>{stopped=true;clearInterval(timer)}},[native,active,username])
  const {message,setMessage,selectDraft}=useChatDraft('subscription:'+username)
  const [error,setError]=useState(''),[busy,setBusy]=useState(false),[loading,setLoading]=useState(false),[older,setOlder]=useState(false)
  const [panel,setPanel]=useState<'connections'|'settings'|null>(null),[filter,setFilter]=useState<'active'|'archived'|'bin'>('active')
@@ -81,17 +82,42 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
   const applied=Object.keys(plan.push).length?await nativeRequest<ChatMirror>({action:'chatGPTRelayMirror',account:username,url:row.provider_url,patch:plan.push,expected:remote}):remote
   await subscriptionChatRequest(undefined,{...args,applied})
  }
- async function syncChats(prefer?:'planner'|'chatgpt',background=false){
+ async function provisionPinnedChat(row:SubscriptionChat){
+  if(row.provider_url)return row
+  if((window.plannerNativeChatGPTRelayVersion||0)<8)throw Error('Update the iPhone app to create Main and Tutor connections in Test.')
+  const turnId=crypto.randomUUID();let completed=false
+  // Reuse the per-chat active-turn lock across devices before creating anything.
+  await subscriptionChatRequest(undefined,{action:'tool_begin',chatId:row.id,turnId,prompt:'Connect this Planner chat to its saved ChatGPT Test conversation.'})
+  try{
+   const found=await nativeRequest<{url:string|null}>({action:'chatGPTRelayFind',account:username,title:row.title})
+   let bound=found.url
+   if(!bound){
+    await nativeRequest({action:'chatGPTRelaySend',account:username,chatId:row.id,text:'Reply only READY. This is a connection check for Planner conversation '+row.id+'. Do not use tools, browse websites, edit data, or start any reviews.',context:'',work:true})
+    for(let attempt=0;attempt<240;attempt++){
+     await new Promise(resolve=>setTimeout(resolve,500))
+     const result=await nativeRequest<{phase:string;url?:string;guest?:boolean;needsLogin?:boolean}>({action:'chatGPTRelayStatus',account:username})
+     if(!bound&&result.url&&/^https:\/\/chatgpt\.com\/g\/[^/]+\/c\/[A-Za-z0-9_-]+$/.test(result.url)){await subscriptionChatRequest(undefined,{action:'relay_bind',chatId:row.id,url:result.url});bound=result.url}
+     if(result.phase==='completed'){if(!bound)throw Error('ChatGPT did not confirm a saved Test conversation.');break}
+     if(result.phase==='attention'||result.phase==='interaction'||result.needsLogin||result.guest)throw Error('Finish the ChatGPT sign-in or pending website approval before syncing chats.')
+     if(attempt===239)throw Error('ChatGPT chat setup is still pending. Its existing link was preserved; check the session before retrying.')
+    }
+   }else await subscriptionChatRequest(undefined,{action:'relay_bind',chatId:row.id,url:bound})
+   const current=await subscriptionChatRequest<SubscriptionWorkspace>(row.id,undefined,undefined,true)
+   await mirrorChat(current.chat,'planner');completed=true;return current.chat
+  }finally{await subscriptionChatRequest(undefined,{action:'tool_finish',chatId:row.id,turnId,cancelled:!completed}).catch(()=>{})}
+ }
+ async function syncChats(prefer?:'planner'|'chatgpt',background=false,pinnedOnly=false){
   if(!native||busy||mirrorLock.current||(background&&!workspace?.chat.provider_url))return
   mirrorLock.current=true;setSyncing(true);setSyncNotice('Syncing ChatGPT conversations…');setError('')
   try{
-   const current=await subscriptionChatRequest()
-   const rows=syncConflict&&prefer?[current.chats.find(c=>c.id===syncConflict.chat.id)].filter((c):c is SubscriptionChat=>Boolean(c)):current.chats.filter(c=>Boolean(c.provider_url)&&(!background||c.id===selected.current))
-   if(!rows.length){setSyncNotice('Chats appear in ChatGPT history after their first message while signed in.');return}
+   let current=await subscriptionChatRequest<SubscriptionWorkspace>()
    const failures:string[]=[]
+   if(!background&&!prefer){for(const row of current.chats.filter(c=>(c.is_main||c.tutor_subject_id)&&!c.archived&&!c.deleted_at&&!c.provider_url)){try{setSyncNotice('Setting up '+row.title+' in ChatGPT Test…');await provisionPinnedChat(row)}catch(e){failures.push(e instanceof Error?e.message:'Chat setup failed')}}current=await subscriptionChatRequest<SubscriptionWorkspace>()}
+   const rows=syncConflict&&prefer?[current.chats.find(c=>c.id===syncConflict.chat.id)].filter((c):c is SubscriptionChat=>Boolean(c)):current.chats.filter(c=>Boolean(c.provider_url)&&(!background||c.id===selected.current)&&(!pinnedOnly||c.is_main||Boolean(c.tutor_subject_id)))
+   if(!rows.length&&!failures.length){setSyncNotice('Chats appear in ChatGPT history after their first message while signed in.');return}
    for(const row of rows){try{await mirrorChat(row,prefer)}catch(e){failures.push(e instanceof Error?e.message:'Sync failed')}}
    if(failures.length){await refresh();throw Error(`${failures.length} conversation${failures.length===1?'':'s'} could not sync. ${[...new Set(failures)].slice(0,2).join(' ')} Your messages remain saved in Planner.`)}
-   setSyncConflict(null);setSyncNotice('ChatGPT conversations synced.');await refresh()
+   setSyncConflict(null);setSyncNotice(pinnedOnly?'Main Chat and Tutor chats are synced in Test.':'ChatGPT conversations synced.');await refresh()
   }catch(e){if(!background)setError(e instanceof Error?e.message:'Could not sync ChatGPT chats.');setSyncNotice('Chat history sync needs attention. You can still send messages; changes remain saved in Planner.')}
   finally{mirrorLock.current=false;setSyncing(false)}
  }
@@ -179,6 +205,14 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
   const scope=epoch.current;setPreparing(true);setError('')
   try{let next=[...attachments];for(const file of files){const item=await prepareRelayFile(file);if(next.length>=4||next.reduce((sum,a)=>sum+a.size,0)+item.size>RELAY_BATCH_MAX)throw new Error('Attach up to four files, 25 MB each and 50 MB total.');next.push(item)}if(scope===epoch.current)setAttachments(next)}catch(e){setError(e instanceof Error?e.message:'Could not prepare attachments.')}finally{setPreparing(false)}
  }
+ const attemptedPinned=useRef(new Set<string>())
+ useEffect(()=>{
+  if(!active||!native||!relayIdle||busy||syncing||preparing||dictating||recovery||message.trim()||attachments.length||panel||rename||syncConflict||(window.plannerNativeChatGPTRelayVersion||0)<8)return
+  const missing=workspace?.chats.filter(c=>(c.is_main||c.tutor_subject_id)&&!c.deleted_at&&((!c.archived&&!c.provider_url)||(c.provider_url&&(c.provider_snapshot?.title!==c.title||c.provider_snapshot?.archived!==c.archived))))||[]
+  if(!missing.some(c=>!attemptedPinned.current.has(username+':'+c.id+':'+c.title+':'+c.archived)))return
+  for(const c of missing)attemptedPinned.current.add(username+':'+c.id+':'+c.title+':'+c.archived)
+  void syncChats(undefined,false,true)
+ },[active,native,relayIdle,busy,syncing,preparing,dictating,recovery,message,attachments.length,panel,rename,syncConflict,workspace?.chats,username])
  useEffect(()=>{
   if(!active||!native||busy||syncing||preparing||dictating||recovery||message.trim()||attachments.length||panel||rename||syncConflict)return
   const timer=setTimeout(()=>void syncChats(undefined,true),60000)

@@ -142,6 +142,19 @@ final class PlannerUITests: XCTestCase {
         waitForExpectations(timeout: 45)
         XCTAssertTrue(app.webViews["plannerWebView"].buttons["ChatGPT session"].exists, "Planner remains the visible chat UI")
     }
+    func testSetupPinnedChatConnections() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
+        let app=XCUIApplication();app.launchArguments=["-UITestSignedRelayDiagnostics"];app.launch()
+        let planner=app.webViews["plannerWebView"];XCTAssertTrue(planner.buttons["Chat"].waitForExistence(timeout:30));planner.buttons["Chat"].tap()
+        for second in 0..<600 {
+            if planner.staticTexts["Main Chat and Tutor chats are synced in Test."].exists{return}
+            if second%30==0{print("PINNED_SETUP_WAIT",second)}
+            let error=planner.staticTexts.matching(NSPredicate(format:"label CONTAINS %@","could not sync.")).firstMatch
+            if error.exists{print("PINNED_SETUP_ERROR",String(error.label.prefix(400)));throw NSError(domain:"PinnedChatSetup",code:1)}
+            Thread.sleep(forTimeInterval:1)
+        }
+        throw NSError(domain:"PinnedChatSetupTimeout",code:1)
+    }
     func testCancelBrightspaceSMSChoice() throws {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
         guard let url=ProcessInfo.processInfo.environment["PLANNER_TEST_CHAT_URL"],url.contains("/g/"),url.contains("/c/") else {throw XCTSkip("Supply the existing authorized Test sign-in conversation.")}

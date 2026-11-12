@@ -42,8 +42,11 @@ export async function handleSubscriptionChat(request:Request,username:string){
  if(input.action==='send'||input.action==='connect')throw new ApiError(409,'ChatGPT subscription sign-in is not configured yet. Hosted access requires an approved Sign in with ChatGPT integration. Your draft has been kept.')
  if(input.action==='relay_bind'){
   const args=z.object({chatId:z.string().uuid(),url:z.string().regex(/^https:\/\/chatgpt\.com\/(?:g\/[A-Za-z0-9_-]+\/)?c\/[A-Za-z0-9_-]+$/)}).parse(input)
-  await owned(username,args.chatId)
-  storage(await db().from('planner_subscription_chats').update({provider_url:args.url}).eq('username',username).eq('id',args.chatId))
+  const chat=await owned(username,args.chatId)
+  if(chat.provider_url===args.url)return json({ok:true})
+  if(chat.provider_url)throw new ApiError(409,'This chat is already linked to another ChatGPT conversation. Refresh before syncing.')
+  const saved=storage(await db().from('planner_subscription_chats').update({provider_url:args.url}).eq('username',username).eq('id',args.chatId).is('provider_url',null).select('id').maybeSingle())
+  if(!saved)throw new ApiError(409,'This chat was linked while syncing. Refresh before trying again.')
   return json({ok:true})
  }
  if(input.action==='relay_mirror'){
