@@ -21,6 +21,10 @@ try{
  await page.evaluate(()=>{const f=document.createElement('form');f.id='secure';f.innerHTML='<h2>Sign in to brightspace.nyu.edu</h2><input type="password" value="fixture-secret-do-not-export"><button>Sign in</button><button>Take over to sign in</button>';document.body.append(f)})
  const secure=await page.evaluate(snapshot)
  assert.equal(secure.interaction,true);assert.equal(secure.guest,false);assert.equal(secure.needsLogin,false);assert(!JSON.stringify(secure).includes('fixture-secret-do-not-export'))
+
+ await page.locator('#secure').evaluate(n=>{n.innerHTML='<h2>Use this saved account?</h2><input type="password" value="fixture-secret-do-not-export"><button>Not now</button><button>Use saved account</button><button>Other sign-in options</button>'})
+ const savedAccount=await page.evaluate(snapshot)
+ assert.equal(savedAccount.interaction,true);assert.equal(savedAccount.needsLogin,false);assert(!JSON.stringify(savedAccount).includes('fixture-secret-do-not-export'))
  await page.locator('#secure').evaluate(n=>n.remove())
  const normal=await page.evaluate(snapshot);assert.equal(normal.interaction,false)
  const request={turn:'current',calls:[{id:'save',name:'planner_save_note',arguments:{content:'A "quoted" note with a path C:'+String.fromCharCode(92)+'sample'}}]}

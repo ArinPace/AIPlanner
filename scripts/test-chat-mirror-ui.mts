@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import {planChatMirror} from '../src/lib/chatSync.js'
 const browser=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true})
 const stamp=()=>new Date().toISOString()
-const main:any={id:'00000000-0000-4000-8000-000000000101',title:'Main Chat',is_main:true,pinned:true,archived:false,deleted_at:null,created_at:stamp(),updated_at:stamp(),provider_url:'https://chatgpt.com/c/planner-ui-fixture',provider_snapshot:{title:'Main Chat',archived:false,deleted:false}}
+const main:any={id:'00000000-0000-4000-8000-000000000101',title:'Mirror QA',is_main:false,pinned:false,archived:false,deleted_at:null,created_at:stamp(),updated_at:stamp(),provider_url:'https://chatgpt.com/c/planner-ui-fixture',provider_snapshot:{title:'Mirror QA',archived:false,deleted:false}}
 const chats=[main]
 try{
  const page=await browser.newPage({viewport:{width:1000,height:850}})
@@ -28,7 +28,7 @@ try{
    if(u.pathname==='/api/subscription-chat'){const body=options.body?JSON.parse(options.body):{chat:u.searchParams.get('chat')};return new Response(JSON.stringify(await (window as any).mirrorFixtureApi(body)),{headers:{'Content-Type':'application/json'}})}
    return fallback(input,options)
   }
-  Object.assign(window,{plannerNativeChatGPTPortal:true,plannerNativeChatGPTRelayVersion:3,mirrorRemote:{title:'Main Chat',archived:false,deleted:false},mirrorCalls:[]})
+  Object.assign(window,{plannerNativeChatGPTPortal:true,plannerNativeChatGPTRelayVersion:3,mirrorRemote:{title:'Mirror QA',archived:false,deleted:false},mirrorCalls:[]})
   ;(window as any).webkit={messageHandlers:{plannerNative:{postMessage:async(input:any)=>{
    if(input.action==='chatGPTRelayStatus')return {ready:true,needsLogin:false,phase:'idle'}
    if(input.action==='chatGPTRelayMirror'){(window as any).mirrorCalls.push(input);const current=(window as any).mirrorRemote;if(input.patch)Object.assign(current,input.patch);return {...current}}
@@ -39,7 +39,7 @@ try{
  page.on('dialog',dialog=>dialog.accept())
  await page.goto('http://127.0.0.1:5174');await page.getByRole('button',{name:'Chat',exact:true}).click()
  const show=page.getByRole('button',{name:'Show chat sidebar'});if(await show.isVisible())await show.click()
- await page.getByLabel('Options for Main Chat').click();await page.getByRole('button',{name:'Rename chat',exact:true}).click()
+ await page.getByLabel('Options for Mirror QA').click();await page.getByRole('button',{name:'Rename chat',exact:true}).click()
  await page.getByRole('textbox',{name:'New name'}).fill('Planner renamed')
  await page.getByRole('dialog',{name:'Rename chat'}).getByRole('button',{name:'Rename',exact:true}).click()
  await page.waitForFunction(()=>(window as any).mirrorRemote.title==='Planner renamed',{},{timeout:8000}).catch(async e=>{console.log(await page.evaluate(()=>({remote:(window as any).mirrorRemote,calls:(window as any).mirrorCalls,version:(window as any).plannerNativeChatGPTRelayVersion,alerts:[...document.querySelectorAll('[role=alert]')].map(n=>n.textContent)})));throw e})

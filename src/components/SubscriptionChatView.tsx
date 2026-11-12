@@ -79,18 +79,18 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
   const applied=Object.keys(plan.push).length?await nativeRequest<ChatMirror>({action:'chatGPTRelayMirror',account:username,url:row.provider_url,patch:plan.push,expected:remote}):remote
   await subscriptionChatRequest(undefined,{...args,applied})
  }
- async function syncChats(prefer?:'planner'|'chatgpt'){
-  if(!native||busy||mirrorLock.current)return
+ async function syncChats(prefer?:'planner'|'chatgpt',background=false){
+  if(!native||busy||mirrorLock.current||(background&&!workspace?.chat.provider_url))return
   mirrorLock.current=true;setSyncing(true);setSyncNotice('Syncing ChatGPT conversations…');setError('')
   try{
    const current=await subscriptionChatRequest()
-   const rows=syncConflict&&prefer?[current.chats.find(c=>c.id===syncConflict.chat.id)].filter((c):c is SubscriptionChat=>Boolean(c)):current.chats.filter(c=>Boolean(c.provider_url))
+   const rows=syncConflict&&prefer?[current.chats.find(c=>c.id===syncConflict.chat.id)].filter((c):c is SubscriptionChat=>Boolean(c)):current.chats.filter(c=>Boolean(c.provider_url)&&(!background||c.id===selected.current))
    if(!rows.length){setSyncNotice('Chats appear in ChatGPT history after their first message while signed in.');return}
    const failures:string[]=[]
-   for(const row of rows){try{await mirrorChat(row,prefer)}catch(e){failures.push(row.title+': '+(e instanceof Error?e.message:'Sync failed'))}}
-   if(failures.length){await refresh();throw Error(failures.join(' · '))}
+   for(const row of rows){try{await mirrorChat(row,prefer)}catch(e){failures.push(e instanceof Error?e.message:'Sync failed')}}
+   if(failures.length){await refresh();throw Error(`${failures.length} conversation${failures.length===1?'':'s'} could not sync. ${[...new Set(failures)].slice(0,2).join(' ')} Your messages remain saved in Planner.`)}
    setSyncConflict(null);setSyncNotice('ChatGPT conversations synced.');await refresh()
-  }catch(e){setError(e instanceof Error?e.message:'Could not sync ChatGPT chats.');setSyncNotice('Chat sync needs attention. Changes remain saved in Planner.')}
+  }catch(e){if(!background)setError(e instanceof Error?e.message:'Could not sync ChatGPT chats.');setSyncNotice('Chat history sync needs attention. You can still send messages; changes remain saved in Planner.')}
   finally{mirrorLock.current=false;setSyncing(false)}
  }
  async function update(chat:SubscriptionChat,patch:Record<string,unknown>){
@@ -179,7 +179,7 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
  }
  useEffect(()=>{
   if(!active||!native||busy||syncing||preparing||dictating||recovery||message.trim()||attachments.length||panel||rename||syncConflict)return
-  const timer=setTimeout(()=>void syncChats(),60000)
+  const timer=setTimeout(()=>void syncChats(undefined,true),60000)
   return()=>clearTimeout(timer)
  },[active,native,busy,syncing,message,attachments.length,panel,rename,preparing,dictating,recovery,syncConflict,workspace?.chat.updated_at])
  useEffect(()=>{if(!active)return;let stopped=false;void subscriptionChatRequest<any>(undefined,{action:'schedule_read'}).then(value=>{if(!stopped)setSchedulePrefs(value)}).catch(e=>{if(!stopped)setScheduleError(e.message)});return()=>{stopped=true}},[active,username])

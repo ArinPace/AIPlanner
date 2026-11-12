@@ -23,6 +23,14 @@ try{
  assert.deepEqual(await run('read'),{title:'Planner QA',archived:false,deleted:false})
  await page.evaluate(()=>{const button=document.querySelector('header:not([hidden]) button');const fresh=button.cloneNode(true);button.replaceWith(fresh);setTimeout(()=>fresh.addEventListener('pointerdown',()=>button.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))),700)})
  assert.deepEqual(await run('read'),{title:'Planner QA',archived:false,deleted:false})
+ // A visible sidebar trigger must not make the active header ambiguous.
+ await page.evaluate(()=>{const aside=document.createElement('aside');aside.innerHTML='<button aria-label="Chat actions">Another chat</button>';document.body.append(aside);document.querySelector('header:not([hidden]) button').setAttribute('aria-label','Conversation options')})
+ assert.deepEqual(await run('read'),{title:'Planner QA',archived:false,deleted:false})
+
+ await page.evaluate(()=>{const n=document.querySelector('header:not([hidden]) button');n.removeAttribute('aria-label');n.textContent=document.title})
+ assert.deepEqual(await run('read'),{title:'Planner QA',archived:false,deleted:false})
+ await page.locator('aside').evaluate(n=>n.remove())
+ await page.evaluate(()=>document.querySelector('header:not([hidden]) button').setAttribute('aria-label','Chat actions'))
  await run('rename',{title:'Math',expected:{title:'Planner QA',archived:false,deleted:false}})
  assert.equal((await run('read')).title,'Math')
  await run('archive',{expected:{title:'Math',archived:false,deleted:false}})
