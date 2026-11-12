@@ -551,6 +551,8 @@ struct PlannerWebView: UIViewRepresentable {
         [data-planner-secure-root]{display:block!important;visibility:visible!important;position:relative!important;transform:none!important;width:calc(100% - 32px)!important;max-width:640px!important;min-width:0!important;margin:16px auto!important;padding:0!important;box-sizing:border-box!important}
         [data-planner-secure-root]>div{width:100%!important;max-width:100%!important;min-width:0!important;box-sizing:border-box!important}
         [data-planner-secure-root] input{font-size:16px!important}
+        [data-planner-secure-root] button{white-space:normal!important;height:auto!important;min-height:44px!important;max-width:100%!important;overflow-wrap:anywhere!important}
+        [data-planner-secure-root] button span{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;min-width:0!important}
       `;document.head.append(style);
       const clear=()=>document.querySelectorAll('[data-planner-secure-hidden],[data-planner-secure-path],[data-planner-secure-root]').forEach(n=>['hidden','path','root'].forEach(k=>n.removeAttribute(attr+k)));
       const domain=root=>(root.innerText.match(/sign in to\s+([a-z0-9.-]+\.[a-z]{2,})/i)||[])[1]||'';
@@ -1049,8 +1051,11 @@ await pause(500);return {applied:true};
             try await Task.sleep(for: .milliseconds(500))
             state = try await snapshot()
             let correctPage = stored != nil ? canonicalConversation(browser.url?.absoluteString)?.lastPathComponent == stored?.lastPathComponent : browser.url?.path == target.path
-            if state["needsLogin"] as? Bool == true || (correctPage && !browser.isLoading && state["ready"] as? Bool == true) { break }
+            let historyLoaded = stored == nil || (state["count"] as? Int ?? 0) > 0
+            if state["needsLogin"] as? Bool == true || (documentCommitted && correctPage && !browser.isLoading && historyLoaded && state["ready"] as? Bool == true) { break }
         }
+        let correctPage = stored != nil ? canonicalConversation(browser.url?.absoluteString)?.lastPathComponent == stored?.lastPathComponent : browser.url?.path == target.path
+        guard documentCommitted, correctPage, stored == nil || (state["count"] as? Int ?? 0) > 0 else { throw NativeError("The linked ChatGPT conversation is still loading. Wait and retry; no message was sent.") }
         guard state["ready"] as? Bool == true, state["needsLogin"] as? Bool != true else { throw NativeError("Sign into ChatGPT using Connect ChatGPT, then return to Planner.") }
         guard state["running"] as? Bool != true else { throw NativeError("ChatGPT is already working. Open the session to check it first.") }
         setInteractive(true); defer { setInteractive(false) }

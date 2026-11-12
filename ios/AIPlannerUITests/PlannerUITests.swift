@@ -147,11 +147,26 @@ final class PlannerUITests: XCTestCase {
         guard let prompt=ProcessInfo.processInfo.environment["PLANNER_TEST_TASK"] else {throw XCTSkip("Supply an authorized QA task.")}
         let app=XCUIApplication();app.launchArguments=["-UITestSignedRelayDiagnostics"];app.launch()
         let planner=app.webViews["plannerWebView"];XCTAssertTrue(planner.buttons["Chat"].waitForExistence(timeout:30));planner.buttons["Chat"].tap()
-        XCTAssertTrue(planner.buttons["New chat"].firstMatch.waitForExistence(timeout:20));planner.buttons["New chat"].firstMatch.tap()
+        if let title=ProcessInfo.processInfo.environment["PLANNER_TEST_CHAT_TITLE"] {
+            let show=planner.buttons["Show chat sidebar"];if show.exists{show.tap()}
+            let existing=planner.buttons[title].firstMatch;XCTAssertTrue(existing.waitForExistence(timeout:20));existing.tap()
+        } else {XCTAssertTrue(planner.buttons["New chat"].firstMatch.waitForExistence(timeout:20));planner.buttons["New chat"].firstMatch.tap()}
         let box=planner.textViews["Message ChatGPT"];expectation(for:NSPredicate(format:"enabled == true"),evaluatedWith:box);waitForExpectations(timeout:30)
-        box.tap();box.typeText(prompt);planner.buttons["Send message"].tap()
+        let initialCopies=planner.buttons.matching(identifier:"Copy").count
+        box.tap()
+        let draft=(box.value as? String) ?? ""
+        if !draft.isEmpty && draft != "Message your assistant…" {
+            guard ProcessInfo.processInfo.environment["PLANNER_TEST_REPLACE_DRAFT"] == "1", draft.hasPrefix("For the Brightspace sign-in") else {throw NSError(domain:"UnrelatedPlannerDraft",code:1)}
+            box.press(forDuration:1)
+            let selectAll=app.menuItems["Select All"].firstMatch
+            if selectAll.waitForExistence(timeout:2){selectAll.tap()}else{let button=app.buttons["Select All"].firstMatch;XCTAssertTrue(button.waitForExistence(timeout:2));button.tap()}
+            box.typeText(XCUIKeyboardKey.delete.rawValue)
+        }
+        box.typeText(prompt)
+        guard box.value as? String == prompt else {throw NSError(domain:"PlannerPromptInputMismatch",code:1)}
+        planner.buttons["Send message"].tap()
         for second in 0..<900 {
-            if planner.buttons.matching(identifier:"Copy").count>=2 {print("LIVE_TASK_REPLY",planner.otherElements.matching(identifier:"Assistant message").staticTexts.allElementsBoundByIndex.map{$0.label}.joined(separator:" | "));return}
+            if planner.buttons.matching(identifier:"Copy").count>=initialCopies+2 {print("LIVE_TASK_REPLY",planner.otherElements.matching(identifier:"Assistant message").staticTexts.allElementsBoundByIndex.map{$0.label}.joined(separator:" | "));return}
             let secure=planner.buttons["Continue in ChatGPT"]
             if secure.exists && secure.isHittable && !app.webViews["chatGPTPortalWebView"].exists{print("LIVE_SECURE_SIGNIN_OPENING");secure.tap()}
             let errors=planner.staticTexts.matching(NSPredicate(format:"label CONTAINS %@ OR label BEGINSWITH %@ OR label BEGINSWITH %@","No tools were run","Invalid values.","Could not reach the server."))

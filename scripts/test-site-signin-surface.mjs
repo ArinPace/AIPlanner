@@ -20,8 +20,8 @@ try{
  assert.equal(await page.locator('#reply').isVisible(),false)
  await page.evaluate(()=>window.__plannerSiteSignIn.restore());assert(await page.locator('#reply').isVisible())
 
- await page.setContent('<header id="chat-header">ChatGPT</header><article id="reply">Private conversation</article><div><p>https://login.microsoftonline.com</p><h2>Use this saved account?</h2><input type="password" value="fixture-never-export"><button>Not now</button><button>Use saved account</button><button>Other sign-in options</button></div>')
- const saved=await page.evaluate(script);assert.equal(saved.found,true);assert(!JSON.stringify(saved).includes('fixture-never-export'))
+ await page.setContent('<header id="chat-header">ChatGPT</header><article id="reply">Private conversation</article><div><p>https://login.microsoftonline.com</p><h2>Use this saved account?</h2><input type="password" value="fixture-never-export"><button>Not now</button><button style="white-space:nowrap">Use saved account</button><button>Other sign-in options</button></div>')
+ const saved=await page.evaluate(script);assert.equal(saved.found,true);assert(!JSON.stringify(saved).includes('fixture-never-export'));assert.equal(await page.getByRole('button',{name:'Use saved account',exact:true}).evaluate(n=>getComputedStyle(n).whiteSpace),'normal')
  assert.equal(await page.locator('#reply').isVisible(),false);assert(await page.getByRole('button',{name:'Use saved account',exact:true}).isVisible())
  await page.evaluate(()=>window.__plannerSiteSignIn.restore())
  await page.setContent('<main><h1>ChatGPT</h1><p>No sign-in available</p></main>')
