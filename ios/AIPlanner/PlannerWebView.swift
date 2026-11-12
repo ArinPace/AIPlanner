@@ -23,7 +23,7 @@ struct PlannerWebView: UIViewRepresentable {
         config.websiteDataStore = .default()
         config.allowsInlineMediaPlayback = true
         config.userContentController.addScriptMessageHandler(context.coordinator, contentWorld: .page, name: "plannerNative")
-        config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeScreenTime=true;window.plannerNativeChatGPTPortal=true;window.plannerNativeChatGPTRelayVersion=6;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true'});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeScreenTime=true;window.plannerNativeChatGPTPortal=true;window.plannerNativeChatGPTRelayVersion=7;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true'});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.userContentController.addUserScript(WKUserScript(source: """
             document.addEventListener('click', event => {
               const link = event.target instanceof Element && event.target.closest('a[href]');
@@ -244,7 +244,7 @@ struct PlannerWebView: UIViewRepresentable {
                         guard let account = body["account"] as? String, let value = body["settings"], JSONSerialization.isValidJSONObject(value) else { throw NativeError("Missing notification settings.") }
                         let options = try JSONDecoder().decode(TaskNotificationOptions.self, from: JSONSerialization.data(withJSONObject: value))
                         try await PlannerTaskNotifications.shared.configure(account: account, options: options)
-                    case "chatGPTPortal", "chatGPTSiteSignIn", "chatGPTRelayStatus", "chatGPTRelaySend", "chatGPTRelayStop", "chatGPTRelayDraft", "chatGPTRelayClearDraft", "chatGPTRelayDownload", "chatGPTRelayMirror":
+                    case "chatGPTPortal", "chatGPTSiteSignIn", "chatGPTRelayStatus", "chatGPTRelaySend", "chatGPTRelayStop", "chatGPTRelayDraft", "chatGPTRelayClearDraft", "chatGPTRelayDownload", "chatGPTRelayMirror", "chatGPTRelayModel":
                         guard let account = body["account"] as? String else { throw NativeError("Sign into Planner first.") }
                         let controller = try relay(account: account)
                         if action == "chatGPTRelayStatus" {
@@ -252,6 +252,11 @@ struct PlannerWebView: UIViewRepresentable {
                             var state = try await controller.relayStatus(peek:body["peek"] as? Bool == true); state["chatId"] = controller.loadedChat
                             if !relayOperationActive && ((state["ready"] as? Bool == true && controller.pendingChat == nil) || state["phase"] as? String == "completed" || state["phase"] as? String == "attention") { parkRelay() }
                             replyHandler(state, nil); return
+                        }
+                        if action == "chatGPTRelayModel" {
+                            guard !relayOperationActive, controller.pendingChat == nil, chatGPTPortal?.presentingViewController == nil else { throw NativeError("Finish the current reply or secure sign-in before changing models.") }
+                            relayOperationActive = true; attachRelayForRun(); defer { relayOperationActive = false; parkRelay() }
+                            replyHandler(try await controller.modelMenu(operation:body["operation"] as? String ?? "open",id:body["id"] as? String,value:body["value"] as? Int,url:body["url"] as? String,newChat:body["newChat"] as? Bool ?? false),nil);return
                         }
                         if action == "chatGPTRelayMirror" {
                             guard !relayOperationActive, chatGPTPortal?.presentingViewController == nil else { throw NativeError("Return to Planner and wait for the current operation before syncing chats.") }
@@ -680,6 +685,12 @@ struct PlannerWebView: UIViewRepresentable {
                 }
             }
         }
+        if ProcessInfo.processInfo.arguments.contains("-UITestInspectModels") {
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for:.seconds(5));guard let self else{return}
+                do{var result=try await self.modelMenu(operation:"open",id:nil);if let wanted=ProcessInfo.processInfo.environment["PLANNER_TEST_MODEL_OPTION"],let options=result["options"] as? [[String:Any]],let option=options.first(where:{$0["label"] as? String == wanted}),let id=option["id"] as? String {result=try await self.modelMenu(operation:"choose",id:id)};if ProcessInfo.processInfo.arguments.contains("-UITestModelSlider"),let ranges=result["sliders"] as? [[String:Any]],let range=ranges.first,let id=range["id"] as? String,let old=range["value"] as? Int,let max=range["max"] as? Int {let next=old<max ? old+1 : old-1;_ = try await self.modelMenu(operation:"adjust",id:id,value:next);result=try await self.modelMenu(operation:"adjust",id:id,value:old)};if ProcessInfo.processInfo.arguments.contains("-UITestModelFast"),let options=result["options"] as? [[String:Any]],let first=options.first(where:{($0["label"] as? String ?? "").lowercased().range(of:"(fast|standard) mode",options:.regularExpression) != nil}),let id=first["id"] as? String,let label=first["label"] as? String {_ = try await self.modelMenu(operation:"choose",id:id);let changed=try await self.modelMenu(operation:"open",id:nil);guard let changedOptions=changed["options"] as? [[String:Any]],let inverse=changedOptions.first(where:{($0["label"] as? String ?? "").lowercased().range(of:"(fast|standard) mode",options:.regularExpression) != nil&&(($0["selected"] as? Bool != first["selected"] as? Bool)||$0["label"] as? String != label)}),let inverseId=inverse["id"] as? String else {throw NativeError("Fast mode change was not confirmed.")};_ = try await self.modelMenu(operation:"choose",id:inverseId);result=try await self.modelMenu(operation:"open",id:nil);result["fastModeRestored"]=true};if ProcessInfo.processInfo.arguments.contains("-UITestModelFastOff"),let options=result["options"] as? [[String:Any]],let fast=options.first(where:{($0["label"] as? String ?? "").lowercased().range(of:"(fast|standard) mode",options:.regularExpression) != nil}),fast["selected"] as? Bool == true,let id=fast["id"] as? String {_ = try await self.modelMenu(operation:"choose",id:id);result=try await self.modelMenu(operation:"open",id:nil)};result["sliderDebug"]=try? await self.browser.evaluateJavaScript("[...document.querySelectorAll('[role=slider],input[type=range]')].map(n=>({html:n.outerHTML,parent:n.parentElement?.parentElement?.outerHTML.slice(0,10000),rect:n.getBoundingClientRect().toJSON(),hidden:n.closest('[aria-hidden=true]')?.tagName}))");if let folder=FileManager.default.urls(for:.cachesDirectory,in:.userDomainMask).first{try JSONSerialization.data(withJSONObject:result).write(to:folder.appendingPathComponent("ChatGPTModelOptions.json"),options:.atomic)};self.status.text="Model controls ready"}catch{self.status.text="Model controls: "+error.localizedDescription}
+            }
+        }
         guard ProcessInfo.processInfo.arguments.contains("-UITestInspectChatGPT") else { return }
         Task { @MainActor [weak self] in
             guard let self else { return }
@@ -891,6 +902,57 @@ if(operation==='delete'){
 await pause(500);return {applied:true};
 """# }
     // END_CHAT_MIRROR_SCRIPT
+    // BEGIN_CHAT_MODEL_MENU
+    private static var modelMenuScript: String { #"""
+const visible=n=>n&&n.getClientRects().length&&!n.closest('[aria-hidden="true"],[inert]');
+const label=n=>(n.getAttribute('aria-label')||n.innerText||'').trim();
+const pause=ms=>new Promise(r=>setTimeout(r,ms));
+const escape=()=>{for(const type of ['keydown','keyup'])document.activeElement?.dispatchEvent(new KeyboardEvent(type,{key:'Escape',code:'Escape',bubbles:true}))};
+if(location.origin!=='https://chatgpt.com')throw Error('Load the signed-in ChatGPT session first.');
+const trigger=()=>[...document.querySelectorAll('button')].find(n=>visible(n)&&/^Select ChatGPT model$/i.test(n.getAttribute('aria-label')||''));
+const menus=()=>[...document.querySelectorAll('[role="menu"],[role="listbox"]')].filter(visible);
+const sliders=()=>menus().flatMap(n=>[...n.querySelectorAll('[role="slider"],input[type="range"]')]).filter(n=>n.getClientRects().length&&!n.closest('[inert]')&&visible(n.parentElement));
+const items=()=>menus().flatMap(menu=>[...menu.querySelectorAll('[role="menuitem"],[role="menuitemradio"],[role="menuitemcheckbox"],[role="option"]')]).filter(n=>visible(n)&&label(n)&&!n.hasAttribute('disabled')&&n.getAttribute('aria-disabled')!=='true'&&!n.querySelector('[role="slider"],input[type="range"]')&&!/upgrade|pricing|learn more|subscribe|manage subscription/i.test(label(n)));
+if(operation==='close'){escape();window.__plannerModelMenuOpen=false;return {summary:'Model menu closed.',options:[]}}
+const button=trigger();if(!button)throw Error('ChatGPT model controls are unavailable. Finish sign-in and load a chat first.');
+if(operation==='open'){
+ escape();await pause(100);button.focus();if(button.hasAttribute('aria-haspopup')){button.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,buttons:1,pointerId:1,isPrimary:true,pointerType:'mouse'}));await pause(150)}if(!menus().length)button.click();window.__plannerModelMenuOpen=true;
+}else if(operation==='choose'){
+ if(!window.__plannerModelMenuOpen)throw Error('Reopen the model menu before choosing an option.');
+ const matching=items().filter(n=>n.dataset.plannerModelOption===id);
+ if(matching.length!==1)throw Error('Model options changed. Refresh before choosing.');matching[0].click();
+}else if(operation==='adjust'){
+ const slider=sliders().find(n=>n.dataset.plannerModelOption===id);if(!slider||!Number.isInteger(value))throw Error('Refresh the thinking controls first.');
+ const number=k=>Number(slider.getAttribute(k));const min=number('aria-valuemin'),max=number('aria-valuemax');if(value<min||value>max)throw Error('Choose a supported thinking level.');
+ slider.focus();for(let i=0;i<20&&number('aria-valuenow')!==value;i++){const key=number('aria-valuenow')<value?'ArrowRight':'ArrowLeft';slider.dispatchEvent(new KeyboardEvent('keydown',{key,code:key,bubbles:true}));await pause(80)}
+ if(number('aria-valuenow')!==value)throw Error('ChatGPT did not confirm the thinking level.');
+}else throw Error('Unsupported model action.');
+for(let i=0;i<30&&!items().length;i++){await pause(100);if(operation==='choose'&&!menus().length)break}
+await pause(250);const options=items().map(n=>{n.dataset.plannerModelOption ||= crypto.randomUUID();return {id:n.dataset.plannerModelOption,label:label(n).slice(0,240),selected:n.getAttribute('aria-checked')==='true'||n.getAttribute('aria-selected')==='true'||n.getAttribute('aria-pressed')==='true'||n.dataset.state==='checked'||(/(fast|standard) mode/i.test(label(n))&&menus().some(m=>m.querySelector('[data-fast-mode="true"]'))),submenu:!!n.getAttribute('aria-haspopup')}});
+if(operation==='open'&&!options.length)throw Error('ChatGPT did not expose model options. No model was changed.');
+const ranges=sliders().map(n=>{n.dataset.plannerModelOption ||= crypto.randomUUID();return {id:n.dataset.plannerModelOption,label:n.getAttribute('aria-label')||'Thinking',min:Number(n.getAttribute('aria-valuemin')),max:Number(n.getAttribute('aria-valuemax')),value:Number(n.getAttribute('aria-valuenow')),text:n.getAttribute('aria-valuetext')||''}});
+return {sliders:ranges,summary:(trigger()?.innerText||'ChatGPT model settings').trim().split('\n').slice(0,2).join(' · ').slice(0,240),options};
+"""# }
+    // END_CHAT_MODEL_MENU
+    func modelMenu(operation:String,id:String?,value:Int? = nil,url:String? = nil,newChat:Bool = false) async throws -> [String:Any] {
+        if operation == "open", url != nil || newChat {
+            guard pendingChat == nil else {throw NativeError("Finish the current reply before changing models.")}
+            try await requireCleanDraft("Review the ChatGPT draft before changing conversations.")
+            let project=try await ensureRelayProject()
+            let target=canonicalConversation(url) ?? (newChat ? project : nil)
+            if let target {
+                if let project,!Self.belongsToProject(target,project:project){throw NativeError("This conversation is outside the Test project.")}
+                if browser.url?.path != target.path{documentCommitted=false;browser.load(URLRequest(url:target,timeoutInterval:30))}
+                var ready=false
+                for _ in 0..<40{let state=try await snapshot();if documentCommitted,!browser.isLoading,browser.url?.path == target.path,state["ready"] as? Bool == true,(newChat || (state["count"] as? Int ?? 0)>0){ready=true;break};try await Task.sleep(for:.milliseconds(500))}
+                guard ready else {throw NativeError("Wait for this ChatGPT conversation to load before changing its model.")}
+            } else if url != nil {throw NativeError("Choose a valid linked ChatGPT conversation.")}
+        }
+        let state=try await snapshot()
+        guard pendingChat == nil,state["running"] as? Bool != true,state["interaction"] as? Bool != true else {throw NativeError("Finish the current reply or secure sign-in before changing models.")}
+        setInteractive(true);defer{setInteractive(false)}
+        return try await browser.callAsyncJavaScript(Self.modelMenuScript,arguments:["operation":operation,"id":id as Any? ?? NSNull(),"value":value as Any? ?? NSNull()],in:nil,contentWorld:.page) as? [String:Any] ?? [:]
+    }
     private var snapshotScript: String { """
     (()=>{const visible=n=>!!n.getClientRects().length;
     const box=window.__plannerComposer();

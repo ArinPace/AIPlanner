@@ -1,3 +1,4 @@
+import {modelCatalog,generationOptions} from '../worker/model-options.mjs'
 import {whoopRetryMessage} from './whoop-review.js'
 import {WHOOP_SLEEP_REVIEW_RULE} from '../worker/whoop-sleep-review.mjs'
 import { randomBytes } from 'node:crypto'
@@ -61,7 +62,7 @@ export async function handleVmWorker(request: Request, path: string) {
     const settings = checked(await db().from('planner_vm_settings').select('*').eq('username', host.username).single())
     const approvals=checked(await db().from('planner_vm_approvals').select('questions,answers,answered_at').eq('username',host.username).eq('host_id',host.id).not('answered_at','is',null).order('answered_at',{ascending:false}).limit(1000))
     const approvedBrowserTools=rememberedBrowserTools(approvals,settings.sources.includes('whatsapp')?settings.whatsapp_read_consent_at:null,settings.sources.includes('slack')?settings.message_read_consent?.slack:null)
-    return json({ browserControlEnabled:host.username==='arin',accountBehaviorInstructions:host.username==='arin'?WHOOP_SLEEP_REVIEW_RULE:'',tutorEnabled:settings.tutor_enabled===true,agentInstructions:await readAgentInstructions(host.username), sources: settings.sources, approvedBrowserTools, messageReadConsent:settings.message_read_consent, whatsappReadConsentAt: settings.whatsapp_read_consent_at, aiProvider: settings.ai_provider, credential: settings.credential ? openVmCredential(settings.credential) : null, personalChatGptAllowed: personalChatGptAllowed(host.username) })
+    return json({ browserControlEnabled:host.username==='arin',accountBehaviorInstructions:host.username==='arin'?WHOOP_SLEEP_REVIEW_RULE:'',tutorEnabled:settings.tutor_enabled===true,agentInstructions:await readAgentInstructions(host.username), sources: settings.sources, approvedBrowserTools, messageReadConsent:settings.message_read_consent, whatsappReadConsentAt: settings.whatsapp_read_consent_at, generationOptions:settings.generation_options||{}, aiProvider: settings.ai_provider, credential: settings.credential ? openVmCredential(settings.credential) : null, personalChatGptAllowed: personalChatGptAllowed(host.username) })
   }
   if(path.startsWith('/api/agent/vm/worker/pdf-upload/')){
     const jobId=request.headers.get('x-planner-job'),lease=request.headers.get('x-planner-lease')
@@ -181,7 +182,7 @@ export async function handleVmRequest(request: Request, path: string, username: 
     const [hosts, chats, settings, runs, provisioning, accounts, deletedChats, queue] = await Promise.all([
       db().from('planner_vm_hosts').select(publicHost).eq('username', username).is('revoked_at', null).order('created_at', { ascending: false }),
       db().from('planner_vm_chats').select('id,title,is_main,pinned,tutor_subject_id,archived,parent_chat_id,parent_job_id,created_at,updated_at').eq('username', username).is('deleted_at',null).order('is_main',{ascending:false}).order('tutor_subject_id',{ascending:true,nullsFirst:false}).order('pinned',{ascending:false}).order('updated_at', { ascending: false }).limit(100),
-      db().from('planner_vm_settings').select('sources,schedule_enabled,sites,ai_provider,schedule,whatsapp_read_consent_at,message_read_consent,tutor_enabled').eq('username', username).single(),
+      db().from('planner_vm_settings').select('sources,schedule_enabled,sites,ai_provider,schedule,whatsapp_read_consent_at,message_read_consent,tutor_enabled,generation_options').eq('username', username).single(),
       db().from('planner_vm_jobs').select('id,chat_id,kind,status,error,created_at,started_at,finished_at,result').eq('username', username).order('created_at', { ascending: false }).limit(20),
       db().from('planner_vm_provisioning').select('status,error,wake_until,power_state,power_updated_at').eq('username', username).maybeSingle(),
       db().from('planner_browser_accounts').select('id,source,identity,label,active,verified_at').eq('username',username).order('verified_at',{ascending:false}),
@@ -306,6 +307,12 @@ export async function handleVmRequest(request: Request, path: string, username: 
   if (path === '/api/agent/vm/ai/disconnect') {
     checked(await db().from('planner_vm_settings').update({ credential: null, ai_provider: null }).eq('username', username))
     return json({ ok: true })
+  }
+  if(path==='/api/agent/vm/model-options'){
+    const hosts=checked(await db().from('planner_vm_hosts').select('capabilities').eq('username',username).is('revoked_at',null).order('heartbeat_at',{ascending:false}).limit(1))
+    const parsed=generationOptions(input.options,modelCatalog(hosts[0]?.capabilities?.modelCatalog));const options=Object.keys(parsed).length?parsed:{reset:true}
+    checked(await db().from('planner_vm_settings').update({generation_options:options,updated_at:new Date().toISOString()}).eq('username',username))
+    return json({options})
   }
   if (path === '/api/agent/vm/settings') {
     if (!Array.isArray(input.sources) || input.sources.some(s => typeof s !== 'string' || !(s in VM_SOURCES)) || typeof input.schedule_enabled !== 'boolean') throw new ApiError(400, 'Choose supported websites.')

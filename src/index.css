@@ -2409,3 +2409,7 @@ html, body { touch-action: pan-x pan-y; }
 .week-time-grid .timed-event-with-actions:has(.calendar-completion-action) > .timed-event { padding-right: 44px; }
 
 .time-view-scroll { overscroll-behavior-x: contain; }
+
+.assistant-settings-section select { display:block; width:100%; max-width:100%; padding:10px; margin:6px 0 12px; border:1px solid var(--border-color,#ddd); border-radius:8px; font:inherit; color:inherit; background:var(--surface-color,transparent); }
+.assistant-model-options { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+.assistant-model-options button { text-align:left; white-space:normal; }

@@ -1,3 +1,4 @@
+import {modelCatalog} from '../worker/model-options.mjs'
 import { createHash } from 'node:crypto'
 
 export const vmHash = (value: string) => createHash('sha256').update(value).digest('hex')
@@ -18,6 +19,7 @@ export function hostOnline(heartbeat: string | null, now = Date.now()): boolean 
 export function safeWorkerStatus(value: unknown) {
   const input = value && typeof value === 'object' ? value as Record<string, unknown> : {}
   return {
+    ...(Array.isArray(input.modelCatalog)?{modelCatalog:modelCatalog(input.modelCatalog)}:{}),
     runtime: input.runtime === 'claude' ? 'claude' : 'codex', recordings: false,
     signedIn: input.signedIn === true,
     identity: typeof input.identity === 'string' ? input.identity.slice(0, 160) : null,
