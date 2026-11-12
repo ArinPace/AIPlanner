@@ -2413,3 +2413,15 @@ html, body { touch-action: pan-x pan-y; }
 .assistant-settings-section select { display:block; width:100%; max-width:100%; padding:10px; margin:6px 0 12px; border:1px solid var(--border-color,#ddd); border-radius:8px; font:inherit; color:inherit; background:var(--surface-color,transparent); }
 .assistant-model-options { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
 .assistant-model-options button { text-align:left; white-space:normal; }
+
+.composer-model-trigger { display:inline-flex; align-items:center; gap:6px; border:0; border-radius:16px; padding:6px 10px; color:inherit; background:transparent; font:inherit; font-size:13px; cursor:pointer; min-width:0; }
+.composer-model-trigger span:first-child { max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.composer-model-trigger:hover:not(:disabled), .composer-model-trigger[aria-expanded=true] { background:rgba(127,127,127,.12); }
+.composer-model-popup { position:fixed; z-index:1500; overflow:auto; border:1px solid #ddd; border-radius:18px; padding:16px; background:#fff; color:#222; box-shadow:0 8px 32px #0003; box-sizing:border-box; }
+.composer-model-popup .assistant-settings-section { padding:0; border:0; }
+.composer-model-popup h3 { font-size:15px; margin:0 30px 12px 0; }
+.composer-model-popup p { font-size:12px; line-height:1.5; color:inherit; opacity:.8; }
+.composer-model-popup label { display:block; font-size:13px; }
+.composer-model-popup button:not(.composer-model-close) { border:1px solid #ccc; border-radius:9px; padding:8px 12px; background:transparent; color:inherit; font:inherit; font-size:13px; cursor:pointer; }
+.composer-model-close { position:absolute; top:9px; right:10px; border:0; background:transparent; color:inherit; font-size:23px; cursor:pointer; }
+[data-theme=dark] .composer-model-popup { background:#22252b; color:#eee; border-color:#454950; }

@@ -17,9 +17,10 @@ export function AgentModelSettings({state,refresh}:{state:VmState;refresh:()=>Pr
  </section>
 }
 type ModelMenu={sliders?:{id:string;label:string;min:number;max:number;value:number;text:string}[];summary:string;options:{id:string;label:string;selected:boolean;submenu:boolean}[]}
-export function ChatModelSettings({username,disabled,providerURL}:{username:string;disabled:boolean;providerURL?:string|null}){
+export function ChatModelSettings({username,disabled,providerURL,autoOpen=false}:{username:string;disabled:boolean;providerURL?:string|null;autoOpen?:boolean}){
  const [menu,setMenu]=useState<ModelMenu|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('')
  async function act(operation:'open'|'choose'|'close'|'adjust',id?:string,value?:number){setBusy(true);setError('');try{const result=await nativeRequest<ModelMenu>({action:'chatGPTRelayModel',account:username,operation,id,value,url:providerURL,newChat:!providerURL});setMenu(operation==='close'?null:result)}catch(e){setError(e instanceof Error?e.message:'Could not open model settings.')}finally{setBusy(false)}}
+ useEffect(()=>{if(autoOpen&&!disabled&&(window.plannerNativeChatGPTRelayVersion||0)>=7)void act('open')},[username,providerURL])
  useEffect(()=>()=>{if((window.plannerNativeChatGPTRelayVersion||0)>=7)void nativeRequest({action:'chatGPTRelayModel',account:username,operation:'close'}).catch(()=>{})},[username])
  const supported=(window.plannerNativeChatGPTRelayVersion||0)>=7
  return <section className="assistant-settings-section"><h3>Model, speed & thinking</h3><p>Choose from the controls offered by your ChatGPT account for the currently loaded conversation. Availability depends on your plan and model.</p>

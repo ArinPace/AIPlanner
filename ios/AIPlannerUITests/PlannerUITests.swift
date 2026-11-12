@@ -142,6 +142,17 @@ final class PlannerUITests: XCTestCase {
         waitForExpectations(timeout: 45)
         XCTAssertTrue(app.webViews["plannerWebView"].buttons["ChatGPT session"].exists, "Planner remains the visible chat UI")
     }
+    func testCancelBrightspaceSMSChoice() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
+        guard let url=ProcessInfo.processInfo.environment["PLANNER_TEST_CHAT_URL"],url.contains("/g/"),url.contains("/c/") else {throw XCTSkip("Supply the existing authorized Test sign-in conversation.")}
+        let app=XCUIApplication();app.launchEnvironment["PLANNER_TEST_CHAT_URL"]=url;app.launchArguments=["-PlannerOpenChatGPT","-PlannerOpenSiteSignIn"];app.launch()
+        let web=app.webViews["chatGPTPortalWebView"];XCTAssertTrue(web.waitForExistence(timeout:30))
+        let cancelChoice=web.buttons["Not now"].firstMatch
+        if cancelChoice.waitForExistence(timeout:20){cancelChoice.tap()}
+        Thread.sleep(forTimeInterval:3)
+        if app.buttons["Cancel"].exists{app.buttons["Cancel"].tap()}
+        XCTAssertTrue(app.webViews["plannerWebView"].exists)
+    }
     func testSubscriptionToolsLive() throws {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
         guard let prompt=ProcessInfo.processInfo.environment["PLANNER_TEST_TASK"] else {throw XCTSkip("Supply an authorized QA task.")}
@@ -156,7 +167,7 @@ final class PlannerUITests: XCTestCase {
         box.tap()
         let draft=(box.value as? String) ?? ""
         if !draft.isEmpty && draft != "Message your assistant…" {
-            guard ProcessInfo.processInfo.environment["PLANNER_TEST_REPLACE_DRAFT"] == "1", draft.hasPrefix("For the Brightspace sign-in") else {throw NSError(domain:"UnrelatedPlannerDraft",code:1)}
+            guard ProcessInfo.processInfo.environment["PLANNER_TEST_REPLACE_DRAFT"] == "1", (draft.hasPrefix("For the Brightspace sign-in") || draft.hasPrefix("Switch the pending NYU Duo sign-in") || draft.hasPrefix("Resume the existing NYU Brightspace browser sign-in.")) else {throw NSError(domain:"UnrelatedPlannerDraft",code:1)}
             box.press(forDuration:1)
             let selectAll=app.menuItems["Select All"].firstMatch
             if selectAll.waitForExistence(timeout:2){selectAll.tap()}else{let button=app.buttons["Select All"].firstMatch;XCTAssertTrue(button.waitForExistence(timeout:2));button.tap()}
@@ -165,7 +176,16 @@ final class PlannerUITests: XCTestCase {
         box.typeText(prompt)
         guard box.value as? String == prompt else {throw NSError(domain:"PlannerPromptInputMismatch",code:1)}
         planner.buttons["Send message"].tap()
+        var clearedRemoteDraft=false
         for second in 0..<900 {
+            let review=planner.buttons["Review ChatGPT draft"]
+            if !clearedRemoteDraft,ProcessInfo.processInfo.environment["PLANNER_TEST_CLEAR_REMOTE_DRAFT"] == "1",review.exists {
+                review.tap()
+                let known=planner.staticTexts.matching(NSPredicate(format:"label CONTAINS %@ AND (label CONTAINS %@ OR label CONTAINS %@ OR label CONTAINS %@)","Planner app integration instructions:","Resume the existing NYU Brightspace browser sign-in.","Switch the pending NYU Duo sign-in","For the Brightspace sign-in")).firstMatch
+                guard known.waitForExistence(timeout:5) else {throw NSError(domain:"UnrelatedRemoteDraft",code:1)}
+                planner.buttons["Clear ChatGPT draft"].tap();Thread.sleep(forTimeInterval:1);clearedRemoteDraft=true
+                planner.buttons["Send message"].tap()
+            }
             if planner.buttons.matching(identifier:"Copy").count>=initialCopies+2 {print("LIVE_TASK_REPLY",planner.otherElements.matching(identifier:"Assistant message").staticTexts.allElementsBoundByIndex.map{$0.label}.joined(separator:" | "));return}
             let secure=planner.buttons["Continue in ChatGPT"]
             if secure.exists && secure.isHittable && !app.webViews["chatGPTPortalWebView"].exists{print("LIVE_SECURE_SIGNIN_OPENING");secure.tap()}

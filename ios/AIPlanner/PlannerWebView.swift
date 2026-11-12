@@ -586,7 +586,7 @@ struct PlannerWebView: UIViewRepresentable {
     """#
     // END_SITE_SIGNIN_SURFACE
     func beginSiteSignIn() {
-        siteSignInMode = true;returnAfterWebsiteInteraction = true;browser.alpha = 0;title = "Connect website"
+        siteSignInMode = true;returnAfterWebsiteInteraction = true;observedWebsiteInteraction=false;browser.alpha = 0;title = "Connect website"
         navigationItem.leftBarButtonItem = UIBarButtonItem(title:"Cancel",style:.plain,target:self,action:#selector(close))
         navigationItem.rightBarButtonItems = nil
         status.text = "Preparing secure sign-in…"
@@ -601,9 +601,10 @@ struct PlannerWebView: UIViewRepresentable {
     private func refreshSiteSignIn() async {
         guard siteSignInMode else{return}
         if browser.url?.scheme == "https",let host=browser.url?.host,host != "chatgpt.com" {
-            browser.alpha = 1;status.text = "Secure sign-in · " + host;return
+            observedWebsiteInteraction=true;browser.alpha = 1;status.text = "Secure sign-in · " + host;return
         }
         let surface = try? await browser.evaluateJavaScript(Self.siteSignInSurface) as? [String:Any]
+        if surface?["found"] as? Bool == true {observedWebsiteInteraction=true}
         browser.alpha = surface?["found"] as? Bool == true ? 1 : 0
         let host=surface?["domain"] as? String ?? ""
         status.text = surface?["found"] as? Bool == true ? (host.isEmpty ? "Approve access or sign in below. Return to Planner is automatic." : "Secure sign-in · " + host + "\nReturn to Planner is automatic.") : "Waiting for the website’s secure sign-in panel…"
@@ -725,6 +726,7 @@ struct PlannerWebView: UIViewRepresentable {
     #endif
     var returnAfterAuthentication = false
     var returnAfterWebsiteInteraction = false
+    private var observedWebsiteInteraction = false
     private var authenticationWatch: Task<Void, Never>?
     private func watchAuthentication() {
         authenticationWatch?.cancel()
@@ -737,7 +739,8 @@ struct PlannerWebView: UIViewRepresentable {
                 await self.refreshSiteSignIn()
                 if let state = try? await self.snapshot() {
                     if state["guest"] as? Bool == true || state["needsLogin"] as? Bool == true || self.browser.url?.host != "chatgpt.com" { self.returnAfterAuthentication = true }
-                    if (self.returnAfterAuthentication || self.returnAfterWebsiteInteraction) && state["interaction"] as? Bool != true && (state["ready"] as? Bool == true || state["running"] as? Bool == true) && state["guest"] as? Bool == false && state["needsLogin"] as? Bool != true { verified += 1 } else { verified = 0 }
+                    if state["interaction"] as? Bool == true {self.observedWebsiteInteraction=true}
+                    if (self.returnAfterAuthentication || (self.returnAfterWebsiteInteraction && self.observedWebsiteInteraction)) && state["interaction"] as? Bool != true && (state["ready"] as? Bool == true || state["running"] as? Bool == true) && state["guest"] as? Bool == false && state["needsLogin"] as? Bool != true { verified += 1 } else { verified = 0 }
                     if verified >= 2 { self.returnAfterAuthentication = false; self.returnAfterWebsiteInteraction = false; self.onClose?(); return }
                 }
                 try? await Task.sleep(for: .seconds(1))
@@ -1114,10 +1117,11 @@ return {sliders:ranges,summary:(trigger()?.innerText||'ChatGPT model settings').
             state = try await snapshot()
             let correctPage = stored != nil ? canonicalConversation(browser.url?.absoluteString)?.lastPathComponent == stored?.lastPathComponent : browser.url?.path == target.path
             let historyLoaded = stored == nil || (state["count"] as? Int ?? 0) > 0
-            if state["needsLogin"] as? Bool == true || (documentCommitted && correctPage && !browser.isLoading && historyLoaded && state["ready"] as? Bool == true) { break }
+            if state["needsLogin"] as? Bool == true || state["interaction"] as? Bool == true || (documentCommitted && correctPage && !browser.isLoading && historyLoaded && state["ready"] as? Bool == true) { break }
         }
         let correctPage = stored != nil ? canonicalConversation(browser.url?.absoluteString)?.lastPathComponent == stored?.lastPathComponent : browser.url?.path == target.path
         guard documentCommitted, correctPage, stored == nil || (state["count"] as? Int ?? 0) > 0 else { throw NativeError("The linked ChatGPT conversation is still loading. Wait and retry; no message was sent.") }
+        guard state["interaction"] as? Bool != true else { throw NativeError("A website sign-in is pending. Finish or cancel it in Planner before sending another message.") }
         guard state["ready"] as? Bool == true, state["needsLogin"] as? Bool != true else { throw NativeError("Sign into ChatGPT using Connect ChatGPT, then return to Planner.") }
         guard state["running"] as? Bool != true else { throw NativeError("ChatGPT is already working. Open the session to check it first.") }
         setInteractive(true); defer { setInteractive(false) }
@@ -1181,6 +1185,7 @@ return {sliders:ranges,summary:(trigger()?.innerText||'ChatGPT model settings').
         if(projectPath && !inProject())throw Error('ChatGPT left the Test project. No message was sent.');
         const box=window.__plannerComposer();
         if(!box)throw Error('ChatGPT composer is unavailable.');
+        if(box.closest('[inert],[aria-hidden="true"]')||[...document.querySelectorAll('button')].some(n=>n.getClientRects().length&&/^(Use saved account|Other sign-in options|Take over to sign in|Return control|I.m done)$/i.test((n.getAttribute('aria-label')||n.innerText||'').trim())))throw Error('A website sign-in is pending. Finish or cancel it in Planner before sending another message.');
         if(clearTestDraft&&text==='Reply with exactly: Planner relay works.'&&window.__plannerComposerText(box).trim()===text){
           if(box.tagName==='TEXTAREA')Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(box,'');else box.textContent='';
           box.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'deleteContentBackward'}));await new Promise(resolve=>setTimeout(resolve,300));
