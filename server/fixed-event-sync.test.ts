@@ -23,6 +23,7 @@ test('queued Google export excludes planned work, deduplicates originals, retrie
  process.env.SUPABASE_URL='https://fixed-sync.test';process.env.SUPABASE_SERVICE_ROLE_KEY='service';delete process.env.SUPABASE_SECRET_KEY;process.env.CONNECTION_ENCRYPTION_KEY='ab'.repeat(32)
  const accountId='ee34ba25-54bc-44df-8515-f7e6784dfed1',mappings:any[]=[],audits:any[]=[],remote=new Map<string,any>()
  let calendarRevision=10,approvedCalendar:any=null
+ let queuedBatch=false,finishedBatches:string[]=[]
  let stageId=0,cancellationDecisions:Record<string,string>={},staleStageWrites=0
  const reviewed=()=>{stageId++;approvedCalendar=structuredClone({events,tags:[],hiddenTagIds:[]});return processFixedSync('owner')}
  let events=[event('class'),event('homework',{scheduleType:'planned'}),event('existing'),event('visual-folder',{eventKind:'folder'})],writes=0,deletes=0,canEdit=true,uncertain=false,lastQueue:any
@@ -31,7 +32,8 @@ test('queued Google export excludes planned work, deduplicates originals, retrie
  globalThis.fetch=async(input,init)=>{
   const request=new Request(input,init),url=new URL(request.url),method=request.method
   if(url.hostname==='fixed-sync.test'){
-   if(url.pathname.endsWith('/rpc/planner_claim_fixed_sync')){assert.deepEqual(await request.json(),{p_username:'owner'});return reply([{username:'owner',lease:'lease-1',requested_revision:10}])}
+   if(url.pathname.endsWith('/rpc/planner_claim_fixed_sync')){assert.deepEqual(await request.json(),{p_username:'owner'});return reply([{username:'owner',lease:'lease-1',requested_revision:99,...(queuedBatch?{claimed_stage_id:'stage-'+stageId,claimed_revision:10}:{requested_revision:10})}])}
+   if(url.pathname.endsWith('/rpc/planner_finish_fixed_stage')){const args=await request.json() as any;assert.equal(args.p_stage,'stage-'+stageId);assert.equal(args.p_complete,true);finishedBatches.push(args.p_stage);return reply(true)}
    if(url.searchParams.has('username'))assert.equal(url.searchParams.get('username'),'eq.owner')
    if(url.pathname.endsWith('/planner_calendars'))return reply({state:{events,tags:[],hiddenTagIds:[]},revision:calendarRevision})
    if(url.pathname.endsWith('/planner_vm_settings'))return reply({google_account_id:accountId})
@@ -43,7 +45,7 @@ test('queued Google export excludes planned work, deduplicates originals, retrie
    }
    if(url.pathname.endsWith('/planner_calendar_history')){const body=await request.json() as any;if(method==='POST'){audits.push(body);return reply({id:audits.length})}return new Response(null,{status:204})}
    if(url.pathname.endsWith('/planner_calendar_staging')){if(method==='GET')return reply({id:'stage-'+stageId,status:'approved',approved_revision:10,account_id:accountId,payload:{calendar:approvedCalendar,google:{events:[...remote.values()]},googleDecisions:cancellationDecisions,resolutions:Object.fromEntries(Object.keys(cancellationDecisions).map(id=>['missing:'+id,'Reviewed the cancellation and its intended disposition.']))}});const update=await request.json() as any;if(update.status==='stale')staleStageWrites++;return new Response(null,{status:204})}
-   if(url.pathname.endsWith('/planner_google_fixed_sync')&&method==='GET')return reply([])
+   if(url.pathname.endsWith('/planner_google_fixed_sync')&&method==='GET')return reply(url.searchParams.get('select')?.includes('claimed_stage_id')?{lease:'lease-1',lease_until:new Date(Date.now()+120000).toISOString(),claimed_stage_id:'stage-'+stageId}:[])
    if(url.pathname.endsWith('/planner_google_fixed_sync')){lastQueue=await request.json();return new Response(null,{status:204})}
   }
   if(url.hostname==='www.googleapis.com'){
@@ -85,6 +87,16 @@ test('queued Google export excludes planned work, deduplicates originals, retrie
   assert.equal(mappings.find(m=>m.local_id==='class').remote_id,ownId,'Restoration reuses the reviewed remote ID')
   events=events.map(e=>({...e,scheduleType:'planned'}))
   await reviewed();assert.equal(deletes,1);assert(remote.has('original'));assert.equal(mappings.length,0)
+  queuedBatch=true
+  approvedCalendar={events:[event('class',{title:'First approved batch'})],tags:[],hiddenTagIds:[]}
+  events=[event('class',{title:'Later live correction'})];calendarRevision=99;stageId++
+  assert.equal((await processFixedSync('owner')).error,undefined)
+  assert.equal(remote.get(ownId).summary,'First approved batch','Export uses its immutable snapshot while the live calendar is newer')
+  approvedCalendar={events:[event('class',{title:'Second approved batch'})],tags:[],hiddenTagIds:[]};stageId++
+  assert.equal((await processFixedSync('owner')).error,undefined)
+  assert.equal(remote.get(ownId).summary,'Second approved batch')
+  assert.equal(finishedBatches.length,2)
+  queuedBatch=false
   canEdit=false;const before=writes;assert.match((await reviewed()).error!,/approve event editing/);assert.equal(writes,before)
  }finally{globalThis.fetch=originalFetch;for(const key of keys){if(env[key]===undefined)delete process.env[key];else process.env[key]=env[key]}}
 })

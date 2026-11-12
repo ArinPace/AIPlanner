@@ -1,3 +1,4 @@
+import {rebaseCalendarDraft} from './calendar-stage-merge.js'
 import {expandEvents} from '../src/lib/recurrence.js'
 import {withSourceHealth} from './source-health.js'
 import {resizeWidgetOccurrence,verifyFreeTimeRequest,type TaskFeedback} from '../src/lib/widgetTaskFeedback.js'
@@ -16,14 +17,24 @@ import type {CalendarEvent,StoredState} from '../src/types.js'
 
 const base='https://www.googleapis.com/calendar/v3/calendars/primary/events'
 type Remote=Record<string,any>
-export type Stage={username:string;id:string;version:number;base_revision:number;account_id:string;status:string;approved_revision:number|null;review_summary?:string;payload:{calendar:StoredState;google:{events:Remote[];mappings:Remote[];timeMin:string;timeMax:string;sources?:{accountId:string;identity:string;events:Remote[]}[]};issues:{id:string;message:string}[];resolutions:Record<string,string>;googleDecisions?:Record<string,'restore'|'preserve_cancelled'>;widgetFeedback?:TaskFeedback[]}}
+export type Stage={username:string;id:string;version:number;base_revision:number;account_id:string;status:string;approved_revision:number|null;review_summary?:string;payload:{baseCalendar?:StoredState;calendar:StoredState;google:{events:Remote[];mappings:Remote[];timeMin:string;timeMax:string;sources?:{accountId:string;identity:string;events:Remote[]}[]};issues:{id:string;message:string}[];resolutions:Record<string,string>;googleDecisions?:Record<string,'restore'|'preserve_cancelled'>;widgetFeedback?:TaskFeedback[]}}
 export {STAGED_CALENDAR_RULES} from './calendar-staging-rules.js'
 export function sameGoogleEvent(a:Remote,b:Remote){
  const time=(v:any)=>v?.date|| (v?.dateTime?new Date(v.dateTime).toISOString():null)
  return (a.summary||'')===(b.summary||'')&&(a.description||'')===(b.description||'')&&time(a.start)===time(b.start)&&time(a.end)===time(b.end)&&JSON.stringify([...(a.recurrence||[])].sort())===JSON.stringify([...(b.recurrence||[])].sort())
 }
 function snapshotKey(events:Remote[]){return createHash('sha256').update(JSON.stringify(events.map(e=>[e.id,e.etag,e.status]).sort((a,b)=>String(a[0]).localeCompare(String(b[0]))))).digest('hex')}
-export async function stagingRow(username:string){return storage(await db().from('planner_calendar_staging').select('*').eq('username',username).maybeSingle()) as Stage|null}
+export async function listCalendarStages(username: string, offset = 0, limit = 20) {
+ const rows = storage(await db().from('planner_calendar_staging')
+  .select('id,version,status,base_revision,approved_revision,created_at,updated_at,review_summary')
+  .eq('username', username).order('created_at', {ascending: false}).range(offset, offset + limit))
+ return {items: rows.slice(0, limit), offset, hasMore: rows.length > limit}
+}
+export async function stagingRow(username: string, id?: string) {
+ let query = db().from('planner_calendar_staging').select('*').eq('username', username)
+ query = id ? query.eq('id', id) : query.order('created_at', {ascending: false}).order('id', {ascending: false}).limit(1)
+ return storage(await query.maybeSingle()) as Stage | null
+}
 function reviewSnapshotKey(google:Stage['payload']['google']){return JSON.stringify([snapshotKey(google.events),...(google.sources||[]).map(source=>[source.accountId,snapshotKey(source.events)]).sort((a,b)=>String(a[0]).localeCompare(String(b[0])))])}
 export function sourceCalendarIssues(calendar:StoredState,sources:NonNullable<Stage['payload']['google']['sources']>){
  return sources.flatMap(source=>stageIssues(calendar,{events:source.events,mappings:[],timeMin:'',timeMax:''}).filter(issue=>issue.id.startsWith('google-overlap:')).map(issue=>({...issue,id:'source:'+source.accountId+':'+issue.id,message:source.identity+': '+issue.message})))
@@ -103,25 +114,23 @@ export function stageIssues(calendar:StoredState,google:Stage['payload']['google
 export async function prepareCalendarStage(username:string,refresh=false){
  const [row,old]=await Promise.all([calendarRow(username),stagingRow(username)])
  if(!refresh&&old?.status==='draft'&&old.base_revision===row.revision)return stageSummary(old)
- if(old?.status==='approved'&&old.approved_revision===row.revision)throw new ApiError(409,'The reviewed batch is still being published. Read sync status before preparing another draft.')
  const snapshot=await googleSnapshot(username)
- const stage:Stage={username,id:randomUUID(),version:1,base_revision:row.revision,account_id:snapshot.accountId,status:'draft',approved_revision:null,payload:{calendar:row.state,google:snapshot.google,issues:[...stageIssues(row.state,snapshot.google),...sourceCalendarIssues(row.state,snapshot.google.sources||[])],resolutions:{}}}
- const saved=old?await db().from('planner_calendar_staging').update(stage).eq('username',username).eq('id',old.id).eq('version',old.version).eq('status',old.status).select('id'):await db().from('planner_calendar_staging').insert(stage).select('id')
+ const stage:Stage={username,id:randomUUID(),version:1,base_revision:row.revision,account_id:snapshot.accountId,status:'draft',approved_revision:null,payload:{baseCalendar:structuredClone(row.state),calendar:row.state,google:snapshot.google,issues:[...stageIssues(row.state,snapshot.google),...sourceCalendarIssues(row.state,snapshot.google.sources||[])],resolutions:{}}}
+ const saved=await db().from('planner_calendar_staging').insert(stage).select('id')
  if(!storage(saved)?.length)throw new ApiError(409,'Staging changed while preparing. Read it again.')
  return stageSummary(stage)
 }
 function stageSummary(stage:Stage){return {id:stage.id,version:stage.version,status:stage.status,baseRevision:stage.base_revision,approvedRevision:stage.approved_revision,accountId:stage.account_id,issues:stage.payload.issues,resolutions:stage.payload.resolutions,calendarEvents:stage.payload.calendar.events.length,googleEvents:stage.payload.google.events.length+(stage.payload.google.sources||[]).reduce((n,s)=>n+s.events.length,0),sourceAccounts:(stage.payload.google.sources||[]).map(({accountId,identity,events})=>({accountId,identity,events:events.length,readOnly:true})),widgetFeedback:stage.payload.widgetFeedback||[],googleDecisions:stage.payload.googleDecisions||{},googleWindow:{timeMin:stage.payload.google.timeMin,timeMax:stage.payload.google.timeMax},coverage:'Google series/occurrences in the stated window plus every linked Google event; internal overlap checks expand recurrence and folder exclusions within the stated window; Google overlap hints still require explicit recurrence review.',download:'/api/calendar/staging.json'}}
-export async function readCalendarStage(username:string,section='summary',offset=0,limit=100){
- const stage=await stagingRow(username);if(!stage)throw new ApiError(404,'Prepare a calendar draft first.')
+export async function readCalendarStage(username:string,section='summary',offset=0,limit=100,id?:string){
+ const stage=await stagingRow(username,id);if(!stage)throw new ApiError(404,'Prepare a calendar draft first.')
  const items=section==='google'?[...stage.payload.google.events.map(e=>({...e,accountId:stage.account_id,exportTarget:true})),...(stage.payload.google.sources||[]).flatMap(source=>source.events.map(e=>({...e,accountId:source.accountId,accountIdentity:source.identity,exportTarget:false})))]:stage.payload.calendar.events
  return section==='summary'?{...stageSummary(stage),tags:stage.payload.calendar.tags,mappings:stage.payload.google.mappings}:{...stageSummary(stage),items:items.slice(offset,offset+limit),total:items.length,offset,hasMore:offset+limit<items.length}
 }
 export const widgetFeedbackSchema=z.object({id:z.string().uuid(),task:z.object({id:z.string().min(1).max(500),title:z.string().max(300),start:z.number().finite(),end:z.number().finite(),planningTaskId:z.string().max(100).optional(),sourceEventId:z.string().max(100).optional()}),remainingMinutes:z.number().int().nonnegative(),done:z.boolean(),reportedAt:z.number().finite(),requestedEnd:z.number().finite().optional(),kind:z.literal('fillFreeTime').optional()})
 const draftPatch=z.object(eventPatch).omit({revision:true,activityType:true,bufferForEventId:true,planningLocked:true})
 export async function editCalendarStage(username:string,args:{id:string;version:number;events?:unknown[];widgetFeedback?:unknown;removeIds?:string[];removalScope?:'event'|'series'|'occurrence';occurrenceStart?:string;userConfirmed?:boolean;resolutions?:{issueId:string;decision:string;googleAction?:'restore'|'preserve_cancelled'}[]}){
- const stage=await stagingRow(username)
+ const stage=await stagingRow(username,args.id)
  if(!stage||stage.id!==args.id||stage.version!==args.version||stage.status!=='draft')throw new ApiError(409,'Read the current staging ID/version before editing.')
- if((await calendarRow(username)).revision!==stage.base_revision)throw new ApiError(409,'Live calendar changed. Prepare a fresh draft.')
  if(args.widgetFeedback){
   const feedback=widgetFeedbackSchema.parse(args.widgetFeedback)
   if(!stage.payload.widgetFeedback?.some(f=>f.id===feedback.id)){
@@ -165,19 +174,43 @@ export async function editCalendarStage(username:string,args:{id:string;version:
  return stageSummary({...stage,version:stage.version+1})
 }
 export async function publishCalendarStage(username:string,args:{id:string;version:number;reviewSummary:string}){
- const stage=await stagingRow(username)
+ const stage=await stagingRow(username,args.id)
  if(!stage||stage.id!==args.id||stage.version!==args.version||stage.status!=='draft')throw new ApiError(409,'Read the latest staging draft before publishing.')
  if(args.reviewSummary.trim().length<20)throw new ApiError(400,'Explain what you reviewed and reconciled.')
  if(stage.payload.issues.some(i=>!stage.payload.resolutions[i.id]))throw new ApiError(409,'Resolve every staging issue before publishing.')
  for(const issue of stageIssues(stage.payload.calendar,stage.payload.google).filter(i=>i.id.startsWith('missing:')))if(!stage.payload.googleDecisions?.[issue.id.slice('missing:'.length)])throw new ApiError(409,'Choose resolutions.googleAction restore or preserve_cancelled for '+issue.id+' before publishing.')
  const current=await calendarRow(username)
- if(current.revision!==stage.base_revision)throw new ApiError(409,'Calendar changed. Prepare a fresh draft before publishing.')
+ if(current.revision!==stage.base_revision) {
+  if (!stage.payload.baseCalendar) throw new ApiError(409,'This older draft is saved. Prepare a fresh draft to review newer calendar changes.')
+  const rebased = rebaseCalendarDraft(stage.payload.baseCalendar, stage.payload.calendar, current.state)
+  validateEventFolders(rebased.events)
+  rebased.events = normalizeEventFolders(rebased.events)
+  stage.payload.calendar = rebased
+  stage.payload.baseCalendar = structuredClone(current.state)
+  stage.payload.issues = [...stageIssues(rebased, stage.payload.google), ...sourceCalendarIssues(rebased, stage.payload.google.sources || [])]
+  const saved = storage(await db().from('planner_calendar_staging').update({
+   payload: stage.payload, base_revision: current.revision, version: stage.version + 1, updated_at: new Date().toISOString(),
+  }).eq('username',username).eq('id',stage.id).eq('version',stage.version).eq('status','draft').select('id'))
+  if (!saved?.length) throw new ApiError(409,'This draft changed during review. Read it again.')
+  stage.base_revision = current.revision
+  stage.version++
+  if (stage.payload.issues.some(issue => !stage.payload.resolutions[issue.id])) {
+   throw new ApiError(409,'Your draft is saved with newer calendar changes. Read its new version and resolve the new issues before publishing.')
+  }
+ }
  const problems=widgetDraftProblems(current.state,stage.payload.calendar,stage.payload.widgetFeedback||[])
  if(problems.length)throw new ApiError(409,'The revised plan is not ready. Fix draft conflicts before publishing: '+problems.join('; '))
  // A read-only grant can prepare/review a draft; publishing still requires export consent.
  await googleCalendarSession(username,stage.account_id,true)
  const fresh=await googleSnapshot(username,stage.payload.google)
- if(fresh.accountId!==stage.account_id||reviewSnapshotKey(fresh.google)!==reviewSnapshotKey(stage.payload.google)){
+ const pendingExports = storage(await db().from('planner_calendar_staging').select('id')
+  .eq('username',username).eq('status','approved').neq('id',stage.id).lte('approved_revision',stage.base_revision).limit(1))
+ const queuedBehind = Array.isArray(pendingExports) && pendingExports.length > 0
+ const sameSources = JSON.stringify((fresh.google.sources||[]).map(source=>[source.accountId,snapshotKey(source.events)]).sort())
+  === JSON.stringify((stage.payload.google.sources||[]).map(source=>[source.accountId,snapshotKey(source.events)]).sort())
+ // An earlier export can be changing its own etags while this draft is reviewed.
+ // Its successor verifies every actual Google write against that completed batch.
+ if(fresh.accountId!==stage.account_id||!sameSources||(!queuedBehind&&!(await reviewedGoogleMatches(username,stage,fresh.google)))){
   storage(await db().from('planner_calendar_staging').update({status:'stale'}).eq('username',username).eq('id',stage.id).eq('version',stage.version))
   throw new ApiError(409,'Google Calendar changed during review. Prepare a fresh draft; nothing was published.')
  }
@@ -188,6 +221,45 @@ export async function publishCalendarStage(username:string,args:{id:string;versi
 export function assertStageEvent(stage:Stage,remoteId:string,before:Remote|null){
  const expected=stage.payload.google.events.find(e=>e.id===remoteId)
  if((expected?.etag||null)!==(before?.etag||null))throw new ApiError(409,'Google event changed since review. Stop and prepare a fresh staging snapshot.')
+}
+// Accept etag changes from earlier reviewed Planner writes, while retaining
+// the normal conditional-write guard for external Google changes.
+export async function assertQueuedStageEvent(username: string, stage: Stage, remoteId: string, before: Remote | null, mappings: Remote[]) {
+ try { assertStageEvent(stage,remoteId,before); return } catch (error) {
+  const expected = stage.payload.google.events.find(event => event.id === remoteId)
+  if (before) {
+   const mapping = mappings.find(item => item.remote_id === remoteId && item.remote_etag === before.etag && item.applied_stage_id)
+   if (mapping) {
+    const previous = await stagingRow(username,mapping.applied_stage_id)
+    const allowed = previous && (previous.id === stage.id || (previous.approved_revision !== null && previous.approved_revision <= stage.base_revision && previous.status === 'published'))
+    const event = previous?.payload.calendar.events.find(item => item.id === mapping.local_id)
+    if (allowed && event && sameGoogleEvent(fixedEventPayload(event),before)) return
+   }
+  } else if (expected?.etag) {
+   const removed = storage(await db().from('planner_calendar_history').select('id')
+    .eq('username',username).eq('calendar_key','google:'+stage.account_id+':primary').eq('event_id',remoteId)
+    .eq('kind','google-sync-removed').eq('before->>etag',expected.etag).limit(1))
+   if (removed.length) return
+  }
+  throw error
+ }
+}
+async function reviewedGoogleMatches(username: string, stage: Stage, fresh: Stage['payload']['google']) {
+ if (reviewSnapshotKey(fresh) === reviewSnapshotKey(stage.payload.google)) return true
+ if (JSON.stringify((fresh.sources||[]).map(source=>[source.accountId,snapshotKey(source.events)]).sort())
+     !== JSON.stringify((stage.payload.google.sources||[]).map(source=>[source.accountId,snapshotKey(source.events)]).sort())) return false
+ const original = new Map(stage.payload.google.events.map(event=>[event.id,event]))
+ const current = new Map(fresh.events.map(event=>[event.id,event]))
+ try {
+  for (const id of new Set([...original.keys(),...current.keys()])) {
+   if (snapshotKey(original.has(id)?[original.get(id)!]:[]) === snapshotKey(current.has(id)?[current.get(id)!]:[])) continue
+   await assertQueuedStageEvent(username,stage,id,current.get(id)||null,fresh.mappings)
+  }
+  return true
+ } catch (error) {
+  if (error instanceof ApiError && error.status === 409) return false
+  throw error
+ }
 }
 export async function preparePendingStage(onlyUsername?:string){
  const query=db().from('planner_google_fixed_sync').select('username,requested_revision,completed_revision,reviewed_revision').lte('retry_at',new Date().toISOString()).order('retry_at').limit(20)

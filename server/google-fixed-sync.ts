@@ -1,5 +1,5 @@
 import {calendarScheduleIdentity} from '../src/lib/eventChecklist.js'
-import {stagingRow,preparePendingStage,assertStageEvent,sameGoogleEvent} from './calendar-staging.js'
+import {stagingRow,preparePendingStage,assertStageEvent,assertQueuedStageEvent,sameGoogleEvent} from './calendar-staging.js'
 import {db,ApiError} from './cloud.js'
 import {storage} from './mcp-auth.js'
 import {googleCalendarSession,googleCalendarStatus} from './agent.js'
@@ -9,7 +9,7 @@ import {fixedEventPayload,fixedEventPatch,fixedFingerprint,fixedGoogleId} from '
 
 const base='https://www.googleapis.com/calendar/v3/calendars/primary/events'
 export async function fixedSyncStatus(username:string){
- const [queue,accounts,decisions]=await Promise.all([db().from('planner_google_fixed_sync').select('requested_revision,completed_revision,reviewed_revision,error,synced_at').eq('username',username).maybeSingle(),googleCalendarStatus(username),db().from('planner_calendar_staging').select('decisions:payload->googleDecisions').eq('username',username).maybeSingle()])
+ const [queue,accounts,decisions]=await Promise.all([db().from('planner_google_fixed_sync').select('requested_revision,completed_revision,reviewed_revision,error,synced_at').eq('username',username).maybeSingle(),googleCalendarStatus(username),db().from('planner_calendar_staging').select('decisions:payload->googleDecisions').eq('username',username).order('created_at',{ascending:false}).limit(1).maybeSingle()])
  const selected=accounts.accounts.find(a=>a.id===accounts.activeAccountId),state=storage(queue)
  return {reviewRequired:Boolean(state&&state.requested_revision!==state.reviewed_revision),connected:Boolean(selected?.canEdit),identity:selected?.identity||null,accountId:selected?.id||null,pending:Boolean(state&&state.requested_revision>state.completed_revision),error:state?.error||(!selected?'Connect Google Calendar in Add sites.':!selected.canEdit?'Reconnect Google Calendar and approve event editing.':null),syncedAt:state?.synced_at||null,preservedCancelled:Object.entries((storage(decisions) as any)?.decisions||{}).filter(([,action])=>action==='preserve_cancelled').map(([id])=>id)}
 }
@@ -23,13 +23,38 @@ export async function processFixedSync(onlyUsername?:string){
  const claimed=storage(await db().rpc('planner_claim_fixed_sync',{p_username:onlyUsername||null}))[0]
  if(!claimed)return {processed:0}
  const username=claimed.username,deadline=Date.now()+25000
+ let activeStageId: string | undefined = claimed.claimed_stage_id
  let processed=0
  try{
-  const session=await googleCalendarSession(username,undefined,true),row=await calendarRow(username)
-  const stage=await stagingRow(username)
-  if(!stage||stage.status!=='approved'||(stage.approved_revision!==row.revision&&(!stage.payload.calendar||calendarScheduleIdentity(stage.payload.calendar)!==calendarScheduleIdentity(row.state)))||stage.account_id!==session.accountId)throw new ApiError(409,'A fresh agent-reviewed calendar draft is required before Google writes.')
-  const ensureCurrent=async()=>{const current=storage(await db().from('planner_calendars').select('revision').eq('username',username).single());if(current.revision!==row.revision&&calendarScheduleIdentity((await calendarRow(username)).state)!==calendarScheduleIdentity(row.state))throw new ApiError(409,'Planner changed during publishing. Review a fresh draft before continuing.')}
+  const session = await googleCalendarSession(username,undefined,true)
+  const queued = Boolean(claimed.claimed_stage_id)
+  const stage = await stagingRow(username,claimed.claimed_stage_id || undefined)
+  activeStageId = stage?.id
+  if (!stage || stage.status !== 'approved' || stage.account_id !== session.accountId) {
+   throw new ApiError(409,'A fresh agent-reviewed calendar draft is required before Google writes.')
+  }
+  const row = queued ? {state:stage.payload.calendar,revision:stage.approved_revision!} : await calendarRow(username)
+  if (!queued && stage.approved_revision !== row.revision && calendarScheduleIdentity(stage.payload.calendar) !== calendarScheduleIdentity(row.state)) {
+   throw new ApiError(409,'A fresh agent-reviewed calendar draft is required before Google writes.')
+  }
+  const ensureCurrent = async () => {
+   if (queued) {
+    const lease = storage(await db().from('planner_google_fixed_sync').select('lease,lease_until,claimed_stage_id')
+     .eq('username',username).single())
+    if (lease.lease !== claimed.lease || lease.claimed_stage_id !== stage.id || Date.parse(lease.lease_until) <= Date.now()) {
+     throw new ApiError(409,'This export lease ended. The queued batch will resume on its next claim.')
+    }
+   } else {
+    const current=storage(await db().from('planner_calendars').select('revision').eq('username',username).single())
+    if(current.revision!==row.revision&&calendarScheduleIdentity((await calendarRow(username)).state)!==calendarScheduleIdentity(row.state)) {
+     throw new ApiError(409,'Planner changed during publishing. Review a fresh draft before continuing.')
+    }
+   }
+  }
   const mappings=storage(await db().from('planner_google_fixed_events').select('*').eq('username',username).eq('account_id',session.accountId))
+  const assertReviewed = (id: string, before: any) => queued
+   ? assertQueuedStageEvent(username,stage,id,before,mappings)
+   : Promise.resolve(assertStageEvent(stage,id,before))
   const fixed=row.state.events.filter(e=>e.eventKind!=='folder'&&eventType(e,row.state.tags)==='fixed'),ids=new Set(fixed.map(e=>e.id))
   const headers={Authorization:'Bearer '+session.tokens.access_token,'Content-Type':'application/json'}
   const call=async(url:string,init:RequestInit={})=>{const response=await fetch(url,{...init,headers:{...headers,...init.headers},signal:AbortSignal.timeout(Math.max(1,Math.min(8000,deadline-Date.now())))});if(!response.ok&&![404,410].includes(response.status)){const details=await response.json().catch(()=>null) as any;const reason=typeof details?.error?.message==='string'?details.error.message.slice(0,300):'';throw new ApiError(response.status===412?409:response.status===401?401:502,'Google sync failed ('+response.status+'). '+(response.status===401?'Reconnect the account to renew access.':response.status===412?'The Google event changed; retry to reconcile.':reason||'The calendar update was rejected; it will retry.'))}return response}
@@ -50,9 +75,9 @@ export async function processFixedSync(onlyUsername?:string){
     do{if(page)query.set('pageToken',page);const response=await call(base+'?'+query);const data=await response.json() as any;candidates.push(...(data.items||[]));page=data.nextPageToken;if(Date.now()>deadline-3000)throw Error('Google reconciliation is still pending; it will retry.')}while(page)
     const same=(a:any,b:any)=>a?.date===b?.date&&(!a?.dateTime&&!b?.dateTime||Date.parse(a?.dateTime)===Date.parse(b?.dateTime))
     before=candidates.find(candidate=>candidate.status!=='cancelled'&&candidate.summary===payload.summary&&same(candidate.start,payload.start)&&same(candidate.end,payload.end)&&JSON.stringify(candidate.recurrence||[])===JSON.stringify(payload.recurrence))
-    if(before){assertStageEvent(stage,before.id,before);await ensureCurrent();managed=false;if(sameGoogleEvent(payload,before)){await persist(event.id,before.id,false,fingerprint,before.etag);processed++;continue}}
+    if(before){await assertReviewed(before.id,before);await ensureCurrent();managed=false;if(sameGoogleEvent(payload,before)){await persist(event.id,before.id,false,fingerprint,before.etag);processed++;continue}}
    }
-   assertStageEvent(stage,before?.id||id,before)
+   await assertReviewed(before?.id||id,before)
    await ensureCurrent()
    if(before&&before.status!=='cancelled'&&sameGoogleEvent(payload,before)){await persist(event.id,before.id,managed,fingerprint,before.etag);processed++;continue}
    const cancelled=before?.status==='cancelled'||Boolean(mapping&&!before)
@@ -82,7 +107,7 @@ export async function processFixedSync(onlyUsername?:string){
   for(const mapping of mappings.filter(m=>!ids.has(m.local_id))){
    if(processed>=12||Date.now()>deadline-3000){unfinished=true;break}
    // Never delete an original Google event adopted during deduplication.
-   if(mapping.managed){const before=await read(mapping.remote_id);assertStageEvent(stage,mapping.remote_id,before);await ensureCurrent();if(before&&before.status!=='cancelled'){
+   if(mapping.managed){const before=await read(mapping.remote_id);await assertReviewed(mapping.remote_id,before);await ensureCurrent();if(before&&before.status!=='cancelled'){
     if(before.extendedProperties?.private?.aipLocalId!==mapping.local_id)throw new ApiError(409,'Google mirror ownership changed; review it before removing.')
     const audit=await backup(mapping.remote_id,before,null,'google-sync-removal-pending')
     await call(base+'/'+encodeURIComponent(mapping.remote_id)+'?sendUpdates=none',{method:'DELETE',headers:{'If-Match':before.etag}})
@@ -90,11 +115,18 @@ export async function processFixedSync(onlyUsername?:string){
    }}
    storage(await db().from('planner_google_fixed_events').delete().eq('username',username).eq('account_id',session.accountId).eq('local_id',mapping.local_id));processed++
   }
+  if (queued) {
+   const finished = storage(await db().rpc('planner_finish_fixed_stage', {
+    p_username:username,p_stage:stage.id,p_lease:claimed.lease,p_complete:!unfinished,
+   }))
+   if (!finished) throw new ApiError(503,'This export claim ended. Its saved progress will be reconciled on retry.')
+  } else {
   if(!unfinished)storage(await db().from('planner_calendar_staging').update({status:'published'}).eq('username',username).eq('id',stage.id).eq('status','approved'))
-  storage(await db().from('planner_google_fixed_sync').update({...(unfinished?{}:{completed_revision:claimed.requested_revision,synced_at:new Date().toISOString()}),lease_until:new Date(0).toISOString(),retry_at:new Date().toISOString(),error:null}).eq('username',username).eq('lease',claimed.lease))
+  storage(await db().from('planner_google_fixed_sync').update({...(unfinished?{}:{completed_revision:claimed.claimed_revision??claimed.requested_revision,synced_at:new Date().toISOString()}),lease_until:new Date(0).toISOString(),retry_at:new Date().toISOString(),error:null}).eq('username',username).eq('lease',claimed.lease))
+  }
   return {processed,pending:unfinished}
  }catch(error){
-  if(error instanceof ApiError&&error.status===409)storage(await db().from('planner_calendar_staging').update({status:'stale'}).eq('username',username).eq('status','approved'))
+  if(error instanceof ApiError&&error.status===409&&activeStageId)storage(await db().from('planner_calendar_staging').update({status:'stale'}).eq('username',username).eq('id',activeStageId).eq('status','approved'))
   const message=error instanceof Error?error.message:'Google sync failed. It will retry.'
   storage(await db().from('planner_google_fixed_sync').update({lease_until:new Date(0).toISOString(),retry_at:new Date(Date.now()+300000).toISOString(),...(error instanceof ApiError&&error.status===409?{reviewed_revision:-1}:{}),error:message}).eq('username',username).eq('lease',claimed.lease))
   return {processed,pending:true,error:message}

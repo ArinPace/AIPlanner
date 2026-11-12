@@ -49,9 +49,9 @@ test('staging is private to the owner, edits are isolated, conflicts require res
   assert.equal(calendar.state.events[0].title,'Old location','Editing staging never changes live state')
   assert.equal(stage!.payload.calendar.events[0].recurrence.interval,2);assert.deepEqual(stage!.payload.calendar.events[0].excludedStarts,event.excludedStarts)
   await assert.rejects(()=>editCalendarStage('owner',{id:first.id,version:1,events:[]}),/current staging/)
-  calendar.revision=5
-  await assert.rejects(()=>publishCalendarStage('owner',{id:first.id,version:edited.version,reviewSummary:'Reviewed verified room details and recurrence.'}),/Calendar changed/)
-  assert.equal(published,0);calendar.revision=4
+  calendar.revision=5;calendar.state.events[0].title='Newer manual correction'
+  await assert.rejects(()=>publishCalendarStage('owner',{id:first.id,version:edited.version,reviewSummary:'Reviewed verified room details and recurrence.'}),/newer changes/)
+  assert.equal(published,0);calendar.revision=4;calendar.state.events[0].title='Old location'
   remote.etag='v2'
   await assert.rejects(()=>publishCalendarStage('owner',{id:first.id,version:edited.version,reviewSummary:'Reviewed verified room details and recurrence.'}),/Google Calendar changed/)
   assert.equal(published,0);assert.equal(calendar.revision,4)
