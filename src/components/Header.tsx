@@ -64,27 +64,18 @@ export function Header({
           <CalendarMark />
           <span>AI Planner</span>
         </div>
-        <button type="button" hidden={tab !== 'calendar'} className="create-btn mobile-only" onClick={onCreate}>
+        <button type="button" hidden={tab !== 'calendar'} className="create-btn mobile-only" aria-label="Create event" title="Create event" onClick={onCreate}>
           <PlusIcon />
-          Create
         </button>
         {tab === 'calendar' && <div className="calendar-navigation">
-        <button type="button" className="today-btn" onClick={onToday}>
-          Today
-        </button>
-        <div className="nav-group">
-          <button type="button" className="icon-btn" aria-label="Previous" onClick={() => onNavigate(-1)}>
-            <ChevronIcon />
-          </button>
-          <button type="button" className="icon-btn" aria-label="Next" onClick={() => onNavigate(1)}>
-            <ChevronIcon className="flip" />
-          </button>
-        </div>
+        <button type="button" className="icon-btn" aria-label="Previous" onClick={() => onNavigate(-1)}><ChevronIcon /></button>
+        <button type="button" className="today-btn" onClick={onToday}>Today</button>
+        <button type="button" className="icon-btn" aria-label="Next" onClick={() => onNavigate(1)}><ChevronIcon className="flip" /></button>
         </div>}
       </div>
 
       <div className="header-center">
-        <nav className="workspace-tabs" aria-label="Workspace"><button type="button" aria-current={tab === 'calendar' ? 'page' : undefined} className={tab === 'calendar' ? 'is-active' : ''} onClick={() => onTabChange('calendar')}>Calendar</button><button type="button" aria-current={tab === 'files' ? 'page' : undefined} className={tab === 'files' ? 'is-active' : ''} onClick={() => onTabChange('files')}>Files</button><button type="button" aria-current={tab === 'todo' ? 'page' : undefined} className={tab === 'todo' ? 'is-active' : ''} onClick={() => onTabChange('todo')}>To-do</button><button type="button" aria-current={tab === 'work' ? 'page' : undefined} className={tab === 'work' ? 'is-active' : ''} onClick={() => onTabChange('work')}>Work</button><button hidden={hideAgent} type="button" aria-current={tab === 'agent' ? 'page' : undefined} className={tab === 'agent' ? 'is-active' : ''} onClick={() => onTabChange('agent')}>Agent</button>{<button type="button" aria-current={tab==='screentime'?'page':undefined} className={tab==='screentime'?'is-active':''} onClick={()=>onTabChange('screentime')}>Screen Time</button>}{<button type="button" aria-current={tab === 'chat' ? 'page' : undefined} className={tab === 'chat' ? 'is-active' : ''} onClick={() => onTabChange('chat')}>Chat</button>}</nav>
+        <nav className="workspace-tabs" aria-label="Workspace"><button type="button" aria-current={tab === 'calendar' ? 'page' : undefined} className={tab === 'calendar' ? 'is-active' : ''} onClick={() => onTabChange('calendar')}>Calendar</button><button hidden type="button" aria-current={tab === 'files' ? 'page' : undefined} className={tab === 'files' ? 'is-active' : ''} onClick={() => onTabChange('files')}>Files</button><button type="button" aria-current={tab === 'todo' ? 'page' : undefined} className={tab === 'todo' ? 'is-active' : ''} onClick={() => onTabChange('todo')}>To-do</button><button type="button" aria-current={tab === 'work' ? 'page' : undefined} className={tab === 'work' ? 'is-active' : ''} onClick={() => onTabChange('work')}>Work</button><button hidden={hideAgent} type="button" aria-current={tab === 'agent' ? 'page' : undefined} className={tab === 'agent' ? 'is-active' : ''} onClick={() => onTabChange('agent')}>Agent</button>{<button type="button" aria-current={tab==='screentime'?'page':undefined} className={tab==='screentime'?'is-active':''} onClick={()=>onTabChange('screentime')}>Screen Time</button>}{<button hidden type="button" aria-current={tab === 'chat' ? 'page' : undefined} className={tab === 'chat' ? 'is-active' : ''} onClick={() => onTabChange('chat')}>Chat</button>}</nav>
         {tab === 'calendar' && <>
 
         <h1 className="range-title">{formatRangeLabel(cursor, view)}</h1><span className="calendar-timezone" title="America/New_York ? adjusts for daylight saving">New York (ET)</span>

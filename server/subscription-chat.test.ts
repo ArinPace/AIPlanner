@@ -34,8 +34,11 @@ test('subscription workspace is fresh and owner-scoped; never touches Agent jobs
   const retitle=await (await post({action:'relay_mirror',chatId:main,expectedUpdatedAt:mainAck.updated_at,url:'https://chatgpt.com/g/test/c/main',observed:{title:'Unwanted automatic title',archived:false,deleted:false}})).json() as any
   assert.deepEqual(retitle.plan.push,{});assert.deepEqual(retitle.plan.pull,{title:'Unwanted automatic title'})
   const mark=tables.length;await handleSubscriptionChat(new Request('https://planner.test/api/subscription-chat?fast=1'),'owner');assert(!tables.slice(mark).some(t=>['planner_sync_subscription_tutors','planner_vm_settings','planner_google_accounts'].includes(t)),'Fast subscription transcript must not wait on Tutor or Google settings')
-  await assert.rejects(()=>handleSubscriptionChat(new Request('https://planner.test/api/subscription-chat?chat='+foreign),'owner'),/not found/)
-  const created=await (await post({action:'create'})).json() as any;assert.equal(created.id,extra)
+  const redirected=await (await handleSubscriptionChat(new Request('https://planner.test/api/subscription-chat?chat='+foreign),'owner')).json() as any;assert.equal(redirected.chat.id,main)
+  await assert.rejects(()=>post({action:'create'}),/persistent Main Chat/)
+  await assert.rejects(()=>post({action:'tutor_sync'}),/Tutor conversations remain/)
+  assert(!tables.includes('planner_sync_subscription_tutors'))
+  const created={id:extra,username:'owner',title:'Legacy Chat',is_main:false,archived:false,deleted_at:null,updated_at:'2026-11-03T00:00:00Z'};chats.push(created)
   const renamed=await (await post({action:'update',id:extra,title:'Independent Chat'})).json() as any;assert.equal(renamed.title,'Independent Chat')
   await assert.rejects(()=>post({action:'update',id:main,pinned:false}),/stays pinned/)
   await post({action:'relay_bind',chatId:extra,url:'https://chatgpt.com/c/test-mapped'})

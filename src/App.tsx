@@ -3,7 +3,7 @@ import {DeviceControlSync} from './components/DeviceControlSync'
 import {subscriptionChatRequest} from './lib/api'
 import {applyTheme,readTheme} from './lib/theme'
 import {useCalendarDisplay} from './lib/useCalendarDisplay'
-import {SubscriptionChatView} from './components/SubscriptionChatView'
+import {MainChatBubble} from './components/MainChatBubble'
 import {TaskNotificationSync} from './components/TaskNotificationSync'
 import {taskScreenTimeWindow} from './lib/taskScreenTime'
 import {verifyFreeTimeRequest, type TaskFeedback, type TaskTimeResult} from './lib/widgetTaskFeedback'
@@ -154,9 +154,10 @@ export default function App() {
 function CalendarApp({ username, onLogout }: { username: string; onLogout: () => void }) {
   const calendarDisplay=useCalendarDisplay(username)
   const [tab, setTab] = useState<'calendar' | 'files' | 'todo' | 'work' | 'agent' | 'screentime' | 'chat'>(()=>sessionStorage.getItem(RECOVERY_TAB)===username?'agent':'calendar')
+  const [mainChatOpen,setMainChatOpen]=useState(false)
   const [hideAgent,setHideAgent]=useState(false)
   useEffect(()=>{let live=true;void subscriptionChatRequest<{agentHidden:boolean}>(undefined,{action:'schedule_read'}).then(value=>{if(live&&value)setHideAgent(value.agentHidden===true)}).catch(()=>{});return()=>{live=false}},[username])
-  useVmActivity(username,!hideAgent&&tab!=='chat')
+  useVmActivity(username,!hideAgent&&!mainChatOpen&&tab!=='chat')
   const [todoRequest,setTodoRequest]=useState(0)
   const [filesUnsaved, setFilesUnsaved] = useState(false)
   const fileDirty=useRef({files:false,todo:false,work:false})
@@ -173,7 +174,6 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
     if (window.innerWidth <= 860) setSidebarOpen(false)
   }
   const [filesSidebar,setFilesSidebar]=useState(()=>window.innerWidth>600)
-  const [subscriptionSidebar,setSubscriptionSidebar]=useState(()=>window.innerWidth>700)
   const [agentSidebar,setAgentSidebar]=useState(()=>window.innerWidth>700)
   const [sidebarOpen, setSidebarOpen] = useState(() => window.matchMedia('(min-width: 861px)').matches)
   const [events, setEvents] = useState<CalendarEvent[]>([])
@@ -195,8 +195,8 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   const latestCalendar=useRef({events,tags,hiddenTagIds,zoom,loaded,draft})
   useLayoutEffect(()=>{latestCalendar.current={events,tags,hiddenTagIds,zoom,loaded,draft}},[events,tags,hiddenTagIds,zoom,loaded,draft])
 
-  const clientUI=useRef({tab,view,date:cursor.toISOString(),filesUnsaved,calendarEditorOpen:Boolean(draft),loaded})
-  useLayoutEffect(()=>{clientUI.current={tab,view,date:cursor.toISOString(),filesUnsaved,calendarEditorOpen:Boolean(draft),loaded}},[tab,view,cursor,filesUnsaved,draft,loaded])
+  const clientUI=useRef({tab,view,date:cursor.toISOString(),filesUnsaved,calendarEditorOpen:Boolean(draft),loaded,mainChatOpen})
+  useLayoutEffect(()=>{clientUI.current={tab,view,date:cursor.toISOString(),filesUnsaved,calendarEditorOpen:Boolean(draft),loaded,mainChatOpen}},[tab,view,cursor,filesUnsaved,draft,loaded,mainChatOpen])
   useEffect(()=>{
     const handle=(event:Event)=>{const d=(event as CustomEvent).detail;if(!d||typeof d.resolve!=='function'||typeof d.reject!=='function')return
       try{
@@ -214,7 +214,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
           if(c.tab==='agent'&&hideAgent)throw Error('Agent is hidden for this test account. Use Chat.')
           const date=c.date?new Date(c.date+'T12:00:00'):null
           if(date&&(!Number.isFinite(date.getTime())||date.getFullYear()!==Number(c.date.slice(0,4))||date.getMonth()+1!==Number(c.date.slice(5,7))||date.getDate()!==Number(c.date.slice(8,10))))throw Error('Invalid calendar date.')
-          setTab(c.tab);if(c.tab==='todo'||c.tab==='work')setTodoRequest(n=>n+1)
+          setMainChatOpen(c.tab==='chat');if(c.tab!=='chat')setTab(c.tab);if(c.tab==='todo'||c.tab==='work')setTodoRequest(n=>n+1)
           if(c.view)setView(c.view)
           if(date)setCursor(date)
         }else throw Error('Unknown Planner UI action.')
@@ -488,7 +488,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
       <DeviceControlSync username={username}/>
       <Header hideAgent={hideAgent}
         tab={tab}
-        onTabChange={next=>{if(next==='todo'||next==='work')setTodoRequest(n=>n+1);setTab(next)}}
+        onTabChange={next=>{if(next==='chat'){setMainChatOpen(true);return}if(next==='todo'||next==='work')setTodoRequest(n=>n+1);setTab(next)}}
         cursor={cursor}
         view={view}
         zoom={zoom}
@@ -496,7 +496,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
         username={username}
         onNavigate={navigate}
         onToday={() => setCursor(new Date())}
-        onToggleSidebar={() => {if(tab==='files'||tab==='todo'||tab==='work')setFilesSidebar(v=>!v);else if(tab==='agent')setAgentSidebar(v=>!v);else if(tab==='chat')setSubscriptionSidebar(v=>!v);else setSidebarOpen(v=>!v)}}
+        onToggleSidebar={() => {if(tab==='files'||tab==='todo'||tab==='work')setFilesSidebar(v=>!v);else if(tab==='agent')setAgentSidebar(v=>!v);else if(tab==='chat')setMainChatOpen(v=>!v);else setSidebarOpen(v=>!v)}}
         onCreate={() => openCreate(cursor)}
         onVisualZoomChange={(value) => setZoom(clampZoom(value))}
         onLogout={() => {
@@ -513,7 +513,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
       {(visitedNotes.work||tab==='work')&&<div className="files-tab-panel" hidden={tab!=='work'}><FilesView standaloneTodo workMode sidebar={false} setSidebar={setFilesSidebar} username={username} active={tab==='work'} todoRequest={todoRequest||1} onUnsavedChange={fileDirtyHandlers.work}/></div>}
       {tab==='screentime' && <ScreenTimePanel/>}
       {!hideAgent&&<div className="agent-tab-panel" hidden={tab !== 'agent'}><AgentView username={username} sidebar={agentSidebar} setSidebar={setAgentSidebar} active={tab === 'agent'} /></div>}
-      <div className="agent-tab-panel" hidden={tab!=='chat'}><SubscriptionChatView active={tab==='chat'} username={username} sidebar={subscriptionSidebar} setSidebar={setSubscriptionSidebar}/></div>
+      <MainChatBubble key={username} username={username} open={mainChatOpen} onOpenChange={setMainChatOpen}/>
       <div className="app-body" hidden={tab !== 'calendar'}>
         <Sidebar
           weekLayout={weekLayout}

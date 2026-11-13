@@ -15,10 +15,10 @@ export async function handleSubscriptionChat(request:Request,username:string){
  const url=new URL(request.url)
  if(request.method==='GET'){
   const fast=url.searchParams.get('fast')==='1'
-  if(!fast)storage(await db().rpc('planner_sync_subscription_tutors',{p_username:username}))
+  // Chat is one persistent Main conversation; Agent retains its separate Tutor chats.
   const main=await mainChat(username)
-  let id=url.searchParams.get('chat')||main.id
-  if(!url.searchParams.has('chat')&&(main.archived||main.deleted_at)){const active=storage(await db().from('planner_subscription_chats').select(fields).eq('username',username).is('deleted_at',null).eq('archived',false).order('updated_at',{ascending:false}).limit(1).maybeSingle());if(active)id=active.id}
+  const id=main.id
+
   z.string().uuid().parse(id);const chat=await owned(username,id)
   const before=url.searchParams.get('before')
   let query=db().from('planner_subscription_messages').select('id,role,content,created_at').eq('username',username).eq('chat_id',id)
@@ -30,12 +30,12 @@ export async function handleSubscriptionChat(request:Request,username:string){
    fast?Promise.resolve({data:{sources:[]},error:null}):db().from('planner_vm_settings').select('sources').eq('username',username).maybeSingle(),fast?Promise.resolve(undefined):googleCalendarStatus(username)
   ])
   const rows=storage(messages)
-  return json({chat,chats:storage(chats),messages:rows.slice(0,pageSize).reverse(),hasOlder:rows.length>pageSize,sources:storage(prefs)?.sources||[],google,connection:{provider:'chatgpt-subscription',connected:false,state:'setup_required',message:'ChatGPT subscription sign-in is not configured yet.'}})
+  return json({chat,chats:storage(chats).filter(row=>row.is_main),messages:rows.slice(0,pageSize).reverse(),hasOlder:rows.length>pageSize,sources:storage(prefs)?.sources||[],google,connection:{provider:'chatgpt-subscription',connected:false,state:'setup_required',message:'ChatGPT subscription sign-in is not configured yet.'}})
  }
  if(request.method!=='POST')throw new ApiError(405,'Use GET or POST.')
  const input=await body(request)
  if(typeof input.action==='string'&&input.action.startsWith('schedule_'))return json(await (await import('./subscription-schedule.js')).subscriptionScheduleAction(username,input))
- if(input.action==='tutor_sync')return json(storage(await db().rpc('planner_sync_subscription_tutors',{p_username:username})))
+ if(input.action==='tutor_sync')throw new ApiError(409,'Chat uses Main Chat only. Tutor conversations remain available in Agent.')
  if(typeof input.action==='string'&&input.action.startsWith('tool_'))return json(await (await import('./subscription-tools.js')).subscriptionTools(username,input))
  if(typeof input.action==='string'&&['file_start','file_finish','file_download'].includes(input.action))return await (await import('./subscription-files.js')).subscriptionFileAction(username,input)
  // Never fall back to API-key billing, the Agent VM, or a browser extension.
@@ -74,10 +74,7 @@ export async function handleSubscriptionChat(request:Request,username:string){
   if(saved!==true)throw new ApiError(409,'This chat changed. Restore it before saving its reply.')
   return json({ok:true})
  }
- if(input.action==='create'){
-  const args=z.object({title:z.string().trim().min(1).max(120).default('New chat')}).parse(input)
-  return json(storage(await db().from('planner_subscription_chats').insert({username,title:args.title}).select(fields).single()))
- }
+ if(input.action==='create')throw new ApiError(409,'Use the persistent Main Chat. Additional conversations are available in Agent.')
  if(input.action!=='update')throw new ApiError(400,'Choose a supported chat action.')
  const args=z.object({id:z.string().uuid(),title:z.string().trim().min(1).max(120).optional(),pinned:z.boolean().optional(),archived:z.boolean().optional(),deleted:z.boolean().optional()}).parse(input)
  const chat=await owned(username,args.id)

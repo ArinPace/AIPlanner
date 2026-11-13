@@ -71,9 +71,8 @@ export function Sidebar({
 
   return (
     <aside className={`sidebar ${open ? 'is-open' : ''}`}>
-      <button type="button" className="create-btn sidebar-create" onClick={onCreate}>
+      <button type="button" className="create-btn sidebar-create" aria-label="Create event" title="Create event" onClick={onCreate}>
         <PlusIcon />
-        Create
       </button>
 
       <div className="view-switch sidebar-view-switch" role="group" aria-label="Calendar view">
