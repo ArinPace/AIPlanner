@@ -23,6 +23,7 @@ struct PlannerScreen: View {
         ZStack {
             Color(uiColor: model.backgroundColor).ignoresSafeArea()
             PlannerWebView(model: model)
+                .ignoresSafeArea(.container, edges: .bottom)
             if let error = model.error {
                 VStack(spacing: 16) {
                     Image(systemName: "wifi.exclamationmark").font(.largeTitle)

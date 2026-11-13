@@ -2470,7 +2470,7 @@ html, body { touch-action: pan-x pan-y; }
 
 /* Leave a clear landing area above the home indicator and floating assistant. */
 @media (max-width: 600px) {
- .has-mobile-week { scroll-padding-bottom: calc(104px + env(safe-area-inset-bottom)); -webkit-mask-image: linear-gradient(to bottom,#000 0,#000 calc(100% - 18px),transparent 100%); mask-image: linear-gradient(to bottom,#000 0,#000 calc(100% - 18px),transparent 100%); }
+ .has-mobile-week { scroll-padding-bottom: calc(104px + env(safe-area-inset-bottom)); }
  .mobile-week { padding-bottom: calc(104px + env(safe-area-inset-bottom)); }
  .calendar-main .time-scroll { padding-bottom: calc(104px + env(safe-area-inset-bottom)); scroll-padding-bottom: calc(104px + env(safe-area-inset-bottom)); }
 }
