@@ -4,7 +4,6 @@ import { useState, type FormEvent } from 'react'
 import type { CalendarEvent, CalendarView, Tag } from '../types'
 import { nextTagColor, TAG_COLORS } from '../lib/colors'
 import { PlusIcon, TrashIcon } from './Icons'
-import { MiniCalendar } from './MiniCalendar'
 import type {ScheduleType} from '../lib/eventType'
 import {FixedCalendarSync} from './FixedCalendarSync'
 
@@ -15,7 +14,6 @@ type SidebarProps = {
   view: CalendarView
   onViewChange: (view: CalendarView) => void
   cursor: Date
-  onCursorChange: (date: Date) => void
   onCreate: () => void
   events: CalendarEvent[]
   tags: Tag[]
@@ -35,7 +33,6 @@ export function Sidebar({
   onWeekLayoutChange,
   onViewChange,
   cursor,
-  onCursorChange,
   onCreate,
   events,
   tags,
@@ -91,7 +88,6 @@ export function Sidebar({
       </fieldset>}
       <button type="button" className="text-btn sidebar-history" onClick={() => setHistoryOpen(true)}>Calendar history</button>
       {historyOpen && <CalendarHistory onClose={() => setHistoryOpen(false)} />}
-      <MiniCalendar cursor={cursor} onCursorChange={onCursorChange} />
       <section className="event-type-filter" aria-label="Event visibility">
         <h2>Show events</h2>
         <label><input type="checkbox" checked={!hiddenTypes.includes('fixed')} onChange={()=>onToggleType('fixed')}/>Fixed events</label>

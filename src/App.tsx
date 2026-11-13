@@ -1,3 +1,4 @@
+import {BottomWorkspaceNav} from './components/BottomWorkspaceNav'
 import {completeCalendarBlock} from './lib/api'
 import {DeviceControlSync} from './components/DeviceControlSync'
 import {subscriptionChatRequest} from './lib/api'
@@ -27,8 +28,6 @@ import {eventType,type ScheduleType} from './lib/eventType'
 import {saveEventGroup,removeEventSeries,detachEventOccurrence} from './lib/eventFolders'
 import {
   addDays,
-  addMonths,
-  addYears,
   combineDateAndTime,
   endOfDateInput,
   startOfDateInput,
@@ -398,13 +397,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
     return expandEvents(events, range.start, range.end)
   }, [events, view, range.end, range.start])
 
-  function navigate(direction: -1 | 1) {
-    setCursor(current => {
-      if (view === 'year') return addYears(current, direction)
-      if (view === 'month') return addMonths(current, direction)
-      return addDays(current, direction * (view === 'week' ? 7 : 1))
-    })
-  }
+  function navigate(direction: -1 | 1) { setCursor(current=>addDays(current,direction)) }
 
   function openCreate(date: Date, options?: { timed?: boolean; allDay?: boolean }) {
     setEditingId(null)
@@ -496,6 +489,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
         username={username}
         onNavigate={navigate}
         onToday={() => setCursor(new Date())}
+        onDateChange={setCursor}
         onToggleSidebar={() => {if(tab==='files'||tab==='todo'||tab==='work')setFilesSidebar(v=>!v);else if(tab==='agent')setAgentSidebar(v=>!v);else if(tab==='chat')setMainChatOpen(v=>!v);else setSidebarOpen(v=>!v)}}
         onCreate={() => openCreate(cursor)}
         onVisualZoomChange={(value) => setZoom(clampZoom(value))}
@@ -513,6 +507,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
       {(visitedNotes.work||tab==='work')&&<div className="files-tab-panel" hidden={tab!=='work'}><FilesView standaloneTodo workMode sidebar={false} setSidebar={setFilesSidebar} username={username} active={tab==='work'} todoRequest={todoRequest||1} onUnsavedChange={fileDirtyHandlers.work}/></div>}
       {tab==='screentime' && <ScreenTimePanel/>}
       {!hideAgent&&<div className="agent-tab-panel" hidden={tab !== 'agent'}><AgentView username={username} sidebar={agentSidebar} setSidebar={setAgentSidebar} active={tab === 'agent'} /></div>}
+      <BottomWorkspaceNav tab={tab} onChange={next=>{if((filesUnsaved||draft)&&next!==tab&&!window.confirm('Discard unsaved changes and switch tabs?'))return;if(next==='todo'||next==='work')setTodoRequest(n=>n+1);setTab(next)}}/>
       <MainChatBubble key={username} username={username} open={mainChatOpen} onOpenChange={setMainChatOpen}/>
       <div className="app-body" hidden={tab !== 'calendar'}>
         <Sidebar
@@ -523,7 +518,6 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
           events={events}
           open={sidebarOpen}
           cursor={cursor}
-          onCursorChange={setCursor}
           onCreate={() => openCreate(cursor)}
           tags={tags}
           hiddenTagIds={hiddenSet}

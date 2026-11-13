@@ -4,9 +4,11 @@ import { ChevronIcon } from './Icons'
 type MiniCalendarProps = {
   cursor: Date
   onCursorChange: (date: Date) => void
+  onMonthChange?: (date:Date)=>void
+  selectedDate?: Date
 }
 
-export function MiniCalendar({ cursor, onCursorChange }: MiniCalendarProps) {
+export function MiniCalendar({ cursor, onCursorChange, onMonthChange=onCursorChange, selectedDate=cursor }: MiniCalendarProps) {
   const days = getMonthGrid(cursor)
   const label = cursor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
 
@@ -19,7 +21,7 @@ export function MiniCalendar({ cursor, onCursorChange }: MiniCalendarProps) {
             type="button"
             className="icon-btn"
             aria-label="Previous month"
-            onClick={() => onCursorChange(addMonths(cursor, -1))}
+            onClick={() => onMonthChange(addMonths(cursor, -1))}
           >
             <ChevronIcon />
           </button>
@@ -27,7 +29,7 @@ export function MiniCalendar({ cursor, onCursorChange }: MiniCalendarProps) {
             type="button"
             className="icon-btn"
             aria-label="Next month"
-            onClick={() => onCursorChange(addMonths(cursor, 1))}
+            onClick={() => onMonthChange(addMonths(cursor, 1))}
           >
             <ChevronIcon className="flip" />
           </button>
@@ -41,7 +43,7 @@ export function MiniCalendar({ cursor, onCursorChange }: MiniCalendarProps) {
         ))}
         {days.map((day) => {
           const outside = !isSameMonth(day, cursor)
-          const selected = isSameDay(day, cursor)
+          const selected = isSameDay(day, selectedDate)
           const today = isToday(day)
           return (
             <button
@@ -53,6 +55,8 @@ export function MiniCalendar({ cursor, onCursorChange }: MiniCalendarProps) {
                 selected ? 'is-selected' : '',
                 today ? 'is-today' : '',
               ].join(' ')}
+              aria-label={day.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}
+              aria-pressed={selected}
               onClick={() => onCursorChange(day)}
             >
               {day.getDate()}

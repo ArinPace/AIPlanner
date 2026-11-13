@@ -115,8 +115,8 @@ export function TimeGridView({ onWeekNavigate, weekLayout = 'list', scaleToDurat
     const keepGridPosition = regularWeek && previous?.gridWeek
     if(previous?.key!==key && !keepGridPosition){
       if(mobileWeek){
-        const marker=mobileNowRef.current
-        node.scrollTop=marker?Math.max(0,node.scrollTop+marker.getBoundingClientRect().top-node.getBoundingClientRect().top-node.clientHeight*.25):0
+        const target=dayKey===todayKey?mobileNowRef.current:node.querySelector<HTMLElement>('[data-calendar-day="'+dayKey+'"]')
+        node.scrollTop=target?Math.max(0,node.scrollTop+target.getBoundingClientRect().top-node.getBoundingClientRect().top-(dayKey===todayKey?node.clientHeight*.25:8)):0
       }else{
         const current=new Date(),showNow=containsToday
         const target=showNow?(current.getHours()+current.getMinutes()/60)*hourHeight:8*hourHeight
@@ -173,7 +173,7 @@ export function TimeGridView({ onWeekNavigate, weekLayout = 'list', scaleToDurat
       {mobileWeek && <div className={'mobile-week'+(scaleToDuration?' is-duration-scaled':'')}>
         {days.map(day => {
           const items = withFreeTime(grouped.top.filter(item => clipToDay(item, day)), busyGrouped.top, startOfDay(day), addDays(startOfDay(day),1))
-          return <section className="mobile-week-day" key={day.toISOString()}>
+          return <section className="mobile-week-day" data-calendar-day={toDateInput(day)} key={day.toISOString()}>
             <div className="mobile-week-heading">
               <h3 className={isToday(day) ? 'is-today' : ''}>{day.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</h3>
               <PlanningButton date={toDateInput(day)} intensity={dayIntensity(day)}/>

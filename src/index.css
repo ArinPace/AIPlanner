@@ -2474,3 +2474,42 @@ html, body { touch-action: pan-x pan-y; }
  .mobile-week { padding-bottom: calc(104px + env(safe-area-inset-bottom)); }
  .calendar-main .time-scroll { padding-bottom: calc(104px + env(safe-area-inset-bottom)); scroll-padding-bottom: calc(104px + env(safe-area-inset-bottom)); }
 }
+
+/* Floating workspace dock and centered date selector. */
+.app-header { position: relative; height: auto; min-height: 112px; grid-template-columns: minmax(0,1fr) auto; grid-template-rows: 56px auto; padding: 4px 12px 10px; gap: 4px 8px; }
+.app-header .header-left { grid-column: 1; grid-row: 1; }
+.app-header .header-right { grid-column: 2; grid-row: 1; flex-wrap: nowrap; max-width: none; }
+.app-header .header-center { grid-column: 1 / -1; grid-row: 2; justify-content: flex-start; flex-wrap: wrap; gap: 6px; }
+.app-header:not(.is-calendar) { min-height: 64px; grid-template-rows: 56px; padding-bottom: 4px; }
+.app-header .calendar-navigation { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); background: color-mix(in srgb,var(--text) 7%,var(--panel)); }
+.app-header .calendar-navigation .today-btn { background: color-mix(in srgb,var(--text) 19%,var(--panel)); color: var(--text); min-width: 100px; }
+.header-agent-button { border: 0; background: transparent; border-radius: 14px; padding: 8px 10px; color: var(--muted); font-size: 13px; font-weight: 600; }
+.header-agent-button.is-active { color: var(--blue); background: var(--blue-soft); }
+.bottom-workspace-nav { position: fixed; z-index: 85; left: 20px; bottom: calc(20px + env(safe-area-inset-bottom)); width: min(460px,calc(100vw - 108px)); display: flex; align-items: center; justify-content: space-around; gap: 2px; min-height: 70px; padding: 8px 10px; border-radius: 32px; background: color-mix(in srgb,var(--panel) 94%,transparent); border: 1px solid color-mix(in srgb,var(--text) 13%,transparent); box-shadow: 0 8px 30px #0002; backdrop-filter: blur(18px); }
+.bottom-workspace-nav button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-width: 0; flex: 1; border: 0; padding: 3px 0; background: transparent; color: var(--muted); font-size: 11px; white-space: nowrap; font-weight: 500; }
+.bottom-workspace-nav button.is-active { color: var(--text); }
+.bottom-workspace-nav button.is-active svg { stroke-width: 2; }
+.bottom-workspace-nav button:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; border-radius: 12px; }
+.header-date-picker { position: fixed; top: max(76px,env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); margin: 0; width: min(380px,calc(100vw - 24px)); padding: 14px 10px 10px; max-height: calc(100dvh - 140px); overflow: auto; border: 1px solid var(--line); border-radius: 24px; background: var(--panel); color: var(--text); box-shadow: var(--shadow-lg); }
+.header-date-picker::backdrop { background: #0007; }
+.header-date-picker .mini-cal { margin: 0; padding: 6px 8px; }
+.header-date-picker .mini-cal-head { margin-bottom: 18px; }
+.header-date-picker .mini-cal-day { min-height: 38px; }
+.header-date-picker-actions { display: flex; justify-content: space-between; padding: 12px 14px 2px; }
+@media(max-width:600px) {
+ .app-header .brand,.app-header .user-chip { display: none; }
+ .app-header .header-right { gap: 0; }
+ .app-header .header-right .icon-btn { width: 30px; }
+ .header-agent-button { padding: 8px 5px; font-size: 12px; }
+ .app-header .calendar-navigation .today-btn { min-width: 86px; padding: 0 12px; }
+ .app-header .calendar-navigation .icon-btn { width: 28px; }
+ .bottom-workspace-nav { left: 12px; bottom: calc(16px + env(safe-area-inset-bottom)); width: calc(100vw - 96px); min-height: 64px; padding: 7px 8px; border-radius: 29px; }
+ .main-ai-bubble { right: 12px; width: 64px; height: 64px; }
+ .app-body .sidebar { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
+}
+.files-tab-panel,.agent-tab-panel { padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
+@media(max-width:360px) {
+ .app-header .header-left > .menu-btn { width: 24px; }
+ .app-header .create-btn.mobile-only { width: 36px; height: 36px; }
+ .app-header .calendar-navigation .today-btn { min-width: 76px; }
+}

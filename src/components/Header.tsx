@@ -1,3 +1,5 @@
+import {MiniCalendar} from './MiniCalendar'
+import {isToday} from '../lib/dates'
 import type {useCalendarDisplay} from '../lib/useCalendarDisplay'
 import { useEffect, useRef, useState } from 'react'
 import type { CalendarView } from '../types'
@@ -15,6 +17,7 @@ type HeaderProps = {
   zoom: number
   username: string
   onNavigate: (direction: -1 | 1) => void
+  onDateChange: (date:Date)=>void
   onToday: () => void
   onToggleSidebar: () => void
   onCreate: () => void
@@ -32,12 +35,18 @@ export function Header({
   username,
   onNavigate,
   onToday,
+  onDateChange,
   onToggleSidebar,
   onCreate,
   onVisualZoomChange,
   onLogout,
   calendarDisplay,
 }: HeaderProps) {
+  const pickerRef=useRef<HTMLDialogElement>(null)
+  const dateButton=useRef<HTMLButtonElement>(null)
+  const [pickerMonth,setPickerMonth]=useState(cursor)
+  function openDatePicker(){setPickerMonth(cursor);pickerRef.current?.showModal()}
+  function closeDatePicker(){pickerRef.current?.close();dateButton.current?.focus()}
   const [settingsOpen, setSettingsOpen] = useState(false)
   const settingsRef = useRef<HTMLDivElement>(null)
   useEffect(()=>{const handle=(event:Event)=>{const open=(event as CustomEvent).detail?.open;if(typeof open==='boolean')setSettingsOpen(open)};window.addEventListener('planner-client-settings',handle);return()=>window.removeEventListener('planner-client-settings',handle)},[])
@@ -69,13 +78,13 @@ export function Header({
         </button>
         {tab === 'calendar' && <div className="calendar-navigation">
         <button type="button" className="icon-btn" aria-label="Previous" onClick={() => onNavigate(-1)}><ChevronIcon /></button>
-        <button type="button" className="today-btn" onClick={onToday}>Today</button>
+        <button ref={dateButton} type="button" className="today-btn" aria-label={'Choose date: '+cursor.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})} aria-haspopup="dialog" onClick={openDatePicker}>{isToday(cursor)?'Today':cursor.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</button>
         <button type="button" className="icon-btn" aria-label="Next" onClick={() => onNavigate(1)}><ChevronIcon className="flip" /></button>
         </div>}
       </div>
 
       <div className="header-center">
-        <nav className="workspace-tabs" aria-label="Workspace"><button type="button" aria-current={tab === 'calendar' ? 'page' : undefined} className={tab === 'calendar' ? 'is-active' : ''} onClick={() => onTabChange('calendar')}>Calendar</button><button hidden type="button" aria-current={tab === 'files' ? 'page' : undefined} className={tab === 'files' ? 'is-active' : ''} onClick={() => onTabChange('files')}>Files</button><button type="button" aria-current={tab === 'todo' ? 'page' : undefined} className={tab === 'todo' ? 'is-active' : ''} onClick={() => onTabChange('todo')}>To-do</button><button type="button" aria-current={tab === 'work' ? 'page' : undefined} className={tab === 'work' ? 'is-active' : ''} onClick={() => onTabChange('work')}>Work</button><button hidden={hideAgent} type="button" aria-current={tab === 'agent' ? 'page' : undefined} className={tab === 'agent' ? 'is-active' : ''} onClick={() => onTabChange('agent')}>Agent</button>{<button type="button" aria-current={tab==='screentime'?'page':undefined} className={tab==='screentime'?'is-active':''} onClick={()=>onTabChange('screentime')}>Screen Time</button>}{<button hidden type="button" aria-current={tab === 'chat' ? 'page' : undefined} className={tab === 'chat' ? 'is-active' : ''} onClick={() => onTabChange('chat')}>Chat</button>}</nav>
+
         {tab === 'calendar' && <>
 
         <h1 className="range-title">{formatRangeLabel(cursor, view)}</h1><span className="calendar-timezone" title="America/New_York ? adjusts for daylight saving">New York (ET)</span>
@@ -83,6 +92,7 @@ export function Header({
       </div>
 
       <div className="header-right">
+        {!hideAgent&&<button type="button" className={'header-agent-button'+(tab==='agent'?' is-active':'')} aria-current={tab==='agent'?'page':undefined} onClick={()=>onTabChange('agent')}>Agent</button>}
         <div className="settings-wrap" ref={settingsRef}>
           <button
             type="button"
@@ -107,6 +117,10 @@ export function Header({
           <span>{username}</span>
         </div>
       </div>
+      <dialog ref={pickerRef} className="header-date-picker" aria-label="Choose calendar date" onCancel={event=>{event.preventDefault();closeDatePicker()}} onClick={event=>{if(event.target===pickerRef.current){const rect=pickerRef.current.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)closeDatePicker()}}}>
+        <MiniCalendar cursor={pickerMonth} selectedDate={cursor} onMonthChange={setPickerMonth} onCursorChange={date=>{onDateChange(date);closeDatePicker()}}/>
+        <div className="header-date-picker-actions"><button type="button" className="text-btn" onClick={()=>{onToday();closeDatePicker()}}>Go to today</button><button type="button" className="text-btn" onClick={closeDatePicker}>Close</button></div>
+      </dialog>
     </header>
   )
 }
