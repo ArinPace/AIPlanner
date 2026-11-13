@@ -5,11 +5,11 @@ import {storage} from './mcp-auth.js'
 const bucket='planner-chat-files'
 export async function subscriptionFileAction(username:string,input:Record<string,unknown>){
  if(input.action==='file_start'){
-  const args=z.object({chatId:z.string().uuid(),name:z.string().trim().min(1).max(240),mime:z.string().max(150),size:z.number().int().positive().max(25*1024*1024)}).parse(input)
-  const chat=storage(await db().from('planner_subscription_chats').select('id,archived,deleted_at').eq('username',username).eq('id',args.chatId).maybeSingle())
-  if(!chat||chat.deleted_at||chat.archived)throw new ApiError(404,'Open an active owned chat first.')
+  const args=z.object({chatId:z.string().uuid().optional(),name:z.string().trim().min(1).max(240),mime:z.string().max(150),size:z.number().int().positive().max(25*1024*1024)}).parse(input)
+  if(args.chatId){const chat=storage(await db().from('planner_subscription_chats').select('id,archived,deleted_at').eq('username',username).eq('id',args.chatId).maybeSingle())
+  if(!chat||chat.deleted_at||chat.archived)throw new ApiError(404,'Open an active owned chat first.')}
   const id=randomUUID(),path=createHash('sha256').update(username).digest('hex')+'/'+id
-  storage(await db().from('planner_subscription_files').insert({id,username,chat_id:args.chatId,name:args.name.replace(/[\r\n/\\]/g,'_'),mime:args.mime||'application/octet-stream',size:args.size,storage_path:path,status:'pending'}))
+  storage(await db().from('planner_subscription_files').insert({id,username,chat_id:args.chatId??null,name:args.name.replace(/[\r\n/\\]/g,'_'),mime:args.mime||'application/octet-stream',size:args.size,storage_path:path,status:'pending'}))
   const signed=await db().storage.from(bucket).createSignedUploadUrl(path,{upsert:false})
   if(signed.error)throw new ApiError(502,'Could not prepare this file upload.')
   return json({id,url:signed.data.signedUrl})

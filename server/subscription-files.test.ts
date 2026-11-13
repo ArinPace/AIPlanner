@@ -22,3 +22,15 @@ test('saving a chat attachment to Files requires a complete owned file with matc
   rows=[{id:item.chatFileId,size:123,mime:'text/html',status:'complete'}];await assert.rejects(()=>assertRelayFileReferences('owner',[item]),/not available/)
  }finally{globalThis.fetch=old;for(const k of keys){if(saved[k]===undefined)delete process.env[k];else process.env[k]=saved[k]}}
 })
+
+test('Files uploads need no chat and retain account ownership',async()=>{
+ const old=globalThis.fetch,keys=['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','SUPABASE_SECRET_KEY'],saved=Object.fromEntries(keys.map(k=>[k,process.env[k]]))
+ process.env.SUPABASE_URL='https://file.test';process.env.SUPABASE_SERVICE_ROLE_KEY='test';delete process.env.SUPABASE_SECRET_KEY
+ let inserted=false
+ globalThis.fetch=async(input,init)=>{const r=new Request(input,init),u=new URL(r.url)
+  assert.ok(!u.pathname.includes('planner_subscription_chats'))
+  if(u.pathname.includes('/rest/v1/planner_subscription_files')){const row=await r.json() as {username:string;chat_id:null};assert.equal(row.username,'owner');assert.equal(row.chat_id,null);inserted=true;return new Response(null,{status:201})}
+  assert.ok(u.pathname.includes('/storage/v1/object/upload/sign/'));return Response.json({url:'/object/upload/sign/planner-chat-files/test?token=fixture'})
+ }
+ try{const response=await subscriptionFileAction('owner',{action:'file_start',name:'notes.docx',mime:'application/octet-stream',size:123});assert.equal(response.status,200);assert.ok(inserted)}finally{globalThis.fetch=old;for(const k of keys){if(saved[k]===undefined)delete process.env[k];else process.env[k]=saved[k]}}
+})

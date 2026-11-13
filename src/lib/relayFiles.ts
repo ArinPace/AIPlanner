@@ -9,7 +9,7 @@ export async function prepareRelayFile(file:File):Promise<RelayFile>{
  const data=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>reject(Error('Could not read '+file.name));reader.readAsDataURL(file)})
  return {id:crypto.randomUUID(),name:file.name,mime:file.type||'application/octet-stream',size:file.size,data}
 }
-export async function storeRelayFile(chatId:string,file:RelayFile){
+export async function storeRelayFile(chatId:string|undefined,file:RelayFile){
  if(file.cloudId)return file.cloudId
  const start=await subscriptionChatRequest<{id:string;url:string}>(undefined,{action:'file_start',chatId,name:file.name,mime:file.mime,size:file.size})
  const bytes=await (await fetch(file.data)).blob()
@@ -31,6 +31,6 @@ export async function loadRelayFile(id:string,signal?:AbortSignal){
 }
 export async function shareRelayBlob(blob:Blob,name:string){
  const file=new File([blob],name,{type:blob.type||'application/octet-stream'})
- if(navigator.canShare?.({files:[file]})){await navigator.share({files:[file]});return}
+ if(window.plannerNativeFilePreview&&navigator.canShare?.({files:[file]})){await navigator.share({files:[file]});return}
  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000)
 }
