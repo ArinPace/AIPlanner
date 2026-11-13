@@ -32,6 +32,11 @@ test('MCP exposes discovery and checks write/browser scopes before any storage o
     for(const name of ['planner_calendar_read','planner_files_search','planner_read_file','planner_update_item','planner_memory_read','planner_memory_write'])assert.ok(tools.tools.some(t=>t.name===name))
     for(const [name,args] of [
       ['planner_memory_write',{revision:0,content:'No access'}],
+      ['planner_file_upload_start',{name:'test.docx',mime:'application/octet-stream',size:123}],
+      ['planner_file_upload_finish',{id:'a1111111-1111-4111-8111-111111111111',folderId:null,revision:0}],
+      ['planner_complete_event',{eventId:'event',occurrenceStart:'2037-01-01T12:00:00Z',revision:0}],
+      ['planner_notification_inbox_check',{id:'issue',checked:true}],
+      ['planner_chat_schedule_update',{expectedUpdatedAt:null,enabled:false}],
       ['planner_save_event',{id:'event',revision:0,title:'Changed'}],
       ['planner_update_item',{id:'file',revision:0,name:'Changed'}],
       ['planner_save_note',{folderId:null,name:'No access',content:'text',revision:0}],
@@ -43,6 +48,12 @@ test('MCP exposes discovery and checks write/browser scopes before any storage o
       const denied=await client.callTool({name,arguments:args})
       assert.equal(denied.isError,true);assert.match(JSON.stringify(denied.content),/planner:write/)
     }
+    const overview=await client.callTool({name:'planner_capabilities',arguments:{section:'overview'}})
+    assert.ok(JSON.stringify(overview).length<6000)
+    const filesGuide=await client.callTool({name:'planner_capabilities',arguments:{section:'files'}})
+    assert.match(JSON.stringify(filesGuide),/planner_file_upload_finish/)
+    assert.ok(tools.tools.find(t=>t.name==='planner_file_download')?.annotations?.readOnlyHint)
+    assert.equal(tools.tools.find(t=>t.name==='planner_delete_events')?.annotations?.destructiveHint,true)
     const result = await client.callTool({name:'planner_register_chat',arguments:{title:'Daily updates',url:'https://chatgpt.com/c/6ab5101f-2f6c-83ea-9164-7380356691a5'}})
     assert.equal(result.isError,true)
     assert.match(JSON.stringify(result.content),/planner:write/)

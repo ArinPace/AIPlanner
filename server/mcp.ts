@@ -1,3 +1,4 @@
+import {registerMcpFileTools} from './mcp-files.js'
 import {registerEventChecklistTools} from './event-checklist.js'
 import {PDF_MAX_BYTES} from '../src/lib/files.js'
 import {plannerToolError} from './tool-errors.js'
@@ -57,7 +58,7 @@ async function saveFiles(username: string, state: FilesState, revision: number, 
 export function createPlannerMcp(username: string, scopes: string[]) {
   const server = new McpServer({name:'ai-planner',version:'1.1.0'},{instructions:instructions+' Read planner_capabilities for the complete current app guide, tool map and limitations. planner_bulk_update_items supports atomic multi-item edits; planner_delete_events and planner_delete_tags handle explicitly requested calendar removal; planner_chats_read/planner_chat_messages/planner_manage_chats provide agent chat management. Always read back saved changes.'})
   function add(name: string, description: string, schema: z.ZodRawShape, scope: string, readOnly: boolean, execute: (args: any)=>Promise<unknown>) {
-    server.registerTool(name,{description,inputSchema:schema,annotations:{readOnlyHint:readOnly,destructiveHint:false,idempotentHint:readOnly,openWorldHint:name.startsWith('browser_')},_meta:{securitySchemes:[{type:'oauth2',scopes:[scope]}]}},async args=>{
+    server.registerTool(name,{description,inputSchema:schema,annotations:{readOnlyHint:readOnly,destructiveHint:!readOnly,idempotentHint:readOnly,openWorldHint:name.startsWith('browser_')},_meta:{securitySchemes:[{type:'oauth2',scopes:[scope]}]}},async args=>{
       if (!scopes.includes(scope)) return {isError:true,content:[{type:'text',text:`Reconnect the planner with ${scope} permission.`}],_meta:{'mcp/www_authenticate':[`Bearer resource_metadata="${MCP_ORIGIN}/.well-known/oauth-protected-resource", scope="${scope}"`]}}
       try { if(['planner_save_event','planner_restore_event','planner_delete_events','planner_save_tag','planner_delete_tags','planner_apply_updates','google_calendar_save_event'].includes(name)|| (name==='planner_task_feedback'&&args.replan!==false)||(['planner_task_save','planner_planning_update'].includes(name)&&args.replan!==false)||(name==='planner_replan'&&args.preview!==true))await requireNoWidgetDraft(username); if(['planner_save_event','planner_restore_event','planner_delete_events','planner_save_tag','planner_delete_tags','planner_apply_updates','google_calendar_save_event','planner_calendar_stage_edit','planner_calendar_stage_publish'].includes(name))await requireCalendarStarted(username);const result = await execute(args); return {content:[{type:'text',text:JSON.stringify(result)}],structuredContent:{result}} }
       catch (error) { console.error('Planner MCP tool failed',{tool:name,type:error instanceof Error?error.name:'unknown'}); return {isError:true,content:[{type:'text',text:plannerToolError(error)}]} }
@@ -70,6 +71,7 @@ export function createPlannerMcp(username: string, scopes: string[]) {
   add('planner_tutor_sync','Reconcile Tutor chats with active subject folders. Creates chats for new folder IDs and archives finished/moved subjects while retaining their history. Never silently restores deleted or manually archived chats. A missing Subjects root is reported, not treated as a completed term.',{},'planner:write',false,async()=> (await import('./vm-tutor.js')).syncTutorChats(username))
   add('planner_subject_rollover_read','Read the actual next one-time subject turnover, its official date evidence and version. This is independent of regular daily reviews.',{},'planner:read',true,async()=> (await import('./subject-rollover.js')).readSubjectRollover(username))
   add('planner_subject_rollover_schedule','Book the next one-time subject turnover after researching official term/course dates. Always replace it with the following turnover or an evidence-based retry during each execution. Pass runAt null only when the user wants to disable it. Preserves daily review times.',{expectedRevision:z.number().int().nonnegative(),runAt:iso.nullable(),basis:z.string().min(1).max(4000),sources:z.array(z.string().url()).min(1).max(10)},'planner:write',false,async args=> (await import('./subject-rollover.js')).scheduleSubjectRollover(username,args))
+  registerMcpFileTools(add,username)
   registerPlannerControls(add,username)
   registerAppSettingsTools(add,username)
   registerWhoopReviewTools(add,username)
@@ -96,7 +98,7 @@ export function createPlannerMcp(username: string, scopes: string[]) {
     const row=await filesRow(username)
     return {revision:row.revision,...searchFiles(row.state,args)}
   })
-  add('planner_read_file','Read any internal Planner note, saved link or uploaded PDF by ID. Notes support character pagination; PDFs support page pagination. Links return their URL, not fetched website content. PDF extraction explicitly reports scanned/empty pages.',{id,offset:z.number().int().nonnegative().optional(),limit:z.number().int().min(1).max(50000).optional(),pageStart:z.number().int().min(1).optional(),pageCount:z.number().int().min(1).max(11).optional(),includeRichText:z.boolean().optional()},'planner:read',true,async args=>{
+  add('planner_read_file','Read any internal Planner note, saved link or uploaded PDF or binary attachment metadata by ID. Use planner_file_download for original DOCX/XLSX/PPTX/ZIP/image bytes; parse them with your own file tools. Notes support character pagination; PDFs support page pagination. Links return their URL, not fetched website content. PDF extraction explicitly reports scanned/empty pages.',{id,offset:z.number().int().nonnegative().optional(),limit:z.number().int().min(1).max(50000).optional(),pageStart:z.number().int().min(1).optional(),pageCount:z.number().int().min(1).max(11).optional(),includeRichText:z.boolean().optional()},'planner:read',true,async args=>{
     const row=await readFilesItemById(username,args.id),file=row.section==='files'?row.item as any:null
     if(file) {
       const offset=args.offset || 0,limit=args.limit || 20000

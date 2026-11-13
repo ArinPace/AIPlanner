@@ -1,3 +1,4 @@
+import {applyFilesPatch} from '../src/lib/filesTransfer.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {Client} from '@modelcontextprotocol/sdk/client/index.js'
@@ -12,11 +13,11 @@ test('MCP removal and restore use the same owner-scoped atomic 30-day Bin as the
  let bin:any[]=[]
  globalThis.fetch=async(input,init)=>{
   const request=new Request(input,init),url=new URL(request.url);assert.equal(url.hostname,'bin-control.test')
-  if(url.pathname.endsWith('/rpc/planner_files_bin_commit')){
+  if(url.pathname.endsWith('/rpc/planner_workspace_delta_commit')){
    const args=await request.json() as any;assert.equal(args.p_username,'arin');assert.equal(args.p_revision,row.revision)
-   row={state:args.p_state,revision:row.revision+1}
-   if(args.p_add)bin.push({id:'12300000-0000-4000-8000-000000000001',names:args.p_add.names,snapshot:args.p_add.snapshot,item_count:args.p_add.itemCount,expires_at:'2099-01-01T00:00:00Z'})
-   bin=bin.filter(entry=>!args.p_remove.includes(entry.id))
+   row={state:applyFilesPatch(row.state,{upserts:args.p_upserts,removeIds:args.p_remove_ids}),revision:row.revision+1}
+   if(args.p_bin_add)bin.push({id:'12300000-0000-4000-8000-000000000001',names:args.p_bin_add.names,snapshot:args.p_bin_add.snapshot,item_count:args.p_bin_add.itemCount,expires_at:'2099-01-01T00:00:00Z'})
+   bin=bin.filter(entry=>!args.p_bin_remove.includes(entry.id))
    return Response.json({revision:row.revision})
   }
   assert.equal(url.searchParams.get('username'),'eq.arin')
@@ -34,6 +35,6 @@ test('MCP removal and restore use the same owner-scoped atomic 30-day Bin as the
   const stale=await client.callTool({name:'planner_restore_items',arguments:{ids:[bin[0].id],revision:1}})
   assert.equal(stale.isError,true);assert.equal(bin.length,1)
   const restore=await client.callTool({name:'planner_restore_items',arguments:{ids:[bin[0].id],revision:2}})
-  assert.ok(!restore.isError);assert.deepEqual(row.state,before);assert.equal(bin.length,0)
+  assert.ok(!restore.isError);assert.deepEqual(JSON.parse(JSON.stringify(row.state)),before);assert.equal(bin.length,0)
  }finally{await client.close();await server.close();globalThis.fetch=fetchBefore;for(const key of keys){if(env[key]===undefined)delete process.env[key];else process.env[key]=env[key]}}
 })
