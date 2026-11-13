@@ -23,3 +23,14 @@ export async function downloadRelayFile(id:string){
  const response=await fetch(result.url);if(!response.ok)throw Error('File download failed.')
  const url=URL.createObjectURL(await response.blob()),a=document.createElement('a');a.href=url;a.download=result.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000)
 }
+export async function loadRelayFile(id:string,signal?:AbortSignal){
+ const meta=await subscriptionChatRequest<{url:string;name:string}>(undefined,{action:'file_download',id})
+ const response=await fetch(meta.url,{signal});if(!response.ok)throw Error('File download failed.')
+ const blob=await response.blob();if(!blob.size||blob.size>RELAY_FILE_MAX)throw Error('This file exceeds the preview limit.')
+ return {name:meta.name,blob}
+}
+export async function shareRelayBlob(blob:Blob,name:string){
+ const file=new File([blob],name,{type:blob.type||'application/octet-stream'})
+ if(navigator.canShare?.({files:[file]})){await navigator.share({files:[file]});return}
+ const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000)
+}

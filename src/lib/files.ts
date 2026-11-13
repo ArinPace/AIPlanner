@@ -42,7 +42,9 @@ export interface PlannerDocument {
   id: string
   folderId: string | null
   name: string
-  kind: 'pdf' | 'link'
+  kind: 'pdf' | 'link' | 'attachment'
+  chatFileId?: string
+  mime?: string
   url?: string
   size?: number
   updatedAt: string
@@ -141,6 +143,8 @@ export function validateFilesState(value: unknown, maxBytes = FILES_ACCOUNT_MAX_
       let url: URL
       try { url = new URL(document.url ?? '') } catch { throw new Error('Enter a valid web link starting with https:// or http://.') }
       if (!['https:', 'http:'].includes(url.protocol) || document.url!.length > 4000 || url.username || url.password) throw new Error('Use a web link starting with https:// or http://, without embedded credentials.')
+    } else if (document.kind === 'attachment') {
+      if(!/^[0-9a-f-]{36}$/i.test(document.chatFileId||'')||!Number.isInteger(document.size)||document.size!<1||document.size!>25*1024*1024||typeof document.mime!=='string'||document.mime.length>150)throw new Error('Invalid chat attachment.')
     } else if (document.kind === 'pdf') {
       if (!/^[0-9a-f-]{36}$/.test(document.id) || !Number.isInteger(document.size) || document.size! < 1 || document.size! > PDF_MAX_BYTES) throw new Error('Invalid PDF document.')
     } else throw new Error('Unsupported document type.')

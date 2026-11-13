@@ -34,7 +34,7 @@ function usePdf(id: string, enabled: boolean) {
   return {pdf, error}
 }
 
-function PdfPage({pdf, pageNumber, width, onError}: {
+export function PdfPage({pdf, pageNumber, width, onError}: {
   pdf: PDFDocumentProxy
   pageNumber: number
   width: number

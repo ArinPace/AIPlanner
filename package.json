@@ -26,6 +26,7 @@
     "@tiptap/starter-kit": "^3.32.0",
     "@vercel/oidc": "3.2.0",
     "ai": "7.0.138",
+    "fflate": "^0.8.3",
     "jose": "6.2.12",
     "pdfjs-dist": "6.4.299",
     "playwright-core": "1.64.0",

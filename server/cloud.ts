@@ -233,6 +233,7 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
         const uploads = dataResult(await db().from('planner_uploads').select('id,size,status').eq('username', username).in('id', pdfs.map((pdf) => pdf.id)))
         if (pdfs.some((pdf) => !uploads.some((upload) => upload.id === pdf.id && upload.status === 'complete' && upload.size === pdf.size))) throw new ApiError(400, 'A PDF is not available in this account. Reload your files.')
       }
+      await (await import('./subscription-files.js')).assertRelayFileReferences(username,(input.documents??[]).filter(item=>item.kind==='attachment'))
       const file=method==='PATCH'?singleFilePatch(payload as FilesPatch,input as FilesState):null
       const saved = await preserveRemovedFiles(username,input,previous) || (file?await commitFileItem(username,previous.revision!,file):await setFiles(username, input, previous))
       await cleanupUploads(username)

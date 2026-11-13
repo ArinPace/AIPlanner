@@ -34,3 +34,8 @@ export async function subscriptionFileAction(username:string,input:Record<string
  }
  throw new ApiError(400,'Unsupported file action.')
 }
+export async function assertRelayFileReferences(username:string,attachments:{chatFileId?:string;size?:number;mime?:string}[]){
+ if(!attachments.length)return
+ const owned=storage(await db().from('planner_subscription_files').select('id,size,status,mime').eq('username',username).in('id',[...new Set(attachments.map(item=>item.chatFileId!))]))
+ if(attachments.some(item=>!owned.some(file=>file.id===item.chatFileId&&file.status==='complete'&&file.size===item.size&&file.mime===item.mime)))throw new ApiError(400,'An attachment is not available in this account.')
+}

@@ -1,5 +1,5 @@
 type NativeMessage={action:string;[key:string]:unknown}
-declare global {interface Window {plannerNativeScreenTime?:boolean;plannerNativeChatGPTPortal?:boolean;plannerNativeChatGPTRelayVersion?:number;webkit?:{messageHandlers?:{plannerNative?:{postMessage:(message:NativeMessage)=>Promise<unknown>}}}}}
+declare global {interface Window {plannerNativeFilePreview?:boolean;plannerNativeScreenTime?:boolean;plannerNativeChatGPTPortal?:boolean;plannerNativeChatGPTRelayVersion?:number;webkit?:{messageHandlers?:{plannerNative?:{postMessage:(message:NativeMessage)=>Promise<unknown>}}}}}
 export function isIPhoneApp(){return Boolean(window.webkit?.messageHandlers?.plannerNative)}
 export function supportsScreenTime(){return isIPhoneApp() && window.plannerNativeScreenTime === true}
 export async function nativeRequest<T=unknown>(message:NativeMessage):Promise<T>{
