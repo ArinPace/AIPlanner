@@ -2513,3 +2513,7 @@ html, body { touch-action: pan-x pan-y; }
  .app-header .create-btn.mobile-only { width: 36px; height: 36px; }
  .app-header .calendar-navigation .today-btn { min-width: 76px; }
 }
+
+@media(max-width:600px) {
+ .bottom-workspace-nav,.main-ai-bubble { bottom: max(6px,env(safe-area-inset-bottom)); }
+}
