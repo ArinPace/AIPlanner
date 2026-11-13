@@ -131,7 +131,7 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
  async function saveReply(value:Recovery){
   while(value.outputs?.length){
    const output=value.outputs[0];setRelayPhase('Downloading '+output.name+'…')
-   const file=await nativeRequest<Omit<RelayFile,'id'>>({action:'chatGPTRelayDownload',account:username,key:output.key})
+   const file=await nativeRequest<Omit<RelayFile,'id'>>({action:'chatGPTRelayDownload',account:username,key:output.key,url:value.providerUrl,reply:value.reply})
    const received={...file,id:crypto.randomUUID()},id=await storeRelayFile(value.chatId,received)
    value={...value,reply:value.reply+'\n\n'+relayFileLink(received.name,id),outputs:value.outputs.slice(1)}
    setRecovery(value);try{localStorage.setItem(recoveryKey,JSON.stringify(value))}catch{/* Keep in-memory recovery. */}

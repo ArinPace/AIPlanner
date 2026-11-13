@@ -155,6 +155,14 @@ final class PlannerUITests: XCTestCase {
         }
         throw NSError(domain:"PinnedChatSetupTimeout",code:1)
     }
+    func testRetrySyllabusFileTransfer() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
+        let app=XCUIApplication();app.launchArguments=["-UITestSignedRelayDiagnostics"];app.launch()
+        let planner=app.webViews["plannerWebView"];XCTAssertTrue(planner.buttons["Chat"].waitForExistence(timeout:30));planner.buttons["Chat"].tap()
+        let retry=planner.buttons["Retry file transfer"];XCTAssertTrue(retry.waitForExistence(timeout:30));retry.tap()
+        let file=planner.links.matching(NSPredicate(format:"label CONTAINS %@","Statistics-Syllabus")).firstMatch
+        XCTAssertTrue(file.waitForExistence(timeout:120))
+    }
     func testCancelBrightspaceSMSChoice() throws {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
         guard let url=ProcessInfo.processInfo.environment["PLANNER_TEST_CHAT_URL"],url.contains("/g/"),url.contains("/c/") else {throw XCTSkip("Supply the existing authorized Test sign-in conversation.")}
@@ -180,7 +188,7 @@ final class PlannerUITests: XCTestCase {
         box.tap()
         let draft=(box.value as? String) ?? ""
         if !draft.isEmpty && draft != "Message your assistant…" {
-            guard ProcessInfo.processInfo.environment["PLANNER_TEST_REPLACE_DRAFT"] == "1", (draft.hasPrefix("For the Brightspace sign-in") || draft.hasPrefix("Switch the pending NYU Duo sign-in") || draft.hasPrefix("Resume the existing NYU Brightspace browser sign-in.")) else {throw NSError(domain:"UnrelatedPlannerDraft",code:1)}
+            guard ProcessInfo.processInfo.environment["PLANNER_TEST_REPLACE_DRAFT"] == "1", (draft.hasPrefix("Return the already downloaded") || draft.hasPrefix("For the Brightspace sign-in") || draft.hasPrefix("Switch the pending NYU Duo sign-in") || draft.hasPrefix("Resume the existing NYU Brightspace browser sign-in.")) else {throw NSError(domain:"UnrelatedPlannerDraft",code:1)}
             box.press(forDuration:1)
             let selectAll=app.menuItems["Select All"].firstMatch
             if selectAll.waitForExistence(timeout:2){selectAll.tap()}else{let button=app.buttons["Select All"].firstMatch;XCTAssertTrue(button.waitForExistence(timeout:2));button.tap()}

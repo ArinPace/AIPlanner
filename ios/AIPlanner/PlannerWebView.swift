@@ -279,7 +279,7 @@ struct PlannerWebView: UIViewRepresentable {
                         if action == "chatGPTRelayDownload" {
                             guard let key = body["key"] as? String, UUID(uuidString: key) != nil else { throw NativeError("Choose a response file.") }
                             relayOperationActive = true; attachRelayForRun(); defer { relayOperationActive = false; parkRelay() }
-                            replyHandler(try await controller.downloadResponse(key: key), nil); return
+                            replyHandler(try await controller.downloadResponse(key: key, providerURL: body["url"] as? String, expectedReply: body["reply"] as? String), nil); return
                         }
                         if action == "chatGPTRelaySend" {
                             guard let text = body["text"] as? String, let chatId = body["chatId"] as? String, UUID(uuidString: chatId) != nil, !text.isEmpty, text.count <= 100000 else { throw NativeError("Choose a chat and enter a message.") }
@@ -531,6 +531,7 @@ struct PlannerWebView: UIViewRepresentable {
     var downloadMimes: [ObjectIdentifier: String] = [:]
     var downloadResult: [String: Any]?
     var downloadFailure: String?
+    private var responseDownloadPending = false
     var documentCommitted = false
     var webFailure: String?
     var recoveryCount = 0
@@ -970,14 +971,26 @@ return {sliders:ranges,summary:(trigger()?.innerText||'ChatGPT model settings').
     const secureForm=buttons.some(n=>/^(Take over to sign in|Sign in on web page|Return control|I.m done|Use saved account|Other sign-in options)$/i.test(label(n)))||[...document.querySelectorAll('form,[role="dialog"]')].filter(visible).some(n=>/sign in to [a-z0-9.-]+[.][a-z]{2,}/i.test(n.innerText));
     const approval=[...document.querySelectorAll('[role="dialog"],[role="alertdialog"]')].filter(visible).some(n=>/website|browser|access to|visit site/i.test(n.innerText)&&[...n.querySelectorAll('button')].some(b=>/^(Allow|Approve|Continue)$/i.test(label(b))));
     const interaction=secureForm||approval;
+    // Keep the submitted turn mounted in ChatGPT's virtualized transcript.
+    if(window.__plannerPendingPrompt)buttons.find(n=>/^Scroll to bottom$/i.test(label(n)))?.click();
     const guest=!secureForm&&buttons.some(n=>/^(Log in|Sign in)$/i.test(label(n)));
     const running=buttons.some(n=>/^(Stop|Stop generating|Stop streaming|Pause|Pause task|Stop task)$/i.test(label(n))||n.dataset.testid==='stop-button');
     let raw=[...document.querySelectorAll('[data-message-author-role="assistant"],[data-markdown-text-style="assistant-message"]')];
     if(!raw.length)raw=[...document.querySelectorAll('button[aria-label="Copy response"]')].map(button=>button.closest('li')).filter(Boolean);
     const replies=raw.filter(n=>!raw.some(other=>other!==n&&other.contains(n)));
-    const last=replies.at(-1);let turn=last?.closest('[data-testid^="conversation-turn"],article,li')||last;
-    const completionSelector='[data-testid="copy-turn-action-button"],button[aria-label="Copy response"],button[aria-label="Copy message"],button[aria-label="Copy"],button[aria-label="Good response"],button[aria-label="Read aloud"]';
-    for(let node=last,depth=0;node&&depth<18;node=node.parentElement,depth++){
+    const last=replies.at(-1);const workTurn=last?.closest('[data-turn-key]');let turn=last?.closest('[data-testid^="conversation-turn"],article,li')||last;
+    // Work virtualizes older turns. Never attribute a newly mounted historical
+    // response to the current request merely because its text/count changed.
+    const normalized=value=>(value||'').replace(/\\s+/g,' ').trim();
+    const expected=normalized(window.__plannerPendingPrompt);
+    let user=workTurn?.querySelector('[data-content-search-unit-key$=":user"]');
+    if(!user&&last)user=[...document.querySelectorAll('[data-message-author-role="user"]')].filter(n=>n.compareDocumentPosition(last)&Node.DOCUMENT_POSITION_FOLLOWING).at(-1);
+    const attributed=!expected||!!user&&normalized(user.textContent).includes(expected);
+    if(expected&&!attributed&&user){const expand=[...user.querySelectorAll('button')].find(n=>/^Show more$/i.test(label(n)));expand?.click()}
+    const completionSelector='[data-testid="copy-turn-action-button"],button[aria-label="Copy response"],button[aria-label="Good response"],button[aria-label="Read aloud"]';
+    const workFinal=last?.closest('[data-local-conversation-final-assistant="true"]');
+    if(workTurn)turn=workTurn;
+    for(let node=last,depth=0;!workTurn&&node&&depth<18;node=node.parentElement,depth++){
       const other=[...node.querySelectorAll('[data-message-author-role="assistant"],[data-markdown-text-style="assistant-message"]')].some(n=>n!==last&&!n.contains(last)&&!last.contains(n));
       if(other)break;if(node.querySelector(completionSelector)){turn=node;break}
     }
@@ -990,9 +1003,9 @@ return {sliders:ranges,summary:(trigger()?.innerText||'ChatGPT model settings').
       const nl=String.fromCharCode(10);target.replaceWith(document.createTextNode(nl+(marked?text:'PLANNER_TOOL_REQUEST'+nl+text+nl+'END_PLANNER_TOOL_REQUEST')+nl));
     });
     const response=(clean?(clean.innerText||clean.textContent||'').trim():'').replace(/(PLANNER_TOOL_REQUEST\\s*)(?:json|planner-tools)\\s*(?=[{])/i,'$1');
-    const outputs=turn?[...turn.querySelectorAll('a[download],a[href^="sandbox:"],a[href*="/backend-api/files/"],a[href*="/backend-api/estuary/content"],button[aria-label^="Download "],button[aria-label="Save image"],[data-file-reference="true"][role="button"][aria-label^="Download "]')].map(node=>{node.dataset.plannerDownloadId ||= crypto.randomUUID();return {key:node.dataset.plannerDownloadId,name:(node.getAttribute('download')||node.innerText||node.getAttribute('aria-label')||'Download file').trim().slice(0,240)}}):[];
-    const replyKey=last?.getAttribute('data-message-id')||last?.closest('[data-message-id]')?.getAttribute('data-message-id')||turn?.id||turn?.getAttribute('data-testid')||'';
-    return {files:outputs,ready:!!box,needsLogin:(!box&&guest)||(!secureForm&&!!document.querySelector('input[type="password"]')),guest,interaction,running,count:replies.length,replyKey,text:response,final:!!turn?.querySelector(completionSelector),url:location.href};})()
+    const outputs=turn?[...turn.querySelectorAll('a[download],a[href^="sandbox:"],a[href*="/backend-api/files/"],a[href*="/backend-api/estuary/content"],button[aria-label^="Download "],button[aria-label="Save image"],[data-file-reference="true"][role="button"][aria-label^="Download "]')].map((node,index)=>{node.dataset.plannerDownloadId ||= (last?.closest('[data-chatgpt-selection-message-id]')?.getAttribute('data-chatgpt-selection-message-id')||last?.getAttribute('data-message-id')||turn?.id||crypto.randomUUID())+':'+index;return {key:node.dataset.plannerDownloadId,name:(node.getAttribute('download')||node.innerText||node.getAttribute('aria-label')||'Download file').trim().slice(0,240)}}):[];
+    const replyKey=last?.closest('[data-chatgpt-selection-message-id]')?.getAttribute('data-chatgpt-selection-message-id')||last?.getAttribute('data-message-id')||last?.closest('[data-message-id]')?.getAttribute('data-message-id')||turn?.id||turn?.getAttribute('data-testid')||'';
+    return {attributed,files:outputs,ready:!!box,needsLogin:(!box&&guest)||(!secureForm&&!!document.querySelector('input[type="password"]')),guest,interaction,running,count:replies.length,replyKey,text:response,final:workTurn?!!workFinal&&!!workTurn.querySelector('[data-talvt-turn-state="complete"]'):!!turn?.querySelector(completionSelector),url:location.href};})()
     """ }
     private func snapshot() async throws -> [String: Any] {
         loadViewIfNeeded()
@@ -1031,11 +1044,35 @@ return {sliders:ranges,summary:(trigger()?.innerText||'ChatGPT model settings').
         box.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'deleteContentBackward'}));}finally{window.__plannerRelayEditing=false}window.__plannerHumanDraft=false;await new Promise(r=>setTimeout(r,300));if(window.__plannerComposerText(box).trim())throw Error('Clearing the draft was not confirmed. Open the session to inspect it.');return true;
         """, arguments: ["expected": expected], in: nil, contentWorld: .page)
     }
-    func downloadResponse(key: String) async throws -> [String: Any] {
+    func downloadResponse(key: String, providerURL: String? = nil, expectedReply: String? = nil) async throws -> [String: Any] {
+        if let target = canonicalConversation(providerURL) {
+            guard let saved = UserDefaults.standard.string(forKey: "chatgpt-project:" + account + ":Test"), let project = URL(string: saved), Self.belongsToProject(target, project: project) else { throw NativeError("The response file must belong to this Test conversation.") }
+            if canonicalConversation(browser.url?.absoluteString) != target {
+                documentCommitted = false; browser.load(URLRequest(url: target, timeoutInterval: 30))
+                for _ in 0..<60 {
+                    try await Task.sleep(for: .milliseconds(500))
+                    if documentCommitted && !browser.isLoading && canonicalConversation(browser.url?.absoluteString) == target { break }
+                }
+            }
+            guard documentCommitted, canonicalConversation(browser.url?.absoluteString) == target else { throw NativeError("The response conversation did not load. Retry the file transfer.") }
+        }
+        var state: [String: Any] = [:]
+        for _ in 0..<60 {
+            _ = try? await browser.evaluateJavaScript("[...document.querySelectorAll('button')].find(n=>(n.getAttribute('aria-label')||n.innerText||'').trim()==='Scroll to bottom')?.click()")
+            state = try await snapshot()
+            if !(state["files"] as? [[String: Any]] ?? []).isEmpty { break }
+            try await Task.sleep(for: .milliseconds(500))
+        }
+        var resolvedKey = key
+        let outputs = state["files"] as? [[String: Any]] ?? []
+        // Upgrade a pre-stable-key recovery only when its exact response text
+        // matches and this same conversation exposes exactly one attachment.
+        if !outputs.contains(where: { $0["key"] as? String == key }), outputs.count == 1, let expectedReply, !expectedReply.isEmpty, state["text"] as? String == expectedReply, let current = outputs.first?["key"] as? String { resolvedKey = current }
         guard browser.url?.host == "chatgpt.com" else { throw NativeError("Load the ChatGPT conversation first.") }
         downloadResult = nil; downloadFailure = nil
+        responseDownloadPending = true; defer { responseDownloadPending = false }
         setInteractive(true); defer { setInteractive(false) }
-        _ = try await browser.callAsyncJavaScript("const node=[...document.querySelectorAll('[data-planner-download-id]')].find(n=>n.dataset.plannerDownloadId===key);if(!node)throw Error('The response file is no longer available.');if(node.tagName==='A'&&!node.hasAttribute('download'))node.setAttribute('download','');node.click();return true;", arguments: ["key": key], in: nil, contentWorld: .page)
+        _ = try await browser.callAsyncJavaScript("const node=[...document.querySelectorAll('[data-planner-download-id]')].find(n=>n.dataset.plannerDownloadId===key);if(!node)throw Error('The response file is no longer available.');if(node.tagName==='A'&&!node.hasAttribute('download'))node.setAttribute('download','');node.click();return true;", arguments: ["key": resolvedKey], in: nil, contentWorld: .page)
         for _ in 0..<120 {
             try await Task.sleep(for: .milliseconds(500))
             if let result = downloadResult {
@@ -1049,7 +1086,12 @@ return {sliders:ranges,summary:(trigger()?.innerText||'ChatGPT model settings').
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) { decisionHandler(navigationAction.shouldPerformDownload ? .download : .allow) }
     func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
         let attachment = (navigationResponse.response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Disposition")?.lowercased().contains("attachment") == true
-        decisionHandler(attachment || !navigationResponse.canShowMIMEType ? .download : .allow)
+        // ChatGPT's file cards can open an inline PDF/Office resource in a
+        // new tab rather than an anchor with download. Capture that main-frame
+        // resource while an explicit relay download is pending.
+        let mime = navigationResponse.response.mimeType?.lowercased() ?? ""
+        let inlineFile = responseDownloadPending && navigationResponse.isForMainFrame && !mime.isEmpty && !["text/html", "application/xhtml+xml", "application/json"].contains(mime)
+        decisionHandler(attachment || inlineFile || !navigationResponse.canShowMIMEType ? .download : .allow)
     }
     func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) { download.delegate = self }
     func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) { download.delegate = self }
@@ -1212,7 +1254,7 @@ return {sliders:ranges,summary:(trigger()?.innerText||'ChatGPT model settings').
         }
         if(!send)throw Error('ChatGPT Send button is unavailable. Draft retained in the session.');
         if(projectPath && !inProject())throw Error('ChatGPT left the Test project. Draft retained; no message was sent.');
-        send.click();await new Promise(resolve=>setTimeout(resolve,500));
+        window.__plannerPendingPrompt=text;send.click();await new Promise(resolve=>setTimeout(resolve,500));
         const working=[...document.querySelectorAll('button')].some(n=>n.getClientRects().length&&/^(Stop|Stop generating|Stop streaming|Pause task|Stop task)$/i.test(n.getAttribute('aria-label')||n.innerText||''));
         if(window.__plannerComposerText(box).trim()===text.trim()&&!working)throw Error('ChatGPT did not confirm submission. The draft remains in its session; inspect it before retrying.');
         return true;
@@ -1262,7 +1304,7 @@ return {sliders:ranges,summary:(trigger()?.innerText||'ChatGPT model settings').
             pendingURL = parsed.path
         }
         let replyKey = state["replyKey"] as? String ?? "", replyText = state["text"] as? String ?? ""
-        let newReply = (state["count"] as? Int ?? 0) > baseline || (!replyKey.isEmpty && !baselineReplyKey.isEmpty && replyKey != baselineReplyKey) || (!replyText.isEmpty && !baselineReplyText.isEmpty && replyText != baselineReplyText)
+        let newReply = state["attributed"] as? Bool != false && ((state["count"] as? Int ?? 0) > baseline || (!replyKey.isEmpty && !baselineReplyKey.isEmpty && replyKey != baselineReplyKey) || (!replyText.isEmpty && !baselineReplyText.isEmpty && replyText != baselineReplyText))
         if !newReply { state["text"] = "" }
         if let parsed = canonicalConversation(state["url"] as? String) { let canonical = "https://chatgpt.com" + parsed.path; state["url"] = canonical; UserDefaults.standard.set(canonical, forKey: "chatgpt-conversation:" + account + ":" + chatId) } else { state.removeValue(forKey: "url") }
         if state["interaction"] as? Bool == true { state["phase"]="interaction";state["message"]="Continue in ChatGPT to approve access or sign in securely.";return state }
