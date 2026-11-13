@@ -64,7 +64,7 @@ export function Header({
   }, [settingsOpen])
 
   return (
-    <header className={'app-header'+(tab === 'calendar' ? ' is-calendar' : '')}>
+    <header hidden={tab !== 'calendar'} className={'app-header'+(tab === 'calendar' ? ' is-calendar' : '')}>
       <div className="header-left">
         <button type="button" hidden={tab==='todo'||tab==='work'||tab==='screentime'} className="icon-btn menu-btn" title="Show or hide sidebar" aria-label="Toggle sidebar" onClick={onToggleSidebar}>
           <MenuIcon />
