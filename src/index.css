@@ -2517,3 +2517,14 @@ html, body { touch-action: pan-x pan-y; }
 @media(max-width:600px) {
  .bottom-workspace-nav,.main-ai-bubble { bottom: max(6px,env(safe-area-inset-bottom)); }
 }
+
+/* Checklist tabs start with their content, without a redundant note heading/footer. */
+.apple-note-toolbar { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); column-gap: 4px; }
+.apple-toolbar-leading { grid-column: 1; grid-row: 1; justify-self: start; }
+.apple-format-tools { grid-column: 2; grid-row: 1; justify-self: center; }
+.apple-toolbar-trailing { grid-column: 3; grid-row: 1; justify-self: end; }
+.standalone-todo-editor .apple-note-document { padding-top: 4px; }
+.standalone-todo-editor .apple-note-document > :first-child { margin-top: 0; }
+.standalone-todo-editor .apple-editor-shell[data-body-has-title=true] .apple-note-document > :first-child { display: none; }
+.files-tab-panel:has(.standalone-todo-editor) { padding-bottom: 0; }
+.standalone-todo-editor .apple-note-document { padding-bottom: calc(120px + env(safe-area-inset-bottom)); }
