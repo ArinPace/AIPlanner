@@ -934,17 +934,18 @@ const pause=ms=>new Promise(r=>setTimeout(r,ms));
 const escape=()=>{for(const type of ['keydown','keyup'])document.activeElement?.dispatchEvent(new KeyboardEvent(type,{key:'Escape',code:'Escape',bubbles:true}))};
 if(location.origin!=='https://chatgpt.com')throw Error('Load the signed-in ChatGPT session first.');
 const trigger=()=>[...document.querySelectorAll('button')].find(n=>visible(n)&&/^Select ChatGPT model$/i.test(n.getAttribute('aria-label')||''));
+const modelLabelForChoice=n=>/^(?:GPT[- ]|o[134](?:[- ]|$)|ChatGPT)/i.test(label(n));
 const menus=()=>[...document.querySelectorAll('[role="menu"],[role="listbox"]')].filter(visible);
 const sliders=()=>menus().flatMap(n=>[...n.querySelectorAll('[role="slider"],input[type="range"]')]).filter(n=>n.getClientRects().length&&!n.closest('[inert]')&&visible(n.parentElement));
 const items=()=>menus().flatMap(menu=>[...menu.querySelectorAll('[role="menuitem"],[role="menuitemradio"],[role="menuitemcheckbox"],[role="option"]')]).filter(n=>visible(n)&&label(n)&&!n.hasAttribute('disabled')&&n.getAttribute('aria-disabled')!=='true'&&!n.querySelector('[role="slider"],input[type="range"]')&&!/upgrade|pricing|learn more|subscribe|manage subscription/i.test(label(n)));
 if(operation==='close'){escape();window.__plannerModelMenuOpen=false;return {summary:'Model menu closed.',options:[]}}
 const button=trigger();if(!button)throw Error('ChatGPT model controls are unavailable. Finish sign-in and load a chat first.');
 if(operation==='open'){
- escape();await pause(100);button.focus();if(button.hasAttribute('aria-haspopup')){button.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,buttons:1,pointerId:1,isPrimary:true,pointerType:'mouse'}));await pause(150)}if(!menus().length)button.click();window.__plannerModelMenuOpen=true;
+ window.__plannerSelectedModel='';escape();await pause(100);button.focus();if(button.hasAttribute('aria-haspopup')){button.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,buttons:1,pointerId:1,isPrimary:true,pointerType:'mouse'}));await pause(150)}if(!menus().length)button.click();window.__plannerModelMenuOpen=true;
 }else if(operation==='choose'){
  if(!window.__plannerModelMenuOpen)throw Error('Reopen the model menu before choosing an option.');
  const matching=items().filter(n=>n.dataset.plannerModelOption===id);
- if(matching.length!==1)throw Error('Model options changed. Refresh before choosing.');matching[0].click();
+ if(matching.length!==1)throw Error('Model options changed. Refresh before choosing.');if(modelLabelForChoice(matching[0]))window.__plannerSelectedModel=label(matching[0]);matching[0].click();
 }else if(operation==='adjust'){
  const slider=sliders().find(n=>n.dataset.plannerModelOption===id);if(!slider||!Number.isInteger(value))throw Error('Refresh the thinking controls first.');
  const number=k=>Number(slider.getAttribute(k));const min=number('aria-valuemin'),max=number('aria-valuemax');if(value<min||value>max)throw Error('Choose a supported thinking level.');
@@ -952,10 +953,25 @@ if(operation==='open'){
  if(number('aria-valuenow')!==value)throw Error('ChatGPT did not confirm the thinking level.');
 }else throw Error('Unsupported model action.');
 for(let i=0;i<30&&!items().length;i++){await pause(100);if(operation==='choose'&&!menus().length)break}
-await pause(250);const options=items().map(n=>{n.dataset.plannerModelOption ||= crypto.randomUUID();return {id:n.dataset.plannerModelOption,label:label(n).slice(0,240),selected:n.getAttribute('aria-checked')==='true'||n.getAttribute('aria-selected')==='true'||n.getAttribute('aria-pressed')==='true'||n.dataset.state==='checked'||(/(fast|standard) mode/i.test(label(n))&&menus().some(m=>m.querySelector('[data-fast-mode="true"]'))),submenu:!!n.getAttribute('aria-haspopup')}});
+await pause(250);
+const checked=n=>n.getAttribute('aria-checked')==='true'||n.getAttribute('aria-selected')==='true'||n.getAttribute('aria-pressed')==='true'||n.dataset.state==='checked';
+const modelLabel=n=>/^(?:GPT[- ]|o[134](?:[- ]|$)|ChatGPT)/i.test(label(n));
+let selectedModel=items().find(n=>checked(n)&&modelLabel(n));
+if(selectedModel)window.__plannerSelectedModel=label(selectedModel);
+if(operation==='open'&&!selectedModel){
+ const select=items().find(n=>/^Select model$/i.test(label(n)));
+ if(select){
+  select.click();await pause(300);
+  selectedModel=items().find(n=>checked(n)&&modelLabel(n));
+  if(selectedModel)window.__plannerSelectedModel=label(selectedModel);
+  escape();await pause(100);
+  if(!sliders().length){escape();await pause(100);const opener=trigger();if(opener){opener.focus();if(opener.hasAttribute('aria-haspopup')){opener.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,buttons:1,pointerId:1,isPrimary:true,pointerType:'mouse'}));await pause(150)}if(!menus().length)opener.click();await pause(250)}}
+ }
+}
+const options=items().map(n=>{n.dataset.plannerModelOption ||= crypto.randomUUID();return {id:n.dataset.plannerModelOption,label:label(n).slice(0,240),selected:n.getAttribute('aria-checked')==='true'||n.getAttribute('aria-selected')==='true'||n.getAttribute('aria-pressed')==='true'||n.dataset.state==='checked'||(/(fast|standard) mode/i.test(label(n))&&menus().some(m=>m.querySelector('[data-fast-mode="true"]'))),submenu:!!n.getAttribute('aria-haspopup')}});
 if(operation==='open'&&!options.length)throw Error('ChatGPT did not expose model options. No model was changed.');
 const ranges=sliders().map(n=>{n.dataset.plannerModelOption ||= crypto.randomUUID();return {id:n.dataset.plannerModelOption,label:n.getAttribute('aria-label')||'Thinking',min:Number(n.getAttribute('aria-valuemin')),max:Number(n.getAttribute('aria-valuemax')),value:Number(n.getAttribute('aria-valuenow')),text:n.getAttribute('aria-valuetext')||''}});
-return {sliders:ranges,summary:(trigger()?.innerText||'ChatGPT model settings').trim().split('\n').slice(0,2).join(' · ').slice(0,240),options};
+return {selectedModel:window.__plannerSelectedModel||'',sliders:ranges,summary:(trigger()?.innerText||'ChatGPT model settings').trim().split('\n').slice(0,2).join(' · ').slice(0,240),options};
 """# }
     // END_CHAT_MODEL_MENU
     func modelMenu(operation:String,id:String?,value:Int? = nil,url:String? = nil,newChat:Bool = false) async throws -> [String:Any] {
