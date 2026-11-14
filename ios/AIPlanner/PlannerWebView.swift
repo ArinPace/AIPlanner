@@ -351,6 +351,11 @@ struct PlannerWebView: UIViewRepresentable {
                         guard let account = body["account"] as? String, let kind = body["kind"] as? String,
                               let savedAt = body["savedAt"] as? Double, let payload = body["data"], JSONSerialization.isValidJSONObject(payload) else { throw NativeError("Missing local copy data.") }
                         try LocalReplicaStore.save(account: account, kind: kind, savedAt: savedAt, payload: payload)
+                    case "tagScreenTime":
+                        guard let account = body["account"] as? String, account == WidgetTaskControl.defaults.string(forKey: "feedback-account"), let tag = body["tag"] as? [String: Any], let id = tag["id"] as? String, !id.isEmpty, id.count <= 200, let title = tag["name"] as? String, !title.isEmpty, title.count <= 300, let parent = webView?.window?.rootViewController else { throw NativeError("Sign in and choose a tag first.") }
+                        guard parent.presentedViewController == nil else { throw NativeError("Close the current menu before opening tag blocking.") }
+                        let host = UIHostingController(rootView: TagScreenTimeView(account: account, tagId: id, title: title))
+                        taskScreenTimeHost = host; parent.present(host, animated: true)
                     case "taskScreenTime":
                         guard let account = body["account"] as? String, account == WidgetTaskControl.defaults.string(forKey: "feedback-account"), let payload = body["task"], JSONSerialization.isValidJSONObject(payload), let parent = webView?.window?.rootViewController else { throw NativeError("Sign in to open task blocking.") }
                         let task = try JSONDecoder().decode(TaskFocusWindow.self, from: JSONSerialization.data(withJSONObject: payload))

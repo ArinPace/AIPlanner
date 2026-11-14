@@ -707,3 +707,58 @@ extension PlannerClientScreenTime {
     }
 }
 #endif
+
+struct TagScreenTimeView: View {
+    let account: String
+    let tagId: String
+    let title: String
+    @StateObject private var authorization = ScreenTimeModel()
+    @State private var selection: FamilyActivitySelection
+    @State private var policy: FocusBlockPolicy
+    @State private var domains: String
+    @State private var picker = false
+    @State private var message: String?
+    @State private var error: String?
+    @Environment(\.dismiss) private var dismiss
+    init(account: String, tagId: String, title: String) {
+        self.account = account; self.tagId = tagId; self.title = title
+        let saved = TagFocusRules.policies(account)[tagId]
+        _selection = State(initialValue: saved?.selection ?? FamilyActivitySelection(includeEntireCategory: true))
+        _policy = State(initialValue: saved?.policy ?? FocusBlockPolicy())
+        _domains = State(initialValue: saved?.policy.domains.joined(separator: ", ") ?? "")
+    }
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Tag") { Text(title).font(.headline); Text("Apply blocking to matching calendar events, including future occurrences and events inside tagged folders.").font(.footnote).foregroundStyle(.secondary) }
+                if !authorization.authorized { Section { Button("Allow Screen Time access") { Task { await authorization.authorize() } }.disabled(authorization.authorizing) } }
+                Section("Apps and websites") {
+                    ForEach(FocusAppGroups.read(account)) { group in Button(group.name) {
+                        selection.applicationTokens.formUnion(group.selection.applicationTokens)
+                        selection.categoryTokens.formUnion(group.selection.categoryTokens)
+                        selection.webDomainTokens.formUnion(group.selection.webDomainTokens)
+                    } }
+                    Button("Choose apps") { Task { if await authorization.authorize() { picker = true } } }
+                    Text("\(selection.applicationTokens.count) apps · \(selection.categoryTokens.count) categories · \(selection.webDomainTokens.count) websites").font(.footnote).foregroundStyle(.secondary)
+                    Toggle("Block all apps", isOn: $policy.allApps)
+                    Toggle("Block all websites", isOn: $policy.allWebsites)
+                    TextField("Blocked domains, separated by commas", text: $domains).textInputAutocapitalization(.never).autocorrectionDisabled()
+                }
+                Section {
+                    Button("Save tag blocking") { do {
+                        policy.domains = try FocusBlockPolicy.domains(domains)
+                        try TagFocusRules.save(TagFocusPolicy(id: tagId, title: title, selection: selection, policy: policy), account: account)
+                        message = "Tag blocking saved"; error = nil
+                    } catch { self.error = error.localizedDescription } }.disabled(!authorization.authorized)
+                    if TagFocusRules.policies(account)[tagId] != nil { Button("Remove tag blocking", role: .destructive) { do { try TagFocusRules.remove(tagId, account: account); message = "Tag blocking removed"; error = nil } catch { self.error = error.localizedDescription } } }
+                    Text("App choices stay on this device. Upcoming blocks refresh when Planner syncs. Up to 16 task and tag blocks can be scheduled at once; the next saved matches are scheduled as blocks end, within the synced calendar window.").font(.footnote).foregroundStyle(.secondary)
+                    if let message { Text(message).foregroundStyle(.secondary) }
+                    if let error { Text(error).foregroundStyle(.red) }
+                }
+            }.navigationTitle("Tag Screen Time")
+                .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+                .familyActivityPicker(isPresented: $picker, selection: $selection)
+                .onAppear { authorization.refresh() }
+        }
+    }
+}

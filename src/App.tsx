@@ -1,3 +1,4 @@
+import {FREE_TIME_TAG_ID} from './lib/freeTime'
 import {BottomWorkspaceNav} from './components/BottomWorkspaceNav'
 import {completeCalendarBlock} from './lib/api'
 import {DeviceControlSync} from './components/DeviceControlSync'
@@ -555,6 +556,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
             />
           ) : view === 'month' ? (
             <MonthView
+              showFreeTime={!hiddenSet.has(FREE_TIME_TAG_ID)}
               scaleToDuration={calendarDisplay.settings.month}
               cursor={cursor}
               zoom={zoom}
@@ -571,6 +573,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
             />
           ) : (
             <TimeGridView
+              showFreeTime={!hiddenSet.has(FREE_TIME_TAG_ID)}
               onVisibleDateChange={reportVisibleDate}
               onWeekNavigate={direction => setCursor(current => addDays(current, direction * 7))}
               weekLayout={view === 'week' ? 'grid' : 'list'}

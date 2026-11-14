@@ -73,6 +73,7 @@ struct TaskFocusWindow: Codable, Equatable {
     var title: String
     var start: Double
     var end: Double
+    var tagIds: [String]? = nil
     var valid: Bool { !id.isEmpty && id.count <= 500 && sourceEventId.count <= 200 && title.count <= 300 && start.isFinite && end.isFinite && end > start }
 }
 struct TaskFocusRecord: Codable {
@@ -82,6 +83,7 @@ struct TaskFocusRecord: Codable {
     var selection: FamilyActivitySelection
     var policy: FocusBlockPolicy? = nil
     var testAllApps: Bool = false
+    var tagId: String? = nil
 }
 /// Each occurrence has its own settings store, so overlapping task blocks cannot clear one another.
 enum TaskFocusRules {
@@ -146,7 +148,7 @@ enum TaskFocusRules {
     static func sync(windows: [TaskFocusWindow], from: Double, until: Double, account: String) {
         guard account == defaults.string(forKey: "feedback-account") else { return }
         var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(identifier: "America/New_York")!
-        for var record in records().values where record.account == account && record.window.start < until && record.window.end > from {
+        for var record in records().values where record.account == account && record.tagId == nil && record.window.start < until && record.window.end > from {
             let match = windows.first { $0.id == record.window.id } ?? windows.first { $0.sourceEventId == record.window.sourceEventId && calendar.isDate(Date(timeIntervalSince1970: $0.start), inSameDayAs: Date(timeIntervalSince1970: record.window.start)) }
             guard let match else { remove(record.name); continue }
             guard match.start != record.window.start || match.end != record.window.end || match.id != record.window.id else { continue }
@@ -155,6 +157,7 @@ enum TaskFocusRules {
             do { try register(record); apply(record.name) } catch { remove(record.name) }
         }
         refreshAll()
+        TagFocusRules.sync(windows, account: account)
     }
 }
 struct TaskFocusError: LocalizedError {
@@ -200,5 +203,76 @@ enum FocusAppGroups {
             selection.webDomainTokens.formUnion(group.selection.webDomainTokens)
         }
         return selection
+    }
+}
+
+struct TagFocusPolicy: Codable {
+    var id: String
+    var title: String
+    var selection: FamilyActivitySelection
+    var policy: FocusBlockPolicy
+}
+/// Tag policies persist separately from occurrence overrides and refresh with calendar snapshots.
+enum TagFocusRules {
+    static let defaults = FocusShieldRules.defaults
+    static func key(_ account: String) -> String { "tagFocusPolicies:" + account }
+    static func policies(_ account: String) -> [String: TagFocusPolicy] {
+        guard let data = defaults.data(forKey: key(account)) else { return [:] }
+        return (try? JSONDecoder().decode([String: TagFocusPolicy].self, from: data)) ?? [:]
+    }
+    static func write(_ values: [String: TagFocusPolicy], account: String) throws {
+        defaults.set(try JSONEncoder().encode(values), forKey: key(account))
+    }
+    static func save(_ value: TagFocusPolicy, account: String) throws {
+        guard account == defaults.string(forKey: "feedback-account"), !value.id.isEmpty, value.id.count <= 200 else { throw TaskFocusError("Your account changed. Reopen tag blocking.") }
+        guard AuthorizationCenter.shared.authorizationStatus == .approved else { throw TaskFocusError("Allow Screen Time access first.") }
+        guard value.policy.hasRules || !value.selection.applicationTokens.isEmpty || !value.selection.categoryTokens.isEmpty || !value.selection.webDomainTokens.isEmpty else { throw TaskFocusError("Choose apps, groups or websites to block first.") }
+        var values = policies(account); values[value.id] = value
+        try write(values, account: account)
+        try refresh(account: account)
+    }
+    static func remove(_ id: String, account: String) throws {
+        guard account == defaults.string(forKey: "feedback-account") else { throw TaskFocusError("Your account changed.") }
+        var values = policies(account); values.removeValue(forKey: id); try write(values, account: account)
+        try refresh(account: account)
+    }
+    static func sync(_ windows: [TaskFocusWindow], account: String) {
+        defaults.set(account, forKey: "tagFocusWindowsAccount")
+        if let data = try? JSONEncoder().encode(windows) { defaults.set(data, forKey: "tagFocusWindows") }
+        do { try refresh(account: account); defaults.removeObject(forKey: "tagFocusError") }
+        catch { defaults.set(error.localizedDescription, forKey: "tagFocusError") }
+    }
+    static func refresh(account: String) throws {
+        guard account == defaults.string(forKey: "feedback-account"), account == defaults.string(forKey: "tagFocusWindowsAccount"), let data = defaults.data(forKey: "tagFocusWindows"), let windows = try? JSONDecoder().decode([TaskFocusWindow].self, from: data) else { return }
+        let policies = policies(account), now = Date().timeIntervalSince1970
+        var desired: [(TagFocusPolicy, TaskFocusWindow)] = []
+        for rule in policies.values.sorted(by: { $0.id < $1.id }) {
+            var merged: [TaskFocusWindow] = []
+            for window in windows.filter({ $0.end > now && $0.tagIds?.contains(rule.id) == true }).sorted(by: { $0.start < $1.start }) {
+                if let last = merged.last, window.start <= last.end {
+                    merged[merged.count - 1].end = max(last.end, window.end)
+                } else { merged.append(window) }
+            }
+            desired += merged.map { window in
+                var tagged = window; tagged.id = "tag:" + rule.id + ":" + window.id; tagged.title = rule.title
+                return (rule, tagged)
+            }
+        }
+        desired.sort { $0.1.start == $1.1.start ? $0.1.id < $1.1.id : $0.1.start < $1.1.start }
+        let manualCount = TaskFocusRules.records().values.filter { $0.account == account && $0.tagId == nil && $0.window.end > now }.count
+        let scheduled = Array(desired.prefix(max(0,16 - manualCount))), ids = Set(scheduled.map { $0.1.id })
+        for record in TaskFocusRules.records().values where record.account == account && record.tagId != nil && (!ids.contains(record.window.id) || record.window.end <= now) { TaskFocusRules.remove(record.name) }
+        for (rule, window) in scheduled {
+            let existing = TaskFocusRules.record(account: account, window: window)
+            var values = TaskFocusRules.records()
+            guard let name = existing?.name ?? (0..<16).map({ TaskFocusRules.prefix + String($0) }).first(where: { values[$0] == nil }) else { throw TaskFocusError("No available Screen Time monitoring slots.") }
+            if let existing, existing.window == window, let savedPolicy = existing.policy,
+               (try? JSONEncoder().encode(savedPolicy)) == (try? JSONEncoder().encode(rule.policy)),
+               (try? JSONEncoder().encode(existing.selection)) == (try? JSONEncoder().encode(rule.selection)) { continue }
+            let record = TaskFocusRecord(name: name, account: account, window: window, selection: rule.selection, policy: rule.policy, tagId: rule.id)
+            do { try TaskFocusRules.register(record) }
+            catch { throw TaskFocusError("Some tag blocks could not be scheduled: " + error.localizedDescription) }
+            values[name] = record; TaskFocusRules.write(values); TaskFocusRules.apply(name)
+        }
     }
 }

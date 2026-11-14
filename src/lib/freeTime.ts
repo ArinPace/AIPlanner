@@ -1,6 +1,8 @@
-import { PlannerDate } from './timezone'
-import type { Occurrence } from '../types'
+import { PlannerDate } from './timezone.js'
+import type { Occurrence } from '../types.js'
 
+export const FREE_TIME_TAG_ID='__free_time__'
+export function isFreeTimeRow(row:Occurrence&{freeTime?:true}){return Boolean(row.freeTime)||row.event.title.trim().toLowerCase()==='free time'||Boolean(row.event.completedStarts?.some(value=>Date.parse(value)===row.start.getTime()))}
 export type ScheduleRow = Occurrence & { freeTime?: true }
 export const freeTimeAppearance = { background: 'var(--calendar-free-fill, #fff)', color: 'var(--calendar-free-text, #000)', border: '1px solid var(--calendar-free-border, #000)' }
 

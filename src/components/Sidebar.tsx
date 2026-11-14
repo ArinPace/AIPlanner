@@ -1,3 +1,7 @@
+import {FREE_TIME_TAG_ID} from '../lib/freeTime'
+import {ScreenTimeIcon} from './Icons'
+import {nativeRequest,supportsScreenTime} from '../lib/platform'
+import {replicaContext} from '../lib/localReplica'
 import {CalendarHistory} from './CalendarHistory'
 import { TagChart } from './TagChart'
 import { useState, type FormEvent } from 'react'
@@ -43,6 +47,9 @@ export function Sidebar({
   const [historyOpen, setHistoryOpen] = useState(false)
   const [chart, setChart] = useState(false)
   const [adding, setAdding] = useState(false)
+  const [draftTagId,setDraftTagId]=useState(()=>crypto.randomUUID())
+  const [screenTimeError,setScreenTimeError]=useState('')
+  function openTagScreenTime(id:string,title:string){setScreenTimeError('');void nativeRequest({action:'tagScreenTime',account:replicaContext().account,tag:{id,name:title}}).catch(error=>setScreenTimeError(error instanceof Error?error.message:'Could not open tag blocking.'))}
   const [editing,setEditing]=useState<string|null>(null)
   const [name, setName] = useState('')
   const [color, setColor] = useState(nextTagColor(tags))
@@ -52,7 +59,7 @@ export function Sidebar({
     const trimmed = name.trim()
     if (!trimmed) return
     ;(editing?onUpdateTag:onAddTag)({
-      id: editing || crypto.randomUUID(),
+      id: editing || draftTagId,
       name: trimmed,
       color,
     })
@@ -88,7 +95,7 @@ export function Sidebar({
         <div className="tag-section-head">
           <h2>Tags</h2>
           <div className="tag-heading-actions"><button type="button" className="icon-btn" aria-label="Show tag statistics" title="Tag statistics" onClick={()=>setChart(true)}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M11 3a9 9 0 1 0 10 10H11V3Z" stroke="currentColor" strokeWidth="1.7"/><path d="M14 2v8h8a9 9 0 0 0-8-8Z" stroke="currentColor" strokeWidth="1.7"/></svg></button>
-          <button type="button" className="icon-btn" aria-label="Add tag" onClick={() => {setEditing(null);setName('');setColor(nextTagColor(tags));setAdding(value=>!value)}}>
+          <button type="button" className="icon-btn" aria-label="Add tag" onClick={() => {setEditing(null);setDraftTagId(crypto.randomUUID());setName('');setColor(nextTagColor(tags));setAdding(value=>!value)}}>
             <PlusIcon size={16} />
           </button></div>
         </div>
@@ -118,7 +125,7 @@ export function Sidebar({
               ))}
             </div>
             <label className="tag-custom-color">Custom color<input type="color" aria-label="Custom tag color" value={color} onChange={event=>setColor(event.target.value)}/><span>{color}</span></label>
-            <div className="tag-form-actions">
+            <div className="tag-form-actions">{supportsScreenTime()&&<button type="button" className="icon-btn" aria-label="Screen Time for tag" title="Screen Time for this tag" disabled={!name.trim()} onClick={()=>openTagScreenTime(editing||draftTagId,name.trim())}><ScreenTimeIcon/></button>}
               <button type="button" className="text-btn" onClick={() => setAdding(false)}>
                 Cancel
               </button>
@@ -129,7 +136,9 @@ export function Sidebar({
           </form>
         )}
 
+        {screenTimeError&&<p role="alert" className="form-error">{screenTimeError}</p>}
         <ul className="tag-list">
+          <li><div className="tag-item"><input aria-label="Show Free time events" type="checkbox" checked={!hiddenTagIds.has(FREE_TIME_TAG_ID)} onChange={()=>onToggleTag(FREE_TIME_TAG_ID)}/><span className="tag-swatch" style={{background:'var(--bg)',border:'1px solid var(--muted)'}}/><span className="tag-name">Free time</span></div>{supportsScreenTime()&&<button type="button" className="icon-btn" aria-label="Screen Time for Free time tag" onClick={()=>openTagScreenTime(FREE_TIME_TAG_ID,'Free time')}><ScreenTimeIcon/></button>}</li>
           {tags.map((tag) => {
             const visible = !hiddenTagIds.has(tag.id)
             return (
@@ -138,6 +147,7 @@ export function Sidebar({
                   <input aria-label={`Show ${tag.name} events`} type="checkbox" checked={visible} onChange={() => onToggleTag(tag.id)} />
                   <button type="button" className="tag-edit" aria-label={`Edit ${tag.name} tag`} onClick={()=>{setEditing(tag.id);setName(tag.name);setColor(tag.color);setAdding(true)}}><span className="tag-swatch" style={{background:tag.color}}/><span className="tag-name">{tag.name}</span></button>
                 </div>
+                {supportsScreenTime()&&<button type="button" className="icon-btn" aria-label={'Screen Time for '+tag.name+' tag'} onClick={()=>openTagScreenTime(tag.id,tag.name)}><ScreenTimeIcon/></button>}
                 <button
                   type="button"
                   className="icon-btn tag-delete"

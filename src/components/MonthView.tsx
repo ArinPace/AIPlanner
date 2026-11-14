@@ -1,5 +1,5 @@
 import {durationHeight} from '../lib/calendarDisplay'
-import { freeTimeAppearance, withFreeTime } from '../lib/freeTime'
+import { freeTimeAppearance, withFreeTime, isFreeTimeRow } from '../lib/freeTime'
 import { eventAppearance } from '../lib/eventAppearance'
 import {PlannerDate as Date} from '../lib/timezone'
 import { urgencyColor } from '../lib/urgencyColor'
@@ -22,6 +22,7 @@ import {
 const TARGET_WEEK_HEIGHT = 112
 
 type MonthViewProps = {
+  showFreeTime?:boolean
   scaleToDuration?:boolean
   cursor: Date
   zoom: number
@@ -34,7 +35,7 @@ type MonthViewProps = {
   onEventClick: (event: CalendarEvent, occurrenceStart: Date) => void
 }
 
-export function MonthView({ scaleToDuration=false,cursor, zoom, events, busyEvents, onMonthChange, tags, onDayClick, onDayOpen, onEventClick }: MonthViewProps) {
+export function MonthView({ showFreeTime=true, scaleToDuration=false,cursor, zoom, events, busyEvents, onMonthChange, tags, onDayClick, onDayOpen, onEventClick }: MonthViewProps) {
   const [now,setNow]=useState(()=>new Date())
   useEffect(()=>{const timer=window.setInterval(()=>setNow(new Date()),60000);return()=>window.clearInterval(timer)},[])
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -47,7 +48,7 @@ export function MonthView({ scaleToDuration=false,cursor, zoom, events, busyEven
   const dayItems = useMemo(() => days.map(day => {
     const start = startOfDay(day).getTime(), end = endOfDay(day).getTime()
     return withFreeTime(occurrences.filter(item => item.start.getTime() < end && item.end.getTime() > start), busyOccurrences, startOfDay(day), addDays(startOfDay(day),1))
-  }), [days, occurrences, busyOccurrences])
+  }).map(rows=>showFreeTime?rows:rows.filter(row=>!isFreeTimeRow(row))), [days, occurrences, busyOccurrences,showFreeTime])
   const scrollFrame = useRef<number | null>(null)
   useEffect(() => () => { if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current) }, [])
   const reportedMonth = useRef<string | null>(null)

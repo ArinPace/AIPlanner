@@ -9,7 +9,7 @@ import {durationHeight} from '../lib/calendarDisplay'
 import {TaskScreenTimeButton} from './TaskScreenTimeButton'
 import {taskScreenTimeWindow} from '../lib/taskScreenTime'
 import {supportsScreenTime} from '../lib/platform'
-import { freeTimeAppearance, withFreeTime, type ScheduleRow } from '../lib/freeTime'
+import { freeTimeAppearance, withFreeTime, isFreeTimeRow, type ScheduleRow } from '../lib/freeTime'
 import { eventAppearance } from '../lib/eventAppearance'
 import { PlannerDate as Date } from '../lib/timezone.js'
 import { urgencyColor } from '../lib/urgencyColor'
@@ -32,6 +32,7 @@ import {PlanningButton} from './PlanningSettings'
 import {toDateInput} from '../lib/dates'
 
 type TimeGridViewProps = {
+  showFreeTime?: boolean
   onVisibleDateChange?: (date: Date) => void
   onWeekNavigate?: (direction: -1 | 1) => void
   weekLayout?: 'list' | 'grid'
@@ -61,7 +62,7 @@ function clipToDay(item: Occurrence, day: Date): { start: Date; end: Date } | nu
   }
 }
 
-export function TimeGridView({ onVisibleDateChange, onWeekNavigate, weekLayout = 'list', scaleToDuration=false, active=true,cursor, view, zoom, occurrences, busyOccurrences, tags, onSlotClick, onEventClick, onEventDone }: TimeGridViewProps) {
+export function TimeGridView({ showFreeTime=true, onVisibleDateChange, onWeekNavigate, weekLayout = 'list', scaleToDuration=false, active=true,cursor, view, zoom, occurrences, busyOccurrences, tags, onSlotClick, onEventClick, onEventDone }: TimeGridViewProps) {
   const [planning, setPlanning] = useState<PlanningProfile>()
   useEffect(() => {
     if (!active) return
@@ -92,11 +93,12 @@ export function TimeGridView({ onVisibleDateChange, onWeekNavigate, weekLayout =
   const [openedFolders,setOpenedFolders]=useState<Set<string>>(()=>new Set())
   const now=new Date(),grouped=occurrenceFolderGroups(occurrences),busyGrouped=occurrenceFolderGroups(busyOccurrences)
   const folderOpen=(item:Occurrence)=>folderExpanded(item,now.getTime(),openedFolders)
+  const visibleRows=(rows:ScheduleRow[])=>showFreeTime?rows:rows.filter(row=>!isFreeTimeRow(row))
   function folderChildren(item:Occurrence,day?:Date):ScheduleRow[]{
     const start=day&&startOfDay(day)>item.start?startOfDay(day):item.start
     const end=day&&addDays(startOfDay(day),1)<item.end?addDays(startOfDay(day),1):item.end
     const children=grouped.children.get(folderOccurrenceKey(item))||[]
-    return withFreeTime(day?children.filter(child=>clipToDay(child,day)):children,busyGrouped.children.get(folderOccurrenceKey(item))||[],start,end)
+    return visibleRows(withFreeTime(day?children.filter(child=>clipToDay(child,day)):children,busyGrouped.children.get(folderOccurrenceKey(item))||[],start,end))
   }
   function folderRows(item:Occurrence):number{return 1+(folderOpen(item)?folderChildren(item).reduce((count,child)=>count+(child.event.eventKind==='folder'?folderRows(child):1),0):0)}
   const toggleFolder=(item:Occurrence)=>setOpenedFolders(current=>{const next=new Set(current);if(next.has(folderOccurrenceKey(item)))next.delete(folderOccurrenceKey(item));else next.add(folderOccurrenceKey(item));return next})
@@ -170,10 +172,11 @@ export function TimeGridView({ onVisibleDateChange, onWeekNavigate, weekLayout =
   const appearance = (item: Occurrence) => completed(item) || ('freeTime' in item && item.freeTime)
     ? freeTimeAppearance : eventAppearance(eventColor(item.event,tags),item.event.reminder)
   const completionClass = (item: Occurrence) => completed(item) ? ' is-completed-free-time' : ''
+  const screenTimeWindow=(item:Occurrence)=>{const task=taskScreenTimeWindow(item.event,item.start,item.end);return occurrenceChecked(item.event,item.start)?{...task,id:'free-time:completed:'+item.event.id+'@'+item.start.toISOString(),sourceEventId:'free-time:completed:'+item.event.id,title:'Free time'}:task}
   const doneButton=(item:Occurrence)=><CalendarDoneButton item={item} leaves={completionLeaves(item)} onDone={onEventDone}/>
   function dayFolderBody(item:Occurrence,day:Date):ReactNode{
     const open=folderOpen(item),children=(grouped.children.get(folderOccurrenceKey(item))||[]).filter(child=>clipToDay(child,day))
-    return <><div className="folder-event-header"><button type="button" className={"folder-grid-toggle"+completionClass(item)} aria-expanded={open} onClick={()=>toggleFolder(item)} style={appearance(item)}><FolderChevron open={open}/> {item.event.title}<small>{formatTimeCompact(item.start)}–{formatTimeCompact(item.end)} · {children.length} {children.length===1?'item':'items'}</small></button><button type="button" className="folder-edit-button" aria-label={'Edit folder '+item.event.title} onClick={()=>onEventClick(item.event,item.start)} title="Edit folder"><EditIcon/></button></div>{open&&<div className="folder-day-children">{folderChildren(item,day).map(child=>child.event.eventKind==='folder'?<div className="nested-day-folder" key={child.event.id}>{dayFolderBody(child,day)}</div>:<div key={child.event.id} className="calendar-task-with-actions"><button type="button" className={"event-chip folder-child-event"+completionClass(child)} onClick={()=>child.freeTime?onSlotClick(child.start):onEventClick(child.event,child.start)} style={appearance(child)}><span>{formatTimeCompact(child.start)}–{formatTimeCompact(child.end)}</span><strong className="event-title">{child.event.title}</strong></button>{!child.freeTime&&doneButton(child)}</div>)}</div>}</>
+    return <><div className="folder-event-header"><button type="button" className={"folder-grid-toggle"+completionClass(item)} aria-expanded={open} onClick={()=>toggleFolder(item)} style={appearance(item)}><FolderChevron open={open}/> {item.event.title}<small>{formatTimeCompact(item.start)}–{formatTimeCompact(item.end)} · {children.length} {children.length===1?'item':'items'}</small></button><button type="button" className="folder-edit-button" aria-label={'Edit folder '+item.event.title} onClick={()=>onEventClick(item.event,item.start)} title="Edit folder"><EditIcon size={18}/></button></div>{open&&<div className="folder-day-children">{folderChildren(item,day).map(child=>child.event.eventKind==='folder'?<div className="nested-day-folder" key={child.event.id}>{dayFolderBody(child,day)}</div>:<div key={child.event.id} className="calendar-task-with-actions"><button type="button" className={"event-chip folder-child-event"+completionClass(child)} onClick={()=>child.freeTime?onSlotClick(child.start):onEventClick(child.event,child.start)} style={appearance(child)}><span>{formatTimeCompact(child.start)}–{formatTimeCompact(child.end)}</span><strong className="event-title">{child.event.title}</strong></button>{!child.freeTime&&doneButton(child)}<TaskScreenTimeButton task={screenTimeWindow(child)}/></div>)}</div>}</>
   }
   function agendaRows(items:ScheduleRow[],day:Date,showNow:boolean,nested=false):ReactNode{
     const currentFolder=items.find(item=>item.event.eventKind==='folder'&&item.start<=now&&now<item.end)
@@ -187,7 +190,7 @@ export function TimeGridView({ onVisibleDateChange, onWeekNavigate, weekLayout =
         <span className="event-title">{item.event.urgency!=null&&<span className="event-urgency-badge" style={urgencyColor(item.event.urgency)}>{item.event.urgency}</span>}{item.event.title||'(No title)'}</span>
         {folder&&<small className="folder-event-count">{children.length} {children.length===1?'item':'items'}</small>}
       </button>
-      return <Fragment key={item.event.id+item.start.toISOString()}>{showNow&&!currentFolder&&index===next&&marker}{folder?<div className="agenda-event-folder"><div className="folder-event-header">{chip}<button type="button" className="folder-edit-button" aria-label={'Edit folder '+item.event.title} onClick={()=>onEventClick(item.event,item.start)} title="Edit folder"><EditIcon/></button></div>{open&&<div className="folder-agenda-children">{children.length?agendaRows(folderChildren(item,day),day,showNow&&currentFolder===item,true):<><p className="quiet">No visible events in this folder.</p>{showNow&&currentFolder===item&&marker}</>}</div>}</div>:!item.freeTime&&!item.event.reminder&&!item.event.allDay?<div className="calendar-task-with-actions">{chip}{doneButton(item)}{supportsScreenTime()&&<TaskScreenTimeButton task={taskScreenTimeWindow(item.event,item.start,item.end)}/>}</div>:chip}</Fragment>
+      return <Fragment key={item.event.id+item.start.toISOString()}>{showNow&&!currentFolder&&index===next&&marker}{folder?<div className="agenda-event-folder"><div className="folder-event-header">{chip}<button type="button" className="folder-edit-button" aria-label={'Edit folder '+item.event.title} onClick={()=>onEventClick(item.event,item.start)} title="Edit folder"><EditIcon size={18}/></button></div>{open&&<div className="folder-agenda-children">{children.length?agendaRows(folderChildren(item,day),day,showNow&&currentFolder===item,true):<><p className="quiet">No visible events in this folder.</p>{showNow&&currentFolder===item&&marker}</>}</div>}</div>:!item.event.reminder&&!item.event.allDay?<div className="calendar-task-with-actions">{chip}{!item.freeTime&&doneButton(item)}{supportsScreenTime()&&<TaskScreenTimeButton task={screenTimeWindow(item)}/>}</div>:chip}</Fragment>
     })}{showNow&&!currentFolder&&next===-1&&marker}</>
   }
 
@@ -195,7 +198,7 @@ export function TimeGridView({ onVisibleDateChange, onWeekNavigate, weekLayout =
     <div ref={weekScrollRef} data-layout={mobileWeek?'agenda':'grid'} className={`time-view-scroll ${mobileWeek ? 'has-mobile-week' : regularWeek ? 'week-time-grid' : ''}`}>
       {mobileWeek && <div className={'mobile-week'+(scaleToDuration?' is-duration-scaled':'')}>
         {days.map(day => {
-          const items = withFreeTime(grouped.top.filter(item => clipToDay(item, day)), busyGrouped.top, startOfDay(day), addDays(startOfDay(day),1))
+          const items = visibleRows(withFreeTime(grouped.top.filter(item => clipToDay(item, day)), busyGrouped.top, startOfDay(day), addDays(startOfDay(day),1)))
           return <section className="mobile-week-day" data-calendar-day={toDateInput(day)} key={day.toISOString()}>
             <div className="mobile-week-heading">
               <h3 className={isToday(day) ? 'is-today' : ''}>{day.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</h3>
@@ -258,7 +261,7 @@ export function TimeGridView({ onVisibleDateChange, onWeekNavigate, weekLayout =
 
           {days.map((day) => {
             const dayEvents = grouped.top.filter(item => !item.event.allDay && clipToDay(item, day))
-            const timed: ScheduleRow[] = regularWeek ? dayEvents : withFreeTime(dayEvents, busyGrouped.top, startOfDay(day), addDays(startOfDay(day),1))
+            const timed: ScheduleRow[] = visibleRows(regularWeek ? dayEvents : withFreeTime(dayEvents, busyGrouped.top, startOfDay(day), addDays(startOfDay(day),1)))
             const laidOut = layoutTimeCards(timed.map(item=>{
               const clipped=clipToDay(item,day)!
               const top=(clipped.start.getHours()*60+clipped.start.getMinutes()+clipped.start.getSeconds()/60)/60*hourHeight
