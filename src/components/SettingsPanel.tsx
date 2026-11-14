@@ -77,10 +77,10 @@ export function SettingsPanel({ calendarDisplay, zoom, onZoomChange, onClose, on
           <strong>{Math.round(zoom * 100)}%</strong>
         </div>
       </label>
-      <button type="button" className="text-btn" onClick={() => onZoomChange(DEFAULT_ZOOM)}>
+      <button type="button" className="text-btn settings-reset-zoom" onClick={() => onZoomChange(DEFAULT_ZOOM)}>
         Reset to 100%
       </button>
-      <p className="quiet settings-hint">
+      <p className="quiet settings-hint settings-zoom-shortcuts">
         Visual zoom: {mod} + / {mod} −. Reset with {mod} 0.
       </p>
         </div>

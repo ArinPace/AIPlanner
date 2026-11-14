@@ -2546,3 +2546,7 @@ html, body { touch-action: pan-x pan-y; }
 .settings-group-content > .settings-theme { margin: 0; }
 .settings-group-content .settings-duration { margin: 0; }
 .settings-group-content .task-notification-settings,.settings-group-content .local-copy-settings { border-top: 0; margin-top: 0; padding-top: 0; }
+.settings-panel .settings-reset-zoom { align-self: flex-start; border: 1px solid var(--blue); border-radius: 10px; padding: 9px 14px; background: var(--blue-soft); color: var(--blue); font-weight: 600; min-height: 38px; }
+.settings-panel .settings-reset-zoom:hover { background: color-mix(in srgb,var(--blue) 18%,var(--panel)); }
+@media(max-width:600px),(hover:none) and (pointer:coarse) { .settings-zoom-shortcuts { display: none; } }
+:root[data-iphone-app='true'] .settings-zoom-shortcuts { display: none; }
