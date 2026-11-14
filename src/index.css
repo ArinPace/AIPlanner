@@ -2910,3 +2910,8 @@ html, body { touch-action: pan-x pan-y; }
 .chat-thinking-control input[type=range] { appearance: none; width: 100%; height: 28px; margin: 14px 0 0; background: transparent; cursor: pointer; touch-action: pan-y; }
 .chat-thinking-control input[type=range]::-webkit-slider-runnable-track { height: 12px; border-radius: 12px; background: linear-gradient(to right,var(--blue) var(--thinking-progress),color-mix(in srgb,var(--text) 15%,transparent) var(--thinking-progress)); }
 .chat-thinking-control input[type=range]::-webkit-slider-thumb { appearance: none; height: 28px; width: 28px; margin-top: -8px; border-radius: 50%; background: #fff; box-shadow: 0 1px 5px #0003; border: 0; }
+.composer-model-popup .chat-model-selector-row { display: flex; gap: 6px; align-items: center; }
+.composer-model-popup .chat-model-selector-row button { display: flex; align-items: center; justify-content: space-between; flex: 1; gap: 8px; border: 0; border-radius: 14px; min-height: 44px; font-size: 15px; }
+.composer-model-popup .chat-model-selector-row .chat-fast-toggle { flex: 0 0 44px; justify-content: center; padding: 10px; }
+.chat-fast-toggle[aria-pressed=true] { color: var(--blue) !important; background: color-mix(in srgb,var(--blue) 14%,transparent) !important; }
+.composer-model-popup .chat-selected-model { margin: 8px 12px; font-size: 15px; opacity: 1; font-weight: 500; }
