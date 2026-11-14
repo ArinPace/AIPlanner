@@ -116,7 +116,7 @@ export function Header({
           >
             <SettingsIcon />
           </button>
-          {settingsOpen && (tab==='calendar'?<SettingsPanel
+          {settingsOpen && (tab==='calendar'&&!document.querySelector('.checklist-sheet[open]')?<SettingsPanel
               calendarDisplay={calendarDisplay}
               zoom={zoom}
               onLogout={onLogout}
@@ -128,7 +128,7 @@ export function Header({
               onLogout={onLogout}
               onZoomChange={onVisualZoomChange}
               onClose={() => setSettingsOpen(false)}
-            /></div>,document.body))}
+            /></div>,document.querySelector('.checklist-sheet[open]')||document.body))}
         </div>
         <div className="user-chip">
           <span>{username}</span>

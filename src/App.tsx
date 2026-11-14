@@ -1,3 +1,4 @@
+import {ChecklistSheet} from './components/ChecklistSheet'
 import {useMultiDayCount} from './lib/useMultiDayCount'
 import {FREE_TIME_TAG_ID} from './lib/freeTime'
 import {BottomWorkspaceNav} from './components/BottomWorkspaceNav'
@@ -495,7 +496,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
       <WidgetTaskFeedback username={username} onApply={applyWidgetTime}/>
       <DeviceControlSync username={username}/>
       <Header hideAgent={hideAgent}
-        tab={tab}
+        tab={tab==='todo'||tab==='work'?'calendar':tab}
         onTabChange={next=>{if(next==='chat'){setMainChatOpen(true);return}if(next==='todo'||next==='work')setTodoRequest(n=>n+1);setTab(next)}}
         cursor={view==='day'||view==='year'?visibleDate:cursor}
         view={view}
@@ -518,13 +519,15 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
       />
 
       <div className="files-tab-panel" hidden={tab!=='files'}><FilesView sidebar={filesSidebar} setSidebar={setFilesSidebar} username={username} active={tab==='files'} onUnsavedChange={fileDirtyHandlers.files}/></div>
-      {(visitedNotes.todo||tab==='todo')&&<div className="files-tab-panel" hidden={tab!=='todo'}><FilesView standaloneTodo sidebar={false} setSidebar={setFilesSidebar} username={username} active={tab==='todo'} todoRequest={todoRequest||1} onUnsavedChange={fileDirtyHandlers.todo}/></div>}
-      {(visitedNotes.work||tab==='work')&&<div className="files-tab-panel" hidden={tab!=='work'}><FilesView standaloneTodo workMode sidebar={false} setSidebar={setFilesSidebar} username={username} active={tab==='work'} todoRequest={todoRequest||1} onUnsavedChange={fileDirtyHandlers.work}/></div>}
+      <ChecklistSheet open={tab==='todo'||tab==='work'} title={tab==='work'?'Work':'To-do'} onClose={()=>setTab('calendar')}>
+      {(visitedNotes.todo||tab==='todo')&&<div className="files-tab-panel" hidden={tab!=='todo'}><FilesView calendarEvents={events} standaloneTodo sidebar={false} setSidebar={setFilesSidebar} username={username} active={tab==='todo'} todoRequest={todoRequest||1} onUnsavedChange={fileDirtyHandlers.todo}/></div>}
+      {(visitedNotes.work||tab==='work')&&<div className="files-tab-panel" hidden={tab!=='work'}><FilesView calendarEvents={events} standaloneTodo workMode sidebar={false} setSidebar={setFilesSidebar} username={username} active={tab==='work'} todoRequest={todoRequest||1} onUnsavedChange={fileDirtyHandlers.work}/></div>}
+      </ChecklistSheet>
       {tab==='screentime' && <ScreenTimePanel/>}
       {!hideAgent&&<div className="agent-tab-panel" hidden={tab !== 'agent'}><AgentView username={username} sidebar={agentSidebar} setSidebar={setAgentSidebar} active={tab === 'agent'} /></div>}
       {!draft&&<BottomWorkspaceNav tab={tab} onChange={next=>{if((filesUnsaved||draft)&&next!==tab&&!window.confirm('Discard unsaved changes and switch tabs?'))return;if(next==='todo'||next==='work')setTodoRequest(n=>n+1);setTab(next)}}/>}
       {!draft&&<MainChatBubble key={username} username={username} open={mainChatOpen} onOpenChange={setMainChatOpen}/>}
-      <div className="app-body" hidden={tab !== 'calendar'}>
+      <div className="app-body" hidden={tab !== 'calendar'&&tab!=='todo'&&tab!=='work'}>
         <Sidebar
           view={view}
           onViewChange={next => { setView(next); if (window.innerWidth <= 860) setSidebarOpen(false) }}
