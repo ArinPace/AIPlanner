@@ -14,7 +14,7 @@ export function checklistSortPlugin() {
    let timer:ReturnType<typeof setTimeout>|undefined
    let viewportHeight=window.visualViewport?.height??window.innerHeight
    const finish=(blur=false)=>{
-    if(destroyed||!view.dom.getClientRects().length)return
+    if(destroyed||!view.dom.getClientRects().length||Boolean(view.dom.closest('[data-checklist-active="false"]')))return
     if(blur&&view.dom.contains(document.activeElement))(document.activeElement as HTMLElement)?.blur()
     view.dispatch(view.state.tr.setMeta(SORT_CHECKLISTS,true).setMeta(SETTLE_CHECKLISTS,true))
    }

@@ -2862,3 +2862,13 @@ html, body { touch-action: pan-x pan-y; }
 :root[data-translucence=on] .agenda-grid-row.is-nested > .mobile-week-event { box-shadow: inset 0 4px 0 var(--event-accent,transparent); }
 :root[data-translucence=on] .agenda-grid-row:not(.is-nested) > .folder-pencil { background: transparent !important; }
 .week-event-card.is-filtered { visibility: hidden; pointer-events: none; }
+
+/* Adjacent, retained editors follow the drag; release settles on a page. */
+.checklist-pages-viewport { flex: 1; min-height: 0; width: 100%; overflow: hidden; }
+.checklist-pages-track { display: flex; width: 100%; height: 100%; transition: transform 280ms cubic-bezier(.22,.68,.2,1); will-change: transform; }
+.checklist-pages-track > .files-tab-panel { flex: 0 0 100%; width: 100%; min-width: 0; height: 100%; padding: 0; }
+.checklist-pages-track > [data-checklist-page=work] { order: 0; }
+.checklist-pages-track > [data-checklist-page=todo] { order: 1; }
+.checklist-sheet.is-paging .apple-note-document { user-select: none; -webkit-user-select: none; }
+.checklist-sheet li[data-scheduled-label]::after { min-width: 40px; text-align: center; }
+@media(prefers-reduced-motion:reduce) { .checklist-pages-track { transition: none; } }

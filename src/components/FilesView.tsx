@@ -85,10 +85,10 @@ function DocumentDialog({ document, folders, busy, error, onClose, onSave }: {
   </dialog>
 }
 
-export function FilesView({ calendarEvents=[], workMode = false, standaloneTodo = false, todoRequest = 0, active, username, sidebar, setSidebar, onUnsavedChange }: { calendarEvents?:CalendarEvent[];workMode?: boolean; standaloneTodo?: boolean; todoRequest?: number; active: boolean; username: string; sidebar: boolean; setSidebar: (open:boolean)=>void; onUnsavedChange: (unsaved: boolean) => void }) {
+export function FilesView({ preloadChecklist=false,calendarEvents=[], workMode = false, standaloneTodo = false, todoRequest = 0, active, username, sidebar, setSidebar, onUnsavedChange }: { preloadChecklist?:boolean;calendarEvents?:CalendarEvent[];workMode?: boolean; standaloneTodo?: boolean; todoRequest?: number; active: boolean; username: string; sidebar: boolean; setSidebar: (open:boolean)=>void; onUnsavedChange: (unsaved: boolean) => void }) {
   const [state, setState] = useState<FilesState | null>(()=>peekFilesCache())
   useEffect(()=>{let live=true;void warmFilesCache(username).then(data=>{if(live&&data)setState(current=>current??data)}).catch(()=>{});return()=>{live=false}},[username])
-  useEffect(()=>{if(!active||!standaloneTodo||state)return;let live=true;void loadCanonicalNote(workMode?'work':'todo').then(data=>{if(live){validateFilesState(data,data.storageLimitBytes);setState(current=>current??data)}}).catch(()=>{});return()=>{live=false}},[username,active,standaloneTodo,workMode])
+  useEffect(()=>{if((!active&&!preloadChecklist)||!standaloneTodo||state)return;let live=true;void loadCanonicalNote(workMode?'work':'todo').then(data=>{if(live){validateFilesState(data,data.storageLimitBytes);setState(current=>current??data)}}).catch(()=>{});return()=>{live=false}},[username,active,preloadChecklist,standaloneTodo,workMode])
   const [loadError, setLoadError] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -131,7 +131,7 @@ export function FilesView({ calendarEvents=[], workMode = false, standaloneTodo 
 
   const handledTodoRequest=useRef(0)
   useEffect(()=>{
-    if(!active || !state || !todoRequest || handledTodoRequest.current===todoRequest || busy)return
+    if((!active&&!(preloadChecklist&&!fileDraft)) || !state || !todoRequest || handledTodoRequest.current===todoRequest || busy)return
     handledTodoRequest.current=todoRequest
     const note=workMode ? state.files.find(file=>file.format==='note' && (file.systemRole==='work'||file.folderId===null&&file.name==='Work')) ?? {id:crypto.randomUUID(),folderId:null,format:'note' as const,name:'Work',content:'# Work\n\nUpcoming assignments, homework, tests and quizzes for the next three weeks.\n\nAwaiting the first agent review of your course materials and connected sources.',updatedAt:new Date().toISOString()} : state.files.find(file=>file.systemRole==='todo') ?? state.files.find(file=>file.format==='note' && /^to[ -]?do(?: list)?$/i.test(file.name.trim()))
     if(!note){setError('Your To-do note could not be found in Files.');return}
@@ -140,7 +140,7 @@ export function FilesView({ calendarEvents=[], workMode = false, standaloneTodo 
     if(fileDraft?.id!==note.id)setFileDraft({...note})
     setError('');setNotice('')
     if(window.innerWidth<=600)setSidebar(false)
-  },[active,state,todoRequest,busy,dirty,fileDraft,setSidebar,workMode])
+  },[active,preloadChecklist,state,todoRequest,busy,dirty,fileDraft,setSidebar,workMode])
 
   const saveNoteRef=useRef(saveFile)
   useEffect(()=>{saveNoteRef.current=saveFile})

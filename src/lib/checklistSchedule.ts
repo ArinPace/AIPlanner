@@ -14,15 +14,15 @@ export function checklistSchedule(events:CalendarEvent[],noteId:string,now=new P
  for(const [id,slots] of candidates){slots.sort((a,b)=>a.start.getTime()-b.start.getTime());const next=slots.find(slot=>slot.end.getTime()>=now.getTime())||slots[slots.length-1];const day=next.start.toLocaleDateString('en-US',{month:'short',day:'numeric'}),time=next.start.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});result[id]={text:Math.abs(next.start.getTime()-now.getTime())<=2*86400000?`${day}, ${time}`:day,title:slots.map(s=>s.start.toLocaleString('en-US')+' – '+s.end.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})).join('\n')+' (New York time)'}}
  return result
 }
-export const ChecklistSchedule=Extension.create<{labels:()=>ScheduleLabels}>({
+export const ChecklistSchedule=Extension.create<{labels:()=>ScheduleLabels;placeholder:boolean}>({
  name:'checklistSchedule',
- addOptions(){return {labels:()=>({})}},
+ addOptions(){return {labels:()=>({}),placeholder:false}},
  addProseMirrorPlugins(){
-  const labels=this.options.labels
+  const labels=this.options.labels,placeholder=this.options.placeholder
   return [new Plugin({props:{decorations(state){
    const decorations:Decoration[]=[]
    state.doc.descendants((node,pos)=>{
-    const schedule=labels()[node.attrs.checklistId]
+    const schedule=labels()[node.attrs.checklistId]||(placeholder?{text:'--:--',title:'No calendar time assigned'}:undefined)
     if(node.type.name==='taskItem'&&schedule)decorations.push(Decoration.node(pos,pos+node.nodeSize,{'data-scheduled-label':schedule.text,title:schedule.title}))
    })
    return DecorationSet.create(state.doc,decorations)
