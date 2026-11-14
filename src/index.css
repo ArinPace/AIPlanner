@@ -589,7 +589,7 @@ p {
   display: grid;
   place-items: center;
   align-items: safe center;
-  background: #f8f9fa;
+  background: var(--bg);
   padding: 24px;
 }
 
@@ -2558,3 +2558,7 @@ html, body { touch-action: pan-x pan-y; }
 
 /* A soft dark scrim grounds the floating controls without intercepting content. */
 .bottom-navigation-shade { position: fixed; pointer-events: none; z-index: 84; left: 0; right: 0; bottom: 0; height: calc(140px + env(safe-area-inset-bottom)); background: linear-gradient(to bottom,transparent 0%,rgba(0,0,0,.08) 25%,rgba(0,0,0,.30) 65%,rgba(0,0,0,.48) 100%); }
+
+.folder-chevron { display: inline-block; flex-shrink: 0; vertical-align: -2px; margin-right: 6px; transition: transform .15s ease; }
+.folder-chevron.is-open { transform: rotate(90deg); }
+@media(prefers-reduced-motion:reduce) { .folder-chevron { transition: none; } }

@@ -1,3 +1,4 @@
+import {FolderChevron} from './FolderChevron'
 import {ComposerModelPicker} from './ComposerModelPicker'
 import {AgentModelSettings} from './ModelSettings'
 import {peekChatCache,readChatCache,writeChatCache} from '../lib/chatCache'
@@ -304,7 +305,7 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
       <nav aria-label="Conversations" className="assistant-conversations">
         {regularChats.filter(item=>item.is_main).map(renderChat)}
         {(state?.settings.tutor_enabled||tutorChats.length>0)&&<section className="assistant-tutor-folder" aria-label="Tutor folder">
-          <div className="assistant-tutor-heading"><button type="button" aria-label="Tutor" aria-expanded={tutorOpen} aria-controls="tutor-subject-chats" onClick={toggleTutor}><span aria-hidden="true">{tutorOpen?'▾':'▸'} 📌 📁</span> Tutor</button><button type="button" aria-label="Refresh Tutor subjects" title="Refresh subjects" disabled={Boolean(chatAction)} onClick={()=>void refreshTutor()}>↻</button></div>
+          <div className="assistant-tutor-heading"><button type="button" aria-label="Tutor" aria-expanded={tutorOpen} aria-controls="tutor-subject-chats" onClick={toggleTutor}><span aria-hidden="true"><FolderChevron open={tutorOpen}/> 📌 📁</span> Tutor</button><button type="button" aria-label="Refresh Tutor subjects" title="Refresh subjects" disabled={Boolean(chatAction)} onClick={()=>void refreshTutor()}>↻</button></div>
           {tutorOpen&&<div id="tutor-subject-chats" role="group" aria-label="Tutor subjects" className="assistant-tutor-subjects">{tutorChats.map(renderChat)}{!tutorChats.length&&<p>{showBin?'No deleted subject chats.':showArchived?'No archived subject chats.':'Add subject folders under Subjects in Files, then refresh.'}</p>}</div>}
           {state?.tutorError&&<p role="status">{state.tutorError}</p>}
         </section>}

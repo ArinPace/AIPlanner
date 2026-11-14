@@ -164,14 +164,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   const [visitedNotes,setVisitedNotes]=useState({todo:false,work:false})
   useEffect(()=>{if(tab==='todo'||tab==='work')setVisitedNotes(previous=>previous[tab]?previous:{...previous,[tab]:true})},[tab])
   const [cursor, setCursor] = useState(() => new Date())
-  const [view, setView] = useState<CalendarView>('week')
-  const [weekLayout, setWeekLayout] = useState<'list' | 'grid'>(() =>
-    localStorage.getItem('planner-week-layout:' + username) === 'grid' ? 'grid' : 'list')
-  function changeWeekLayout(layout: 'list' | 'grid') {
-    setWeekLayout(layout)
-    localStorage.setItem('planner-week-layout:' + username, layout)
-    if (window.innerWidth <= 860) setSidebarOpen(false)
-  }
+  const [view, setView] = useState<CalendarView>('day')
   const [filesSidebar,setFilesSidebar]=useState(()=>window.innerWidth>600)
   const [agentSidebar,setAgentSidebar]=useState(()=>window.innerWidth>700)
   const [sidebarOpen, setSidebarOpen] = useState(() => window.matchMedia('(min-width: 861px)').matches)
@@ -386,7 +379,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
 
   const hiddenSet = useMemo(() => new Set(hiddenTagIds), [hiddenTagIds])
   const visibleEvents = useMemo(() => events.filter(event => isEventVisible(event, hiddenSet)&&!hiddenTypes.includes(eventType(event,tags))), [events, hiddenSet,hiddenTypes,tags])
-  const range = useMemo(() => visibleRange(cursor, view), [cursor, view])
+  const range = useMemo(() => visibleRange(cursor, view === 'day' ? 'week' : view), [cursor, view])
   const occurrences = useMemo(() => {
     if (view === 'month' || view === 'year') return []
     return expandEvents(visibleEvents, range.start, range.end)
@@ -511,8 +504,6 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
       {!draft&&<MainChatBubble key={username} username={username} open={mainChatOpen} onOpenChange={setMainChatOpen}/>}
       <div className="app-body" hidden={tab !== 'calendar'}>
         <Sidebar
-          weekLayout={weekLayout}
-          onWeekLayoutChange={changeWeekLayout}
           view={view}
           onViewChange={next => { setView(next); if (window.innerWidth <= 860) setSidebarOpen(false) }}
           events={events}
@@ -572,12 +563,12 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
           ) : (
             <TimeGridView
               onWeekNavigate={direction => setCursor(current => addDays(current, direction * 7))}
-              weekLayout={weekLayout}
+              weekLayout={view === 'week' ? 'grid' : 'list'}
               scaleToDuration={calendarDisplay.settings.week}
               onEventDone={markCalendarDone}
               active={tab==='calendar'}
               cursor={cursor}
-              view={view}
+              view={view === 'day' ? 'week' : view}
               zoom={zoom}
               occurrences={occurrences}
               busyOccurrences={busyOccurrences}

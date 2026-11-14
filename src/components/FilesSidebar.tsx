@@ -1,3 +1,4 @@
+import {FolderChevron} from './FolderChevron'
 import { useState, type DragEvent, type ReactNode } from 'react'
 import {isVisiblePlannerFile,type FilesState} from '../lib/files'
 import { navigationFolders } from '../lib/fileActions'
@@ -35,7 +36,7 @@ export function FilesSidebar({ selectedItemId,state, folderId, bin, count, busy,
       const files=items.filter(item=>item.folderId===folder.id)
       const children=state.folders.some(f=>f.parentId===folder.id) || files.length>0
       return <div key={folder.id}><div {...target(folder.id)} className="folder-tree-row" style={{paddingLeft:Math.min(path.length-1,8)*12}} draggable={!busy} onDragStart={e=>onDrag(e,folder.id)}>
-        {children ? <button className="folder-disclosure" aria-label={(collapsed.has(folder.id)?'Expand ':'Collapse ')+folder.name} aria-expanded={!collapsed.has(folder.id)} onClick={()=>onCollapse(folder.id)}>{collapsed.has(folder.id)?'\u25b8':'\u25be'}</button> : <span className="folder-disclosure-space"/>}
+        {children ? <button className="folder-disclosure" aria-label={(collapsed.has(folder.id)?'Expand ':'Collapse ')+folder.name} aria-expanded={!collapsed.has(folder.id)} onClick={()=>onCollapse(folder.id)}><FolderChevron open={!collapsed.has(folder.id)}/></button> : <span className="folder-disclosure-space"><FolderChevron/></span>}
         <button className={'folder-nav '+(!bin && folderId===folder.id?'is-active':'')} title={path.map(f=>f.name).join(' / ')} onClick={()=>onOpen(folder.id)}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" fill={folder.color} fillOpacity=".16" stroke={folder.color} strokeWidth="1.6"/></svg><span>{folder.name}</span></button>
       </div>{!collapsed.has(folder.id) && files.map(item=>fileRow(item,path.length))}</div>
     })}</nav>
