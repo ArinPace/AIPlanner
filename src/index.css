@@ -2809,3 +2809,4 @@ html, body { touch-action: pan-x pan-y; }
 .checklist-page-dots button[aria-current=page] { background: transparent; }
 .checklist-page-dots button[aria-current=page]::before { background: var(--blue); }
 .has-mobile-week { overflow-anchor: none; }
+.checklist-sheet,.checklist-sheet .apple-note-scroll { touch-action: pan-y; }
