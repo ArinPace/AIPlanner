@@ -2528,3 +2528,9 @@ html, body { touch-action: pan-x pan-y; }
 .standalone-todo-editor .apple-editor-shell[data-body-has-title=true] .apple-note-document > :first-child { display: none; }
 .files-tab-panel:has(.standalone-todo-editor) { padding-bottom: 0; }
 .standalone-todo-editor .apple-note-document { padding-bottom: calc(120px + env(safe-area-inset-bottom)); }
+
+/* Both checklist tabs share one intentional gap; legacy empty headings add none. */
+.standalone-todo-editor .apple-note-document { padding-top: 22px; }
+.standalone-todo-editor .apple-note-document > :is(h1,h2,h3,h4,h5,h6):first-child:empty,
+.standalone-todo-editor .apple-note-document > :is(h1,h2,h3,h4,h5,h6):first-child:has(> br.ProseMirror-trailingBreak:only-child) { display: none; }
+.standalone-todo-editor .apple-note-document > ul[data-type='taskList']:first-of-type { margin-top: 0; }
