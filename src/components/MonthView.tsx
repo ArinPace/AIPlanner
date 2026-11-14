@@ -4,7 +4,7 @@ import { eventAppearance } from '../lib/eventAppearance'
 import {PlannerDate as Date} from '../lib/timezone'
 import { urgencyColor } from '../lib/urgencyColor'
 import { Fragment,useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { CalendarEvent, Tag } from '../types'
+import type { CalendarEvent, Tag, Occurrence } from '../types'
 import { expandEvents } from '../lib/recurrence'
 import {occurrenceFolderGroups} from '../lib/eventFolders'
 import { eventColor } from '../lib/colors'
@@ -22,6 +22,7 @@ import {
 const TARGET_WEEK_HEIGHT = 112
 
 type MonthViewProps = {
+  onFreeTimeClick?: (item:Occurrence)=>void
   showFreeTime?:boolean
   scaleToDuration?:boolean
   cursor: Date
@@ -35,7 +36,7 @@ type MonthViewProps = {
   onEventClick: (event: CalendarEvent, occurrenceStart: Date) => void
 }
 
-export function MonthView({ showFreeTime=true, scaleToDuration=false,cursor, zoom, events, busyEvents, onMonthChange, tags, onDayClick, onDayOpen, onEventClick }: MonthViewProps) {
+export function MonthView({ onFreeTimeClick, showFreeTime=true, scaleToDuration=false,cursor, zoom, events, busyEvents, onMonthChange, tags, onDayClick, onDayOpen, onEventClick }: MonthViewProps) {
   const [now,setNow]=useState(()=>new Date())
   useEffect(()=>{const timer=window.setInterval(()=>setNow(new Date()),60000);return()=>window.clearInterval(timer)},[])
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -167,7 +168,7 @@ export function MonthView({ showFreeTime=true, scaleToDuration=false,cursor, zoo
                       style={{...(item.freeTime?freeTimeAppearance:eventAppearance(color,item.event.reminder)),...(scaleToDuration?{height:durationHeight(item,'month',zoom,startOfDay(day).getTime(),addDays(startOfDay(day),1).getTime())}:{})}}
                       onClick={(event) => {
                         event.stopPropagation()
-                        if(item.freeTime)onDayClick(item.start)
+                        if(item.freeTime){if(onFreeTimeClick)onFreeTimeClick(item);else onDayClick(item.start)}
                         else onEventClick(item.event, item.start)
                       }}
                     >

@@ -7,7 +7,7 @@ import {applyTheme,readTheme} from './lib/theme'
 import {useCalendarDisplay} from './lib/useCalendarDisplay'
 import {MainChatBubble} from './components/MainChatBubble'
 import {TaskNotificationSync} from './components/TaskNotificationSync'
-import {taskScreenTimeWindow} from './lib/taskScreenTime'
+import {taskScreenTimeWindow,type TaskScreenTimeWindow} from './lib/taskScreenTime'
 import {verifyFreeTimeRequest, type TaskFeedback, type TaskTimeResult} from './lib/widgetTaskFeedback'
 import {WidgetTaskFeedback} from './components/WidgetTaskFeedback'
 import {ScreenTimePanel} from './components/ScreenTimePanel'
@@ -43,7 +43,7 @@ import { createId } from './lib/storage'
 import { useDatePinch } from './lib/useDatePinch'
 import { useVmActivity } from './lib/useVmActivity'
 import { clampZoom, DEFAULT_ZOOM, ZOOM_STEP } from './lib/zoom'
-import type { CalendarEvent, CalendarView, EventDraft, StoredState, Tag } from './types'
+import type { Occurrence, CalendarEvent, CalendarView, EventDraft, StoredState, Tag } from './types'
 
 function emptyRecurrence() {
   return { frequency: 'none' as const, interval: 1, until: null }
@@ -180,6 +180,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   const [hiddenTypes,setHiddenTypes]=useState<ScheduleType[]>(()=>{try{return JSON.parse(localStorage.getItem('planner-event-types:'+username)||'[]').filter((type:unknown)=>type==='fixed'||type==='planned')}catch{return []}})
   function toggleEventType(type:ScheduleType){setHiddenTypes(current=>{const next=current.includes(type)?current.filter(value=>value!==type):[...current,type];try{localStorage.setItem('planner-event-types:'+username,JSON.stringify(next))}catch{/* Keep the filter working when browser storage is unavailable. */}return next})}
   const [zoom, setZoom] = useState(DEFAULT_ZOOM)
+  const [editingFocusWindow,setEditingFocusWindow]=useState<TaskScreenTimeWindow|null>(null)
   const [draft, setDraft] = useState<EventDraft | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingOccurrence,setEditingOccurrence]=useState<string|null>(null)
@@ -403,10 +404,18 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
 
   function openCreate(date: Date, options?: { timed?: boolean; allDay?: boolean }) {
     setEditingId(null)
+    setEditingFocusWindow(null)
     setDraft(draftFromPreset(date, options))
   }
 
+  function openFreeTime(item:Occurrence) {
+    openCreate(item.start,{timed:true,allDay:false})
+    setDraft({...draftFromPreset(item.start,{timed:true,allDay:false}),endDate:toDateInput(item.end),endTime:toTimeInput(item.end)})
+    setEditingFocusWindow(taskScreenTimeWindow(item.event,item.start,item.end))
+  }
+
   function openEdit(event: CalendarEvent,occurrenceStart?: Date,sourceEvents=events) {
+    setEditingFocusWindow(null)
     setEditingOccurrence((occurrenceStart||new Date(event.start)).toISOString())
     setEditingId(event.id)
     function tree(item:CalendarEvent):EventDraft{return {...draftFromEvent(item),...(item.eventKind==='folder'?{folderChildren:sourceEvents.filter(child=>child.folderId===item.id).map(child=>({id:child.id,draft:tree(child)}))}:{})}}
@@ -416,6 +425,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   function closeModal() {
     setDraft(null)
     setEditingId(null)
+    setEditingFocusWindow(null)
   }
 
   function saveDraft() {
@@ -556,6 +566,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
             />
           ) : view === 'month' ? (
             <MonthView
+              onFreeTimeClick={openFreeTime}
               showFreeTime={!hiddenSet.has(FREE_TIME_TAG_ID)}
               scaleToDuration={calendarDisplay.settings.month}
               cursor={cursor}
@@ -573,6 +584,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
             />
           ) : (
             <TimeGridView
+              onFreeTimeClick={openFreeTime}
               showFreeTime={!hiddenSet.has(FREE_TIME_TAG_ID)}
               onVisibleDateChange={reportVisibleDate}
               onWeekNavigate={direction => setCursor(current => addDays(current, direction * 7))}
@@ -595,7 +607,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
 
       {draft && (
         <EventModal
-          screenTimeTask={(()=>{const event=events.find(event=>event.id===editingId);if(!event||event.allDay||event.reminder||!editingOccurrence)return undefined;const start=new Date(editingOccurrence);return taskScreenTimeWindow(event,start,new Date(start.getTime()+new Date(event.end).getTime()-new Date(event.start).getTime()))})()}
+          screenTimeTask={editingFocusWindow??(()=>{const event=events.find(event=>event.id===editingId);if(!event||event.allDay||event.reminder||!editingOccurrence)return undefined;const start=new Date(editingOccurrence);return taskScreenTimeWindow(event,start,new Date(start.getTime()+new Date(event.end).getTime()-new Date(event.start).getTime()))})()}
           existingId={editingId||undefined}
           nested={Boolean(editingId&&events.find(event=>event.id===editingId)?.folderId)}
           mode={editingId ? 'edit' : 'create'}

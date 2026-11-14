@@ -1,3 +1,4 @@
+import {supportsScreenTime} from '../lib/platform'
 import {TaskScreenTimeButton} from './TaskScreenTimeButton'
 import type {TaskScreenTimeWindow} from '../lib/taskScreenTime'
 import { urgencyColor } from '../lib/urgencyColor'
@@ -290,7 +291,7 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
 
         {error && <p className="form-error">{error}</p>}
 
-        {screenTimeTask&&!folder&&<TaskScreenTimeButton task={screenTimeTask}/>}
+        {screenTimeTask&&supportsScreenTime()&&<div className="event-screen-time-setting"><span>Screen Time</span><TaskScreenTimeButton task={screenTimeTask}/></div>}
         <div className="modal-actions">
           {onDeleteOccurrence && <button type="button" className="danger-btn" onClick={onDeleteOccurrence}>Remove occurrence from series</button>}
           {mode === 'edit' && onDelete && (

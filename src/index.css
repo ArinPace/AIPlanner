@@ -2640,3 +2640,12 @@ html, body { touch-action: pan-x pan-y; }
 
 .agenda-screen-time-action .task-screen-time-action { position: relative; }
 .agenda-screen-time-action .form-error { position: absolute; right: 0; top: 100%; z-index: 20; width: min(260px,75vw); padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+
+/* Cards open their editor; only the hierarchy control expands folders. */
+.mobile-week .agenda-grid-row { grid-template-columns: 36px minmax(0,1fr) 36px; }
+@media(min-width:601px) { .mobile-week .agenda-grid-row { grid-template-columns: 40px minmax(0,1fr) 40px; } }
+.grid-folder-disclosure { width: 28px; flex: 0 0 28px; }
+.event-screen-time-setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+
+.week-time-grid .timed-event-folder .folder-event-header { display: grid; grid-template-columns: 24px minmax(0,1fr); align-items: stretch; gap: 2px; }
+.week-time-grid .grid-folder-disclosure { width: 24px; min-height: 24px; }
