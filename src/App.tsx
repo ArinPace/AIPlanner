@@ -384,7 +384,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   },[loaded,loadError,tab])
 
   const hiddenSet = useMemo(() => new Set(hiddenTagIds), [hiddenTagIds])
-  const visibleEvents = useMemo(() => events.filter(event => isEventVisible(event, hiddenSet)&&!hiddenTypes.includes(eventType(event,tags))), [events, hiddenSet,hiddenTypes,tags])
+  const visibleEvents = useMemo(() => events.filter(event => (!hiddenSet.has(FREE_TIME_TAG_ID)||event.title.trim().toLowerCase()!=='free time')&&isEventVisible(event, hiddenSet)&&!hiddenTypes.includes(eventType(event,tags))), [events, hiddenSet,hiddenTypes,tags])
   const range = useMemo(() => visibleRange(cursor, view === 'day' ? 'week' : view), [cursor, view])
   const occurrences = useMemo(() => {
     if (view === 'month' || view === 'year') return []
