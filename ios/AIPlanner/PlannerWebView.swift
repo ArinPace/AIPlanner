@@ -936,7 +936,7 @@ if(location.origin!=='https://chatgpt.com')throw Error('Load the signed-in ChatG
 const trigger=()=>{const buttons=[...document.querySelectorAll('button')].filter(n=>visible(n)&&!n.closest('[role=menu],[role=listbox]'));return buttons.find(n=>/^(?:Select effort|Thinking effort|Select thinking effort)$/i.test(label(n))||/^(?:Select effort|Thinking effort)$/i.test((n.innerText||'').trim()))||buttons.find(n=>/^Select ChatGPT model$/i.test(n.getAttribute('aria-label')||''))};
 const modelLabelForChoice=n=>/^(?:GPT[- ]|o[134](?:[- ]|$)|ChatGPT)/i.test(label(n));
 const menus=()=>[...document.querySelectorAll('[role="menu"],[role="listbox"]')].filter(visible);
-const sliders=()=>menus().flatMap(n=>[...n.querySelectorAll('[role="slider"],input[type="range"]')]).filter(n=>n.getClientRects().length&&!n.closest('[inert]')&&visible(n.parentElement));
+const sliders=()=>[...document.querySelectorAll('[role="slider"],input[type="range"]')].filter(n=>visible(n)&&visible(n.parentElement));
 const items=()=>menus().flatMap(menu=>[...menu.querySelectorAll('[role="menuitem"],[role="menuitemradio"],[role="menuitemcheckbox"],[role="option"]')]).filter(n=>visible(n)&&label(n)&&!n.hasAttribute('disabled')&&n.getAttribute('aria-disabled')!=='true'&&!n.querySelector('[role="slider"],input[type="range"]')&&!/upgrade|pricing|learn more|subscribe|manage subscription/i.test(label(n)));
 const registry=window.__plannerModelRegistry ||= {};
 const register=n=>{n.dataset.plannerModelOption ||= crypto.randomUUID();registry[n.dataset.plannerModelOption]={label:label(n)};return n.dataset.plannerModelOption};
@@ -953,7 +953,18 @@ if(operation==='open'){
  let matching=items().filter(n=>n.dataset.plannerModelOption===id);if(!matching.length&&registry[id]){await overview();matching=items().filter(n=>label(n)===registry[id].label);if(!matching.length){const select=items().find(n=>/^Select model$/i.test(label(n)));if(select){select.click();await pause(150);matching=items().filter(n=>label(n)===registry[id].label)}}}
  if(matching.length!==1)throw Error('Model options changed. Refresh before choosing.');if(modelLabelForChoice(matching[0]))window.__plannerSelectedModel=label(matching[0]);matching[0].click();
 }else if(operation==='adjust'){
- let slider=sliders().find(n=>n.dataset.plannerModelOption===id);if(!slider&&registry[id]){await overview();slider=sliders().find(n=>label(n)===registry[id].label)}if(!slider||!Number.isInteger(value))throw Error('Refresh the thinking controls first.');
+ let slider=sliders().find(n=>n.dataset.plannerModelOption===id);
+ if(!slider){
+  await overview();
+  for(let attempt=0;attempt<15&&!slider;attempt++){
+   const candidates=sliders().filter(n=>registry[id]?label(n)===registry[id].label:/thinking|effort/i.test(label(n)));
+   if(candidates.length===1)slider=candidates[0];else if(!registry[id]&&sliders().length===1)slider=sliders()[0];
+   if(!slider)await pause(100);
+  }
+ }
+ if(!slider||!Number.isInteger(value))throw Error('Thinking controls are unavailable. Reopen the picker and try again.');
+ register(slider);
+
  const number=k=>Number(slider.getAttribute(k));const min=number('aria-valuemin'),max=number('aria-valuemax');if(value<min||value>max)throw Error('Choose a supported thinking level.');
  slider.focus();for(let i=0;i<20&&number('aria-valuenow')!==value;i++){const key=number('aria-valuenow')<value?'ArrowRight':'ArrowLeft';slider.dispatchEvent(new KeyboardEvent('keydown',{key,code:key,bubbles:true}));await pause(80)}
  if(number('aria-valuenow')!==value)throw Error('ChatGPT did not confirm the thinking level.');
