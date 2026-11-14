@@ -7,7 +7,7 @@ const browser=await chromium.launch({executablePath:'/Applications/Google Chrome
 try{
  const page=await browser.newPage()
  await page.route('https://chatgpt.com/**',r=>r.fulfill({contentType:'text/html',body:`<button id="model" aria-label="Select ChatGPT model">Model A</button><script>
- window.changes=[];document.addEventListener('pointerdown',e=>{if(e.target===document.body)document.querySelector('[role=menu]')?.remove()});
+ window.changes=[];document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!window.fixtureIgnoreEscape)document.querySelector('[role=menu]')?.remove()});
  document.querySelector('#model').onclick=()=>{const m=document.createElement('div');m.role='menu';for(const label of ['Model A','Model B','Thinking','Speed','Upgrade']){const b=document.createElement('button');b.role='menuitemradio';b.textContent=label;b.setAttribute('aria-checked',document.querySelector('#model').textContent===label);b.onclick=()=>{changes.push(label);document.querySelector('#model').textContent=label;m.remove()};m.append(b)}document.body.append(m)};
  </script>`}))
  await page.goto('https://chatgpt.com/')
@@ -22,7 +22,7 @@ try{
  const adjusted=await run('adjust','power-test',3);assert.equal(adjusted.sliders[0].value,3);assert(!adjusted.options.some(x=>x.label==='Power'));await assert.rejects(()=>run('adjust','power-test',9),/supported thinking/)
  await run('close');assert.equal(await page.locator('[role=menu]').count(),0)
  await page.setContent(`<button id="model" aria-label="Select ChatGPT model">Select effort</button><script>
- document.addEventListener('pointerdown',e=>{if(e.target===document.body)document.querySelector('[role=menu]')?.remove()});
+ window.fixtureIgnoreEscape=true;document.addEventListener('pointerdown',e=>{if(e.target===document.body)document.querySelector('[role=menu]')?.remove()});
  document.querySelector('#model').onclick=()=>{const m=document.createElement('div');m.role='menu';m.innerHTML='<button role="menuitem" id="select">Select model</button><div role="menuitem"><span role="slider" aria-label="Thinking" aria-valuemin="0" aria-valuemax="5" aria-valuenow="3"></span></div>';m.querySelector('#select').onclick=()=>{m.innerHTML='<button role="menuitemradio" aria-checked="true">GPT-6.1 Sol</button><button role="menuitemradio" aria-checked="false">GPT-6 Astra</button>'};document.body.append(m)};
  </script>`)
  const nested=await run('open');assert.equal(nested.selectedModel,'GPT-6.1 Sol');assert.equal(nested.sliders.length,1);assert.ok(nested.options.some(o=>o.label==='Select model'));assert.ok(!nested.options.some(o=>o.label==='GPT-6.1 Sol'));await run('close')
