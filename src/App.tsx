@@ -477,7 +477,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   }
 
   return (
-    <div className="app-shell" inert={widgetSaving}>
+    <div className="app-shell" style={{'--visual-zoom':String(zoom)} as CSSProperties} inert={widgetSaving}>
       <TaskNotificationSync username={username} calendar={{events,tags,hiddenTagIds,zoom}}/>
       <WidgetTaskFeedback username={username} onApply={applyWidgetTime}/>
       <DeviceControlSync username={username}/>

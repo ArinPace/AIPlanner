@@ -2594,3 +2594,9 @@ html, body { touch-action: pan-x pan-y; }
 @media(prefers-reduced-motion:reduce) {
  .folder-agenda-children,.folder-day-children { animation: none; }
 }
+
+/* Content zoom leaves toolbars and app navigation at a usable fixed size. */
+.standalone-todo-editor .apple-note-document { zoom: var(--visual-zoom,1); }
+.mobile-week .mobile-week-event { font-size: calc(10px * var(--visual-zoom,1)); min-height: calc(36px * var(--visual-zoom,1)); }
+.mobile-week .folder-event-count { font-size: calc(10px * var(--visual-zoom,1)); }
+.note-settings-host .settings-panel { position: fixed; top: 64px; right: 12px; z-index: 110; max-height: calc(100dvh - 166px - env(safe-area-inset-bottom)); bottom: calc(90px + env(safe-area-inset-bottom)); }

@@ -1,3 +1,4 @@
+import {createPortal} from 'react-dom'
 import {MiniCalendar} from './MiniCalendar'
 import {isToday,startOfWeek,isSameDay,isSameMonth,isSameYear,addDays} from '../lib/dates'
 import {PlannerDate as Date} from '../lib/timezone'
@@ -61,7 +62,7 @@ export function Header({
   useEffect(() => {
     if (!settingsOpen) return
     function onPointer(event: MouseEvent) {
-      if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
+      if (settingsRef.current && !settingsRef.current.contains(event.target as Node) && !(event.target instanceof Element && event.target.closest('.settings-panel'))) {
         setSettingsOpen(false)
       }
     }
@@ -109,15 +110,19 @@ export function Header({
           >
             <SettingsIcon />
           </button>
-          {settingsOpen && (
-            <SettingsPanel
+          {settingsOpen && (tab==='calendar'?<SettingsPanel
               calendarDisplay={calendarDisplay}
               zoom={zoom}
               onLogout={onLogout}
               onZoomChange={onVisualZoomChange}
               onClose={() => setSettingsOpen(false)}
-            />
-          )}
+            />:createPortal(<div className="note-settings-host"><SettingsPanel
+              calendarDisplay={calendarDisplay}
+              zoom={zoom}
+              onLogout={onLogout}
+              onZoomChange={onVisualZoomChange}
+              onClose={() => setSettingsOpen(false)}
+            /></div>,document.body))}
         </div>
         <div className="user-chip">
           <span>{username}</span>
