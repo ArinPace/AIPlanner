@@ -964,8 +964,20 @@ if(operation==='open'&&!selectedModel){
   select.click();await pause(300);
   selectedModel=items().find(n=>checked(n)&&modelLabel(n));
   if(selectedModel)window.__plannerSelectedModel=label(selectedModel);
-  escape();await pause(100);
-  if(!sliders().length){escape();await pause(100);const opener=trigger();if(opener){opener.focus();if(opener.hasAttribute('aria-haspopup')){opener.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,buttons:1,pointerId:1,isPrimary:true,pointerType:'mouse'}));await pause(150)}if(!menus().length)opener.click();await pause(250)}}
+  // Return to the effort overview even when Escape leaves a nested menu mounted.
+  for(const menu of menus()){menu.focus();menu.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',code:'Escape',bubbles:true}))}
+  escape();await pause(150);
+  const opener=trigger();
+  if(opener){
+   // Dismiss remaining popovers using an outside pointer, then reopen the root.
+   if(menus().length){for(const type of ['pointerdown','pointerup','click'])document.body.dispatchEvent(new PointerEvent(type,{bubbles:true,button:0,pointerId:1,isPrimary:true,pointerType:'mouse'}));await pause(150)}
+   for(let attempt=0;attempt<3;attempt++){
+    opener.focus();
+    if(opener.hasAttribute('aria-haspopup'))opener.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,buttons:1,pointerId:1,isPrimary:true,pointerType:'mouse'}));else opener.click();
+    await pause(200);
+    if(items().some(n=>/^Select model$/i.test(label(n)))&&sliders().length)break;
+   }
+  }
  }
 }
 const options=items().map(n=>{n.dataset.plannerModelOption ||= crypto.randomUUID();return {id:n.dataset.plannerModelOption,label:label(n).slice(0,240),selected:n.getAttribute('aria-checked')==='true'||n.getAttribute('aria-selected')==='true'||n.getAttribute('aria-pressed')==='true'||n.dataset.state==='checked'||(/(fast|standard) mode/i.test(label(n))&&menus().some(m=>m.querySelector('[data-fast-mode="true"]'))),submenu:!!n.getAttribute('aria-haspopup')}});
