@@ -15,7 +15,7 @@ try{
  let menu=await run('open');assert.equal(menu.options.length,4);assert(menu.options.find(x=>x.label==='Model A').selected);assert(!menu.options.some(x=>/Upgrade/.test(x.label)))
  const old=menu.options.find(x=>x.label==='Model B').id
  await run('choose',old);assert.equal((await run('open')).summary,'Model B');assert.deepEqual(await page.evaluate(()=>changes),['Model B'])
- await assert.rejects(()=>run('choose',old),/options changed/);await page.evaluate(()=>{const m=document.querySelector('[role=menu]');const row=document.createElement('div');row.role='menuitem';row.setAttribute('aria-label','Power');row.innerHTML='<span role="slider" tabindex="0" aria-label="Power" aria-valuemin="0" aria-valuemax="5" aria-valuenow="1" aria-valuetext="Light">Thinking</span>';const slider=row.firstChild;slider.onkeydown=e=>{slider.setAttribute('aria-valuenow',Number(slider.getAttribute('aria-valuenow'))+(e.key==='ArrowRight'?1:-1))};m.append(row)})
+ await run('choose',old);await assert.rejects(()=>run('choose','unknown-option'),/options changed/);await run('open');await page.evaluate(()=>{const m=document.querySelector('[role=menu]');const row=document.createElement('div');row.role='menuitem';row.setAttribute('aria-label','Power');row.innerHTML='<span role="slider" tabindex="0" aria-label="Power" aria-valuemin="0" aria-valuemax="5" aria-valuenow="1" aria-valuetext="Light">Thinking</span>';const slider=row.firstChild;slider.onkeydown=e=>{slider.setAttribute('aria-valuenow',Number(slider.getAttribute('aria-valuenow'))+(e.key==='ArrowRight'?1:-1))};m.append(row)})
  const menuWithSlider=await run('choose',null).catch(()=>null)
  assert.equal(menuWithSlider,null)
  await page.locator('[role=slider]').evaluate(n=>n.dataset.plannerModelOption='power-test')

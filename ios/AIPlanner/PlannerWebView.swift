@@ -933,11 +933,14 @@ const label=n=>(n.getAttribute('aria-label')||n.innerText||'').trim();
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 const escape=()=>{for(const type of ['keydown','keyup'])document.activeElement?.dispatchEvent(new KeyboardEvent(type,{key:'Escape',code:'Escape',bubbles:true}))};
 if(location.origin!=='https://chatgpt.com')throw Error('Load the signed-in ChatGPT session first.');
-const trigger=()=>[...document.querySelectorAll('button')].find(n=>visible(n)&&/^Select ChatGPT model$/i.test(n.getAttribute('aria-label')||''));
+const trigger=()=>{const buttons=[...document.querySelectorAll('button')].filter(n=>visible(n)&&!n.closest('[role=menu],[role=listbox]'));return buttons.find(n=>/^(?:Select effort|Thinking effort|Select thinking effort)$/i.test(label(n))||/^(?:Select effort|Thinking effort)$/i.test((n.innerText||'').trim()))||buttons.find(n=>/^Select ChatGPT model$/i.test(n.getAttribute('aria-label')||''))};
 const modelLabelForChoice=n=>/^(?:GPT[- ]|o[134](?:[- ]|$)|ChatGPT)/i.test(label(n));
 const menus=()=>[...document.querySelectorAll('[role="menu"],[role="listbox"]')].filter(visible);
 const sliders=()=>menus().flatMap(n=>[...n.querySelectorAll('[role="slider"],input[type="range"]')]).filter(n=>n.getClientRects().length&&!n.closest('[inert]')&&visible(n.parentElement));
 const items=()=>menus().flatMap(menu=>[...menu.querySelectorAll('[role="menuitem"],[role="menuitemradio"],[role="menuitemcheckbox"],[role="option"]')]).filter(n=>visible(n)&&label(n)&&!n.hasAttribute('disabled')&&n.getAttribute('aria-disabled')!=='true'&&!n.querySelector('[role="slider"],input[type="range"]')&&!/upgrade|pricing|learn more|subscribe|manage subscription/i.test(label(n)));
+const registry=window.__plannerModelRegistry ||= {};
+const register=n=>{n.dataset.plannerModelOption ||= crypto.randomUUID();registry[n.dataset.plannerModelOption]={label:label(n)};return n.dataset.plannerModelOption};
+const overview=async()=>{escape();for(const type of ['pointerdown','mousedown','pointerup','mouseup','click'])document.body.dispatchEvent(new MouseEvent(type,{bubbles:true,button:0}));await pause(80);const b=trigger();if(!b)throw Error('Thinking controls are unavailable.');b.focus();if(b.hasAttribute('aria-haspopup'))b.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,buttons:1,pointerId:1,isPrimary:true,pointerType:'mouse'}));else b.click();await pause(150)};
 if(operation==='close'){escape();window.__plannerModelMenuOpen=false;return {summary:'Model menu closed.',options:[]}}
 const button=trigger();if(!button)throw Error('ChatGPT model controls are unavailable. Finish sign-in and load a chat first.');
 if(operation==='open'){
@@ -947,10 +950,10 @@ if(operation==='open'){
  await pause(150);button.focus();if(button.hasAttribute('aria-haspopup')){button.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,buttons:1,pointerId:1,isPrimary:true,pointerType:'mouse'}));await pause(150)}if(!menus().length)button.click();window.__plannerModelMenuOpen=true;
 }else if(operation==='choose'){
  if(!window.__plannerModelMenuOpen)throw Error('Reopen the model menu before choosing an option.');
- const matching=items().filter(n=>n.dataset.plannerModelOption===id);
+ let matching=items().filter(n=>n.dataset.plannerModelOption===id);if(!matching.length&&registry[id]){await overview();matching=items().filter(n=>label(n)===registry[id].label);if(!matching.length){const select=items().find(n=>/^Select model$/i.test(label(n)));if(select){select.click();await pause(150);matching=items().filter(n=>label(n)===registry[id].label)}}}
  if(matching.length!==1)throw Error('Model options changed. Refresh before choosing.');if(modelLabelForChoice(matching[0]))window.__plannerSelectedModel=label(matching[0]);matching[0].click();
 }else if(operation==='adjust'){
- const slider=sliders().find(n=>n.dataset.plannerModelOption===id);if(!slider||!Number.isInteger(value))throw Error('Refresh the thinking controls first.');
+ let slider=sliders().find(n=>n.dataset.plannerModelOption===id);if(!slider&&registry[id]){await overview();slider=sliders().find(n=>label(n)===registry[id].label)}if(!slider||!Number.isInteger(value))throw Error('Refresh the thinking controls first.');
  const number=k=>Number(slider.getAttribute(k));const min=number('aria-valuemin'),max=number('aria-valuemax');if(value<min||value>max)throw Error('Choose a supported thinking level.');
  slider.focus();for(let i=0;i<20&&number('aria-valuenow')!==value;i++){const key=number('aria-valuenow')<value?'ArrowRight':'ArrowLeft';slider.dispatchEvent(new KeyboardEvent('keydown',{key,code:key,bubbles:true}));await pause(80)}
  if(number('aria-valuenow')!==value)throw Error('ChatGPT did not confirm the thinking level.');
@@ -963,30 +966,12 @@ let selectedModel=items().find(n=>checked(n)&&modelLabel(n));
 if(selectedModel)window.__plannerSelectedModel=label(selectedModel);
 if(operation==='open'&&!selectedModel){
  const select=items().find(n=>/^Select model$/i.test(label(n)));
- if(select)return {selectedModel:window.__plannerSelectedModel||'',sliders:sliders().map(n=>{n.dataset.plannerModelOption ||= crypto.randomUUID();return {id:n.dataset.plannerModelOption,label:n.getAttribute('aria-label')||'Thinking',min:Number(n.getAttribute('aria-valuemin')),max:Number(n.getAttribute('aria-valuemax')),value:Number(n.getAttribute('aria-valuenow')),text:n.getAttribute('aria-valuetext')||''}}),summary:(trigger()?.innerText||'').trim(),options:items().map(n=>{n.dataset.plannerModelOption ||= crypto.randomUUID();return {id:n.dataset.plannerModelOption,label:label(n),selected:checked(n),submenu:!!n.getAttribute('aria-haspopup')}})};
- if(select){
-  select.click();await pause(300);
-  selectedModel=items().find(n=>checked(n)&&modelLabel(n));
-  if(selectedModel)window.__plannerSelectedModel=label(selectedModel);
-  // Return to the effort overview even when Escape leaves a nested menu mounted.
-  for(const menu of menus()){menu.focus();menu.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',code:'Escape',bubbles:true}))}
-  escape();await pause(150);
-  const opener=trigger();
-  if(opener){
-   // Dismiss remaining popovers using an outside pointer, then reopen the root.
-   if(menus().length){for(const type of ['pointerdown','pointerup','click'])document.body.dispatchEvent(new PointerEvent(type,{bubbles:true,button:0,pointerId:1,isPrimary:true,pointerType:'mouse'}));await pause(150)}
-   for(let attempt=0;attempt<3;attempt++){
-    opener.focus();
-    if(opener.hasAttribute('aria-haspopup'))opener.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,buttons:1,pointerId:1,isPrimary:true,pointerType:'mouse'}));else opener.click();
-    await pause(200);
-    if(items().some(n=>/^Select model$/i.test(label(n)))&&sliders().length)break;
-   }
-  }
- }
+ if(select)return {selectedModel:window.__plannerSelectedModel||'',sliders:sliders().map(n=>{register(n);return {id:n.dataset.plannerModelOption,label:n.getAttribute('aria-label')||'Thinking',min:Number(n.getAttribute('aria-valuemin')),max:Number(n.getAttribute('aria-valuemax')),value:Number(n.getAttribute('aria-valuenow')),text:n.getAttribute('aria-valuetext')||''}}),summary:(trigger()?.innerText||'').trim(),options:items().map(n=>{register(n);return {id:n.dataset.plannerModelOption,label:label(n),selected:checked(n),submenu:!!n.getAttribute('aria-haspopup')}})};
 }
-const options=items().map(n=>{n.dataset.plannerModelOption ||= crypto.randomUUID();return {id:n.dataset.plannerModelOption,label:label(n).slice(0,240),selected:n.getAttribute('aria-checked')==='true'||n.getAttribute('aria-selected')==='true'||n.getAttribute('aria-pressed')==='true'||n.dataset.state==='checked'||(/(fast|standard) mode/i.test(label(n))&&menus().some(m=>m.querySelector('[data-fast-mode="true"]'))),submenu:!!n.getAttribute('aria-haspopup')}});
+
+const options=items().map(n=>{register(n);return {id:n.dataset.plannerModelOption,label:label(n).slice(0,240),selected:n.getAttribute('aria-checked')==='true'||n.getAttribute('aria-selected')==='true'||n.getAttribute('aria-pressed')==='true'||n.dataset.state==='checked'||(/(fast|standard) mode/i.test(label(n))&&menus().some(m=>m.querySelector('[data-fast-mode="true"]'))),submenu:!!n.getAttribute('aria-haspopup')}});
 if(operation==='open'&&!options.length)throw Error('ChatGPT did not expose model options. No model was changed.');
-const ranges=sliders().map(n=>{n.dataset.plannerModelOption ||= crypto.randomUUID();return {id:n.dataset.plannerModelOption,label:n.getAttribute('aria-label')||'Thinking',min:Number(n.getAttribute('aria-valuemin')),max:Number(n.getAttribute('aria-valuemax')),value:Number(n.getAttribute('aria-valuenow')),text:n.getAttribute('aria-valuetext')||''}});
+const ranges=sliders().map(n=>{register(n);return {id:n.dataset.plannerModelOption,label:n.getAttribute('aria-label')||'Thinking',min:Number(n.getAttribute('aria-valuemin')),max:Number(n.getAttribute('aria-valuemax')),value:Number(n.getAttribute('aria-valuenow')),text:n.getAttribute('aria-valuetext')||''}});
 return {selectedModel:window.__plannerSelectedModel||'',sliders:ranges,summary:(trigger()?.innerText||'ChatGPT model settings').trim().split('\n').slice(0,2).join(' · ').slice(0,240),options};
 """# }
     // END_CHAT_MODEL_MENU
