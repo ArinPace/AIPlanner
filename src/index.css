@@ -2872,3 +2872,7 @@ html, body { touch-action: pan-x pan-y; }
 .checklist-sheet.is-paging .apple-note-document { user-select: none; -webkit-user-select: none; }
 .checklist-sheet li[data-scheduled-label]::after { min-width: 40px; text-align: center; }
 @media(prefers-reduced-motion:reduce) { .checklist-pages-track { transition: none; } }
+.checklist-pages-track > [data-checklist-page=todo] { order: 0; }
+.checklist-pages-track > [data-checklist-page=work] { order: 1; }
+.checklist-sheet.is-closing { transition: transform 240ms cubic-bezier(.4,0,.7,.4); pointer-events: none; }
+@media(prefers-reduced-motion:reduce) { .checklist-sheet.is-closing { transition: none; } }
