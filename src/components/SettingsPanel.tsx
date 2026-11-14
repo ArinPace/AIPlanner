@@ -1,3 +1,4 @@
+import {useFolderItemCounts,setFolderItemCounts} from '../lib/folderItemCounts'
 import {useCalendarRowControls,setCalendarRowControls} from '../lib/calendarRowControls'
 import {readFolderAnimations,setFolderAnimations} from '../lib/folderAnimations'
 import {isIPhoneApp} from '../lib/platform'
@@ -26,6 +27,7 @@ function shortcutMod(): string {
 
 export function SettingsPanel({ calendarDisplay, zoom, onZoomChange, onClose, onLogout }: SettingsPanelProps) {
   const rowControls=useCalendarRowControls()
+  const showItemCounts=useFolderItemCounts()
   const [folderAnimations,setFolderAnimationsState]=useState(readFolderAnimations)
   const [openExternally, setOpenExternally] = useState(externalLinks)
   const [downloadError,setDownloadError]=useState('')
@@ -62,6 +64,7 @@ export function SettingsPanel({ calendarDisplay, zoom, onZoomChange, onClose, on
         }} />
       </label>
       <label className="settings-theme"><span>Folder animations</span><input type="checkbox" role="switch" checked={folderAnimations} onChange={event=>{setFolderAnimationsState(event.target.checked);setFolderAnimations(event.target.checked)}}/></label>
+      <label className="settings-theme"><span>Folder item counts</span><input type="checkbox" role="switch" checked={showItemCounts} onChange={event=>setFolderItemCounts(event.target.checked)}/></label>
       <label className="settings-field"><span>Event controls</span><select aria-label="Event controls" value={rowControls} onChange={event=>setCalendarRowControls(event.target.value==='left'?'left':'right')}><option value="right">Clean lines, checkbox on right</option><option value="left">Checkboxes and bullets on left</option></select></label>
       <fieldset className="settings-duration"><legend>Scale to duration</legend>
         <label className="settings-theme"><span>Week view</span><input type="checkbox" role="switch" aria-label="Scale week view to duration" checked={calendarDisplay.settings.week} disabled={calendarDisplay.saving} onChange={e=>void calendarDisplay.change('week',e.target.checked)}/></label>
