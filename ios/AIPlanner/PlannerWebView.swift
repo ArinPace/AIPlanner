@@ -23,7 +23,7 @@ struct PlannerWebView: UIViewRepresentable {
         config.websiteDataStore = .default()
         config.allowsInlineMediaPlayback = true
         config.userContentController.addScriptMessageHandler(context.coordinator, contentWorld: .page, name: "plannerNative")
-        config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeScreenTime=true;window.plannerNativeChatGPTPortal=true;window.plannerNativeChatGPTRelayVersion=8;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true';document.documentElement.dataset.edgeToEdge='true'});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeScreenTime=true;window.plannerNativeChatGPTPortal=true;window.plannerNativeChatGPTRelayVersion=8;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true';document.documentElement.dataset.edgeToEdge='true';const inset=document.createElement('style');inset.id='planner-native-safe-area';inset.textContent=':root[data-iphone-app=true] .app-shell{padding-top:env(safe-area-inset-top);box-sizing:border-box}';document.head.append(inset)});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.userContentController.addUserScript(WKUserScript(source: """
             document.addEventListener('click', event => {
               const link = event.target instanceof Element && event.target.closest('a[href]');
@@ -102,7 +102,7 @@ struct PlannerWebView: UIViewRepresentable {
                 coordinator?.checkPage(web, notifyFocus: true)
             }
         }
-        web.load(URLRequest(url: AppConfiguration.origin))
+        web.load(URLRequest(url: AppConfiguration.origin, cachePolicy: .reloadIgnoringLocalCacheData))
         return web
     }
     func updateUIView(_ web: WKWebView, context: Context) {
