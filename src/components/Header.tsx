@@ -83,7 +83,7 @@ export function Header({
         </div>}
       </div>
 
-      <div className="header-center">
+      <div className="header-center" hidden={view === 'day'}>
 
         {tab === 'calendar' && <>
 
