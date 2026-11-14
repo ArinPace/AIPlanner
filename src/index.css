@@ -2810,3 +2810,19 @@ html, body { touch-action: pan-x pan-y; }
 .checklist-page-dots button[aria-current=page]::before { background: var(--blue); }
 .has-mobile-week { overflow-anchor: none; }
 .checklist-sheet,.checklist-sheet .apple-note-scroll { touch-action: pan-y; }
+
+/* Compact sheet chrome, with an actual pointer/keyboard resize handle. */
+.checklist-sheet { padding-bottom: 0; }
+.checklist-sheet > header { position: relative; padding-top: 22px; }
+.checklist-sheet .checklist-sheet-handle { position: absolute; top: 0; left: calc(50% - 36px); width: 72px; height: 22px; margin: 0; border: 0; background: transparent; padding: 0; cursor: ns-resize; touch-action: none; display: grid; place-items: center; }
+.checklist-sheet-handle::before { content: ''; width: 36px; height: 4px; border-radius: 8px; background: var(--line); }
+.checklist-sheet-title { min-width: 0; }
+.checklist-sheet-title time { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.4; }
+.checklist-sheet > header > div { align-items: flex-start; }
+.checklist-sheet .standalone-todo-editor .apple-note-document { padding-top: 8px; padding-bottom: 32px; }
+.checklist-sheet .checklist-page-dots { position: absolute; bottom: max(3px,calc(env(safe-area-inset-bottom) - 14px)); left: 50%; transform: translateX(-50%); z-index: 4; gap: 0; padding: 0; height: 20px; background: transparent; }
+.checklist-sheet .checklist-page-dots button { width: 20px; height: 20px; }
+.checklist-page-dots button::before { opacity: .18; transition: opacity 180ms ease; }
+.checklist-page-dots button[aria-current=page]::before { opacity: .3; }
+.checklist-page-dots.is-switching button::before { opacity: .55; }
+.checklist-page-dots.is-switching button[aria-current=page]::before { opacity: 1; }

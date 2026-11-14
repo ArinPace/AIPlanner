@@ -1,7 +1,8 @@
+import {ChecklistSheetMetadata} from './ChecklistSheet'
 import {checklistSchedule} from '../lib/checklistSchedule'
 import type {CalendarEvent} from '../types'
 import { PlannerDate as Date } from '../lib/timezone.js'
-import {useEffect,useState,useMemo} from 'react'
+import {useEffect,useState,useMemo,useContext} from 'react'
 import type {FilesState,PlannerTextFile} from '../lib/files'
 import {folderPath,isPermanentPlannerNote} from '../lib/files'
 import {NoteHistory} from './NoteHistory'
@@ -17,8 +18,10 @@ export function NotesWorkspace({calendarEvents=[],standalone=false,state,folderI
  async function copyNote(){if(!draft)return;const text=draft.name+'\n\n'+draft.content;try{if(navigator.share)await navigator.share({title:draft.name,text});else await navigator.clipboard.writeText(text);setCopied(true);window.setTimeout(()=>setCopied(false),2000)}catch{/* Dismissing a native share dialog leaves the note untouched. */}}
  function download(){if(!draft)return;const url=URL.createObjectURL(new Blob([draft.content],{type:'text/markdown;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=draft.name.replace(/[/\\]/g,'_')+'.md';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);setMore(false)}
  useEffect(()=>{if(standalone&&draft&&!draft.name.trim())onChange({...draft,name:draft.systemRole==='work'?'Work':'To do'})},[standalone,draft,onChange])
+ const reportDate=useContext(ChecklistSheetMetadata)
  const savedUpdatedAt=state.files.find(file=>file.id===draft?.id)?.updatedAt??draft?.updatedAt
- const noteHeader=standalone&&savedUpdatedAt?<div className="checklist-updated"><time dateTime={savedUpdatedAt} aria-label="Last updated">Last updated {new Date(savedUpdatedAt).toLocaleString(undefined,{month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'})}</time></div>:!standalone&&draft&&<div className="apple-note-heading"><time dateTime={draft.updatedAt}>{new Date(draft.updatedAt).toLocaleString(undefined,{month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'})}</time><textarea rows={1} className="apple-note-title" aria-label="Note title" placeholder="New Note" maxLength={100} value={draft.name} readOnly={draft.systemRole==='work'||draft.name==='Work' && draft.folderId===null} onChange={e=>onChange({...draft,name:e.target.value.replace(/\n/g,' ')})}/>{!standalone && draft.tags?.length?<div className="apple-note-tags">{draft.tags.map(tag=><button type="button" key={tag} onClick={()=>onSearch('#'+tag)}>#{tag}</button>)}</div>:null}</div>
+ useEffect(()=>{if(standalone&&savedUpdatedAt&&draft)reportDate?.(draft.systemRole==='work'||draft.name==='Work'?'work':'todo',savedUpdatedAt)},[standalone,savedUpdatedAt,draft?.systemRole,draft?.name,reportDate])
+ const noteHeader=standalone?undefined:!standalone&&draft&&<div className="apple-note-heading"><time dateTime={draft.updatedAt}>{new Date(draft.updatedAt).toLocaleString(undefined,{month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'})}</time><textarea rows={1} className="apple-note-title" aria-label="Note title" placeholder="New Note" maxLength={100} value={draft.name} readOnly={draft.systemRole==='work'||draft.name==='Work' && draft.folderId===null} onChange={e=>onChange({...draft,name:e.target.value.replace(/\n/g,' ')})}/>{!standalone && draft.tags?.length?<div className="apple-note-tags">{draft.tags.map(tag=><button type="button" key={tag} onClick={()=>onSearch('#'+tag)}>#{tag}</button>)}</div>:null}</div>
  return <section className={"apple-notes-content notes-list-hidden unified-note-editor"+(standalone?" standalone-todo-editor":"")} aria-label="File editor">
   {!standalone && <div className="apple-notes-navigation"><button type="button" aria-label="Back to Files" title="Back to Files" onClick={onClose}><NoteIcon name="back"/></button><span>Files{folder?' / '+folder.name:''}</span></div>}
   <section className="apple-note-detail" aria-label="Opened note">
