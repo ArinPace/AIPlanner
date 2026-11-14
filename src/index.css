@@ -2568,3 +2568,5 @@ html, body { touch-action: pan-x pan-y; }
 .has-mobile-week .mobile-week-day { padding-top: 0; }
 .has-mobile-week .mobile-week-heading { position: sticky; top: 0; z-index: 6; min-height: 64px; margin: 0 -12px; padding: 8px 12px; background: var(--bg); border-bottom: 1px solid var(--line); }
 .has-mobile-week { scroll-padding-top: 64px; }
+/* The sticky day row replaces the second header row entirely. */
+.app-header:has(.header-center[hidden]) { min-height: 70px; grid-template-rows: 56px; padding-bottom: 10px; row-gap: 0; }
