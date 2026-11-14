@@ -941,7 +941,7 @@ const items=()=>menus().flatMap(menu=>[...menu.querySelectorAll('[role="menuitem
 if(operation==='close'){escape();window.__plannerModelMenuOpen=false;return {summary:'Model menu closed.',options:[]}}
 const button=trigger();if(!button)throw Error('ChatGPT model controls are unavailable. Finish sign-in and load a chat first.');
 if(operation==='open'){
- window.__plannerSelectedModel='';escape();await pause(100);button.focus();if(button.hasAttribute('aria-haspopup')){button.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,buttons:1,pointerId:1,isPrimary:true,pointerType:'mouse'}));await pause(150)}if(!menus().length)button.click();window.__plannerModelMenuOpen=true;
+ escape();await pause(100);button.focus();if(button.hasAttribute('aria-haspopup')){button.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,buttons:1,pointerId:1,isPrimary:true,pointerType:'mouse'}));await pause(150)}if(!menus().length)button.click();window.__plannerModelMenuOpen=true;
 }else if(operation==='choose'){
  if(!window.__plannerModelMenuOpen)throw Error('Reopen the model menu before choosing an option.');
  const matching=items().filter(n=>n.dataset.plannerModelOption===id);
@@ -960,6 +960,7 @@ let selectedModel=items().find(n=>checked(n)&&modelLabel(n));
 if(selectedModel)window.__plannerSelectedModel=label(selectedModel);
 if(operation==='open'&&!selectedModel){
  const select=items().find(n=>/^Select model$/i.test(label(n)));
+ if(select)return {selectedModel:window.__plannerSelectedModel||'',sliders:sliders().map(n=>{n.dataset.plannerModelOption ||= crypto.randomUUID();return {id:n.dataset.plannerModelOption,label:n.getAttribute('aria-label')||'Thinking',min:Number(n.getAttribute('aria-valuemin')),max:Number(n.getAttribute('aria-valuemax')),value:Number(n.getAttribute('aria-valuenow')),text:n.getAttribute('aria-valuetext')||''}}),summary:(trigger()?.innerText||'').trim(),options:items().map(n=>{n.dataset.plannerModelOption ||= crypto.randomUUID();return {id:n.dataset.plannerModelOption,label:label(n),selected:checked(n),submenu:!!n.getAttribute('aria-haspopup')}})};
  if(select){
   select.click();await pause(300);
   selectedModel=items().find(n=>checked(n)&&modelLabel(n));
