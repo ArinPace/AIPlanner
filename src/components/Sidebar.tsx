@@ -2,7 +2,6 @@ import {FREE_TIME_TAG_ID} from '../lib/freeTime'
 import {ScreenTimeIcon} from './Icons'
 import {nativeRequest,supportsScreenTime} from '../lib/platform'
 import {replicaContext} from '../lib/localReplica'
-import {CalendarHistory} from './CalendarHistory'
 import { TagChart } from './TagChart'
 import { useState, type FormEvent } from 'react'
 import type { CalendarEvent, CalendarView, Tag } from '../types'
@@ -44,7 +43,6 @@ export function Sidebar({
   onUpdateTag,
   onDeleteTag,
 }: SidebarProps) {
-  const [historyOpen, setHistoryOpen] = useState(false)
   const [chart, setChart] = useState(false)
   const [adding, setAdding] = useState(false)
   const [draftTagId,setDraftTagId]=useState(()=>crypto.randomUUID())
@@ -82,8 +80,6 @@ export function Sidebar({
           </button>
         ))}
       </div>
-      <button type="button" className="text-btn sidebar-history" onClick={() => setHistoryOpen(true)}>Calendar history</button>
-      {historyOpen && <CalendarHistory onClose={() => setHistoryOpen(false)} />}
       <section className="event-type-filter" aria-label="Event visibility">
         <h2>Show events</h2>
         <label><input type="checkbox" checked={!hiddenTypes.includes('fixed')} onChange={()=>onToggleType('fixed')}/>Fixed events</label>

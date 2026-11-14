@@ -111,5 +111,5 @@ export function CheckIcon({size=20,className}:IconProps) {
 }
 
 export function WindIcon({size=24,className}:IconProps) {
- return <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 8h12.5A2.5 2.5 0 1 0 13 5.5M2 12h17a3 3 0 1 1-3 3M4 16h5.5A2.5 2.5 0 1 1 7 18.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+ return <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 9c2.8-4.8 10.2-6.2 14.8-2.2 3.5 3.1 3.1 8.4-.6 9.9-2.7 1.1-5.4-.9-4.7-3 .5-1.4 2.3-1.7 3.1-.6M2 14c2.9-2.6 7.6-2.8 10.8-.6 2.9 2 3.8 5.2 1.8 6.7-1.5 1.1-3.7.5-4-1.1M6 3c4.9-1.6 10.9.1 14 4.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
 }

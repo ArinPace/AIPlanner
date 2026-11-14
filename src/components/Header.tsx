@@ -1,3 +1,5 @@
+import {CalendarHistory} from './CalendarHistory'
+import {NoteIcon} from './NoteIcons'
 import {createPortal} from 'react-dom'
 import {MiniCalendar} from './MiniCalendar'
 import {isToday,startOfWeek,isSameDay,isSameMonth,isSameYear,addDays} from '../lib/dates'
@@ -49,6 +51,7 @@ export function Header({
   const weekStart=startOfWeek(cursor),weekEnd=addDays(weekStart,6)
   const weekLabel=weekStart.toLocaleDateString('en-US',{month:'short',day:'numeric'})+'–'+weekEnd.toLocaleDateString('en-US',isSameMonth(weekStart,weekEnd)?{day:'numeric'}:{month:'short',day:'numeric'})
   const periodLabel=currentPeriod?({day:'Today',week:'This week',month:'This month',year:'This year'}[view]):view==='day'?cursor.toLocaleDateString('en-US',{month:'short',day:'numeric'}):view==='month'?cursor.toLocaleDateString('en-US',{month:'short',year:'numeric'}):view==='year'?String(cursor.getFullYear()):weekLabel
+  const [historyOpen,setHistoryOpen]=useState(false)
   const pickerRef=useRef<HTMLDialogElement>(null)
   const dateButton=useRef<HTMLButtonElement>(null)
   const [pickerMonth,setPickerMonth]=useState(cursor)
@@ -100,6 +103,7 @@ export function Header({
 
       <div className="header-right">
         {!hideAgent&&<button type="button" className={'header-agent-button'+(tab==='agent'?' is-active':'')} aria-current={tab==='agent'?'page':undefined} onClick={()=>onTabChange('agent')}>Agent</button>}
+        <button type="button" className="icon-btn header-calendar-history" aria-label="Calendar history" title="Calendar history" aria-haspopup="dialog" onClick={()=>setHistoryOpen(true)}><NoteIcon name="history" size={20}/></button>
         <div className="settings-wrap" ref={settingsRef}>
           <button
             type="button"
@@ -128,6 +132,7 @@ export function Header({
           <span>{username}</span>
         </div>
       </div>
+      {historyOpen&&<CalendarHistory onClose={()=>setHistoryOpen(false)}/>}
       <dialog ref={pickerRef} className="header-date-picker" aria-label="Choose calendar date" onCancel={event=>{event.preventDefault();closeDatePicker()}} onClick={event=>{if(event.target===pickerRef.current){const rect=pickerRef.current.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)closeDatePicker()}}}>
         <MiniCalendar cursor={pickerMonth} selectedDate={cursor} onMonthChange={setPickerMonth} onCursorChange={date=>{onDateChange(date);closeDatePicker()}}/>
         <div className="header-date-picker-actions"><button type="button" className="text-btn" onClick={()=>{onToday();closeDatePicker()}}>Go to today</button><button type="button" className="text-btn" onClick={closeDatePicker}>Close</button></div>

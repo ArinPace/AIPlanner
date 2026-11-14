@@ -2683,3 +2683,11 @@ html, body { touch-action: pan-x pan-y; }
 .settings-panel select[aria-label="Event controls"] { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; }
 
 .agenda-indent .calendar-done-button.is-checkbox,.agenda-event-bullet { background: var(--agenda-row-fill,var(--bg)); }
+
+@media(max-width:380px) {
+ .app-header.is-calendar .header-right .icon-btn { width: 24px; height: 32px; }
+ .header-agent-button { font-size: 11px; padding: 6px 2px; }
+ .app-header.is-calendar .calendar-navigation { gap: 0; }
+ .app-header.is-calendar .calendar-navigation .icon-btn { width: 24px; }
+ .app-header.is-calendar .calendar-navigation .today-btn { min-width: 70px; max-width: 80px; padding-inline: 8px; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
