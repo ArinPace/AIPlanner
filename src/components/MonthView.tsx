@@ -44,12 +44,13 @@ export function MonthView({ onFreeTimeClick, showFreeTime=true, scaleToDuration=
   const [range, setRange] = useState(() => ({ start: startOfWeek(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1)), weeks: 18 }))
   const days = useMemo(() => Array.from({ length: range.weeks * 7 }, (_, index) => addDays(range.start, index)), [range])
   const rows = range.weeks
-  const occurrences = useMemo(() => occurrenceFolderGroups(expandEvents(events, range.start, endOfDay(addDays(range.start, range.weeks * 7 - 1)))).top, [events, range])
-  const busyOccurrences = useMemo(() => occurrenceFolderGroups(expandEvents(busyEvents, range.start, endOfDay(addDays(range.start, range.weeks * 7 - 1)))).top, [busyEvents, range])
+  const occurrences = useMemo(() => occurrenceFolderGroups(expandEvents(busyEvents, range.start, endOfDay(addDays(range.start, range.weeks * 7 - 1)))).top, [busyEvents, range])
+  const visibleIds=useMemo(()=>new Set(events.map(event=>event.id)),[events])
+  const busyOccurrences = occurrences
   const dayItems = useMemo(() => days.map(day => {
     const start = startOfDay(day).getTime(), end = endOfDay(day).getTime()
     return withFreeTime(occurrences.filter(item => item.start.getTime() < end && item.end.getTime() > start), busyOccurrences, startOfDay(day), addDays(startOfDay(day),1))
-  }).map(rows=>showFreeTime?rows:rows.filter(row=>!isFreeTimeRow(row))), [days, occurrences, busyOccurrences,showFreeTime])
+  }), [days, occurrences, busyOccurrences])
   const scrollFrame = useRef<number | null>(null)
   useEffect(() => () => { if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current) }, [])
   const reportedMonth = useRef<string | null>(null)
@@ -158,12 +159,13 @@ export function MonthView({ onFreeTimeClick, showFreeTime=true, scaleToDuration=
               <div className="month-events">
                 {dayEvents.map((item,eventIndex) => {
                   const color = eventColor(item.event, tags)
+                  const filtered=(!showFreeTime&&isFreeTimeRow(item))||(!item.freeTime&&!visibleIds.has(item.event.id))
                   return (
                     <Fragment key={`${item.event.id}-${item.start.toISOString()}`}>
                     {today&&eventIndex===nextEvent&&timeLine}
                     <button
                       type="button"
-                      className={`event-chip ${item.event.reminder?'reminder-event':''}`}
+                      className={`event-chip ${item.event.reminder?'reminder-event':''}${filtered?' is-filtered':''}`} aria-hidden={filtered?true:undefined} disabled={filtered}
                       title={item.event.title}
                       style={{...(item.freeTime?freeTimeAppearance:eventAppearance(color,item.event.reminder)),...(scaleToDuration?{height:durationHeight(item,'month',zoom,startOfDay(day).getTime(),addDays(startOfDay(day),1).getTime())}:{})}}
                       onClick={(event) => {

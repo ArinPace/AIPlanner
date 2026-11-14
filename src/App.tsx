@@ -386,11 +386,12 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
 
   const hiddenSet = useMemo(() => new Set(hiddenTagIds), [hiddenTagIds])
   const visibleEvents = useMemo(() => events.filter(event => (!hiddenSet.has(FREE_TIME_TAG_ID)||event.title.trim().toLowerCase()!=='free time')&&isEventVisible(event, hiddenSet)&&!hiddenTypes.includes(eventType(event,tags))), [events, hiddenSet,hiddenTypes,tags])
+  const visibleEventIds=useMemo(()=>new Set(visibleEvents.map(event=>event.id)),[visibleEvents])
   const range = useMemo(() => visibleRange(cursor, view === 'day' ? 'week' : view), [cursor, view])
   const occurrences = useMemo(() => {
     if (view === 'month' || view === 'year') return []
-    return expandEvents(visibleEvents, range.start, range.end)
-  }, [visibleEvents, view, range.end, range.start])
+    return expandEvents(events, range.start, range.end).filter(({event})=>visibleEventIds.has(event.id))
+  }, [events,visibleEventIds, view, range.end, range.start])
 
   const busyOccurrences = useMemo(() => {
     if (view === 'month' || view === 'year') return []
@@ -584,6 +585,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
             />
           ) : (
             <TimeGridView
+              visibleEventIds={visibleEventIds}
               onFreeTimeClick={openFreeTime}
               showFreeTime={!hiddenSet.has(FREE_TIME_TAG_ID)}
               onVisibleDateChange={reportVisibleDate}

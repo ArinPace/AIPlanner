@@ -109,3 +109,7 @@ export function ScreenTimeIcon({size=20,className}:IconProps) {
 export function CheckIcon({size=20,className}:IconProps) {
  return <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 12 4 4L19 6" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
 }
+
+export function WindIcon({size=24,className}:IconProps) {
+ return <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 8h12.5A2.5 2.5 0 1 0 13 5.5M2 12h17a3 3 0 1 1-3 3M4 16h5.5A2.5 2.5 0 1 1 7 18.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+}

@@ -2660,3 +2660,9 @@ html, body { touch-action: pan-x pan-y; }
 .mobile-week-heading > .day-intensity-button { grid-column: 3; min-width: 0; max-width: 100%; }
 .mobile-week-heading > .text-btn { grid-column: 4; min-width: 0; width: 100%; padding-inline: 0; }
 @media(min-width:601px) { .mobile-week { --agenda-gutter: 40px; --agenda-action: 40px; --agenda-gap: 6px; } }
+
+/* Filtering removes paint and interaction, while preserving the complete layout. */
+.agenda-grid-row.is-filtered,.agenda-event-folder.is-filtered-folder,.month-events > .event-chip.is-filtered { visibility: hidden; pointer-events: none; }
+.agenda-event-folder.is-filtered-folder .mobile-week-now { visibility: visible; }
+.main-ai-bubble { background: color-mix(in srgb,var(--panel) 76%,transparent); border-color: color-mix(in srgb,var(--text) 16%,transparent); color: var(--text); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
+.main-ai-identity > span,.main-ai-greeting > span { color: var(--muted); }

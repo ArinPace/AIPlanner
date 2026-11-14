@@ -30,6 +30,7 @@ import {PlanningButton} from './PlanningSettings'
 import {toDateInput} from '../lib/dates'
 
 type TimeGridViewProps = {
+  visibleEventIds?:ReadonlySet<string>
   onFreeTimeClick?: (item:Occurrence)=>void
   showFreeTime?: boolean
   onVisibleDateChange?: (date: Date) => void
@@ -61,7 +62,7 @@ function clipToDay(item: Occurrence, day: Date): { start: Date; end: Date } | nu
   }
 }
 
-export function TimeGridView({ onFreeTimeClick, showFreeTime=true, onVisibleDateChange, onWeekNavigate, weekLayout = 'list', scaleToDuration=false, active=true,cursor, view, zoom, occurrences, busyOccurrences, tags, onSlotClick, onEventClick, onEventDone }: TimeGridViewProps) {
+export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=true, onVisibleDateChange, onWeekNavigate, weekLayout = 'list', scaleToDuration=false, active=true,cursor, view, zoom, occurrences, busyOccurrences, tags, onSlotClick, onEventClick, onEventDone }: TimeGridViewProps) {
   const [planning, setPlanning] = useState<PlanningProfile>()
   useEffect(() => {
     if (!active) return
@@ -91,14 +92,14 @@ export function TimeGridView({ onFreeTimeClick, showFreeTime=true, onVisibleDate
   const previousLayout = useRef<{key:string;hourHeight:number;gridWeek:boolean}|null>(null)
   const bodyRef=useRef<HTMLDivElement>(null)
   const [openedFolders,setOpenedFolders]=useState<Set<string>>(()=>new Set())
-  const now=new Date(),grouped=occurrenceFolderGroups(occurrences),busyGrouped=occurrenceFolderGroups(busyOccurrences)
+  const now=new Date(),grouped=occurrenceFolderGroups(view==='week'&&weekLayout!=='grid'?busyOccurrences:occurrences),busyGrouped=occurrenceFolderGroups(busyOccurrences)
   const folderOpen=(item:Occurrence)=>folderExpanded(item,now.getTime(),openedFolders)
-  const visibleRows=(rows:ScheduleRow[])=>showFreeTime?rows:rows.filter(row=>!isFreeTimeRow(row))
+  const hiddenRow=(item:ScheduleRow)=>(!showFreeTime&&isFreeTimeRow(item))||(!item.freeTime&&visibleEventIds!==undefined&&!visibleEventIds.has(item.event.id))
   function folderChildren(item:Occurrence,day?:Date):ScheduleRow[]{
     const start=day&&startOfDay(day)>item.start?startOfDay(day):item.start
     const end=day&&addDays(startOfDay(day),1)<item.end?addDays(startOfDay(day),1):item.end
     const children=grouped.children.get(folderOccurrenceKey(item))||[]
-    return visibleRows(withFreeTime(day?children.filter(child=>clipToDay(child,day)):children,busyGrouped.children.get(folderOccurrenceKey(item))||[],start,end))
+    return withFreeTime(day?children.filter(child=>clipToDay(child,day)):children,busyGrouped.children.get(folderOccurrenceKey(item))||[],start,end)
   }
   function folderRows(item:Occurrence):number{return 1+(folderOpen(item)?folderChildren(item).reduce((count,child)=>count+(child.event.eventKind==='folder'?folderRows(child):1),0):0)}
   const toggleFolder=(item:Occurrence)=>setOpenedFolders(current=>{const next=new Set(current);if(next.has(folderOccurrenceKey(item)))next.delete(folderOccurrenceKey(item));else next.add(folderOccurrenceKey(item));return next})
@@ -184,8 +185,9 @@ export function TimeGridView({ onFreeTimeClick, showFreeTime=true, onVisibleDate
     const marker=<div ref={mobileNowRef} className="mobile-week-now" role="img" aria-label={'Current time '+formatTimeCompact(now)}><span>Now · {formatTimeCompact(now)}</span></div>
     return <>{items.map((item,index)=>{
       const folder=item.event.eventKind==='folder',children=(grouped.children.get(folderOccurrenceKey(item))||[]).filter(child=>clipToDay(child,day)),open=folder&&folderOpen(item)
+      const filtered=hiddenRow(item)
       const eligible=!folder&&!item.freeTime&&completionLeaves(item).length>0
-      const row=<div className={'agenda-grid-row'+(eligible?' has-completion':'')+(depth?' is-nested':'')} data-depth={depth}>
+      const row=<div className={'agenda-grid-row'+(eligible?' has-completion':'')+(depth?' is-nested':'')+(filtered?' is-filtered':'')} data-depth={depth} inert={filtered} aria-hidden={filtered?true:undefined}>
         <div className="agenda-indent">{folder?<button type="button" className="agenda-disclosure" aria-label={(open?'Collapse folder ':'Expand folder ')+item.event.title} aria-expanded={Boolean(open)} onClick={()=>toggleFolder(item)}><FolderChevron open={Boolean(open)}/></button>:depth>0?<span className="agenda-tree-line" aria-hidden="true"/>:null}</div>
         <button type="button" className={'event-chip mobile-week-event'+(folder?' is-folder':'')+completionClass(item)} style={{...appearance(item),...(scaleToDuration&&view==='week'?{height:folder&&open&&!item.event.allDay&&!item.event.reminder?Math.max(40,40*zoom):durationHeight(item,'week',zoom,startOfDay(day).getTime(),addDays(startOfDay(day),1).getTime())}:{}),...(folder?{transition:folderAnimations?'height 480ms cubic-bezier(.25,.1,.25,1)':'none'}:{})}} title={item.event.title} onClick={()=>selectEvent(item)}>
           <span className="mobile-week-time">{item.event.allDay?(item.event.reminder?'Reminder':'All day'):item.event.reminder?formatTimeCompact(item.start):formatTimeCompact(item.start)+'–'+formatTimeCompact(item.end)}</span>
@@ -194,7 +196,7 @@ export function TimeGridView({ onFreeTimeClick, showFreeTime=true, onVisibleDate
         </button>
         {eligible&&<div className="agenda-primary-action">{doneButton(item)}</div>}
       </div>
-      return <Fragment key={item.event.id+item.start.toISOString()}>{showNow&&!currentFolder&&index===next&&marker}{folder?<div className="agenda-event-folder">{row}<FolderReveal open={Boolean(open)}>{()=><div className="folder-agenda-children">{children.length?agendaRows(folderChildren(item,day),day,showNow&&currentFolder===item,depth+1):<><p className="quiet">No visible events in this folder.</p>{showNow&&currentFolder===item&&marker}</>}</div>}</FolderReveal></div>:row}</Fragment>
+      return <Fragment key={item.event.id+item.start.toISOString()}>{showNow&&!currentFolder&&index===next&&marker}{folder?<div className={'agenda-event-folder'+(filtered?' is-filtered-folder':'')} inert={filtered} aria-hidden={filtered?true:undefined}>{row}<FolderReveal open={Boolean(open)}>{()=><div className="folder-agenda-children">{children.length?agendaRows(folderChildren(item,day),day,showNow&&currentFolder===item,depth+1):<><p className="quiet">No visible events in this folder.</p>{showNow&&currentFolder===item&&marker}</>}</div>}</FolderReveal></div>:row}</Fragment>
     })}{showNow&&!currentFolder&&next===-1&&marker}</>
   }
 
@@ -202,7 +204,7 @@ export function TimeGridView({ onFreeTimeClick, showFreeTime=true, onVisibleDate
     <div ref={weekScrollRef} data-layout={mobileWeek?'agenda':'grid'} className={`time-view-scroll ${mobileWeek ? 'has-mobile-week' : regularWeek ? 'week-time-grid' : ''}`}>
       {mobileWeek && <div className={'mobile-week'+(scaleToDuration?' is-duration-scaled':'')}>
         {days.map(day => {
-          const items = visibleRows(withFreeTime(grouped.top.filter(item => clipToDay(item, day)), busyGrouped.top, startOfDay(day), addDays(startOfDay(day),1)))
+          const items = withFreeTime(grouped.top.filter(item => clipToDay(item, day)), busyGrouped.top, startOfDay(day), addDays(startOfDay(day),1))
           return <section className="mobile-week-day" data-calendar-day={toDateInput(day)} key={day.toISOString()}>
             <div className="mobile-week-heading">
               <h3 className={isToday(day) ? 'is-today' : ''}>{day.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</h3>
@@ -265,7 +267,7 @@ export function TimeGridView({ onFreeTimeClick, showFreeTime=true, onVisibleDate
 
           {days.map((day) => {
             const dayEvents = grouped.top.filter(item => !item.event.allDay && clipToDay(item, day))
-            const timed: ScheduleRow[] = visibleRows(regularWeek ? dayEvents : withFreeTime(dayEvents, busyGrouped.top, startOfDay(day), addDays(startOfDay(day),1)))
+            const timed: ScheduleRow[] = regularWeek ? dayEvents : withFreeTime(dayEvents, busyGrouped.top, startOfDay(day), addDays(startOfDay(day),1))
             const laidOut = layoutTimeCards(timed.map(item=>{
               const clipped=clipToDay(item,day)!
               const top=(clipped.start.getHours()*60+clipped.start.getMinutes()+clipped.start.getSeconds()/60)/60*hourHeight
