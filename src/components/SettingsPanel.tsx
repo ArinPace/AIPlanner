@@ -1,3 +1,4 @@
+import {readFolderAnimations,setFolderAnimations} from '../lib/folderAnimations'
 import {isIPhoneApp} from '../lib/platform'
 import {externalLinks, setExternalLinks} from '../lib/linkPreference'
 import type {useCalendarDisplay} from '../lib/useCalendarDisplay'
@@ -23,6 +24,7 @@ function shortcutMod(): string {
 }
 
 export function SettingsPanel({ calendarDisplay, zoom, onZoomChange, onClose, onLogout }: SettingsPanelProps) {
+  const [folderAnimations,setFolderAnimationsState]=useState(readFolderAnimations)
   const [openExternally, setOpenExternally] = useState(externalLinks)
   const [downloadError,setDownloadError]=useState('')
   const mod = shortcutMod()
@@ -57,10 +59,10 @@ export function SettingsPanel({ calendarDisplay, zoom, onZoomChange, onClose, on
           applyTheme(next)
         }} />
       </label>
+      <label className="settings-theme"><span>Folder animations</span><input type="checkbox" role="switch" checked={folderAnimations} onChange={event=>{setFolderAnimationsState(event.target.checked);setFolderAnimations(event.target.checked)}}/></label>
       <fieldset className="settings-duration"><legend>Scale to duration</legend>
         <label className="settings-theme"><span>Week view</span><input type="checkbox" role="switch" aria-label="Scale week view to duration" checked={calendarDisplay.settings.week} disabled={calendarDisplay.saving} onChange={e=>void calendarDisplay.change('week',e.target.checked)}/></label>
         <label className="settings-theme"><span>Month view</span><input type="checkbox" role="switch" aria-label="Scale month view to duration" checked={calendarDisplay.settings.month} disabled={calendarDisplay.saving} onChange={e=>void calendarDisplay.change('month',e.target.checked)}/></label>
-        <p className="quiet">Size timed events and folders by their duration. Short events keep a minimum tappable height. Saved to your account.</p>
         {calendarDisplay.error&&<p role="alert" className="form-error">{calendarDisplay.error}</p>}
       </fieldset>
       <label className="settings-field">

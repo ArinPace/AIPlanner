@@ -2582,19 +2582,6 @@ html, body { touch-action: pan-x pan-y; }
 .mobile-week-event.is-folder .mobile-week-time { flex-basis: 102px; }
 @media(pointer:coarse) { .folder-edit-button,.calendar-task-with-actions .task-screen-time-button,.calendar-done-button { width: 44px; height: 44px; min-height: 44px; } }
 
-/* Let child events slide gently out from their folder header. */
-@keyframes calendar-folder-open {
- from { opacity: .2; transform: translateY(-18px); }
- to { opacity: 1; transform: translateY(0); }
-}
-.folder-agenda-children,.folder-day-children {
- transform-origin: top;
- animation: calendar-folder-open 480ms cubic-bezier(.25,.1,.25,1);
-}
-@media(prefers-reduced-motion:reduce) {
- .folder-agenda-children,.folder-day-children { animation: none; }
-}
-
 /* Content zoom leaves toolbars and app navigation at a usable fixed size. */
 .standalone-todo-editor .apple-note-document { zoom: var(--visual-zoom,1); }
 .mobile-week .mobile-week-event { font-size: calc(10px * var(--visual-zoom,1)); min-height: calc(36px * var(--visual-zoom,1)); }
@@ -2609,12 +2596,27 @@ html, body { touch-action: pan-x pan-y; }
 .tag-list .tag-delete { flex: 0 0 28px; }
 
 .folder-edit-button svg,.task-screen-time-button svg { width: 20px; height: 20px; display: block; stroke-width: 1.8; }
-.calendar-folder-reveal { display: grid; grid-template-rows: 1fr; animation: calendar-folder-unfold 480ms cubic-bezier(.25,.1,.25,1) backwards; }
-.calendar-folder-reveal-body { min-height: 0; }
-@keyframes calendar-folder-unfold {
- from { grid-template-rows: 0fr; overflow: hidden; }
- to { grid-template-rows: 1fr; overflow: hidden; }
-}
-@media(prefers-reduced-motion:reduce) { .calendar-folder-reveal { animation: none; } }
 .timed-event-folder > .calendar-folder-reveal { min-height: 0; flex: 1; }
 .timed-event-folder > .calendar-folder-reveal > .calendar-folder-reveal-body { overflow: auto; }
+
+/* Expand and retract folders smoothly, retaining content until the close finishes. */
+.calendar-folder-reveal { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 480ms cubic-bezier(.25,.1,.25,1); }
+.calendar-folder-reveal.is-open { grid-template-rows: 1fr; }
+.calendar-folder-reveal.is-animating { overflow: hidden; }
+.calendar-folder-reveal-body { min-height: 0; transform: translateY(-18px); opacity: .2; transition: transform 480ms cubic-bezier(.25,.1,.25,1),opacity 480ms ease; }
+.calendar-folder-reveal.is-open > .calendar-folder-reveal-body { transform: translateY(0); opacity: 1; }
+.calendar-folder-reveal[data-animated=false],.calendar-folder-reveal[data-animated=false] > .calendar-folder-reveal-body { transition: none; }
+@media(prefers-reduced-motion:reduce) { .calendar-folder-reveal,.calendar-folder-reveal-body { transition: none; } }
+/* Stretch the action surfaces with the row while keeping their glyphs readable. */
+.folder-event-header,.calendar-task-with-actions { align-items: stretch; }
+.folder-event-header > .folder-edit-button { height: auto; align-self: stretch; margin-top: 4px; }
+.calendar-task-with-actions > .task-screen-time-action,.calendar-task-with-actions > .calendar-completion-action { align-self: stretch; margin-top: 4px; }
+.calendar-task-with-actions .task-screen-time-button,.calendar-task-with-actions .calendar-done-button { height: 100%; min-height: 40px; flex: 1; }
+.settings-panel { width: 264px; padding: 12px; gap: 8px; }
+.settings-group > summary { padding: 9px 2px; }
+.settings-panel .settings-theme { padding: 7px 0; }
+.settings-panel .settings-group-content { gap: 8px; }
+@media(max-width:600px) { .settings-panel { top: 72px; bottom: auto; max-height: calc(100dvh - 184px - env(safe-area-inset-bottom)); } }
+.note-settings-host .settings-panel { bottom: auto; max-height: calc(100dvh - 184px - env(safe-area-inset-bottom)); }
+
+.folder-event-header:has(> .folder-grid-toggle) > .folder-edit-button { margin-top: 0; }
