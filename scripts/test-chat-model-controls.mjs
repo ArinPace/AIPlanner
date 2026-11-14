@@ -25,6 +25,6 @@ try{
  window.fixtureIgnoreEscape=true;document.addEventListener('pointerdown',e=>{if(e.target===document.body)document.querySelector('[role=menu]')?.remove()});
  document.querySelector('#model').onclick=()=>{const m=document.createElement('div');m.role='menu';m.innerHTML='<button role="menuitem" id="select">Select model</button><div role="menuitem"><span role="slider" aria-label="Thinking" aria-valuemin="0" aria-valuemax="5" aria-valuenow="3"></span></div>';m.querySelector('#select').onclick=()=>{m.innerHTML='<button role="menuitemradio" aria-checked="true">GPT-6.1 Sol</button><button role="menuitemradio" aria-checked="false">GPT-6 Astra</button>'};document.body.append(m)};
  </script>`)
- const nested=await run('open');assert.equal(nested.selectedModel,'');assert.equal(nested.sliders.length,1);assert.ok(nested.options.some(o=>o.label==='Select model'));assert.ok(!nested.options.some(o=>o.label==='GPT-6.1 Sol'));await run('close')
+ await page.locator('#model').click();await page.locator('#select').click();assert.equal(await page.locator('[role=slider]').count(),0);const nested=await run('open');assert.equal(nested.selectedModel,'');assert.equal(nested.sliders.length,1);assert.ok(nested.options.some(o=>o.label==='Select model'));assert.ok(!nested.options.some(o=>o.label==='GPT-6.1 Sol'));await run('close')
  console.log('Native public model controls: provider options, checked state, change, stale refusal, upgrade filtering and close passed. DOM fixture only.')
 }finally{await browser.close()}

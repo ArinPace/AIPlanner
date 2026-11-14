@@ -941,7 +941,10 @@ const items=()=>menus().flatMap(menu=>[...menu.querySelectorAll('[role="menuitem
 if(operation==='close'){escape();window.__plannerModelMenuOpen=false;return {summary:'Model menu closed.',options:[]}}
 const button=trigger();if(!button)throw Error('ChatGPT model controls are unavailable. Finish sign-in and load a chat first.');
 if(operation==='open'){
- escape();await pause(100);button.focus();if(button.hasAttribute('aria-haspopup')){button.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,buttons:1,pointerId:1,isPrimary:true,pointerType:'mouse'}));await pause(150)}if(!menus().length)button.click();window.__plannerModelMenuOpen=true;
+ for(const menu of menus()){menu.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',code:'Escape',bubbles:true}))}
+ escape();await pause(100);
+ for(const type of ['pointerdown','mousedown','pointerup','mouseup','click'])document.body.dispatchEvent(new MouseEvent(type,{bubbles:true,button:0}));
+ await pause(150);button.focus();if(button.hasAttribute('aria-haspopup')){button.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,buttons:1,pointerId:1,isPrimary:true,pointerType:'mouse'}));await pause(150)}if(!menus().length)button.click();window.__plannerModelMenuOpen=true;
 }else if(operation==='choose'){
  if(!window.__plannerModelMenuOpen)throw Error('Reopen the model menu before choosing an option.');
  const matching=items().filter(n=>n.dataset.plannerModelOption===id);
