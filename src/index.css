@@ -2888,3 +2888,11 @@ html, body { touch-action: pan-x pan-y; }
 :root[data-translucence=on] .agenda-grid-row.is-nested > .mobile-week-event { box-shadow: inset 4px 0 0 var(--event-accent,transparent); }
 :root[data-translucence=on] .folder-pencil { box-shadow: none; }
 :root[data-translucence=on] .agenda-grid-row:not(.is-nested) > .mobile-week-event { box-shadow: none; }
+
+/* Hierarchy markers share the checkbox size and the connector's center axis. */
+.agenda-grid-row .agenda-tree-line { left: calc(50% - 1px); }
+.agenda-grid-row .agenda-tree-line::after { top: calc(50% - 1px); }
+.agenda-grid-row.has-left-controls .agenda-tree-line::after { width: calc(var(--agenda-gutter) / 2 + var(--agenda-gap) - 1px); }
+.agenda-event-bullet { flex: 0 0 20px; width: 20px; height: 20px; max-width: 20px; border-width: 1.6px; background: var(--bg); }
+/* Free-time outlines must not shift the hierarchy grid by a border pixel. */
+.mobile-week .agenda-grid-row:not(.is-nested):not(.has-completion) { border: 0 !important; outline: var(--agenda-row-border,none); outline-offset: -1px; }
