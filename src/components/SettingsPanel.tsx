@@ -48,7 +48,7 @@ export function SettingsPanel({ calendarDisplay, zoom, onZoomChange, onClose, on
           <CloseIcon />
         </button>
       </div>
-      <details className="settings-group" open>
+      <details className="settings-group">
         <summary>Display</summary>
         <div className="settings-group-content">
       <label className="settings-theme">

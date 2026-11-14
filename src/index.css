@@ -2649,3 +2649,14 @@ html, body { touch-action: pan-x pan-y; }
 
 .week-time-grid .timed-event-folder .folder-event-header { display: grid; grid-template-columns: 24px minmax(0,1fr); align-items: stretch; gap: 2px; }
 .week-time-grid .grid-folder-disclosure { width: 24px; min-height: 24px; }
+
+/* Align the day controls with the card tracks and reclaim unused action space. */
+.mobile-week { --agenda-gutter: 36px; --agenda-action: 36px; --agenda-gap: 4px; }
+.mobile-week .agenda-grid-row { grid-template-columns: var(--agenda-gutter) minmax(0,1fr) var(--agenda-action); gap: var(--agenda-gap); }
+.mobile-week .agenda-grid-row:not(.has-completion) > .mobile-week-event { grid-column: 2 / -1; }
+.mobile-week .agenda-grid-row > .mobile-week-event:not(.is-folder) { grid-template-columns: clamp(65px,22vw,112px) minmax(0,1fr); }
+.has-mobile-week .mobile-week-heading { display: grid; grid-template-columns: var(--agenda-gutter) minmax(0,1fr) auto var(--agenda-action); gap: var(--agenda-gap); align-items: center; }
+.mobile-week-heading > h3 { grid-column: 2; min-width: 0; margin: 0; }
+.mobile-week-heading > .day-intensity-button { grid-column: 3; min-width: 0; max-width: 100%; }
+.mobile-week-heading > .text-btn { grid-column: 4; min-width: 0; width: 100%; padding-inline: 0; }
+@media(min-width:601px) { .mobile-week { --agenda-gutter: 40px; --agenda-action: 40px; --agenda-gap: 6px; } }

@@ -185,14 +185,14 @@ export function TimeGridView({ onFreeTimeClick, showFreeTime=true, onVisibleDate
     return <>{items.map((item,index)=>{
       const folder=item.event.eventKind==='folder',children=(grouped.children.get(folderOccurrenceKey(item))||[]).filter(child=>clipToDay(child,day)),open=folder&&folderOpen(item)
       const eligible=!folder&&!item.freeTime&&completionLeaves(item).length>0
-      const row=<div className={'agenda-grid-row'+(depth?' is-nested':'')} data-depth={depth}>
+      const row=<div className={'agenda-grid-row'+(eligible?' has-completion':'')+(depth?' is-nested':'')} data-depth={depth}>
         <div className="agenda-indent">{folder?<button type="button" className="agenda-disclosure" aria-label={(open?'Collapse folder ':'Expand folder ')+item.event.title} aria-expanded={Boolean(open)} onClick={()=>toggleFolder(item)}><FolderChevron open={Boolean(open)}/></button>:depth>0?<span className="agenda-tree-line" aria-hidden="true"/>:null}</div>
         <button type="button" className={'event-chip mobile-week-event'+(folder?' is-folder':'')+completionClass(item)} style={{...appearance(item),...(scaleToDuration&&view==='week'?{height:folder&&open&&!item.event.allDay&&!item.event.reminder?Math.max(40,40*zoom):durationHeight(item,'week',zoom,startOfDay(day).getTime(),addDays(startOfDay(day),1).getTime())}:{}),...(folder?{transition:folderAnimations?'height 480ms cubic-bezier(.25,.1,.25,1)':'none'}:{})}} title={item.event.title} onClick={()=>selectEvent(item)}>
           <span className="mobile-week-time">{item.event.allDay?(item.event.reminder?'Reminder':'All day'):item.event.reminder?formatTimeCompact(item.start):formatTimeCompact(item.start)+'–'+formatTimeCompact(item.end)}</span>
           <span className="event-title">{item.event.urgency!=null&&<span className="event-urgency-badge" style={urgencyColor(item.event.urgency)}>{item.event.urgency}</span>}{item.event.title||'(No title)'}</span>
           {folder&&<small className="folder-event-count">{children.length} {children.length===1?'item':'items'}</small>}
         </button>
-        <div className="agenda-primary-action">{eligible?doneButton(item):null}</div>
+        {eligible&&<div className="agenda-primary-action">{doneButton(item)}</div>}
       </div>
       return <Fragment key={item.event.id+item.start.toISOString()}>{showNow&&!currentFolder&&index===next&&marker}{folder?<div className="agenda-event-folder">{row}<FolderReveal open={Boolean(open)}>{()=><div className="folder-agenda-children">{children.length?agendaRows(folderChildren(item,day),day,showNow&&currentFolder===item,depth+1):<><p className="quiet">No visible events in this folder.</p>{showNow&&currentFolder===item&&marker}</>}</div>}</FolderReveal></div>:row}</Fragment>
     })}{showNow&&!currentFolder&&next===-1&&marker}</>
