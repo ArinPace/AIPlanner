@@ -2485,7 +2485,7 @@ html, body { touch-action: pan-x pan-y; }
 .app-header .calendar-navigation .today-btn { background: color-mix(in srgb,var(--text) 19%,var(--panel)); color: var(--text); min-width: 100px; }
 .header-agent-button { border: 0; background: transparent; border-radius: 14px; padding: 8px 10px; color: var(--muted); font-size: 13px; font-weight: 600; }
 .header-agent-button.is-active { color: var(--blue); background: var(--blue-soft); }
-.bottom-workspace-nav { position: fixed; z-index: 85; left: 20px; bottom: calc(20px + env(safe-area-inset-bottom)); width: min(460px,calc(100vw - 108px)); display: flex; align-items: center; justify-content: space-around; gap: 2px; min-height: 70px; padding: 8px 10px; border-radius: 32px; background: color-mix(in srgb,var(--panel) 94%,transparent); border: 1px solid color-mix(in srgb,var(--text) 13%,transparent); box-shadow: 0 8px 30px #0002; backdrop-filter: blur(18px); }
+.bottom-workspace-nav { position: fixed; z-index: 85; left: 20px; bottom: calc(20px + env(safe-area-inset-bottom)); width: min(460px,calc(100vw - 108px)); display: flex; align-items: center; justify-content: space-around; gap: 2px; min-height: 70px; padding: 8px 10px; border-radius: 22px; background: color-mix(in srgb,var(--panel) 76%,transparent); border: 1px solid color-mix(in srgb,var(--text) 13%,transparent); box-shadow: 0 8px 30px #0004, inset 0 1px 0 #ffffff18; backdrop-filter: blur(18px) saturate(125%); -webkit-backdrop-filter: blur(18px) saturate(125%); }
 .bottom-workspace-nav button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-width: 0; flex: 1; border: 0; padding: 3px 0; background: transparent; color: var(--muted); font-size: 11px; white-space: nowrap; font-weight: 500; }
 .bottom-workspace-nav button.is-active { color: var(--text); }
 .bottom-workspace-nav button.is-active svg { stroke-width: 2; }
@@ -2503,7 +2503,7 @@ html, body { touch-action: pan-x pan-y; }
  .header-agent-button { padding: 8px 5px; font-size: 12px; }
  .app-header .calendar-navigation .today-btn { min-width: 86px; padding: 0 12px; }
  .app-header .calendar-navigation .icon-btn { width: 28px; }
- .bottom-workspace-nav { left: 12px; bottom: calc(16px + env(safe-area-inset-bottom)); width: calc(100vw - 96px); min-height: 64px; padding: 7px 8px; border-radius: 29px; }
+ .bottom-workspace-nav { left: 12px; bottom: calc(16px + env(safe-area-inset-bottom)); width: calc(100vw - 96px); min-height: 64px; padding: 7px 8px; border-radius: 20px; }
  .main-ai-bubble { right: 12px; width: 64px; height: 64px; }
  .app-body .sidebar { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
 }
@@ -2555,3 +2555,6 @@ html, body { touch-action: pan-x pan-y; }
 @media(max-width:600px) {
  .settings-panel { top: 76px; bottom: calc(90px + env(safe-area-inset-bottom)); max-height: calc(100dvh - 166px - env(safe-area-inset-bottom)); overscroll-behavior: contain; }
 }
+
+/* A soft dark scrim grounds the floating controls without intercepting content. */
+.bottom-navigation-shade { position: fixed; pointer-events: none; z-index: 84; left: 0; right: 0; bottom: 0; height: calc(140px + env(safe-area-inset-bottom)); background: linear-gradient(to bottom,transparent 0%,rgba(0,0,0,.08) 25%,rgba(0,0,0,.30) 65%,rgba(0,0,0,.48) 100%); }
