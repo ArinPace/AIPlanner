@@ -212,9 +212,9 @@ export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=tr
           </section>
         })}
       </div>}
-      {regularWeek&&onMultiDayDate&&<nav className="multi-day-strip" aria-label="Choose multi-day start">{getWeekDays(cursor).map(day=><button type="button" key={toDateInput(day)} aria-label={day.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})} aria-pressed={toDateInput(day)===toDateInput(cursor)} className={days.some(shown=>toDateInput(shown)===toDateInput(day))?'in-range':''} onClick={()=>onMultiDayDate(day)}><small>{day.toLocaleDateString('en-US',{weekday:'narrow'})}</small><span>{day.getDate()}</span></button>)}</nav>}
+      {regularWeek&&onMultiDayDate&&<nav className="multi-day-strip" aria-label="Choose multi-day start">{Array.from({length:7},(_,index)=>addDays(startOfDay(cursor),index-2)).map(day=><button type="button" key={toDateInput(day)} aria-label={day.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})} aria-pressed={toDateInput(day)===toDateInput(cursor)} className={days.some(shown=>toDateInput(shown)===toDateInput(day))?'in-range':''} onClick={()=>onMultiDayDate(day)}><small>{day.toLocaleDateString('en-US',{weekday:'narrow'})}</small><span>{day.getDate()}</span></button>)}</nav>}
       <div className={`time-view is-${view}`}>
-      <div className={`time-header days-${days.length}`}>
+      {!regularWeek&&<div className={`time-header days-${days.length}`}>
         <div className="gutter" />
         {days.map((day) => (
           <div key={day.toISOString()} className={`time-day-head ${isToday(day) ? 'is-today' : ''}`}>
@@ -222,12 +222,12 @@ export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=tr
             {view==='week'?<PlanningButton date={toDateInput(day)} dayNumber={day.getDate()} intensity={dayIntensity(day).score} summary={dayIntensity(day).summary}/>:<><span className="num">{day.getDate()}</span><PlanningButton date={toDateInput(day)} intensity={dayIntensity(day).score} summary={dayIntensity(day).summary}/></>}
           </div>
         ))}
-      </div>
+      </div>}
 
       <div className={`all-day-row days-${days.length}`}>
         <div className="gutter">All day</div>
         {days.map((day) => {
-          const items = occurrences.filter((item) => item.event.allDay && clipToDay(item, day))
+          const items = occurrences.filter((item) => item.event.allDay && (!regularWeek||item.event.eventKind!=='folder') && clipToDay(item, day))
           return (
             <div key={day.toISOString()} className="all-day-cell" onClick={() => onSlotClick(startOfDay(day), true)}>
               {items.map((item) => {
@@ -263,7 +263,7 @@ export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=tr
           </div>
 
           {days.map((day) => {
-            const dayEvents = grouped.top.filter(item => !item.event.allDay && clipToDay(item, day))
+            const dayEvents = (regularWeek?occurrences.filter(item=>item.event.eventKind!=='folder'):grouped.top).filter(item => !item.event.allDay && clipToDay(item, day))
             const timed: ScheduleRow[] = regularWeek ? dayEvents : withFreeTime(dayEvents, busyGrouped.top, startOfDay(day), addDays(startOfDay(day),1))
             const laidOut = layoutTimeCards(timed.map(item=>{
               const clipped=clipToDay(item,day)!
