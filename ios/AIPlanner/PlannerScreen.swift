@@ -27,7 +27,7 @@ struct PlannerScreen: View {
                 Color(red: 32 / 255, green: 33 / 255, blue: 36 / 255).opacity(0.4).ignoresSafeArea()
             }
             PlannerWebView(model: model)
-                .ignoresSafeArea(.container, edges: .bottom)
+                .ignoresSafeArea(.container, edges: [.top, .bottom])
             if let error = model.error {
                 VStack(spacing: 16) {
                     Image(systemName: "wifi.exclamationmark").font(.largeTitle)

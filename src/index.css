@@ -2876,3 +2876,15 @@ html, body { touch-action: pan-x pan-y; }
 .checklist-pages-track > [data-checklist-page=work] { order: 1; }
 .checklist-sheet.is-closing { transition: transform 240ms cubic-bezier(.4,0,.7,.4); pointer-events: none; }
 @media(prefers-reduced-motion:reduce) { .checklist-sheet.is-closing { transition: none; } }
+
+/* Updated native shells let the web app own the status-bar safe area too. */
+:root[data-edge-to-edge=true] .app-shell { padding-top: env(safe-area-inset-top); box-sizing: border-box; }
+
+/* Vertical accents throughout the calendar; Week's horizontal cards keep top accents. */
+:root[data-translucence=on] .timed-event,
+:root[data-translucence=on] .event-chip,
+:root[data-translucence=on] .agenda-grid-row:not(.is-nested):not(.has-completion),
+:root[data-translucence=on] .agenda-grid-row.has-completion:not(.is-nested)::before,
+:root[data-translucence=on] .agenda-grid-row.is-nested > .mobile-week-event { box-shadow: inset 4px 0 0 var(--event-accent,transparent); }
+:root[data-translucence=on] .folder-pencil { box-shadow: none; }
+:root[data-translucence=on] .agenda-grid-row:not(.is-nested) > .mobile-week-event { box-shadow: none; }

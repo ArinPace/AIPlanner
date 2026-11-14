@@ -7,6 +7,18 @@ final class PlannerUITests: XCTestCase {
         app.launchArguments = ["-UITestFixture"] + (signedIn ? ["-UITestSignedIn"] : []) + (resumeSync ? ["-UITestResumeSync"] : []) + (focusZoom ? ["-UITestFocusZoom"] : [])
         app.launch(); return app
     }
+    func testFullHeightChromeBehindChatModal() {
+        let app = launch()
+        let web = app.webViews["plannerWebView"]
+        XCTAssertTrue(web.waitForExistence(timeout: 20))
+        XCTAssertEqual(web.frame.minY, 0, accuracy: 1)
+        let menu = web.buttons["Toggle sidebar"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 15))
+        XCTAssertGreaterThan(menu.frame.minY, 40)
+        let chat = web.descendants(matching: .any).matching(identifier: "Open Main Chat").firstMatch
+        XCTAssertTrue(chat.waitForExistence(timeout: 10)); chat.tap()
+        XCTAssertTrue(web.buttons["Close Main Chat"].waitForExistence(timeout: 10))
+    }
     override func setUpWithError() throws { continueAfterFailure = false }
     override func tearDownWithError() throws {
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
