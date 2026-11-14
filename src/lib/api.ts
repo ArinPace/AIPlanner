@@ -276,3 +276,5 @@ export async function completeCalendarBlock(input:{revision:number;eventId:strin
 export function sendWidgetCompletion(feedback: import('./widgetTaskFeedback').TaskFeedback) {
  return request<{ok: boolean; merged?: boolean}>('/api/widget/feedback', {method: 'POST', body: JSON.stringify(feedback)})
 }
+
+export function setGoogleExportEnabled(exportEnabled:boolean){return request('/api/calendar/google-sync',{method:'PATCH',body:JSON.stringify({exportEnabled})})}

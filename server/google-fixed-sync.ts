@@ -11,7 +11,7 @@ const base='https://www.googleapis.com/calendar/v3/calendars/primary/events'
 export async function fixedSyncStatus(username:string){
  const [queue,accounts,decisions]=await Promise.all([db().from('planner_google_fixed_sync').select('requested_revision,completed_revision,reviewed_revision,error,synced_at').eq('username',username).maybeSingle(),googleCalendarStatus(username),db().from('planner_calendar_staging').select('decisions:payload->googleDecisions').eq('username',username).order('created_at',{ascending:false}).limit(1).maybeSingle()])
  const selected=accounts.accounts.find(a=>a.id===accounts.activeAccountId),state=storage(queue)
- return {reviewRequired:Boolean(state&&state.requested_revision!==state.reviewed_revision),connected:Boolean(selected?.canEdit),identity:selected?.identity||null,accountId:selected?.id||null,pending:Boolean(state&&state.requested_revision>state.completed_revision),error:state?.error||(!selected?'Connect Google Calendar in Add sites.':!selected.canEdit?'Reconnect Google Calendar and approve event editing.':null),syncedAt:state?.synced_at||null,preservedCancelled:Object.entries((storage(decisions) as any)?.decisions||{}).filter(([,action])=>action==='preserve_cancelled').map(([id])=>id)}
+ return {exportEnabled:accounts.exportEnabled,reviewRequired:accounts.exportEnabled&&Boolean(state&&state.requested_revision!==state.reviewed_revision),connected:Boolean(selected?.canEdit),identity:selected?.identity||null,accountId:selected?.id||null,pending:accounts.exportEnabled&&Boolean(state&&state.requested_revision>state.completed_revision),error:accounts.exportEnabled?(state?.error||(!selected?'Connect Google Calendar in Add sites.':!selected.canEdit?'Reconnect Google Calendar and approve event editing.':null)):null,syncedAt:state?.synced_at||null,preservedCancelled:Object.entries((storage(decisions) as any)?.decisions||{}).filter(([,action])=>action==='preserve_cancelled').map(([id])=>id)}
 }
 export async function enqueueFixedSync(username:string){
  const row=await calendarRow(username)
@@ -19,6 +19,7 @@ export async function enqueueFixedSync(username:string){
 }
 export async function requestFixedSync(username:string){await enqueueFixedSync(username);return processFixedSync(username)}
 export async function processFixedSync(onlyUsername?:string){
+ if(onlyUsername&&(await googleCalendarStatus(onlyUsername)).exportEnabled===false)return {processed:0,disabled:true}
  await preparePendingStage(onlyUsername)
  const claimed=storage(await db().rpc('planner_claim_fixed_sync',{p_username:onlyUsername||null}))[0]
  if(!claimed)return {processed:0}

@@ -43,6 +43,7 @@ async function googleSnapshot(username:string,window?:{timeMin:string;timeMax:st
  return withSourceHealth(username,'calendar','staging',()=>googleSnapshotUnchecked(username,window))
 }
 async function googleSnapshotUnchecked(username:string,window?:{timeMin:string;timeMax:string}){
+ const exportEnabled=(await googleCalendarStatus(username)).exportEnabled
  const session=await googleCalendarSession(username)
  const mappings=storage(await db().from('planner_google_fixed_events').select('*').eq('username',username).eq('account_id',session.accountId))
  const local=await calendarRow(username)
@@ -73,7 +74,7 @@ async function googleSnapshotUnchecked(username:string,window?:{timeMin:string;t
   }while(next)
   sources.push({accountId:account.id,identity:account.identity,events:sourceEvents})
  }
- return {accountId:session.accountId,identity:session.identity,google:{...bounds,events,mappings,sources}}
+ return {accountId:session.accountId,identity:session.identity,google:{...bounds,events,mappings:exportEnabled?mappings:[],sources}}
 }
 export function stageIssues(calendar:StoredState,google:Stage['payload']['google']){
  const issues:Stage['payload']['issues']=[]
@@ -200,7 +201,9 @@ export async function publishCalendarStage(username:string,args:{id:string;versi
  }
  const problems=widgetDraftProblems(current.state,stage.payload.calendar,stage.payload.widgetFeedback||[])
  if(problems.length)throw new ApiError(409,'The revised plan is not ready. Fix draft conflicts before publishing: '+problems.join('; '))
- // A read-only grant can prepare/review a draft; publishing still requires export consent.
+ const exportEnabled=(await googleCalendarStatus(username)).exportEnabled
+ if(exportEnabled){
+ // Exporting a reviewed draft requires Google's write permission.
  await googleCalendarSession(username,stage.account_id,true)
  const fresh=await googleSnapshot(username,stage.payload.google)
  const pendingExports = storage(await db().from('planner_calendar_staging').select('id')
@@ -214,9 +217,10 @@ export async function publishCalendarStage(username:string,args:{id:string;versi
   storage(await db().from('planner_calendar_staging').update({status:'stale'}).eq('username',username).eq('id',stage.id).eq('version',stage.version))
   throw new ApiError(409,'Google Calendar changed during review. Prepare a fresh draft; nothing was published.')
  }
+ }
  const result=await db().rpc('planner_publish_calendar_stage',{p_username:username,p_id:stage.id,p_version:stage.version,p_summary:args.reviewSummary.trim()})
  if(result.error)throw new ApiError(409,'Could not publish: '+(result.error.message||'calendar/draft changed. Read both again.'))
- return {publishedToPlanner:true,revision:result.data,googleStatus:'Reviewed fixed-event batch queued; check status for completion. Google writes are not a cross-provider atomic transaction.'}
+ return {publishedToPlanner:true,revision:result.data,googleStatus:exportEnabled?'Reviewed fixed-event batch queued; check status for completion. Google writes are not a cross-provider atomic transaction.':'Google publishing is off. Published to Planner only; Google calendar reading remains available.'}
 }
 export function assertStageEvent(stage:Stage,remoteId:string,before:Remote|null){
  const expected=stage.payload.google.events.find(e=>e.id===remoteId)
@@ -265,7 +269,7 @@ export async function preparePendingStage(onlyUsername?:string){
  const query=db().from('planner_google_fixed_sync').select('username,requested_revision,completed_revision,reviewed_revision').lte('retry_at',new Date().toISOString()).order('retry_at').limit(20)
  const rows=storage(await (onlyUsername?query.eq('username',onlyUsername):query))
  const pending=rows.find(r=>r.requested_revision>r.completed_revision&&r.requested_revision!==r.reviewed_revision)
- if(pending)try{await prepareCalendarStage(pending.username);storage(await db().from('planner_google_fixed_sync').update({retry_at:new Date(Date.now()+300000).toISOString(),error:null}).eq('username',pending.username))}catch(error){storage(await db().from('planner_google_fixed_sync').update({retry_at:new Date(Date.now()+300000).toISOString(),error:error instanceof Error?error.message:'Calendar review snapshot is pending.'}).eq('username',pending.username))}
+ if(pending&&(await googleCalendarStatus(pending.username)).exportEnabled!==false)try{await prepareCalendarStage(pending.username);storage(await db().from('planner_google_fixed_sync').update({retry_at:new Date(Date.now()+300000).toISOString(),error:null}).eq('username',pending.username))}catch(error){storage(await db().from('planner_google_fixed_sync').update({retry_at:new Date(Date.now()+300000).toISOString(),error:error instanceof Error?error.message:'Calendar review snapshot is pending.'}).eq('username',pending.username))}
 }
 export async function calendarDownload(username:string,staging=false){
  if(staging){const stage=await stagingRow(username);if(!stage)throw new ApiError(404,'No staging snapshot yet. Connect Google Calendar and let the agent prepare one.');return {format:'ai-planner-calendar-stage',formatVersion:1,exportedAt:new Date().toISOString(),...stage}}

@@ -23,6 +23,7 @@ export function safeWorkerStatus(value: unknown) {
     runtime: input.runtime === 'claude' ? 'claude' : 'codex', recordings: false,
     signedIn: input.signedIn === true,
     identity: typeof input.identity === 'string' ? input.identity.slice(0, 160) : null,
+    ...(typeof input.workerRevision==='string'&&/^[a-f0-9]{64}$/.test(input.workerRevision)?{workerRevision:input.workerRevision}:{}),
     version: typeof input.version === 'string' ? input.version.slice(0, 40) : null,
     ...(typeof input.chatgptConnected === 'boolean' ? { chatgptConnected: input.chatgptConnected } : {}),
     ...(typeof input.claudeConnected === 'boolean' ? { claudeConnected: input.claudeConnected } : {}),

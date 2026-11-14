@@ -121,10 +121,10 @@ async function googleTokens(username: string) {
   return { tokens, identity:connection.identity }
 }
 export async function googleCalendarStatus(username: string) {
-  const [rows,selected]=await Promise.all([db().from('planner_google_accounts').select('id,identity,credentials,updated_at,read_enabled').eq('username',username).order('updated_at',{ascending:false}),db().from('planner_vm_settings').select('google_account_id').eq('username',username).maybeSingle()])
+  const [rows,selected]=await Promise.all([db().from('planner_google_accounts').select('id,identity,credentials,updated_at,read_enabled').eq('username',username).order('updated_at',{ascending:false}),db().from('planner_vm_settings').select('google_account_id,google_export_enabled').eq('username',username).maybeSingle()])
   const accounts=check(rows).map(row=>({id:row.id,identity:row.identity,updatedAt:row.updated_at,readEnabled:row.read_enabled!==false,canReadMail:String(decrypt(row.credentials).scope||'').split(' ').includes(GOOGLE_MAIL_READ_SCOPE),connected:String(decrypt(row.credentials).scope || '').split(' ').some(scope=>[GOOGLE_CALENDAR_SCOPE,GOOGLE_CALENDAR_WRITE_SCOPE,'https://www.googleapis.com/auth/calendar'].includes(scope)),canEdit:String(decrypt(row.credentials).scope || '').split(' ').some(scope=>[GOOGLE_CALENDAR_WRITE_SCOPE,'https://www.googleapis.com/auth/calendar'].includes(scope))}))
   const active=accounts.find(a=>a.id===check(selected)?.google_account_id) || accounts[0]
-  return { configured:Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET), connected:active?.connected || false, canEdit:active?.canEdit || false, identity:active?.identity || null, updatedAt:active?.updatedAt || null, activeAccountId:active?.id || null, accounts }
+  return { exportEnabled:check(selected)?.google_export_enabled!==false, configured:Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET), connected:active?.connected || false, canEdit:active?.canEdit || false, identity:active?.identity || null, updatedAt:active?.updatedAt || null, activeAccountId:active?.id || null, accounts }
 }
 export async function selectGoogleAccount(username:string,id:string) {
   const account=check(await db().from('planner_google_accounts').select('id').eq('id',id).eq('username',username).maybeSingle())
@@ -172,6 +172,7 @@ async function readGoogleCalendarUnchecked(username: string, timeMin?: string, t
 export async function googleCalendarSession(username:string,accountId?:string,write=false){
  const status=await googleCalendarStatus(username),selected=status.accounts.find(a=>a.id===(accountId||status.activeAccountId))
  if(!selected?.connected)throw new ApiError(409,'Connect Google Calendar through Add sites first.')
+ if(write&&status.exportEnabled===false)throw new ApiError(403,'Google Calendar publishing is turned off. Publish changes to Planner only; calendar reading remains enabled.')
  if(write&&!selected.canEdit)throw new ApiError(403,'Reconnect Google Calendar in Add sites and approve event editing; the current grant is read-only.')
   const account=check(await db().from('planner_google_accounts').select('identity,credentials').eq('username',username).eq('id',selected.id).single())
   let tokens=decrypt(account.credentials)

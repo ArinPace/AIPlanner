@@ -11,13 +11,13 @@ test('staging is private to the owner, edits are isolated, conflicts require res
  process.env.SUPABASE_URL='https://calendar-staging.test';process.env.SUPABASE_SERVICE_ROLE_KEY='service';delete process.env.SUPABASE_SECRET_KEY;process.env.CONNECTION_ENCRYPTION_KEY='ab'.repeat(32)
  const original=globalThis.fetch,accountId='ee34ba25-54bc-44df-8515-f7e6784dfed1'
  const event:CalendarEvent={id:'class',title:'Old location',description:'Room 1',start:'2026-11-02T10:00:00-05:00',end:'2026-11-02T11:00:00-05:00',allDay:false,tagIds:[],scheduleType:'fixed',recurrence:{frequency:'weekly',interval:2,until:'2026-12-01'},excludedStarts:['2026-11-16T10:00:00-05:00']}
- let calendar:{revision:number;state:StoredState}={revision:4,state:{events:[event,{...event,id:'study',scheduleType:'planned'},{...event,id:'rest',title:'Rest',scheduleType:'planned',tagIds:['break'],start:'2026-11-02T11:00:00-05:00',end:'2026-11-02T11:10:00-05:00',recurrence:{frequency:'none',interval:1,until:null}}],tags:[{id:'break',name:'Breaks',color:'#999999'}],hiddenTagIds:[]}},stage:Stage|null=null,published=0,canEdit=false
+ let calendar:{revision:number;state:StoredState}={revision:4,state:{events:[event,{...event,id:'study',scheduleType:'planned'},{...event,id:'rest',title:'Rest',scheduleType:'planned',tagIds:['break'],start:'2026-11-02T11:00:00-05:00',end:'2026-11-02T11:10:00-05:00',recurrence:{frequency:'none',interval:1,until:null}}],tags:[{id:'break',name:'Breaks',color:'#999999'}],hiddenTagIds:[]}},stage:Stage|null=null,published=0,canEdit=false,exportEnabled=true
  const remote={id:'remote',etag:'v1',...fixedEventPayload({...event,title:'Verified room update'})}
  globalThis.fetch=async(input,init)=>{
   const request=new Request(input,init),url=new URL(request.url),table=url.pathname.split('/').at(-1),method=request.method
   if(url.hostname==='www.googleapis.com'){assert.equal(method,'GET','Preparing/reviewing/publishing a draft must not directly write Google');return Response.json({items:[remote]})}
   if(url.searchParams.has('username'))assert.equal(url.searchParams.get('username'),'eq.owner')
-  if(table==='planner_vm_settings')return Response.json({google_account_id:accountId})
+  if(table==='planner_vm_settings')return Response.json({google_account_id:accountId,google_export_enabled:exportEnabled})
   if(table==='planner_google_accounts'){const account={id:accountId,identity:'owner@example.com',credentials:sealVmCredential({access_token:'private',scope:GOOGLE_CALENDAR_SCOPE+(canEdit?' '+GOOGLE_CALENDAR_WRITE_SCOPE:''),expires_at:Date.now()+3600000})};return Response.json(url.searchParams.has('id')?account:[account])}
   if(table==='planner_google_fixed_events')return Response.json([{local_id:'class',remote_id:'remote',managed:false}])
   if(table==='planner_calendars'){assert.equal(method,'GET');return Response.json(calendar)}
@@ -32,7 +32,7 @@ test('staging is private to the owner, edits are isolated, conflicts require res
    const args=await request.json() as any
    assert.equal(args.p_username,'owner');assert.equal(args.p_id,stage!.id);assert.equal(args.p_version,stage!.version)
    if(calendar.revision!==stage!.base_revision)return Response.json({message:'Calendar changed'},{status:400})
-   calendar={...calendar,revision:calendar.revision+1,state:stage!.payload.calendar as any};stage!.status='approved';stage!.approved_revision=calendar.revision;published++
+   calendar={...calendar,revision:calendar.revision+1,state:stage!.payload.calendar as any};stage!.status=exportEnabled?'approved':'published';stage!.approved_revision=calendar.revision;published++
    return Response.json(calendar.revision)
   }
   throw Error('Unexpected request '+table)
@@ -86,6 +86,14 @@ test('staging is private to the owner, edits are isolated, conflicts require res
   assert.equal(stage!.payload.googleDecisions?.class,'preserve_cancelled')
   await publishCalendarStage('owner',{id:cancelled.id,version:resolved.version,reviewSummary:'Reviewed the cancelled Google copy; preserve its cancellation without deleting local history.'})
 
+  exportEnabled=false;canEdit=false
+  const localOnly=await prepareCalendarStage('owner',true)
+  assert.equal(stage!.payload.google.mappings.length,0,'Read-only Google source does not create export-difference issues')
+  const localReviewed=await editCalendarStage('owner',{id:localOnly.id,version:localOnly.version,resolutions:stage!.payload.issues.map(issue=>({issueId:issue.id,decision:'Reviewed the read-only source alongside the internal calendar.'}))})
+  const localResult=await publishCalendarStage('owner',{id:localOnly.id,version:localReviewed.version,reviewSummary:'Reviewed Planner-only calendar with Google export disabled and no editing permission.'})
+  assert.equal(localResult.publishedToPlanner,true)
+  assert.match(localResult.googleStatus,/Planner only/)
+  assert.equal(stage!.status,'published')
  }finally{globalThis.fetch=original}
 })
 

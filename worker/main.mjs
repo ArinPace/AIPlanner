@@ -1,5 +1,5 @@
 import {modelCatalog,generationOptions} from './model-options.mjs'
-import {browserToolApprovals} from './tool-approvals.mjs'
+import {browserToolApprovals,plannerToolApprovals} from './tool-approvals.mjs'
 import { sources as sourceUrls } from './browser-sources.mjs'
 import { readFile, writeFile, mkdir, rename, unlink } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
@@ -90,6 +90,7 @@ async function chat(job, auth, remote) {
     'mcp_servers.browser.args': [path.join(root, 'browser-tools.mjs')],
     'mcp_servers.browser.env': { ...browserRuntimeEnv(dataDir), PLANNER_BROWSER_CONTROL:remote.browserControlEnabled===true?'1':'0', PLANNER_JOB_ID:job.id, PLANNER_JOB_LEASE:job.lease, PLANNER_ENABLED_SOURCES: JSON.stringify(remote.sources) },
     'mcp_servers.browser.env_vars': ['PLANNER_WORKER_TOKEN', 'PLANNER_ORIGIN'],
+    ...plannerToolApprovals(),
     ...browserToolApprovals(remote.browserControlEnabled===true),
     ...(remote.approvedBrowserTools?.includes('browser_read_whatsapp_chat') && remote.whatsappReadConsentAt && remote.sources.includes('whatsapp') ? {'mcp_servers.browser.tools.browser_read_whatsapp_chat.approval_mode':'approve'} : {}),
     ...(remote.approvedBrowserTools?.includes('browser_read_slack_dm') && remote.messageReadConsent?.slack && remote.sources.includes('slack') ? {'mcp_servers.browser.tools.browser_read_slack_dm.approval_mode':'approve'} : {}),
@@ -150,7 +151,7 @@ for (;;) {
     signedIn = Boolean(auth); identity = auth?.identity || null
     await refreshModels(auth).catch(()=>{runtimeModels=[]})
     pendingSites = { ...pendingSites, ...await observeSignIn(dataDir).catch(() => ({})) }
-    ;({ job } = await api('claim', { signedIn, identity, workerStartedAt, observedSites: pendingSites, modelCatalog:runtimeModels, runtime: remote.aiProvider === 'claude_code' ? 'claude' : 'codex', chatgptConnected: Boolean(nativeChatGpt), claudeConnected: Boolean(nativeClaude), activateClaude, version: '0.3.2' }))
+    ;({ job } = await api('claim', { signedIn, identity, workerStartedAt, workerRevision:process.env.PLANNER_WORKER_REVISION, observedSites: pendingSites, modelCatalog:runtimeModels, runtime: remote.aiProvider === 'claude_code' ? 'claude' : 'codex', chatgptConnected: Boolean(nativeChatGpt), claudeConnected: Boolean(nativeClaude), activateClaude, version: '0.3.2' }))
     process.send?.({ type: 'ready' })
     workerReady = true
     pendingSites = {}
