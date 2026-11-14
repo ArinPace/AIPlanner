@@ -2710,3 +2710,15 @@ html, body { touch-action: pan-x pan-y; }
 .folder-pencil { display: flex; align-items: center; justify-content: center; border: 0; border-radius: 4px; padding: 0; min-width: 32px; min-height: 40px; cursor: pointer; }
 .mobile-week .folder-pencil { grid-column: 3; align-self: stretch; }
 .week-time-grid .timed-event-folder .folder-event-header { grid-template-columns: 24px minmax(0,1fr) 32px; }
+
+/* Nested cards share stable event/action tracks; connectors use the page ink. */
+.mobile-week .agenda-grid-row.is-nested { border: 0; color: var(--text); }
+.mobile-week .agenda-grid-row.is-nested > .mobile-week-event,
+.mobile-week .agenda-grid-row.is-nested:not(.has-completion) > .mobile-week-event { grid-column: 2; border: var(--agenda-row-border,none); }
+.mobile-week .agenda-grid-row.is-nested > .agenda-indent { color: var(--muted); }
+.agenda-grid-row .agenda-tree-line,.agenda-grid-row .agenda-tree-line::after { border-color: var(--muted); opacity: .7; }
+.mobile-week .agenda-grid-row.has-completion { border: 0; }
+.mobile-week .agenda-grid-row.has-completion:not(.has-left-controls):not(.is-nested)::before { border: var(--agenda-row-border,none); }
+.mobile-week .agenda-grid-row.is-nested.has-left-controls > .mobile-week-event { grid-column: 2; }
+.agenda-primary-action { background: transparent; }
+.mobile-week .agenda-grid-row.is-nested,.mobile-week .agenda-grid-row.has-completion { border: 0 !important; }
