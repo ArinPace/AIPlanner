@@ -2799,3 +2799,12 @@ html, body { touch-action: pan-x pan-y; }
 .checklist-sheet li[data-scheduled-label]::after { content: attr(data-scheduled-label); flex: 0 0 auto; max-width: 105px; white-space: normal; padding: 4px 6px; margin-top: 2px; border-radius: 6px; background: color-mix(in srgb,var(--blue) 12%,var(--panel)); color: var(--blue); font-size: 11px; line-height: 1.4; user-select: none; }
 @media(max-width:600px) { .checklist-sheet { inset: auto 0 0; width: 100%; height: 76dvh; border-radius: 28px 28px 0 0; border-bottom: 0; padding-bottom: env(safe-area-inset-bottom); } }
 .checklist-sheet { max-width: none; box-sizing: border-box; }
+.checklist-sheet-actions { display: flex; align-items: center; gap: 8px; }
+.checklist-add-item { display: flex; align-items: center; gap: 4px; border: 0; border-radius: 12px; padding: 8px; color: var(--blue); background: color-mix(in srgb,var(--blue) 8%,transparent); font: inherit; font-size: 13px; cursor: pointer; }
+.checklist-page-dots { flex: none; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 0 12px; }
+.checklist-page-dots button { border: 0; border-radius: 50%; width: 8px; height: 8px; padding: 0; background: var(--line); cursor: pointer; }
+.checklist-page-dots button[aria-current=page] { background: var(--blue); }
+.checklist-page-dots button { display: grid; place-items: center; width: 28px; height: 28px; background: transparent; }
+.checklist-page-dots button::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+.checklist-page-dots button[aria-current=page] { background: transparent; }
+.checklist-page-dots button[aria-current=page]::before { background: var(--blue); }

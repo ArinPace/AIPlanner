@@ -11,7 +11,7 @@ export function checklistSchedule(events:CalendarEvent[],noteId:string,now=new P
  const candidates=new Map<string,{start:Date;end:Date}[]>()
  for(const item of expandEvents(events,start,end))for(const link of item.event.checklistLinks||[]){if(link.noteId!==noteId)continue;const slots=candidates.get(link.itemId)||[];slots.push({start:item.start,end:item.end});candidates.set(link.itemId,slots)}
  const result:ScheduleLabels={}
- for(const [id,slots] of candidates){slots.sort((a,b)=>a.start.getTime()-b.start.getTime());const next=slots.find(slot=>slot.end.getTime()>=now.getTime())||slots[slots.length-1];const day=next.start.toLocaleDateString('en-US',{month:'short',day:'numeric'}),time=next.start.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});result[id]={text:`${day}, ${time}`,title:slots.map(s=>s.start.toLocaleString('en-US')+' – '+s.end.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})).join('\n')+' (New York time)'}}
+ for(const [id,slots] of candidates){slots.sort((a,b)=>a.start.getTime()-b.start.getTime());const next=slots.find(slot=>slot.end.getTime()>=now.getTime())||slots[slots.length-1];const day=next.start.toLocaleDateString('en-US',{month:'short',day:'numeric'}),time=next.start.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});result[id]={text:Math.abs(next.start.getTime()-now.getTime())<=2*86400000?`${day}, ${time}`:day,title:slots.map(s=>s.start.toLocaleString('en-US')+' – '+s.end.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})).join('\n')+' (New York time)'}}
  return result
 }
 export const ChecklistSchedule=Extension.create<{labels:()=>ScheduleLabels}>({
