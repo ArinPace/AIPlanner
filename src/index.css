@@ -2827,3 +2827,10 @@ html, body { touch-action: pan-x pan-y; }
 .checklist-page-dots.is-switching button::before { opacity: .55; }
 .checklist-page-dots.is-switching button[aria-current=page]::before { opacity: 1; }
 .has-mobile-week .mobile-week-heading > h3 { padding-left: 0; }
+.checklist-sheet .compact-checklist-toolbar { display: none; }
+.checklist-sheet > header > div { align-items: center; padding-bottom: 6px; }
+.checklist-sheet-actions { gap: 2px; }
+.checklist-sheet .checklist-add-item,.checklist-toolbar-slot .apple-toolbar-trailing button { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 0; border-radius: 8px; padding: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.checklist-toolbar-slot .apple-toolbar-trailing { display: flex; gap: 2px; }
+.checklist-toolbar-slot button[hidden] { display: none; }
+.checklist-sheet > header { touch-action: none; }
