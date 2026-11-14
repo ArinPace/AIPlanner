@@ -46,6 +46,9 @@ export function SettingsPanel({ calendarDisplay, zoom, onZoomChange, onClose, on
           <CloseIcon />
         </button>
       </div>
+      <details className="settings-group" open>
+        <summary>Display</summary>
+        <div className="settings-group-content">
       <label className="settings-theme">
         <span>Dark mode</span>
         <input type="checkbox" role="switch" checked={theme === 'dark'} onChange={event => {
@@ -54,28 +57,14 @@ export function SettingsPanel({ calendarDisplay, zoom, onZoomChange, onClose, on
           applyTheme(next)
         }} />
       </label>
-      {isIPhoneApp() && <label className="settings-theme">
-        <span>Open links in browser</span>
-        <input type="checkbox" role="switch" checked={openExternally} onChange={event => {
-          setOpenExternally(event.target.checked)
-          setExternalLinks(event.target.checked)
-        }} />
-      </label>}
-      <button type="button" className="today-btn" onClick={()=>setPlanningOpen(true)}>Planning & intensity</button>
-      {planningOpen&&<PlanningSettings onClose={()=>setPlanningOpen(false)}/>}
-      <button type="button" className="today-btn" onClick={()=>void downloadCalendarJson().catch(e=>setDownloadError(e.message))}>Download calendar JSON</button>
-      <button type="button" className="today-btn" onClick={()=>void downloadCalendarJson(true).catch(e=>setDownloadError(e.message))}>Download staging JSON</button>
-      {downloadError&&<p className="form-error" role="alert">{downloadError}</p>}
       <fieldset className="settings-duration"><legend>Scale to duration</legend>
         <label className="settings-theme"><span>Week view</span><input type="checkbox" role="switch" aria-label="Scale week view to duration" checked={calendarDisplay.settings.week} disabled={calendarDisplay.saving} onChange={e=>void calendarDisplay.change('week',e.target.checked)}/></label>
         <label className="settings-theme"><span>Month view</span><input type="checkbox" role="switch" aria-label="Scale month view to duration" checked={calendarDisplay.settings.month} disabled={calendarDisplay.saving} onChange={e=>void calendarDisplay.change('month',e.target.checked)}/></label>
         <p className="quiet">Size timed events and folders by their duration. Short events keep a minimum tappable height. Saved to your account.</p>
         {calendarDisplay.error&&<p role="alert" className="form-error">{calendarDisplay.error}</p>}
       </fieldset>
-      <TaskNotificationSettings/>
-      <LocalCopySettings/>
       <label className="settings-field">
-        <span>Display size</span>
+        <span>Zoom</span>
         <div className="settings-zoom-row">
           <input
             type="range"
@@ -94,7 +83,31 @@ export function SettingsPanel({ calendarDisplay, zoom, onZoomChange, onClose, on
       <p className="quiet settings-hint">
         Visual zoom: {mod} + / {mod} −. Reset with {mod} 0.
       </p>
-      <button type="button" className="text-btn" onClick={onLogout}>Log out</button>
+        </div>
+      </details>
+      <details className="settings-group">
+        <summary>Notifications</summary>
+        <div className="settings-group-content"><TaskNotificationSettings/></div>
+      </details>
+      <details className="settings-group">
+        <summary>Advanced</summary>
+        <div className="settings-group-content">
+      {isIPhoneApp() && <label className="settings-theme">
+        <span>Open links in browser</span>
+        <input type="checkbox" role="switch" checked={openExternally} onChange={event => {
+          setOpenExternally(event.target.checked)
+          setExternalLinks(event.target.checked)
+        }} />
+      </label>}
+      <button type="button" className="today-btn" onClick={()=>setPlanningOpen(true)}>Planning & intensity</button>
+      {planningOpen&&<PlanningSettings onClose={()=>setPlanningOpen(false)}/>}
+      <button type="button" className="today-btn" onClick={()=>void downloadCalendarJson().catch(e=>setDownloadError(e.message))}>Download calendar JSON</button>
+      <button type="button" className="today-btn" onClick={()=>void downloadCalendarJson(true).catch(e=>setDownloadError(e.message))}>Download staging JSON</button>
+      {downloadError&&<p className="form-error" role="alert">{downloadError}</p>}
+          <LocalCopySettings/>
+          <button type="button" className="text-btn" onClick={onLogout}>Log out</button>
+        </div>
+      </details>
     </div>
   )
 }

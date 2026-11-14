@@ -2534,3 +2534,15 @@ html, body { touch-action: pan-x pan-y; }
 .standalone-todo-editor .apple-note-document > :is(h1,h2,h3,h4,h5,h6):first-child:empty,
 .standalone-todo-editor .apple-note-document > :is(h1,h2,h3,h4,h5,h6):first-child:has(> br.ProseMirror-trailingBreak:only-child) { display: none; }
 .standalone-todo-editor .apple-note-document > ul[data-type='taskList']:first-of-type { margin-top: 0; }
+
+.settings-group { border-bottom: 1px solid var(--line); padding: 4px 0; }
+.settings-group:last-child { border-bottom: 0; }
+.settings-group > summary { display: flex; align-items: center; justify-content: space-between; padding: 12px 2px; cursor: pointer; list-style: none; font-weight: 650; color: var(--text); }
+.settings-group > summary::-webkit-details-marker { display: none; }
+.settings-group > summary::after { content: '›'; font-size: 22px; color: var(--muted); transform: rotate(0deg); }
+.settings-group[open] > summary::after { transform: rotate(90deg); }
+.settings-group > summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 6px; }
+.settings-group-content { display: flex; flex-direction: column; gap: 10px; padding: 0 2px 14px; }
+.settings-group-content > .settings-theme { margin: 0; }
+.settings-group-content .settings-duration { margin: 0; }
+.settings-group-content .task-notification-settings,.settings-group-content .local-copy-settings { border-top: 0; margin-top: 0; padding-top: 0; }
