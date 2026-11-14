@@ -87,7 +87,7 @@ export function Header({
 
         {tab === 'calendar' && <>
 
-        <h1 className="range-title">{formatRangeLabel(cursor, view === 'day' ? 'week' : view)}</h1><span className="calendar-timezone" title="America/New_York ? adjusts for daylight saving">New York (ET)</span>
+        <h1 className="range-title">{formatRangeLabel(cursor, view)}</h1><span className="calendar-timezone" title="America/New_York ? adjusts for daylight saving">New York (ET)</span>
         </>}
       </div>
 
