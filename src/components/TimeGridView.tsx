@@ -253,7 +253,7 @@ export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=tr
       </div>
 
       <div className="time-scroll" ref={scrollRef}>
-        <div ref={bodyRef} className={`time-body days-${days.length}`} style={{ height: 24 * hourHeight, marginBottom: 90 }}>
+        <div ref={bodyRef} className={`time-body days-${days.length}`} style={{ height: 24 * hourHeight, marginBottom: regularWeek?0:90 }}>
           <div className="hours">
             {HOURS.map((hour) => (
               <div key={hour} className="hour-label" style={{ height: hourHeight }}>

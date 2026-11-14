@@ -2781,3 +2781,6 @@ html, body { touch-action: pan-x pan-y; }
 /* Short multi-day events retain one readable title line without vertical padding. */
 .week-time-grid .timed-event.is-short { padding: 0 2px; border-width: 0; justify-content: flex-start; }
 .week-time-grid .timed-event.is-short .event-title { display: block; line-height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* End the multi-day scroll content at midnight without stacked footer spacers. */
+.calendar-main .week-time-grid .time-scroll { padding-bottom: 0; scroll-padding-bottom: 0; }
