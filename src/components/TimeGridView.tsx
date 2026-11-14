@@ -270,7 +270,7 @@ export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=tr
               const top=(clipped.start.getHours()*60+clipped.start.getMinutes()+clipped.start.getSeconds()/60)/60*hourHeight
               const endMinutes=clipped.end.getTime()===addDays(startOfDay(day),1).getTime()?1440:clipped.end.getHours()*60+clipped.end.getMinutes()+clipped.end.getSeconds()/60
               const startMinutes=clipped.start.getHours()*60+clipped.start.getMinutes()+clipped.start.getSeconds()/60
-              const height=Math.max((endMinutes-startMinutes)/60*hourHeight,1)
+              const height=Math.max((endMinutes-startMinutes)/60*hourHeight,regularWeek?14:1)
               const key=day.toDateString()+'/'+item.event.id+'/'+item.start.toISOString()
               return {item,key,top,height,bottom:top+height}
             }))
@@ -324,7 +324,7 @@ export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=tr
                         {item.event.title || '(No title)'}
                       </span>
                       <span className="event-time">{item.event.reminder?'Reminder \u00b7 '+formatTimeCompact(item.start):formatTimeCompact(item.start)+' \u2013 '+formatTimeCompact(item.end)}</span>
-                    </button>{!item.freeTime&&!item.event.reminder&&doneButton(item)}</div>
+                    </button>{!regularWeek&&!item.freeTime&&!item.event.reminder&&doneButton(item)}</div>
                   )
                 })}
               </div>
