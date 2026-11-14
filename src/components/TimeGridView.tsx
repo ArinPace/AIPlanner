@@ -37,6 +37,8 @@ type TimeGridViewProps = {
   onFreeTimeClick?: (item:Occurrence)=>void
   showFreeTime?: boolean
   onVisibleDateChange?: (date: Date) => void
+  agendaRange?:{start:Date;end:Date}
+  onAgendaExtend?:(direction:-1|1)=>void
   onMultiDayDate?: (date: Date) => void
   onWeekNavigate?: (direction: -1 | 1) => void
   weekLayout?: 'list' | 'grid'
@@ -66,13 +68,15 @@ function clipToDay(item: Occurrence, day: Date): { start: Date; end: Date } | nu
   }
 }
 
-export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=true, onVisibleDateChange, onMultiDayDate, onWeekNavigate, weekLayout = 'list', scaleToDuration=false, active=true,cursor, view, zoom, occurrences, busyOccurrences, tags, onSlotClick, onEventClick, onEventDone }: TimeGridViewProps) {
+export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=true, onVisibleDateChange, agendaRange, onAgendaExtend, onMultiDayDate, onWeekNavigate, weekLayout = 'list', scaleToDuration=false, active=true,cursor, view, zoom, occurrences, busyOccurrences, tags, onSlotClick, onEventClick, onEventDone }: TimeGridViewProps) {
   const multiDayCount=useMultiDayCount()
   const showItemCounts=useFolderItemCounts()
   const rowControls=useCalendarRowControls()
   const folderAnimations=useFolderAnimations()
   const dayIntensity = (day: Date) => calendarIntensity(busyOccurrences,tags,startOfDay(day).getTime(),addDays(startOfDay(day),1).getTime())
-  const days = view === 'day' ? [startOfDay(cursor)] : weekLayout==='grid'?Array.from({length:multiDayCount},(_,index)=>addDays(startOfDay(cursor),index)):getWeekDays(cursor)
+  const agendaDays:Date[]=[]
+  if(agendaRange)for(let day=startOfDay(agendaRange.start);day<=agendaRange.end;day=addDays(day,1))agendaDays.push(day)
+  const days = view === 'day' ? [startOfDay(cursor)] : weekLayout==='grid'?Array.from({length:multiDayCount},(_,index)=>addDays(startOfDay(cursor),index)):agendaRange?agendaDays:getWeekDays(cursor)
   const scrollRef = useRef<HTMLDivElement>(null)
   const weekScrollRef=useRef<HTMLDivElement>(null)
   useWeekSwipe(weekScrollRef, active && view === 'week' && Boolean(onWeekNavigate), onWeekNavigate)
@@ -129,6 +133,15 @@ export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=tr
     previousLayout.current={key,hourHeight,gridWeek:regularWeek}
   }, [active,view,dayKey,todayKey,mobileWeek,hourHeight,containsToday,scaleToDuration,regularWeek])
 
+  const extensionRef=useRef(onAgendaExtend);extensionRef.current=onAgendaExtend
+  const pendingExtension=useRef<{height:number;top:number;prepend:boolean}|null>(null)
+  const rangeKey=days[0]?.toISOString()+'/'+days[days.length-1]?.toISOString()
+  useLayoutEffect(()=>{
+    const node=weekScrollRef.current,pending=pendingExtension.current
+    if(!node||!pending)return
+    if(pending.prepend)node.scrollTop=pending.top+node.scrollHeight-pending.height
+    pendingExtension.current=null
+  },[rangeKey])
   const visibleDateCallback=useRef(onVisibleDateChange)
   visibleDateCallback.current=onVisibleDateChange
   useEffect(()=>{
@@ -142,11 +155,12 @@ export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=tr
       const section=sections.find(section=>section.getBoundingClientRect().bottom>top)
       const key=section?.dataset.calendarDay
       if(key&&key!==last){last=key;visibleDateCallback.current?.(new Date(key+'T12:00:00'))}
+      if(extensionRef.current&&!pendingExtension.current){const prepend=node.scrollTop<240;if(prepend||node.scrollHeight-node.clientHeight-node.scrollTop<400){pendingExtension.current={height:node.scrollHeight,top:node.scrollTop,prepend};extensionRef.current(prepend?-1:1)}}
     }
     const scroll=()=>{if(!frame)frame=requestAnimationFrame(report)}
     node.addEventListener('scroll',scroll,{passive:true});scroll()
     return()=>{node.removeEventListener('scroll',scroll);cancelAnimationFrame(frame)}
-  },[active,mobileWeek,dayKey])
+  },[active,mobileWeek,dayKey,rangeKey])
 
   const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 60) * hourHeight
   const busyEvents = busyOccurrences.map(item => item.event)

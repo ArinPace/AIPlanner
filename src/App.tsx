@@ -170,6 +170,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   const [visitedNotes,setVisitedNotes]=useState({todo:false,work:false})
   useEffect(()=>{if(tab==='todo'||tab==='work')setVisitedNotes(previous=>previous[tab]?previous:{...previous,[tab]:true})},[tab])
   const [cursor, setCursor] = useState(() => new Date())
+  const [agendaWindow,setAgendaWindow]=useState<{anchor:string;start:Date;end:Date}|null>(null)
   const [view, setView] = useState<CalendarView>('day')
   const [visibleDate,setVisibleDate]=useState(cursor)
   useEffect(()=>setVisibleDate(cursor),[cursor,view])
@@ -390,7 +391,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   const hiddenSet = useMemo(() => new Set(hiddenTagIds), [hiddenTagIds])
   const visibleEvents = useMemo(() => events.filter(event => (!hiddenSet.has(FREE_TIME_TAG_ID)||event.title.trim().toLowerCase()!=='free time')&&isEventVisible(event, hiddenSet)&&!hiddenTypes.includes(eventType(event,tags))), [events, hiddenSet,hiddenTypes,tags])
   const visibleEventIds=useMemo(()=>new Set(visibleEvents.map(event=>event.id)),[visibleEvents])
-  const range = useMemo(() => view==='week'?{start:visibleRange(cursor,'day').start,end:visibleRange(addDays(cursor,multiDayCount-1),'day').end}:visibleRange(cursor, view === 'day' ? 'week' : view), [cursor, view,multiDayCount])
+  const range = useMemo(() => view==='day'&&agendaWindow?.anchor===cursor.toISOString()?{start:agendaWindow.start,end:agendaWindow.end}:view==='week'?{start:visibleRange(cursor,'day').start,end:visibleRange(addDays(cursor,multiDayCount-1),'day').end}:visibleRange(cursor, view === 'day' ? 'week' : view), [cursor, view,multiDayCount,agendaWindow])
   const occurrences = useMemo(() => {
     if (view === 'month' || view === 'year') return []
     return expandEvents(events, range.start, range.end).filter(({event})=>visibleEventIds.has(event.id))
@@ -594,6 +595,8 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
               onFreeTimeClick={openFreeTime}
               showFreeTime={!hiddenSet.has(FREE_TIME_TAG_ID)}
               onVisibleDateChange={reportVisibleDate}
+              agendaRange={view==='day'?range:undefined}
+              onAgendaExtend={direction=>setAgendaWindow(current=>{const base=current?.anchor===cursor.toISOString()?current:visibleRange(cursor,'week');return {anchor:cursor.toISOString(),start:direction<0?addDays(base.start,-7):base.start,end:direction>0?addDays(base.end,7):base.end}})}
               onMultiDayDate={setCursor}
               onWeekNavigate={direction => setCursor(current => addDays(current, direction * multiDayCount))}
               weekLayout={view === 'week' ? 'grid' : 'list'}

@@ -2808,3 +2808,4 @@ html, body { touch-action: pan-x pan-y; }
 .checklist-page-dots button::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
 .checklist-page-dots button[aria-current=page] { background: transparent; }
 .checklist-page-dots button[aria-current=page]::before { background: var(--blue); }
+.has-mobile-week { overflow-anchor: none; }
