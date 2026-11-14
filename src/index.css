@@ -2515,7 +2515,7 @@ html, body { touch-action: pan-x pan-y; }
 }
 
 @media(max-width:600px) {
- .bottom-workspace-nav,.main-ai-bubble { bottom: max(6px,env(safe-area-inset-bottom)); }
+ .bottom-workspace-nav,.main-ai-bubble { bottom: max(0px,calc(env(safe-area-inset-bottom) - 6px)); }
 }
 
 /* Checklist tabs start with their content, without a redundant note heading/footer. */
