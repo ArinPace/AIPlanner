@@ -138,7 +138,7 @@ export function Sidebar({
 
         {screenTimeError&&<p role="alert" className="form-error">{screenTimeError}</p>}
         <ul className="tag-list">
-          <li><div className="tag-item"><input aria-label="Show Free time events" type="checkbox" checked={!hiddenTagIds.has(FREE_TIME_TAG_ID)} onChange={()=>onToggleTag(FREE_TIME_TAG_ID)}/><span className="tag-swatch" style={{background:'var(--bg)',border:'1px solid var(--muted)'}}/><span className="tag-name">Free time</span></div>{supportsScreenTime()&&<button type="button" className="icon-btn" aria-label="Screen Time for Free time tag" onClick={()=>openTagScreenTime(FREE_TIME_TAG_ID,'Free time')}><ScreenTimeIcon/></button>}</li>
+          <li><div className="tag-item"><input aria-label="Show Free time events" type="checkbox" checked={!hiddenTagIds.has(FREE_TIME_TAG_ID)} onChange={()=>onToggleTag(FREE_TIME_TAG_ID)}/><span className="tag-swatch" style={{background:'var(--bg)',border:'1px solid var(--muted)'}}/><span className="tag-name">Free time</span></div>{supportsScreenTime()&&<button type="button" className="icon-btn" aria-label="Screen Time for Free time tag" onClick={()=>openTagScreenTime(FREE_TIME_TAG_ID,'Free time')}><ScreenTimeIcon/></button>}<span className="tag-delete-placeholder" aria-hidden="true"/></li>
           {tags.map((tag) => {
             const visible = !hiddenTagIds.has(tag.id)
             return (

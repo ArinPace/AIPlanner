@@ -2603,3 +2603,7 @@ html, body { touch-action: pan-x pan-y; }
 
 .checklist-updated { padding: 10px 20px 0; text-align: center; font-size: 11px; line-height: 1.4; color: var(--muted); }
 .standalone-todo-editor .checklist-updated + div .apple-note-document { padding-top: 14px; }
+
+.tag-delete-placeholder { display: block; width: 28px; flex: 0 0 28px; }
+.tag-list .tag-item { min-width: 0; }
+.tag-list .tag-delete { flex: 0 0 28px; }
