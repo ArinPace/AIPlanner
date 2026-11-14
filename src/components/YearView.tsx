@@ -12,6 +12,7 @@ import {
 } from '../lib/dates'
 
 type YearViewProps = {
+  onVisibleDateChange?: (date: Date) => void
   cursor: Date
   events: CalendarEvent[]
   tags: Tag[]
@@ -24,7 +25,7 @@ function monthCursor(year: number, month: number): Date {
   return new Date(year, month, 1)
 }
 
-export function YearView({ cursor, events, tags, hiddenTagIds, onMonthOpen, onDayOpen }: YearViewProps) {
+export function YearView({ onVisibleDateChange, cursor, events, tags, hiddenTagIds, onMonthOpen, onDayOpen }: YearViewProps) {
   const year = cursor.getFullYear()
   const [years, setYears] = useState({ start: year - 1, end: year + 1 })
   const months = Array.from({ length: (years.end - years.start + 1) * 12 }, (_, month) => monthCursor(years.start, month))
@@ -54,6 +55,9 @@ export function YearView({ cursor, events, tags, hiddenTagIds, onMonthOpen, onDa
     <div className="year-view" ref={viewRef} onScroll={() => {
       const view = viewRef.current
       if (!view || prependAnchor.current) return
+      const top=view.getBoundingClientRect().top+40
+      const section=Array.from(view.querySelectorAll<HTMLElement>('[data-visible-year]')).find(section=>section.getBoundingClientRect().bottom>top)
+      if(section?.dataset.visibleYear)onVisibleDateChange?.(new Date(Number(section.dataset.visibleYear),0,1))
       if (view.scrollTop < 200) {
         prependAnchor.current = { height: view.scrollHeight, top: view.scrollTop }
         setYears(current => ({ ...current, start: current.start - 1 }))
@@ -65,7 +69,7 @@ export function YearView({ cursor, events, tags, hiddenTagIds, onMonthOpen, onDa
         const days = getMonthGrid(month)
         const label = month.toLocaleDateString(undefined, { month: 'long' })
         return (
-          <section key={month.toISOString()} className="year-month" ref={month.getFullYear() === year && month.getMonth() === currentMonth ? currentMonthRef : undefined}>
+          <section key={month.toISOString()} data-visible-year={month.getFullYear()} className="year-month" ref={month.getFullYear() === year && month.getMonth() === currentMonth ? currentMonthRef : undefined}>
             <button type="button" className="year-month-title" onClick={() => onMonthOpen(month)}>
               {label} {month.getFullYear()}
             </button>

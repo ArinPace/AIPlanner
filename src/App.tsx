@@ -28,6 +28,8 @@ import {eventType,type ScheduleType} from './lib/eventType'
 import {saveEventGroup,removeEventSeries,detachEventOccurrence} from './lib/eventFolders'
 import {
   addDays,
+  addMonths,
+  addYears,
   combineDateAndTime,
   endOfDateInput,
   startOfDateInput,
@@ -165,6 +167,9 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   useEffect(()=>{if(tab==='todo'||tab==='work')setVisitedNotes(previous=>previous[tab]?previous:{...previous,[tab]:true})},[tab])
   const [cursor, setCursor] = useState(() => new Date())
   const [view, setView] = useState<CalendarView>('day')
+  const [visibleDate,setVisibleDate]=useState(cursor)
+  useEffect(()=>setVisibleDate(cursor),[cursor,view])
+  const reportVisibleDate=useCallback((date:Date)=>setVisibleDate(current=>toDateInput(current)===toDateInput(date)?current:date),[])
   const [filesSidebar,setFilesSidebar]=useState(()=>window.innerWidth>600)
   const [agentSidebar,setAgentSidebar]=useState(()=>window.innerWidth>700)
   const [sidebarOpen, setSidebarOpen] = useState(() => window.matchMedia('(min-width: 861px)').matches)
@@ -390,7 +395,10 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
     return expandEvents(events, range.start, range.end)
   }, [events, view, range.end, range.start])
 
-  function navigate(direction: -1 | 1) { setCursor(current=>addDays(current,direction)) }
+  function navigate(direction: -1 | 1) {
+    const current=view==='day'||view==='year'?visibleDate:cursor
+    setCursor(view==='year'?addYears(current,direction):view==='month'?addMonths(current,direction):addDays(current,direction*(view==='week'?7:1)))
+  }
 
   function openCreate(date: Date, options?: { timed?: boolean; allDay?: boolean }) {
     setEditingId(null)
@@ -475,7 +483,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
       <Header hideAgent={hideAgent}
         tab={tab}
         onTabChange={next=>{if(next==='chat'){setMainChatOpen(true);return}if(next==='todo'||next==='work')setTodoRequest(n=>n+1);setTab(next)}}
-        cursor={cursor}
+        cursor={view==='day'||view==='year'?visibleDate:cursor}
         view={view}
         zoom={zoom}
         calendarDisplay={calendarDisplay}
@@ -530,6 +538,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
           {(loadError || saveError) && <p className="save-banner">{loadError || saveError}</p>}
           {view === 'year' ? (
             <YearView
+              onVisibleDateChange={reportVisibleDate}
               key={cursor.getFullYear()}
               cursor={cursor}
               events={visibleEvents}
@@ -562,6 +571,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
             />
           ) : (
             <TimeGridView
+              onVisibleDateChange={reportVisibleDate}
               onWeekNavigate={direction => setCursor(current => addDays(current, direction * 7))}
               weekLayout={view === 'week' ? 'grid' : 'list'}
               scaleToDuration={calendarDisplay.settings.week}

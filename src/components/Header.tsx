@@ -1,5 +1,6 @@
 import {MiniCalendar} from './MiniCalendar'
-import {isToday} from '../lib/dates'
+import {isToday,startOfWeek,isSameDay,isSameMonth,isSameYear,addDays} from '../lib/dates'
+import {PlannerDate as Date} from '../lib/timezone'
 import type {useCalendarDisplay} from '../lib/useCalendarDisplay'
 import { useEffect, useRef, useState } from 'react'
 import type { CalendarView } from '../types'
@@ -42,6 +43,11 @@ export function Header({
   onLogout,
   calendarDisplay,
 }: HeaderProps) {
+  const now=new Date()
+  const currentPeriod=view==='day'?isToday(cursor):view==='week'?isSameDay(startOfWeek(cursor),startOfWeek(now)):view==='month'?isSameMonth(cursor,now):isSameYear(cursor,now)
+  const weekStart=startOfWeek(cursor),weekEnd=addDays(weekStart,6)
+  const weekLabel=weekStart.toLocaleDateString('en-US',{month:'short',day:'numeric'})+'–'+weekEnd.toLocaleDateString('en-US',isSameMonth(weekStart,weekEnd)?{day:'numeric'}:{month:'short',day:'numeric'})
+  const periodLabel=currentPeriod?({day:'Today',week:'This week',month:'This month',year:'This year'}[view]):view==='day'?cursor.toLocaleDateString('en-US',{month:'short',day:'numeric'}):view==='month'?cursor.toLocaleDateString('en-US',{month:'short',year:'numeric'}):view==='year'?String(cursor.getFullYear()):weekLabel
   const pickerRef=useRef<HTMLDialogElement>(null)
   const dateButton=useRef<HTMLButtonElement>(null)
   const [pickerMonth,setPickerMonth]=useState(cursor)
@@ -78,7 +84,7 @@ export function Header({
         </button>
         {tab === 'calendar' && <div className="calendar-navigation">
         <button type="button" className="icon-btn" aria-label="Previous" onClick={() => onNavigate(-1)}><ChevronIcon /></button>
-        <button ref={dateButton} type="button" className="today-btn" aria-label={'Choose date: '+cursor.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})} aria-haspopup="dialog" onClick={openDatePicker}>{isToday(cursor)?'Today':cursor.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</button>
+        <button ref={dateButton} type="button" className="today-btn" aria-label={'Choose date: '+cursor.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})} aria-haspopup="dialog" onClick={openDatePicker}>{periodLabel}</button>
         <button type="button" className="icon-btn" aria-label="Next" onClick={() => onNavigate(1)}><ChevronIcon className="flip" /></button>
         </div>}
       </div>

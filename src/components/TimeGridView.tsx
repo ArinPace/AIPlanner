@@ -31,6 +31,7 @@ import {PlanningButton} from './PlanningSettings'
 import {toDateInput} from '../lib/dates'
 
 type TimeGridViewProps = {
+  onVisibleDateChange?: (date: Date) => void
   onWeekNavigate?: (direction: -1 | 1) => void
   weekLayout?: 'list' | 'grid'
   scaleToDuration?:boolean
@@ -59,7 +60,7 @@ function clipToDay(item: Occurrence, day: Date): { start: Date; end: Date } | nu
   }
 }
 
-export function TimeGridView({ onWeekNavigate, weekLayout = 'list', scaleToDuration=false, active=true,cursor, view, zoom, occurrences, busyOccurrences, tags, onSlotClick, onEventClick, onEventDone }: TimeGridViewProps) {
+export function TimeGridView({ onVisibleDateChange, onWeekNavigate, weekLayout = 'list', scaleToDuration=false, active=true,cursor, view, zoom, occurrences, busyOccurrences, tags, onSlotClick, onEventClick, onEventDone }: TimeGridViewProps) {
   const [planning, setPlanning] = useState<PlanningProfile>()
   useEffect(() => {
     if (!active) return
@@ -117,7 +118,7 @@ export function TimeGridView({ onWeekNavigate, weekLayout = 'list', scaleToDurat
     if(previous?.key!==key && !keepGridPosition){
       if(mobileWeek){
         const target=dayKey===todayKey?mobileNowRef.current:node.querySelector<HTMLElement>('[data-calendar-day="'+dayKey+'"]')
-        node.scrollTop=target?Math.max(0,node.scrollTop+target.getBoundingClientRect().top-node.getBoundingClientRect().top-(dayKey===todayKey?node.clientHeight*.25:8)):0
+        node.scrollTop=target?Math.max(0,node.scrollTop+target.getBoundingClientRect().top-node.getBoundingClientRect().top-(dayKey===todayKey?node.clientHeight*.25:0)):0
       }else{
         const current=new Date(),showNow=containsToday
         const target=showNow?(current.getHours()+current.getMinutes()/60)*hourHeight:8*hourHeight
@@ -129,6 +130,25 @@ export function TimeGridView({ onWeekNavigate, weekLayout = 'list', scaleToDurat
     }
     previousLayout.current={key,hourHeight,gridWeek:regularWeek}
   }, [active,view,dayKey,todayKey,mobileWeek,hourHeight,containsToday,scaleToDuration,regularWeek])
+
+  const visibleDateCallback=useRef(onVisibleDateChange)
+  visibleDateCallback.current=onVisibleDateChange
+  useEffect(()=>{
+    const node=weekScrollRef.current
+    if(!active||!mobileWeek||!node)return
+    let frame=0,last=''
+    const report=()=>{
+      frame=0
+      const top=node.getBoundingClientRect().top+1
+      const sections=Array.from(node.querySelectorAll<HTMLElement>('[data-calendar-day]'))
+      const section=sections.find(section=>section.getBoundingClientRect().bottom>top)
+      const key=section?.dataset.calendarDay
+      if(key&&key!==last){last=key;visibleDateCallback.current?.(new Date(key+'T12:00:00'))}
+    }
+    const scroll=()=>{if(!frame)frame=requestAnimationFrame(report)}
+    node.addEventListener('scroll',scroll,{passive:true});scroll()
+    return()=>{node.removeEventListener('scroll',scroll);cancelAnimationFrame(frame)}
+  },[active,mobileWeek,dayKey])
 
   const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 60) * hourHeight
   const busyEvents = busyOccurrences.map(item => item.event)
