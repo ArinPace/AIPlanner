@@ -936,7 +936,7 @@ if(location.origin!=='https://chatgpt.com')throw Error('Load the signed-in ChatG
 const trigger=()=>{const buttons=[...document.querySelectorAll('button')].filter(n=>visible(n)&&!n.closest('[role=menu],[role=listbox]'));return buttons.find(n=>/^(?:Select effort|Thinking effort|Select thinking effort)$/i.test(label(n))||/^(?:Select effort|Thinking effort)$/i.test((n.innerText||'').trim()))||buttons.find(n=>/^Select ChatGPT model$/i.test(n.getAttribute('aria-label')||''))};
 const modelLabelForChoice=n=>/^(?:GPT[- ]|o[134](?:[- ]|$)|ChatGPT)/i.test(label(n));
 const menus=()=>[...document.querySelectorAll('[role="menu"],[role="listbox"]')].filter(visible);
-const sliders=()=>[...document.querySelectorAll('[role="slider"],input[type="range"]')].filter(n=>visible(n)&&visible(n.parentElement));
+const sliders=()=>[...document.querySelectorAll('[role="slider"],input[type="range"]')].filter(n=>n.getClientRects().length&&!n.closest('[inert]')&&visible(n.parentElement));
 const items=()=>menus().flatMap(menu=>[...menu.querySelectorAll('[role="menuitem"],[role="menuitemradio"],[role="menuitemcheckbox"],[role="option"]')]).filter(n=>visible(n)&&label(n)&&!n.hasAttribute('disabled')&&n.getAttribute('aria-disabled')!=='true'&&!n.querySelector('[role="slider"],input[type="range"]')&&!/upgrade|pricing|learn more|subscribe|manage subscription/i.test(label(n)));
 const registry=window.__plannerModelRegistry ||= {};
 const register=n=>{n.dataset.plannerModelOption ||= crypto.randomUUID();registry[n.dataset.plannerModelOption]={label:label(n)};return n.dataset.plannerModelOption};
