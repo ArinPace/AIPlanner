@@ -5,8 +5,11 @@ export function writeChatDraft(username:string,chat:string|null,text:string){try
 export function useChatDraft(username:string){
  const [message,update]=useState(''),current=useRef<{username:string;chat:string|null;text:string}>({username,chat:null,text:''})
  const selectDraft=useCallback((chat:string|null,move=false)=>{
-  const previous=current.current,text=move&&previous.username===username?previous.text:readChatDraft(username,chat)
-  if(move){writeChatDraft(username,chat,text);writeChatDraft(previous.username,previous.chat,'')}
+  const previous=current.current
+  if(previous.username===username&&previous.chat===chat)return
+  const carry=previous.username===username&&previous.chat===null&&chat!==null&&Boolean(previous.text)
+  const saved=readChatDraft(username,chat),text=move&&previous.username===username?previous.text:carry?(saved&&saved!==previous.text?saved+'\n'+previous.text:previous.text):saved
+  if(move||carry){writeChatDraft(username,chat,text);writeChatDraft(previous.username,previous.chat,'')}
   current.current={username,chat,text};update(text)
  },[username])
  const setMessage=useCallback((action:SetStateAction<string>)=>{

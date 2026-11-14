@@ -2931,3 +2931,8 @@ html, body { touch-action: pan-x pan-y; }
 .connected-app-row button { border: 0; border-radius: 18px; background: color-mix(in srgb,var(--blue) 10%,transparent); color: var(--blue); padding: 7px 12px; font-size: 12px; }
 .connected-calendar-details > summary { padding: 14px 0; font-size: 13px; color: var(--muted); cursor: pointer; }
 .connected-calendar-details .assistant-settings-section { padding: 0; border: 0; }
+/* Keep chat typing comfortable with a hardware or software keyboard. */
+.assistant-compose.assistant-compose.subscription-compose { grid-template-columns: 34px 34px minmax(40px,1fr) 34px 36px; }
+.assistant-compose.subscription-compose > textarea { font-size: 16px; max-height: 144px; overflow-y: auto; box-sizing: border-box; }
+.assistant-compose.subscription-compose .dictation-button { grid-column: 4; }
+.assistant-compose.subscription-compose .assistant-send { grid-column: 5; }
