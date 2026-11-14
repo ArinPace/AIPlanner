@@ -2722,3 +2722,9 @@ html, body { touch-action: pan-x pan-y; }
 .mobile-week .agenda-grid-row.is-nested.has-left-controls > .mobile-week-event { grid-column: 2; }
 .agenda-primary-action { background: transparent; }
 .mobile-week .agenda-grid-row.is-nested,.mobile-week .agenda-grid-row.has-completion { border: 0 !important; }
+
+/* Keep actions in one right-hand track across parent and child rows. */
+.mobile-week .agenda-grid-row.is-nested { margin-left: 0; width: 100%; }
+.mobile-week .agenda-grid-row.is-nested:not(.has-completion):not(.is-folder-row) > .mobile-week-event,
+.mobile-week .agenda-grid-row.is-nested.has-left-controls:not(.is-folder-row) > .mobile-week-event { grid-column: 2 / -1; }
+.mobile-week .agenda-grid-row > .folder-pencil { border: 0 !important; box-shadow: none; outline-offset: -3px; }
