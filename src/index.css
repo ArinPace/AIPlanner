@@ -2600,3 +2600,6 @@ html, body { touch-action: pan-x pan-y; }
 .mobile-week .mobile-week-event { font-size: calc(10px * var(--visual-zoom,1)); min-height: calc(36px * var(--visual-zoom,1)); }
 .mobile-week .folder-event-count { font-size: calc(10px * var(--visual-zoom,1)); }
 .note-settings-host .settings-panel { position: fixed; top: 64px; right: 12px; z-index: 110; max-height: calc(100dvh - 166px - env(safe-area-inset-bottom)); bottom: calc(90px + env(safe-area-inset-bottom)); }
+
+.checklist-updated { padding: 10px 20px 0; text-align: center; font-size: 11px; line-height: 1.4; color: var(--muted); }
+.standalone-todo-editor .checklist-updated + div .apple-note-document { padding-top: 14px; }
