@@ -2570,3 +2570,14 @@ html, body { touch-action: pan-x pan-y; }
 .has-mobile-week { scroll-padding-top: 64px; }
 /* The sticky day row replaces the second header row entirely. */
 .app-header:has(.header-center[hidden]) { min-height: 70px; grid-template-rows: 56px; padding-bottom: 10px; row-gap: 0; }
+
+/* Compact calendar actions retain full touch targets and accessible names. */
+.folder-edit-button,.task-screen-time-button,.calendar-done-button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 40px; height: 40px; min-height: 40px; padding: 0; margin: 0; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); }
+.calendar-task-with-actions .task-screen-time-button { min-height: 40px; max-width: 40px; }
+.calendar-done-button { color: #18814a; }
+.calendar-done-button.is-done,.calendar-done-button.is-pending { color: var(--muted); background: color-mix(in srgb,var(--muted) 12%,var(--panel)); opacity: .65; }
+.week-time-grid .calendar-done-button { width: 28px; height: 28px; min-height: 28px; padding: 0; }
+.timed-event-with-actions:has(.calendar-completion-action)>.timed-event { padding-right: 36px; }
+.mobile-week-event.is-folder > .folder-chevron { margin: 0 4px 0 0; align-self: center; }
+.mobile-week-event.is-folder .mobile-week-time { flex-basis: 102px; }
+@media(pointer:coarse) { .folder-edit-button,.calendar-task-with-actions .task-screen-time-button,.calendar-done-button { width: 44px; height: 44px; min-height: 44px; } }
