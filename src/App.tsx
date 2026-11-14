@@ -507,8 +507,8 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
       {(visitedNotes.work||tab==='work')&&<div className="files-tab-panel" hidden={tab!=='work'}><FilesView standaloneTodo workMode sidebar={false} setSidebar={setFilesSidebar} username={username} active={tab==='work'} todoRequest={todoRequest||1} onUnsavedChange={fileDirtyHandlers.work}/></div>}
       {tab==='screentime' && <ScreenTimePanel/>}
       {!hideAgent&&<div className="agent-tab-panel" hidden={tab !== 'agent'}><AgentView username={username} sidebar={agentSidebar} setSidebar={setAgentSidebar} active={tab === 'agent'} /></div>}
-      <BottomWorkspaceNav tab={tab} onChange={next=>{if((filesUnsaved||draft)&&next!==tab&&!window.confirm('Discard unsaved changes and switch tabs?'))return;if(next==='todo'||next==='work')setTodoRequest(n=>n+1);setTab(next)}}/>
-      <MainChatBubble key={username} username={username} open={mainChatOpen} onOpenChange={setMainChatOpen}/>
+      {!draft&&<BottomWorkspaceNav tab={tab} onChange={next=>{if((filesUnsaved||draft)&&next!==tab&&!window.confirm('Discard unsaved changes and switch tabs?'))return;if(next==='todo'||next==='work')setTodoRequest(n=>n+1);setTab(next)}}/>}
+      {!draft&&<MainChatBubble key={username} username={username} open={mainChatOpen} onOpenChange={setMainChatOpen}/>}
       <div className="app-body" hidden={tab !== 'calendar'}>
         <Sidebar
           weekLayout={weekLayout}

@@ -2550,3 +2550,8 @@ html, body { touch-action: pan-x pan-y; }
 .settings-panel .settings-reset-zoom:hover { background: color-mix(in srgb,var(--blue) 18%,var(--panel)); }
 @media(max-width:600px),(hover:none) and (pointer:coarse) { .settings-zoom-shortcuts { display: none; } }
 :root[data-iphone-app='true'] .settings-zoom-shortcuts { display: none; }
+
+/* Keep mobile settings clear of the floating navigation dock. */
+@media(max-width:600px) {
+ .settings-panel { top: 76px; bottom: calc(90px + env(safe-area-inset-bottom)); max-height: calc(100dvh - 166px - env(safe-area-inset-bottom)); overscroll-behavior: contain; }
+}

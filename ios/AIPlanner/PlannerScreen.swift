@@ -6,6 +6,7 @@ import SafariServices
     var backgroundColor: UIColor {
         darkMode ? UIColor(red: 23 / 255, green: 25 / 255, blue: 29 / 255, alpha: 1) : .white
     }
+    @Published var eventEditorOpen = false
     @Published var loading = true
     @Published var error: String?
     @Published var sharedFile: SharedFile?
@@ -22,6 +23,9 @@ struct PlannerScreen: View {
     var body: some View {
         ZStack {
             Color(uiColor: model.backgroundColor).ignoresSafeArea()
+            if model.eventEditorOpen {
+                Color(red: 32 / 255, green: 33 / 255, blue: 36 / 255).opacity(0.4).ignoresSafeArea()
+            }
             PlannerWebView(model: model)
                 .ignoresSafeArea(.container, edges: .bottom)
             if let error = model.error {

@@ -34,11 +34,19 @@ struct PlannerWebView: UIViewRepresentable {
             });
         """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.userContentController.addUserScript(WKUserScript(source: """
+        let lastPlannerAppearance;
         function syncPlannerTheme() {
             const dark = document.documentElement.dataset.theme === 'dark';
-            window.webkit.messageHandlers.plannerNative.postMessage({action:'plannerTheme',dark}).catch(()=>{});
+            const eventEditorOpen = !!document.querySelector('.modal-backdrop');
+            const appearance = `${dark}:${eventEditorOpen}`;
+            if (appearance === lastPlannerAppearance) return;
+            lastPlannerAppearance = appearance;
+            window.webkit.messageHandlers.plannerNative.postMessage({action:'plannerTheme',dark,eventEditorOpen}).catch(()=>{});
         }
-        document.addEventListener('DOMContentLoaded', syncPlannerTheme);
+        document.addEventListener('DOMContentLoaded', () => {
+            syncPlannerTheme();
+            new MutationObserver(syncPlannerTheme).observe(document.body,{childList:true,subtree:true});
+        });
         window.addEventListener('planner-theme-refresh', syncPlannerTheme);
         """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         #if DEBUG
@@ -219,6 +227,7 @@ struct PlannerWebView: UIViewRepresentable {
                     switch action {
                     case "plannerTheme":
                         guard let dark = body["dark"] as? Bool else { throw NativeError("Invalid theme.") }
+                        model.eventEditorOpen = body["eventEditorOpen"] as? Bool ?? false
                         model.darkMode = dark
                         UserDefaults.standard.set(dark, forKey: "planner-dark-mode")
                     #if DEBUG
