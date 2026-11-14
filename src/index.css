@@ -2620,3 +2620,23 @@ html, body { touch-action: pan-x pan-y; }
 .note-settings-host .settings-panel { bottom: auto; max-height: calc(100dvh - 184px - env(safe-area-inset-bottom)); }
 
 .folder-event-header:has(> .folder-grid-toggle) > .folder-edit-button { margin-top: 0; }
+
+/* Every agenda row shares the same four tracks, including empty action slots. */
+.mobile-week .agenda-grid-row { display: grid; grid-template-columns: 36px minmax(0,1fr) 36px 36px; gap: 4px; align-items: stretch; width: 100%; min-width: 0; margin-top: 4px; }
+.agenda-indent { min-width: 0; display: flex; align-items: center; justify-content: center; position: relative; }
+.agenda-disclosure { display: grid; place-items: center; width: 100%; min-height: 40px; padding: 0; border: 0; background: transparent; color: var(--muted); }
+.agenda-disclosure .folder-chevron { width: 20px; height: 20px; margin: 0; }
+.agenda-tree-line { position: absolute; left: 17px; top: -4px; bottom: -4px; width: 12px; border-left: 2px solid var(--line); }
+.agenda-tree-line::after { content: ''; position: absolute; left: 0; top: 50%; width: 10px; border-top: 2px solid var(--line); }
+.mobile-week .agenda-grid-row > .mobile-week-event { display: grid; grid-template-columns: clamp(65px,22vw,112px) minmax(0,1fr) 28px; align-items: center; gap: 6px; width: 100%; min-width: 0; min-height: 40px; margin: 0; padding: 7px 6px; text-align: left; }
+.agenda-grid-row .mobile-week-time { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.agenda-grid-row .folder-event-count { margin: 0; padding: 0; font-size: .85em; white-space: normal; overflow-wrap: normal; }
+.mobile-week .folder-agenda-children { border: 0; margin: 0; padding: 0; min-width: 0; }
+.agenda-primary-action,.agenda-screen-time-action { display: flex; align-items: stretch; min-width: 0; }
+.agenda-grid-row .calendar-completion-action,.agenda-grid-row .task-screen-time-action { display: flex; flex: 1; align-self: stretch; min-width: 0; width: 100%; margin: 0; }
+.agenda-grid-row .folder-edit-button,.agenda-grid-row .calendar-done-button,.agenda-grid-row .task-screen-time-button { width: 100%; max-width: none; height: auto; min-height: 40px; margin: 0; padding: 0; flex: 1; align-self: stretch; }
+.has-mobile-week { overflow-x: hidden; }
+@media(min-width:601px) { .mobile-week .agenda-grid-row { grid-template-columns: 40px minmax(0,1fr) 40px 40px; gap: 6px; } }
+
+.agenda-screen-time-action .task-screen-time-action { position: relative; }
+.agenda-screen-time-action .form-error { position: absolute; right: 0; top: 100%; z-index: 20; width: min(260px,75vw); padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }

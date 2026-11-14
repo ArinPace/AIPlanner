@@ -9,7 +9,6 @@ import {CalendarDoneButton} from './CalendarDoneButton'
 import {durationHeight} from '../lib/calendarDisplay'
 import {TaskScreenTimeButton} from './TaskScreenTimeButton'
 import {taskScreenTimeWindow} from '../lib/taskScreenTime'
-import {supportsScreenTime} from '../lib/platform'
 import { freeTimeAppearance, withFreeTime, isFreeTimeRow, type ScheduleRow } from '../lib/freeTime'
 import { eventAppearance } from '../lib/eventAppearance'
 import { PlannerDate as Date } from '../lib/timezone.js'
@@ -179,19 +178,24 @@ export function TimeGridView({ showFreeTime=true, onVisibleDateChange, onWeekNav
     const open=folderOpen(item),children=(grouped.children.get(folderOccurrenceKey(item))||[]).filter(child=>clipToDay(child,day))
     return <><div className="folder-event-header"><button type="button" className={"folder-grid-toggle"+completionClass(item)} aria-expanded={open} onClick={()=>toggleFolder(item)} style={appearance(item)}><FolderChevron open={open}/> {item.event.title}<small>{formatTimeCompact(item.start)}–{formatTimeCompact(item.end)} · {children.length} {children.length===1?'item':'items'}</small></button><button type="button" className="folder-edit-button" aria-label={'Edit folder '+item.event.title} onClick={()=>onEventClick(item.event,item.start)} title="Edit folder"><EditIcon size={20}/></button></div><FolderReveal open={open}>{()=><div className="folder-day-children">{folderChildren(item,day).map(child=>child.event.eventKind==='folder'?<div className="nested-day-folder" key={child.event.id}>{dayFolderBody(child,day)}</div>:<div key={child.event.id} className="calendar-task-with-actions"><button type="button" className={"event-chip folder-child-event"+completionClass(child)} onClick={()=>child.freeTime?onSlotClick(child.start):onEventClick(child.event,child.start)} style={appearance(child)}><span>{formatTimeCompact(child.start)}–{formatTimeCompact(child.end)}</span><strong className="event-title">{child.event.title}</strong></button>{!child.freeTime&&doneButton(child)}<TaskScreenTimeButton task={screenTimeWindow(child)}/></div>)}</div>}</FolderReveal></>
   }
-  function agendaRows(items:ScheduleRow[],day:Date,showNow:boolean,nested=false):ReactNode{
+  function agendaRows(items:ScheduleRow[],day:Date,showNow:boolean,depth=0):ReactNode{
     const currentFolder=items.find(item=>item.event.eventKind==='folder'&&item.start<=now&&now<item.end)
     const next=items.findIndex(item=>!item.event.allDay&&item.end>now)
     const marker=<div ref={mobileNowRef} className="mobile-week-now" role="img" aria-label={'Current time '+formatTimeCompact(now)}><span>Now · {formatTimeCompact(now)}</span></div>
     return <>{items.map((item,index)=>{
       const folder=item.event.eventKind==='folder',children=(grouped.children.get(folderOccurrenceKey(item))||[]).filter(child=>clipToDay(child,day)),open=folder&&folderOpen(item)
-      const chip=<button type="button" className={'event-chip mobile-week-event'+(folder?' is-folder':'')+(nested?' folder-child-event':'')+completionClass(item)} style={{...appearance(item),...(scaleToDuration&&view==='week'&&(!folder||!open)?{height:durationHeight(item,'week',zoom,startOfDay(day).getTime(),addDays(startOfDay(day),1).getTime())}:{})}} title={item.event.title} aria-expanded={folder?open:undefined} onClick={()=>item.freeTime?onSlotClick(item.start):folder?toggleFolder(item):onEventClick(item.event,item.start)}>
-        {folder&&<FolderChevron open={Boolean(open)}/>}
-        <span className="mobile-week-time">{item.event.allDay?(item.event.reminder?'Reminder':'All day'):item.event.reminder?formatTimeCompact(item.start):formatTimeCompact(item.start)+'–'+formatTimeCompact(item.end)}</span>
-        <span className="event-title">{item.event.urgency!=null&&<span className="event-urgency-badge" style={urgencyColor(item.event.urgency)}>{item.event.urgency}</span>}{item.event.title||'(No title)'}</span>
-        {folder&&<small className="folder-event-count">{children.length} {children.length===1?'item':'items'}</small>}
-      </button>
-      return <Fragment key={item.event.id+item.start.toISOString()}>{showNow&&!currentFolder&&index===next&&marker}{folder?<div className="agenda-event-folder"><div className="folder-event-header">{chip}<button type="button" className="folder-edit-button" aria-label={'Edit folder '+item.event.title} onClick={()=>onEventClick(item.event,item.start)} title="Edit folder"><EditIcon size={20}/></button></div><FolderReveal open={Boolean(open)}>{()=><div className="folder-agenda-children">{children.length?agendaRows(folderChildren(item,day),day,showNow&&currentFolder===item,true):<><p className="quiet">No visible events in this folder.</p>{showNow&&currentFolder===item&&marker}</>}</div>}</FolderReveal></div>:!item.event.reminder&&!item.event.allDay?<div className="calendar-task-with-actions">{chip}{!item.freeTime&&doneButton(item)}{supportsScreenTime()&&<TaskScreenTimeButton task={screenTimeWindow(item)}/>}</div>:chip}</Fragment>
+      const eligible=!folder&&!item.freeTime&&completionLeaves(item).length>0
+      const row=<div className={'agenda-grid-row'+(depth?' is-nested':'')} data-depth={depth}>
+        <div className="agenda-indent">{folder?<button type="button" className="agenda-disclosure" aria-label={(open?'Collapse folder ':'Expand folder ')+item.event.title} aria-expanded={Boolean(open)} onClick={()=>toggleFolder(item)}><FolderChevron open={Boolean(open)}/></button>:depth>0?<span className="agenda-tree-line" aria-hidden="true"/>:null}</div>
+        <button type="button" className={'event-chip mobile-week-event'+(folder?' is-folder':'')+completionClass(item)} style={{...appearance(item),...(scaleToDuration&&view==='week'&&(!folder||!open)?{height:durationHeight(item,'week',zoom,startOfDay(day).getTime(),addDays(startOfDay(day),1).getTime())}:{})}} title={item.event.title} aria-expanded={folder?Boolean(open):undefined} onClick={()=>item.freeTime?onSlotClick(item.start):folder?toggleFolder(item):onEventClick(item.event,item.start)}>
+          <span className="mobile-week-time">{item.event.allDay?(item.event.reminder?'Reminder':'All day'):item.event.reminder?formatTimeCompact(item.start):formatTimeCompact(item.start)+'–'+formatTimeCompact(item.end)}</span>
+          <span className="event-title">{item.event.urgency!=null&&<span className="event-urgency-badge" style={urgencyColor(item.event.urgency)}>{item.event.urgency}</span>}{item.event.title||'(No title)'}</span>
+          {folder&&<small className="folder-event-count">{children.length} {children.length===1?'item':'items'}</small>}
+        </button>
+        <div className="agenda-primary-action">{eligible?doneButton(item):!item.freeTime?<button type="button" className="folder-edit-button" aria-label={'Edit '+(folder?'folder ':'event ')+item.event.title} title={folder?'Edit folder':'Edit event'} onClick={()=>onEventClick(item.event,item.start)}><EditIcon size={20}/></button>:null}</div>
+        <div className="agenda-screen-time-action">{!item.event.allDay&&!item.event.reminder&&<TaskScreenTimeButton task={screenTimeWindow(item)}/>}</div>
+      </div>
+      return <Fragment key={item.event.id+item.start.toISOString()}>{showNow&&!currentFolder&&index===next&&marker}{folder?<div className="agenda-event-folder">{row}<FolderReveal open={Boolean(open)}>{()=><div className="folder-agenda-children">{children.length?agendaRows(folderChildren(item,day),day,showNow&&currentFolder===item,depth+1):<><p className="quiet">No visible events in this folder.</p>{showNow&&currentFolder===item&&marker}</>}</div>}</FolderReveal></div>:row}</Fragment>
     })}{showNow&&!currentFolder&&next===-1&&marker}</>
   }
 
