@@ -3,8 +3,7 @@ import {useFolderAnimations} from '../lib/folderAnimations'
 import {FolderReveal} from './FolderReveal'
 import {FolderChevron} from './FolderChevron'
 import {useWeekSwipe} from '../lib/useWeekSwipe'
-import {planningRequest} from '../lib/api'
-import {intensityFor, type PlanningProfile} from '../lib/planning'
+import {calendarIntensity} from '../lib/dayIntensity'
 import {occurrenceChecked,repeatsWithAncestors} from '../lib/eventChecklist'
 import {CalendarDoneButton} from './CalendarDoneButton'
 import {durationHeight} from '../lib/calendarDisplay'
@@ -64,22 +63,9 @@ function clipToDay(item: Occurrence, day: Date): { start: Date; end: Date } | nu
 }
 
 export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=true, onVisibleDateChange, onWeekNavigate, weekLayout = 'list', scaleToDuration=false, active=true,cursor, view, zoom, occurrences, busyOccurrences, tags, onSlotClick, onEventClick, onEventDone }: TimeGridViewProps) {
-  const [planning, setPlanning] = useState<PlanningProfile>()
-  useEffect(() => {
-    if (!active) return
-    let live = true
-    function refresh() {
-      void planningRequest<{profile: PlanningProfile}>().then(({profile}) => {
-        if (live) setPlanning(profile)
-      }).catch(() => {})
-    }
-    refresh()
-    window.addEventListener('planner-intensity-refresh', refresh)
-    return () => { live = false; window.removeEventListener('planner-intensity-refresh', refresh) }
-  }, [active])
   const rowControls=useCalendarRowControls()
   const folderAnimations=useFolderAnimations()
-  const dayIntensity = (day: Date) => planning && intensityFor(planning, toDateInput(day), day.getDay())
+  const dayIntensity = (day: Date) => calendarIntensity(busyOccurrences,tags,startOfDay(day).getTime(),addDays(startOfDay(day),1).getTime())
   const days = view === 'day' ? [startOfDay(cursor)] : getWeekDays(cursor)
   const scrollRef = useRef<HTMLDivElement>(null)
   const weekScrollRef=useRef<HTMLDivElement>(null)
@@ -190,9 +176,9 @@ export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=tr
       const rowAppearance=appearance(item)
       const filtered=hiddenRow(item)
       const eligible=!folder&&!item.freeTime&&completionLeaves(item).length>0
-      const row=<div className={'agenda-grid-row'+(eligible?' has-completion':'')+(depth?' is-nested':'')+(filtered?' is-filtered':'')+(rowControls==='left'?' has-left-controls':'')} style={{...rowAppearance,'--agenda-row-fill':rowAppearance.background==='transparent'?'var(--bg)':rowAppearance.background} as CSSProperties} data-depth={depth} inert={filtered} aria-hidden={filtered?true:undefined}>
+      const row=<div className={'agenda-grid-row'+(eligible?' has-completion':'')+(depth?' is-nested':'')+(filtered?' is-filtered':'')+(rowControls==='left'?' has-left-controls':'')} style={{...rowAppearance,background:depth?'transparent':rowAppearance.background,'--agenda-row-fill':rowAppearance.background==='transparent'?'var(--bg)':rowAppearance.background} as CSSProperties} data-depth={depth} inert={filtered} aria-hidden={filtered?true:undefined}>
         <div className="agenda-indent">{depth>0&&<span className="agenda-tree-line" aria-hidden="true"/>}{folder?<button type="button" className="agenda-disclosure" aria-label={(open?'Collapse folder ':'Expand folder ')+item.event.title} aria-expanded={Boolean(open)} onClick={()=>toggleFolder(item)}><FolderChevron open={Boolean(open)}/></button>:rowControls==='left'?(eligible?doneButton(item,true):<span className="agenda-event-bullet" aria-hidden="true"/>):null}</div>
-        <button type="button" className={'event-chip mobile-week-event'+(folder?' is-folder':'')+completionClass(item)} style={{...(scaleToDuration&&view==='week'?{height:folder&&open&&!item.event.allDay&&!item.event.reminder?Math.max(40,40*zoom):durationHeight(item,'week',zoom,startOfDay(day).getTime(),addDays(startOfDay(day),1).getTime())}:{}),...(folder?{transition:folderAnimations?'height 480ms cubic-bezier(.25,.1,.25,1)':'none'}:{})}} title={item.event.title} onClick={()=>selectEvent(item)}>
+        <button type="button" className={'event-chip mobile-week-event'+(folder?' is-folder':'')+completionClass(item)} style={{...(depth?rowAppearance:{}),...(scaleToDuration&&view==='week'?{height:folder&&open&&!item.event.allDay&&!item.event.reminder?Math.max(40,40*zoom):durationHeight(item,'week',zoom,startOfDay(day).getTime(),addDays(startOfDay(day),1).getTime())}:{}),...(folder?{transition:folderAnimations?'height 480ms cubic-bezier(.25,.1,.25,1)':'none'}:{})}} title={item.event.title} onClick={()=>selectEvent(item)}>
           <span className="mobile-week-time">{item.event.allDay?(item.event.reminder?'Reminder':'All day'):item.event.reminder?formatTimeCompact(item.start):formatTimeCompact(item.start)+'–'+formatTimeCompact(item.end)}</span>
           <span className="event-title">{item.event.urgency!=null&&<span className="event-urgency-badge" style={urgencyColor(item.event.urgency)}>{item.event.urgency}</span>}{item.event.title||'(No title)'}</span>
           {folder&&<small className="folder-event-count">{children.length} {children.length===1?'item':'items'}</small>}
@@ -211,7 +197,7 @@ export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=tr
           return <section className="mobile-week-day" data-calendar-day={toDateInput(day)} key={day.toISOString()}>
             <div className="mobile-week-heading">
               <h3 className={isToday(day) ? 'is-today' : ''}>{day.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</h3>
-              <PlanningButton date={toDateInput(day)} intensity={dayIntensity(day)}/>
+              <PlanningButton date={toDateInput(day)} intensity={dayIntensity(day).score} summary={dayIntensity(day).summary}/>
               <button type="button" className="text-btn" aria-label={'Add event on ' + day.toDateString()} onClick={() => onSlotClick(startOfDay(day), true)}>+</button>
             </div>
             {items.length === 0 && <p className="mobile-week-empty">No events</p>}
@@ -225,7 +211,7 @@ export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=tr
         {days.map((day) => (
           <div key={day.toISOString()} className={`time-day-head ${isToday(day) ? 'is-today' : ''}`}>
             <span className="dow">{day.toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase()}</span>
-            {view==='week'?<PlanningButton date={toDateInput(day)} dayNumber={day.getDate()}/>:<><span className="num">{day.getDate()}</span><PlanningButton date={toDateInput(day)} intensity={dayIntensity(day)}/></>}
+            {view==='week'?<PlanningButton date={toDateInput(day)} dayNumber={day.getDate()} intensity={dayIntensity(day).score} summary={dayIntensity(day).summary}/>:<><span className="num">{day.getDate()}</span><PlanningButton date={toDateInput(day)} intensity={dayIntensity(day).score} summary={dayIntensity(day).summary}/></>}
           </div>
         ))}
       </div>

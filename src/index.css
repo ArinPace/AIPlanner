@@ -2691,3 +2691,14 @@ html, body { touch-action: pan-x pan-y; }
  .app-header.is-calendar .calendar-navigation .icon-btn { width: 24px; }
  .app-header.is-calendar .calendar-navigation .today-btn { min-width: 70px; max-width: 80px; padding-inline: 8px; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
+
+/* Keep the original page margins and reserve unpainted completion controls. */
+.mobile-week .agenda-grid-row { width: 100%; margin-inline: 0; padding-inline: 0; }
+.mobile-week .agenda-grid-row.has-completion:not(.has-left-controls) { background: transparent !important; position: relative; isolation: isolate; }
+.mobile-week .agenda-grid-row.has-completion:not(.has-left-controls):not(.is-nested)::before { content: ''; position: absolute; inset: 0 calc(var(--agenda-action) + var(--agenda-gap)) 0 0; background: var(--agenda-row-fill); border-radius: 4px; z-index: -1; }
+.mobile-week .agenda-grid-row.is-nested > .mobile-week-event { background: var(--agenda-row-fill); border-radius: 4px; }
+.mobile-week .agenda-grid-row.is-nested { margin-left: 12px; width: calc(100% - 24px); }
+.agenda-primary-action { background: var(--bg); }
+.mobile-week .agenda-grid-row.has-completion.has-left-controls { background: transparent !important; }
+.mobile-week .agenda-grid-row.has-completion.has-left-controls > .mobile-week-event { background: var(--agenda-row-fill); border-radius: 4px; }
+.agenda-indent .calendar-done-button.is-checkbox { background: var(--bg); }

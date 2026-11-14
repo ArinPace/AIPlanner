@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from 'react'
 import {planningRequest} from '../lib/api'
-import {intensityDescription,personalTaskLimit,type PlanningProfile} from '../lib/planning'
+import {intensityDescription,type PlanningProfile} from '../lib/planning'
 import {PlannerDate as Date} from '../lib/timezone'
 import {toDateInput} from '../lib/dates'
 
@@ -35,14 +35,14 @@ export function PlanningSettings({date,onClose}:{date?:string;onClose:()=>void})
   </>}
  </dialog>
 }
-export function PlanningButton({date, dayNumber, intensity}: {date: string; dayNumber?: number; intensity?: number}) {
+export function PlanningButton({date, dayNumber, intensity, summary}: {date: string; dayNumber?: number; intensity?: number; summary?: string}) {
  const [open, setOpen] = useState(false)
- const limit = intensity === undefined ? undefined : personalTaskLimit(intensity)
+ const color = intensity === undefined ? undefined : `hsl(${120-intensity*1.2} 65% 40%)`
  return <>
-  <button type="button" className={dayNumber === undefined ? 'day-intensity-button' : 'num day-intensity-date'} title={'Adjust intensity for ' + date} aria-label={'Adjust intensity for ' + date} onClick={event => { event.stopPropagation(); setOpen(true) }}>
+  <button type="button" className={dayNumber === undefined ? 'day-intensity-button' : 'num day-intensity-date'} style={{color,borderColor:color}} title={(summary?summary+'. Estimated workload. ':'')+'Adjust planning preferences for ' + date} aria-label={'Adjust intensity for ' + date} onClick={event => { event.stopPropagation(); setOpen(true) }}>
    {dayNumber ?? <>
     <strong>{intensity === undefined ? 'Intensity' : `Intensity ${intensity}`}</strong>
-    {limit !== undefined && <small>{limit === 1 ? '1 medium To-do/day' : `Up to ${limit} core To-dos/day`}</small>}
+    {summary && <small>{summary}</small>}
    </>}
   </button>
   {open && <PlanningSettings date={date} onClose={() => setOpen(false)} />}
