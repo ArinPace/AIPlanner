@@ -1,3 +1,4 @@
+import {useCalendarRowControls} from '../lib/calendarRowControls'
 import {useFolderAnimations} from '../lib/folderAnimations'
 import {FolderReveal} from './FolderReveal'
 import {FolderChevron} from './FolderChevron'
@@ -11,7 +12,7 @@ import { freeTimeAppearance, withFreeTime, isFreeTimeRow, type ScheduleRow } fro
 import { eventAppearance } from '../lib/eventAppearance'
 import { PlannerDate as Date } from '../lib/timezone.js'
 import { urgencyColor } from '../lib/urgencyColor'
-import { Fragment,useEffect,useLayoutEffect, useRef,useState,type ReactNode } from 'react'
+import { Fragment,useEffect,useLayoutEffect, useRef,useState,type ReactNode,type CSSProperties } from 'react'
 import {occurrenceFolderGroups,folderExpanded,folderOccurrenceKey} from '../lib/eventFolders'
 import type { CalendarEvent, CalendarView, Occurrence, Tag } from '../types'
 import { eventColor } from '../lib/colors'
@@ -76,6 +77,7 @@ export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=tr
     window.addEventListener('planner-intensity-refresh', refresh)
     return () => { live = false; window.removeEventListener('planner-intensity-refresh', refresh) }
   }, [active])
+  const rowControls=useCalendarRowControls()
   const folderAnimations=useFolderAnimations()
   const dayIntensity = (day: Date) => planning && intensityFor(planning, toDateInput(day), day.getDay())
   const days = view === 'day' ? [startOfDay(cursor)] : getWeekDays(cursor)
@@ -174,7 +176,7 @@ export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=tr
     ? freeTimeAppearance : eventAppearance(eventColor(item.event,tags),item.event.reminder)
   const completionClass = (item: Occurrence) => completed(item) ? ' is-completed-free-time' : ''
   const selectEvent=(item:ScheduleRow)=>item.freeTime?(onFreeTimeClick?onFreeTimeClick(item):onSlotClick(item.start)):onEventClick(item.event,item.start)
-  const doneButton=(item:Occurrence)=><CalendarDoneButton item={item} leaves={completionLeaves(item)} onDone={onEventDone}/>
+  const doneButton=(item:Occurrence,checkbox=false)=><CalendarDoneButton checkbox={checkbox} item={item} leaves={completionLeaves(item)} onDone={onEventDone}/>
   function dayFolderBody(item:Occurrence,day:Date):ReactNode{
     const open=folderOpen(item),children=(grouped.children.get(folderOccurrenceKey(item))||[]).filter(child=>clipToDay(child,day))
     return <><div className="folder-event-header"><button type="button" className="agenda-disclosure grid-folder-disclosure" aria-label={(open?'Collapse folder ':'Expand folder ')+item.event.title} aria-expanded={open} onClick={()=>toggleFolder(item)}><FolderChevron open={open}/></button><button type="button" className={"folder-grid-toggle"+completionClass(item)} onClick={()=>onEventClick(item.event,item.start)} style={appearance(item)}> {item.event.title}<small>{formatTimeCompact(item.start)}–{formatTimeCompact(item.end)} · {children.length} {children.length===1?'item':'items'}</small></button></div><FolderReveal open={open}>{()=><div className="folder-day-children">{folderChildren(item,day).map(child=>child.event.eventKind==='folder'?<div className="nested-day-folder" key={child.event.id}>{dayFolderBody(child,day)}</div>:<div key={child.event.id} className="calendar-task-with-actions"><button type="button" className={"event-chip folder-child-event"+completionClass(child)} onClick={()=>selectEvent(child)} style={appearance(child)}><span>{formatTimeCompact(child.start)}–{formatTimeCompact(child.end)}</span><strong className="event-title">{child.event.title}</strong></button>{!child.freeTime&&doneButton(child)}</div>)}</div>}</FolderReveal></>
@@ -185,16 +187,17 @@ export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=tr
     const marker=<div ref={mobileNowRef} className="mobile-week-now" role="img" aria-label={'Current time '+formatTimeCompact(now)}><span>Now · {formatTimeCompact(now)}</span></div>
     return <>{items.map((item,index)=>{
       const folder=item.event.eventKind==='folder',children=(grouped.children.get(folderOccurrenceKey(item))||[]).filter(child=>clipToDay(child,day)),open=folder&&folderOpen(item)
+      const rowAppearance=appearance(item)
       const filtered=hiddenRow(item)
       const eligible=!folder&&!item.freeTime&&completionLeaves(item).length>0
-      const row=<div className={'agenda-grid-row'+(eligible?' has-completion':'')+(depth?' is-nested':'')+(filtered?' is-filtered':'')} data-depth={depth} inert={filtered} aria-hidden={filtered?true:undefined}>
-        <div className="agenda-indent">{folder?<button type="button" className="agenda-disclosure" aria-label={(open?'Collapse folder ':'Expand folder ')+item.event.title} aria-expanded={Boolean(open)} onClick={()=>toggleFolder(item)}><FolderChevron open={Boolean(open)}/></button>:depth>0?<span className="agenda-tree-line" aria-hidden="true"/>:null}</div>
-        <button type="button" className={'event-chip mobile-week-event'+(folder?' is-folder':'')+completionClass(item)} style={{...appearance(item),...(scaleToDuration&&view==='week'?{height:folder&&open&&!item.event.allDay&&!item.event.reminder?Math.max(40,40*zoom):durationHeight(item,'week',zoom,startOfDay(day).getTime(),addDays(startOfDay(day),1).getTime())}:{}),...(folder?{transition:folderAnimations?'height 480ms cubic-bezier(.25,.1,.25,1)':'none'}:{})}} title={item.event.title} onClick={()=>selectEvent(item)}>
+      const row=<div className={'agenda-grid-row'+(eligible?' has-completion':'')+(depth?' is-nested':'')+(filtered?' is-filtered':'')+(rowControls==='left'?' has-left-controls':'')} style={{...rowAppearance,'--agenda-row-fill':rowAppearance.background==='transparent'?'var(--bg)':rowAppearance.background} as CSSProperties} data-depth={depth} inert={filtered} aria-hidden={filtered?true:undefined}>
+        <div className="agenda-indent">{depth>0&&<span className="agenda-tree-line" aria-hidden="true"/>}{folder?<button type="button" className="agenda-disclosure" aria-label={(open?'Collapse folder ':'Expand folder ')+item.event.title} aria-expanded={Boolean(open)} onClick={()=>toggleFolder(item)}><FolderChevron open={Boolean(open)}/></button>:rowControls==='left'?(eligible?doneButton(item,true):<span className="agenda-event-bullet" aria-hidden="true"/>):null}</div>
+        <button type="button" className={'event-chip mobile-week-event'+(folder?' is-folder':'')+completionClass(item)} style={{...(scaleToDuration&&view==='week'?{height:folder&&open&&!item.event.allDay&&!item.event.reminder?Math.max(40,40*zoom):durationHeight(item,'week',zoom,startOfDay(day).getTime(),addDays(startOfDay(day),1).getTime())}:{}),...(folder?{transition:folderAnimations?'height 480ms cubic-bezier(.25,.1,.25,1)':'none'}:{})}} title={item.event.title} onClick={()=>selectEvent(item)}>
           <span className="mobile-week-time">{item.event.allDay?(item.event.reminder?'Reminder':'All day'):item.event.reminder?formatTimeCompact(item.start):formatTimeCompact(item.start)+'–'+formatTimeCompact(item.end)}</span>
           <span className="event-title">{item.event.urgency!=null&&<span className="event-urgency-badge" style={urgencyColor(item.event.urgency)}>{item.event.urgency}</span>}{item.event.title||'(No title)'}</span>
           {folder&&<small className="folder-event-count">{children.length} {children.length===1?'item':'items'}</small>}
         </button>
-        {eligible&&<div className="agenda-primary-action">{doneButton(item)}</div>}
+        {eligible&&rowControls==='right'&&<div className="agenda-primary-action">{doneButton(item)}</div>}
       </div>
       return <Fragment key={item.event.id+item.start.toISOString()}>{showNow&&!currentFolder&&index===next&&marker}{folder?<div className={'agenda-event-folder'+(filtered?' is-filtered-folder':'')} inert={filtered} aria-hidden={filtered?true:undefined}>{row}<FolderReveal open={Boolean(open)}>{()=><div className="folder-agenda-children">{children.length?agendaRows(folderChildren(item,day),day,showNow&&currentFolder===item,depth+1):<><p className="quiet">No visible events in this folder.</p>{showNow&&currentFolder===item&&marker}</>}</div>}</FolderReveal></div>:row}</Fragment>
     })}{showNow&&!currentFolder&&next===-1&&marker}</>

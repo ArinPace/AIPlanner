@@ -2666,3 +2666,20 @@ html, body { touch-action: pan-x pan-y; }
 .agenda-event-folder.is-filtered-folder .mobile-week-now { visibility: visible; }
 .main-ai-bubble { background: color-mix(in srgb,var(--panel) 76%,transparent); border-color: color-mix(in srgb,var(--text) 16%,transparent); color: var(--text); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
 .main-ai-identity > span,.main-ai-greeting > span { color: var(--muted); }
+
+/* Continuous row color includes the hierarchy gutter, right up to the edges. */
+.mobile-week .agenda-grid-row { width: calc(100% + 24px); margin-inline: -12px; padding-inline: 12px; border-radius: 4px; }
+.mobile-week .agenda-grid-row > .mobile-week-event { background: transparent; color: inherit; border: 0; border-radius: 0; }
+.agenda-grid-row .agenda-disclosure { color: inherit; z-index: 1; }
+.agenda-grid-row .agenda-tree-line,.agenda-grid-row .agenda-tree-line::after { border-color: currentColor; opacity: .45; }
+.mobile-week .agenda-grid-row.has-left-controls > .mobile-week-event { grid-column: 2 / -1; }
+.agenda-indent .calendar-completion-action { align-items: center; justify-content: center; color: inherit; z-index: 1; }
+.agenda-indent .calendar-done-button.is-checkbox { flex: 0 0 20px; width: 20px; height: 20px; min-height: 20px; max-width: 20px; align-self: center; border-radius: 4px; border: 1.6px solid currentColor; background: transparent; color: inherit; padding: 0; }
+.agenda-event-bullet { display: block; width: 8px; height: 8px; border: 1.5px solid currentColor; border-radius: 50%; z-index: 1; }
+.has-mobile-week .mobile-week-heading { grid-template-columns: minmax(0,1fr) auto var(--agenda-action); text-align: left; }
+.mobile-week-heading > h3 { grid-column: 1; text-align: left; }
+.mobile-week-heading > .day-intensity-button { grid-column: 2; }
+.mobile-week-heading > .text-btn { grid-column: 3; }
+.settings-panel select[aria-label="Event controls"] { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; }
+
+.agenda-indent .calendar-done-button.is-checkbox,.agenda-event-bullet { background: var(--agenda-row-fill,var(--bg)); }
