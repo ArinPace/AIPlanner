@@ -2826,3 +2826,4 @@ html, body { touch-action: pan-x pan-y; }
 .checklist-page-dots button[aria-current=page]::before { opacity: .3; }
 .checklist-page-dots.is-switching button::before { opacity: .55; }
 .checklist-page-dots.is-switching button[aria-current=page]::before { opacity: 1; }
+.has-mobile-week .mobile-week-heading > h3 { padding-left: 0; }

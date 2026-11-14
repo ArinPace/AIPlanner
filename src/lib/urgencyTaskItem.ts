@@ -1,7 +1,7 @@
 import TaskItem from '@tiptap/extension-task-item'
 import { TextSelection } from '@tiptap/pm/state'
 import { urgencyColor } from './urgencyColor'
-import { checklistSortPlugin, SORT_CHECKLISTS } from './checklistSort'
+import { checklistSortPlugin, SORT_CHECKLISTS,SETTLE_CHECKLISTS } from './checklistSort'
 
 function urgency(value:unknown){
  const n=typeof value==='number'?value:typeof value==='string' && /^\d{1,2}$/.test(value)?Number(value):NaN
@@ -60,7 +60,7 @@ export const UrgencyTaskItem=TaskItem.extend({
     const node=props.editor.state.doc.nodeAt(position)
     if(node)props.editor.view.dispatch(props.editor.state.tr.setNodeMarkup(position,undefined,{...node.attrs,urgency:n}))
    })
-   input.addEventListener('blur',()=>{input.setCustomValidity('');const pos=props.getPos();if(typeof pos==='number'){const node=props.editor.state.doc.nodeAt(pos);if(node)sync(node);if(!node?.textContent.trim())return};queueMicrotask(()=>{if(!props.editor.isDestroyed)props.editor.view.dispatch(props.editor.state.tr.setMeta(SORT_CHECKLISTS,true))})})
+   input.addEventListener('blur',()=>{input.setCustomValidity('');const pos=props.getPos();if(typeof pos==='number'){const node=props.editor.state.doc.nodeAt(pos);if(node)sync(node)};queueMicrotask(()=>{if(!props.editor.isDestroyed)props.editor.view.dispatch(props.editor.state.tr.setMeta(SORT_CHECKLISTS,true).setMeta(SETTLE_CHECKLISTS,true))})})
    input.addEventListener('keydown',event=>{if(event.key==='Enter'){
     event.preventDefault();event.stopPropagation()
     if(!input.checkValidity()){input.reportValidity();return}

@@ -2,6 +2,7 @@ import { Fragment } from '@tiptap/pm/model'
 import { Plugin, TextSelection } from '@tiptap/pm/state'
 
 export const SORT_CHECKLISTS = 'sort-checklists-by-urgency'
+export const SETTLE_CHECKLISTS = 'settle-checklist-edit'
 export function checklistSortPlugin() {
  let editorFocused = () => false
  let editable = () => true
@@ -10,12 +11,28 @@ export function checklistSortPlugin() {
    let destroyed = false
    editorFocused = () => view.hasFocus()
    editable = () => view.editable
-   const onBlur = () => queueMicrotask(() => {
-    if (!destroyed && !view.dom.contains(document.activeElement)) view.dispatch(view.state.tr.setMeta(SORT_CHECKLISTS, true))
-   })
-   view.dom.addEventListener('focusout', onBlur)
-   queueMicrotask(() => { if (!destroyed) view.dispatch(view.state.tr.setMeta(SORT_CHECKLISTS, true)) })
-   return { destroy: () => { destroyed = true; view.dom.removeEventListener('focusout', onBlur) } }
+   let timer:ReturnType<typeof setTimeout>|undefined
+   let viewportHeight=window.visualViewport?.height??window.innerHeight
+   const finish=(blur=false)=>{
+    if(destroyed||!view.dom.getClientRects().length)return
+    if(blur&&view.dom.contains(document.activeElement))(document.activeElement as HTMLElement)?.blur()
+    view.dispatch(view.state.tr.setMeta(SORT_CHECKLISTS,true).setMeta(SETTLE_CHECKLISTS,true))
+   }
+   const onBlur=()=>queueMicrotask(()=>{if(!view.dom.contains(document.activeElement))finish()})
+   const onPointer=(event:PointerEvent)=>{
+    if(!(event.target instanceof Element)||event.target.closest('[role="slider"],.checklist-add-item'))return
+    clearTimeout(timer);timer=setTimeout(()=>finish(!view.dom.contains(event.target as Node)),0)
+   }
+   const onChange=(event:Event)=>{if(event.target instanceof HTMLInputElement&&event.target.type==='checkbox')queueMicrotask(()=>finish())}
+   const onViewport=()=>{const next=window.visualViewport?.height??window.innerHeight;if(next>viewportHeight+60)finish(true);viewportHeight=next}
+   const onWindowBlur=()=>finish(true)
+   view.dom.addEventListener('focusout',onBlur)
+   view.dom.addEventListener('change',onChange,true)
+   document.addEventListener('pointerup',onPointer,true)
+   window.addEventListener('blur',onWindowBlur)
+   window.addEventListener('resize',onViewport);window.visualViewport?.addEventListener('resize',onViewport)
+   queueMicrotask(()=>{if(!destroyed)view.dispatch(view.state.tr.setMeta(SORT_CHECKLISTS,true))})
+   return {destroy:()=>{destroyed=true;clearTimeout(timer);view.dom.removeEventListener('focusout',onBlur);view.dom.removeEventListener('change',onChange,true);document.removeEventListener('pointerup',onPointer,true);window.removeEventListener('blur',onWindowBlur);window.removeEventListener('resize',onViewport);window.visualViewport?.removeEventListener('resize',onViewport)}}
   },
   appendTransaction(transactions, _old, state) {
    if (!editable()) return null
