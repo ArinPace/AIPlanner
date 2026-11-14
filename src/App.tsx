@@ -1,5 +1,6 @@
 import {ChecklistSheet} from './components/ChecklistSheet'
-import {useMultiDayCount} from './lib/useMultiDayCount'
+import {useTranslucence} from './lib/translucence'
+import {WeekCardsView} from './components/WeekCardsView'
 import {FREE_TIME_TAG_ID} from './lib/freeTime'
 import {BottomWorkspaceNav} from './components/BottomWorkspaceNav'
 import {completeCalendarBlock} from './lib/api'
@@ -156,7 +157,7 @@ export default function App() {
 }
 
 function CalendarApp({ username, onLogout }: { username: string; onLogout: () => void }) {
-  const multiDayCount=useMultiDayCount()
+  useTranslucence()
   const calendarDisplay=useCalendarDisplay(username)
   const [tab, setTab] = useState<'calendar' | 'files' | 'todo' | 'work' | 'agent' | 'screentime' | 'chat'>(()=>sessionStorage.getItem(RECOVERY_TAB)===username?'agent':'calendar')
   const [mainChatOpen,setMainChatOpen]=useState(false)
@@ -391,7 +392,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   const hiddenSet = useMemo(() => new Set(hiddenTagIds), [hiddenTagIds])
   const visibleEvents = useMemo(() => events.filter(event => (!hiddenSet.has(FREE_TIME_TAG_ID)||event.title.trim().toLowerCase()!=='free time')&&isEventVisible(event, hiddenSet)&&!hiddenTypes.includes(eventType(event,tags))), [events, hiddenSet,hiddenTypes,tags])
   const visibleEventIds=useMemo(()=>new Set(visibleEvents.map(event=>event.id)),[visibleEvents])
-  const range = useMemo(() => view==='day'&&agendaWindow?.anchor===cursor.toISOString()?{start:agendaWindow.start,end:agendaWindow.end}:view==='week'?{start:visibleRange(cursor,'day').start,end:visibleRange(addDays(cursor,multiDayCount-1),'day').end}:visibleRange(cursor, view === 'day' ? 'week' : view), [cursor, view,multiDayCount,agendaWindow])
+  const range = useMemo(() => view==='day'&&agendaWindow?.anchor===cursor.toISOString()?{start:agendaWindow.start,end:agendaWindow.end}:view==='week'?{start:visibleRange(cursor,'day').start,end:visibleRange(addDays(cursor,6),'day').end}:visibleRange(cursor, view === 'day' ? 'week' : view), [cursor, view,agendaWindow])
   const occurrences = useMemo(() => {
     if (view === 'month' || view === 'year') return []
     return expandEvents(events, range.start, range.end).filter(({event})=>visibleEventIds.has(event.id))
@@ -404,7 +405,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
 
   function navigate(direction: -1 | 1) {
     const current=view==='day'||view==='year'?visibleDate:cursor
-    setCursor(view==='year'?addYears(current,direction):view==='month'?addMonths(current,direction):addDays(current,direction*(view==='week'?multiDayCount:1)))
+    setCursor(view==='year'?addYears(current,direction):view==='month'?addMonths(current,direction):addDays(current,direction*(view==='week'?7:1)))
   }
 
   function openCreate(date: Date, options?: { timed?: boolean; allDay?: boolean }) {
@@ -589,6 +590,8 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
               }}
               onEventClick={(event,start) => openEdit(event,start)}
             />
+          ) : view==='week'?(
+            <WeekCardsView visibleEventIds={visibleEventIds} cursor={cursor} occurrences={busyOccurrences} tags={tags} zoom={zoom} active={tab==='calendar'} onEventClick={(event,start)=>openEdit(event,start)} onDayOpen={date=>{setCursor(date);setView('day')}} onNavigate={direction=>setCursor(current=>addDays(current,direction*7))}/>
           ) : (
             <TimeGridView
               visibleEventIds={visibleEventIds}
@@ -598,8 +601,8 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
               agendaRange={view==='day'?range:undefined}
               onAgendaExtend={direction=>setAgendaWindow(current=>{const base=current?.anchor===cursor.toISOString()?current:visibleRange(cursor,'week');return {anchor:cursor.toISOString(),start:direction<0?addDays(base.start,-7):base.start,end:direction>0?addDays(base.end,7):base.end}})}
               onMultiDayDate={setCursor}
-              onWeekNavigate={direction => setCursor(current => addDays(current, direction * multiDayCount))}
-              weekLayout={view === 'week' ? 'grid' : 'list'}
+              onWeekNavigate={direction => setCursor(current => addDays(current, direction * 7))}
+              weekLayout="list"
               scaleToDuration={calendarDisplay.settings.week}
               onEventDone={markCalendarDone}
               active={tab==='calendar'}

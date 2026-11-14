@@ -21,7 +21,7 @@ export function useWeekSwipe(
   let touchFinished = false
 
   function editing(target: EventTarget | null) {
-   return target instanceof Element && Boolean(target.closest('input, textarea, select, [contenteditable="true"]'))
+   return target instanceof Element && Boolean(target.closest('input, textarea, select, [contenteditable="true"], [data-ignore-week-swipe]'))
   }
   function onWheel(event: WheelEvent) {
    if (event.ctrlKey || event.metaKey || editing(event.target)) return

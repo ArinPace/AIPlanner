@@ -2834,3 +2834,31 @@ html, body { touch-action: pan-x pan-y; }
 .checklist-toolbar-slot .apple-toolbar-trailing { display: flex; gap: 2px; }
 .checklist-toolbar-slot button[hidden] { display: none; }
 .checklist-sheet > header { touch-action: none; }
+
+/* Week overview: seven day rows with independently scrollable event cards. */
+.week-card-view { flex: 1; min-height: 0; width: 100%; overflow-y: auto; padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
+.week-card-day { display: grid; grid-template-columns: 64px minmax(0,1fr); min-height: 146px; border-bottom: 1px solid var(--line); }
+.week-card-date { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 2px; padding: 0; border: 0; background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
+.week-card-date strong { font-size: 1.7em; font-weight: 600; }
+.week-card-day.is-today { box-shadow: inset 3px 0 var(--blue); }
+.week-card-day.is-today .week-card-date { color: var(--blue); }
+.week-event-strip { display: flex; gap: 4px; overflow-x: auto; min-width: 0; padding: 3px 8px 3px 0; scrollbar-width: thin; overscroll-behavior-x: contain; }
+.week-event-card { position: relative; display: flex; flex-direction: column; gap: 12px; flex: 0 0 132px; min-width: 0; min-height: 140px; border: 0; border-radius: 10px; padding: 10px 8px 7px; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.week-card-title { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; font-weight: 500; overflow-wrap: anywhere; }
+.week-card-meta { display: flex; flex-direction: column; gap: 2px; margin-top: auto; opacity: .8; font-size: .88em; }
+.week-no-events { align-self: center; color: var(--muted); padding: 12px; font-size: .9em; }
+.completed-original-title { text-decoration: line-through; }
+@media(min-width:800px) { .week-card-day { grid-template-columns: 80px minmax(0,1fr); min-height: 160px; } .week-event-card { flex-basis: 160px; min-height: 154px; } }
+
+/* Optional Apple-style translucent fill with a solid accent strip. */
+:root[data-translucence=on] { --calendar-event-opacity: 20%; --calendar-translucent-ink: var(--text); }
+:root[data-translucence=on] .week-event-card,
+:root[data-translucence=on] .timed-event,
+:root[data-translucence=on] .event-chip,
+:root[data-translucence=on] .agenda-grid-row:not(.is-nested):not(.has-completion),
+:root[data-translucence=on] .agenda-grid-row.has-completion:not(.is-nested)::before,
+:root[data-translucence=on] .folder-pencil { box-shadow: inset 0 4px 0 var(--event-accent,transparent); }
+:root[data-translucence=on] .agenda-grid-row > .mobile-week-event { box-shadow: none; }
+:root[data-translucence=on] .agenda-grid-row.is-nested > .mobile-week-event { box-shadow: inset 0 4px 0 var(--event-accent,transparent); }
+:root[data-translucence=on] .agenda-grid-row:not(.is-nested) > .folder-pencil { background: transparent !important; }
+.week-event-card.is-filtered { visibility: hidden; pointer-events: none; }

@@ -1,4 +1,3 @@
-import {useMultiDayCount} from '../lib/useMultiDayCount'
 import {CalendarHistory} from './CalendarHistory'
 import {NoteIcon} from './NoteIcons'
 import {createPortal} from 'react-dom'
@@ -48,11 +47,10 @@ export function Header({
   calendarDisplay,
 }: HeaderProps) {
   const now=new Date()
-  const multiDayCount=useMultiDayCount()
   const currentPeriod=view==='day'?isToday(cursor):view==='week'?isToday(cursor):view==='month'?isSameMonth(cursor,now):isSameYear(cursor,now)
-  const weekStart=cursor,weekEnd=addDays(cursor,multiDayCount-1)
+  const weekStart=cursor,weekEnd=addDays(cursor,6)
   const weekLabel=weekStart.toLocaleDateString('en-US',{month:'short',day:'numeric'})+'–'+weekEnd.toLocaleDateString('en-US',isSameMonth(weekStart,weekEnd)?{day:'numeric'}:{month:'short',day:'numeric'})
-  const periodLabel=currentPeriod?({day:'Today',week:'Today',month:'This month',year:'This year'}[view]):view==='day'?cursor.toLocaleDateString('en-US',{month:'short',day:'numeric'}):view==='month'?cursor.toLocaleDateString('en-US',{month:'short',year:'numeric'}):view==='year'?String(cursor.getFullYear()):weekLabel
+  const periodLabel=currentPeriod?({day:'Today',week:'This week',month:'This month',year:'This year'}[view]):view==='day'?cursor.toLocaleDateString('en-US',{month:'short',day:'numeric'}):view==='month'?cursor.toLocaleDateString('en-US',{month:'short',year:'numeric'}):view==='year'?String(cursor.getFullYear()):weekLabel
   const [historyOpen,setHistoryOpen]=useState(false)
   const pickerRef=useRef<HTMLDialogElement>(null)
   const dateButton=useRef<HTMLButtonElement>(null)
