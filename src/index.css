@@ -2581,3 +2581,16 @@ html, body { touch-action: pan-x pan-y; }
 .mobile-week-event.is-folder > .folder-chevron { margin: 0 4px 0 0; align-self: center; }
 .mobile-week-event.is-folder .mobile-week-time { flex-basis: 102px; }
 @media(pointer:coarse) { .folder-edit-button,.calendar-task-with-actions .task-screen-time-button,.calendar-done-button { width: 44px; height: 44px; min-height: 44px; } }
+
+/* Let child events slide gently out from their folder header. */
+@keyframes calendar-folder-open {
+ from { opacity: 0; transform: translateY(-10px); }
+ to { opacity: 1; transform: translateY(0); }
+}
+.folder-agenda-children,.folder-day-children {
+ transform-origin: top;
+ animation: calendar-folder-open 200ms cubic-bezier(.2,.7,.3,1);
+}
+@media(prefers-reduced-motion:reduce) {
+ .folder-agenda-children,.folder-day-children { animation: none; }
+}
