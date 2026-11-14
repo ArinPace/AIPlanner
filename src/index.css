@@ -2731,3 +2731,28 @@ html, body { touch-action: pan-x pan-y; }
 
 /* Day labels follow the same leading gutter as the event time column. */
 .has-mobile-week .mobile-week-heading > h3 { padding-left: calc(var(--agenda-gutter) + var(--agenda-gap) + 6px); }
+
+/* Compact, single-line composer with every tool beside the input. */
+.assistant-compose.assistant-compose.subscription-compose { display: grid; grid-template-columns: 34px 34px minmax(40px,1fr) 34px 34px 36px; align-items: center; gap: 2px; border-radius: 28px; padding: 7px 8px; background: color-mix(in srgb,var(--text) 6%,var(--panel)); border-color: var(--line); color: var(--text); }
+.assistant-compose.subscription-compose > textarea { grid-column: 3; grid-row: 2; min-height: 38px; height: 38px; padding: 7px 4px; font-size: 15px; line-height: 24px; color: inherit; }
+.assistant-compose.subscription-compose > .assistant-compose-toolbar,.assistant-compose.subscription-compose .compose-left-actions,.assistant-compose.subscription-compose .assistant-compose-actions,.assistant-compose.subscription-compose .dictation-control { display: contents; }
+.assistant-compose.subscription-compose .assistant-attach { grid-column: 1; grid-row: 2; }
+.assistant-compose.subscription-compose .assistant-attach span { display: none; }
+.assistant-compose.subscription-compose .assistant-compose-connect { grid-column: 2; grid-row: 2; }
+.assistant-compose.subscription-compose .composer-model-trigger { grid-column: 4; grid-row: 2; }
+.assistant-compose.subscription-compose .dictation-button { grid-column: 5; grid-row: 2; min-width: 0; }
+.assistant-compose.subscription-compose .assistant-send { grid-column: 6; grid-row: 2; }
+.assistant-compose.subscription-compose .assistant-attach,.assistant-compose.subscription-compose .assistant-compose-connect,.assistant-compose.subscription-compose .composer-model-trigger { display: flex; align-items: center; justify-content: center; width: 34px; height: 38px; padding: 0; border-radius: 20px; color: inherit; }
+.assistant-compose.subscription-compose .dictation-button { color: inherit; }
+.assistant-compose.subscription-compose > .chat-attachment-list { grid-column: 1 / -1; grid-row: 1; }
+.assistant-compose.subscription-compose .dictation-status { grid-column: 1 / -1; grid-row: 3; }
+.assistant-compose.subscription-compose .dictation-status:empty { display: none; }
+.assistant-compose.subscription-compose .dictation-cancel { grid-column: 1 / -1; grid-row: 4; }
+.assistant-compose-note.is-idle { display: none; }
+.main-ai-sheet .assistant-compose.assistant-compose.subscription-compose { padding: 7px 8px; }
+.main-ai-sheet .assistant-compose-wrap { padding: 8px 12px max(4px,env(safe-area-inset-bottom)); }
+@media(max-width:600px) { .main-ai-sheet { padding-bottom: 0; } }
+.compact-chat-model .assistant-model-options { display: flex; flex-direction: column; gap: 4px; }
+.composer-model-popup .compact-chat-model .assistant-model-options button { border: 0; border-radius: 12px; text-align: left; padding: 12px; }
+.compact-chat-model .assistant-model-options button[aria-pressed=true] { background: color-mix(in srgb,var(--text) 12%,transparent); }
+.compact-chat-model input[type=range] { display: block; width: 100%; margin: 18px 0; accent-color: var(--blue); }
