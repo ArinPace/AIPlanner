@@ -2756,3 +2756,17 @@ html, body { touch-action: pan-x pan-y; }
 .composer-model-popup .compact-chat-model .assistant-model-options button { border: 0; border-radius: 12px; text-align: left; padding: 12px; }
 .compact-chat-model .assistant-model-options button[aria-pressed=true] { background: color-mix(in srgb,var(--text) 12%,transparent); }
 .compact-chat-model input[type=range] { display: block; width: 100%; margin: 18px 0; accent-color: var(--blue); }
+
+/* Apple-style multi-day grid: readable columns rather than a squeezed week. */
+.week-time-grid > .time-view { min-width: 0; width: 100%; }
+.week-time-grid .days-2 { grid-template-columns: 48px repeat(2,minmax(0,1fr)); }
+.week-time-grid .days-3 { grid-template-columns: 56px repeat(3,minmax(0,1fr)); }
+.week-time-grid .time-day-head { min-width: 0; }
+.week-time-grid .timed-event .event-title { white-space: normal; overflow-wrap: anywhere; }
+.sidebar-view-switch button { min-width: 0; }
+.multi-day-strip { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 2px; padding: 8px 8px 10px; background: var(--bg); }
+.multi-day-strip button { border: 0; background: transparent; color: var(--text); border-radius: 20px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 5px 0; cursor: pointer; }
+.multi-day-strip small { font-size: 11px; color: var(--muted); }
+.multi-day-strip span { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; }
+.multi-day-strip .in-range { background: color-mix(in srgb,var(--text) 8%,transparent); }
+.multi-day-strip button[aria-pressed=true] span { background: var(--text); color: var(--bg); }

@@ -1,8 +1,9 @@
+import {useMultiDayCount} from '../lib/useMultiDayCount'
 import {CalendarHistory} from './CalendarHistory'
 import {NoteIcon} from './NoteIcons'
 import {createPortal} from 'react-dom'
 import {MiniCalendar} from './MiniCalendar'
-import {isToday,startOfWeek,isSameDay,isSameMonth,isSameYear,addDays} from '../lib/dates'
+import {isToday,isSameMonth,isSameYear,addDays} from '../lib/dates'
 import {PlannerDate as Date} from '../lib/timezone'
 import type {useCalendarDisplay} from '../lib/useCalendarDisplay'
 import { useEffect, useRef, useState } from 'react'
@@ -47,10 +48,11 @@ export function Header({
   calendarDisplay,
 }: HeaderProps) {
   const now=new Date()
-  const currentPeriod=view==='day'?isToday(cursor):view==='week'?isSameDay(startOfWeek(cursor),startOfWeek(now)):view==='month'?isSameMonth(cursor,now):isSameYear(cursor,now)
-  const weekStart=startOfWeek(cursor),weekEnd=addDays(weekStart,6)
+  const multiDayCount=useMultiDayCount()
+  const currentPeriod=view==='day'?isToday(cursor):view==='week'?isToday(cursor):view==='month'?isSameMonth(cursor,now):isSameYear(cursor,now)
+  const weekStart=cursor,weekEnd=addDays(cursor,multiDayCount-1)
   const weekLabel=weekStart.toLocaleDateString('en-US',{month:'short',day:'numeric'})+'–'+weekEnd.toLocaleDateString('en-US',isSameMonth(weekStart,weekEnd)?{day:'numeric'}:{month:'short',day:'numeric'})
-  const periodLabel=currentPeriod?({day:'Today',week:'This week',month:'This month',year:'This year'}[view]):view==='day'?cursor.toLocaleDateString('en-US',{month:'short',day:'numeric'}):view==='month'?cursor.toLocaleDateString('en-US',{month:'short',year:'numeric'}):view==='year'?String(cursor.getFullYear()):weekLabel
+  const periodLabel=currentPeriod?({day:'Today',week:'Today',month:'This month',year:'This year'}[view]):view==='day'?cursor.toLocaleDateString('en-US',{month:'short',day:'numeric'}):view==='month'?cursor.toLocaleDateString('en-US',{month:'short',year:'numeric'}):view==='year'?String(cursor.getFullYear()):weekLabel
   const [historyOpen,setHistoryOpen]=useState(false)
   const pickerRef=useRef<HTMLDialogElement>(null)
   const dateButton=useRef<HTMLButtonElement>(null)
@@ -97,7 +99,7 @@ export function Header({
 
         {tab === 'calendar' && <>
 
-        <h1 className="range-title">{formatRangeLabel(cursor, view)}</h1><span className="calendar-timezone" title="America/New_York ? adjusts for daylight saving">New York (ET)</span>
+        <h1 className="range-title">{view==='week'?weekLabel+', '+weekEnd.getFullYear():formatRangeLabel(cursor, view)}</h1><span className="calendar-timezone" title="America/New_York ? adjusts for daylight saving">New York (ET)</span>
         </>}
       </div>
 

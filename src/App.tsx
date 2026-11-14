@@ -1,3 +1,4 @@
+import {useMultiDayCount} from './lib/useMultiDayCount'
 import {FREE_TIME_TAG_ID} from './lib/freeTime'
 import {BottomWorkspaceNav} from './components/BottomWorkspaceNav'
 import {completeCalendarBlock} from './lib/api'
@@ -154,6 +155,7 @@ export default function App() {
 }
 
 function CalendarApp({ username, onLogout }: { username: string; onLogout: () => void }) {
+  const multiDayCount=useMultiDayCount()
   const calendarDisplay=useCalendarDisplay(username)
   const [tab, setTab] = useState<'calendar' | 'files' | 'todo' | 'work' | 'agent' | 'screentime' | 'chat'>(()=>sessionStorage.getItem(RECOVERY_TAB)===username?'agent':'calendar')
   const [mainChatOpen,setMainChatOpen]=useState(false)
@@ -387,7 +389,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   const hiddenSet = useMemo(() => new Set(hiddenTagIds), [hiddenTagIds])
   const visibleEvents = useMemo(() => events.filter(event => (!hiddenSet.has(FREE_TIME_TAG_ID)||event.title.trim().toLowerCase()!=='free time')&&isEventVisible(event, hiddenSet)&&!hiddenTypes.includes(eventType(event,tags))), [events, hiddenSet,hiddenTypes,tags])
   const visibleEventIds=useMemo(()=>new Set(visibleEvents.map(event=>event.id)),[visibleEvents])
-  const range = useMemo(() => visibleRange(cursor, view === 'day' ? 'week' : view), [cursor, view])
+  const range = useMemo(() => view==='week'?{start:visibleRange(cursor,'day').start,end:visibleRange(addDays(cursor,multiDayCount-1),'day').end}:visibleRange(cursor, view === 'day' ? 'week' : view), [cursor, view,multiDayCount])
   const occurrences = useMemo(() => {
     if (view === 'month' || view === 'year') return []
     return expandEvents(events, range.start, range.end).filter(({event})=>visibleEventIds.has(event.id))
@@ -400,7 +402,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
 
   function navigate(direction: -1 | 1) {
     const current=view==='day'||view==='year'?visibleDate:cursor
-    setCursor(view==='year'?addYears(current,direction):view==='month'?addMonths(current,direction):addDays(current,direction*(view==='week'?7:1)))
+    setCursor(view==='year'?addYears(current,direction):view==='month'?addMonths(current,direction):addDays(current,direction*(view==='week'?multiDayCount:1)))
   }
 
   function openCreate(date: Date, options?: { timed?: boolean; allDay?: boolean }) {
@@ -589,7 +591,8 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
               onFreeTimeClick={openFreeTime}
               showFreeTime={!hiddenSet.has(FREE_TIME_TAG_ID)}
               onVisibleDateChange={reportVisibleDate}
-              onWeekNavigate={direction => setCursor(current => addDays(current, direction * 7))}
+              onMultiDayDate={setCursor}
+              onWeekNavigate={direction => setCursor(current => addDays(current, direction * multiDayCount))}
               weekLayout={view === 'week' ? 'grid' : 'list'}
               scaleToDuration={calendarDisplay.settings.week}
               onEventDone={markCalendarDone}

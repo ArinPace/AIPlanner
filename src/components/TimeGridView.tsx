@@ -1,3 +1,4 @@
+import {useMultiDayCount} from '../lib/useMultiDayCount'
 import {useFolderItemCounts} from '../lib/folderItemCounts'
 import {EditIcon} from './Icons'
 import {useCalendarRowControls} from '../lib/calendarRowControls'
@@ -36,6 +37,7 @@ type TimeGridViewProps = {
   onFreeTimeClick?: (item:Occurrence)=>void
   showFreeTime?: boolean
   onVisibleDateChange?: (date: Date) => void
+  onMultiDayDate?: (date: Date) => void
   onWeekNavigate?: (direction: -1 | 1) => void
   weekLayout?: 'list' | 'grid'
   scaleToDuration?:boolean
@@ -64,12 +66,13 @@ function clipToDay(item: Occurrence, day: Date): { start: Date; end: Date } | nu
   }
 }
 
-export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=true, onVisibleDateChange, onWeekNavigate, weekLayout = 'list', scaleToDuration=false, active=true,cursor, view, zoom, occurrences, busyOccurrences, tags, onSlotClick, onEventClick, onEventDone }: TimeGridViewProps) {
+export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=true, onVisibleDateChange, onMultiDayDate, onWeekNavigate, weekLayout = 'list', scaleToDuration=false, active=true,cursor, view, zoom, occurrences, busyOccurrences, tags, onSlotClick, onEventClick, onEventDone }: TimeGridViewProps) {
+  const multiDayCount=useMultiDayCount()
   const showItemCounts=useFolderItemCounts()
   const rowControls=useCalendarRowControls()
   const folderAnimations=useFolderAnimations()
   const dayIntensity = (day: Date) => calendarIntensity(busyOccurrences,tags,startOfDay(day).getTime(),addDays(startOfDay(day),1).getTime())
-  const days = view === 'day' ? [startOfDay(cursor)] : getWeekDays(cursor)
+  const days = view === 'day' ? [startOfDay(cursor)] : weekLayout==='grid'?Array.from({length:multiDayCount},(_,index)=>addDays(startOfDay(cursor),index)):getWeekDays(cursor)
   const scrollRef = useRef<HTMLDivElement>(null)
   const weekScrollRef=useRef<HTMLDivElement>(null)
   useWeekSwipe(weekScrollRef, active && view === 'week' && Boolean(onWeekNavigate), onWeekNavigate)
@@ -209,6 +212,7 @@ export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=tr
           </section>
         })}
       </div>}
+      {regularWeek&&onMultiDayDate&&<nav className="multi-day-strip" aria-label="Choose multi-day start">{getWeekDays(cursor).map(day=><button type="button" key={toDateInput(day)} aria-label={day.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})} aria-pressed={toDateInput(day)===toDateInput(cursor)} className={days.some(shown=>toDateInput(shown)===toDateInput(day))?'in-range':''} onClick={()=>onMultiDayDate(day)}><small>{day.toLocaleDateString('en-US',{weekday:'narrow'})}</small><span>{day.getDate()}</span></button>)}</nav>}
       <div className={`time-view is-${view}`}>
       <div className={`time-header days-${days.length}`}>
         <div className="gutter" />

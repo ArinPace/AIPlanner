@@ -76,7 +76,7 @@ export function Sidebar({
       <div className="view-switch sidebar-view-switch" role="group" aria-label="Calendar view">
         {(['day', 'week', 'month', 'year'] as const).map(option => (
           <button key={option} type="button" aria-pressed={view === option} className={view === option ? 'is-active' : ''} onClick={() => onViewChange(option)}>
-            {option[0].toUpperCase() + option.slice(1)}
+            {option==='week'?'Multi-day':option[0].toUpperCase() + option.slice(1)}
           </button>
         ))}
       </div>
