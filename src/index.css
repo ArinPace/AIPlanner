@@ -2584,12 +2584,12 @@ html, body { touch-action: pan-x pan-y; }
 
 /* Let child events slide gently out from their folder header. */
 @keyframes calendar-folder-open {
- from { opacity: 0; transform: translateY(-10px); }
+ from { opacity: .2; transform: translateY(-18px); }
  to { opacity: 1; transform: translateY(0); }
 }
 .folder-agenda-children,.folder-day-children {
  transform-origin: top;
- animation: calendar-folder-open 200ms cubic-bezier(.2,.7,.3,1);
+ animation: calendar-folder-open 480ms cubic-bezier(.25,.1,.25,1);
 }
 @media(prefers-reduced-motion:reduce) {
  .folder-agenda-children,.folder-day-children { animation: none; }
@@ -2607,3 +2607,14 @@ html, body { touch-action: pan-x pan-y; }
 .tag-delete-placeholder { display: block; width: 28px; flex: 0 0 28px; }
 .tag-list .tag-item { min-width: 0; }
 .tag-list .tag-delete { flex: 0 0 28px; }
+
+.folder-edit-button svg,.task-screen-time-button svg { width: 20px; height: 20px; display: block; stroke-width: 1.8; }
+.calendar-folder-reveal { display: grid; grid-template-rows: 1fr; animation: calendar-folder-unfold 480ms cubic-bezier(.25,.1,.25,1) backwards; }
+.calendar-folder-reveal-body { min-height: 0; }
+@keyframes calendar-folder-unfold {
+ from { grid-template-rows: 0fr; overflow: hidden; }
+ to { grid-template-rows: 1fr; overflow: hidden; }
+}
+@media(prefers-reduced-motion:reduce) { .calendar-folder-reveal { animation: none; } }
+.timed-event-folder > .calendar-folder-reveal { min-height: 0; flex: 1; }
+.timed-event-folder > .calendar-folder-reveal > .calendar-folder-reveal-body { overflow: auto; }
