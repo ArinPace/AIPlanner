@@ -13,7 +13,7 @@ test('subscription workspace is fresh and owner-scoped; never touches Agent jobs
   if(req.method==='GET')assert.equal(url.searchParams.get('username'),'eq.owner')
   if(table==='planner_vm_settings')return Response.json({sources:[],google_account_id:null})
   if(table==='planner_google_accounts')return Response.json([])
-  if(table==='planner_subscription_messages')return Response.json([])
+  if(table==='planner_subscription_messages'||table==='planner_subscription_attempts')return Response.json([])
   if(table==='planner_subscription_chats'){
    if(req.method==='POST'){const data=await req.json() as any;assert.equal(data.username,'owner');const row={...data,id:data.is_main?main:extra,archived:false,deleted_at:null,updated_at:'2026-11-03T00:00:00Z'};chats.push(row);return Response.json(row)}
    if(req.method==='PATCH'){assert.equal(url.searchParams.get('username'),'eq.owner');const row=chats.find(c=>c.id===url.searchParams.get('id')?.slice(3));Object.assign(row,await req.json());return Response.json(row)}

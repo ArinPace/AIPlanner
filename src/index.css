@@ -2936,3 +2936,20 @@ html, body { touch-action: pan-x pan-y; }
 .assistant-compose.subscription-compose > textarea { font-size: 16px; max-height: 144px; overflow-y: auto; box-sizing: border-box; }
 .assistant-compose.subscription-compose .dictation-button { grid-column: 4; }
 .assistant-compose.subscription-compose .assistant-send { grid-column: 5; }
+.chat-attempt-status { margin: 8px 0 18px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; color: var(--muted); font-size: 13px; }
+.chat-attempt-status strong { font-size: 13px; font-weight: 500; color: var(--text); }
+.chat-attempt-status p { margin: 7px 0; }
+.chat-attempt-status .assistant-reply { margin-top: 10px; padding: 0; }
+.chat-attempt-status button { padding: 6px 0; border: 0; background: transparent; color: var(--blue); font: inherit; }
+/* Keep request progress and interrupted replies in the conversation itself. */
+.assistant-thread .chat-attempt-status { margin: 10px 0 24px; padding: 0; border: 0; border-radius: 0; font-size: 12px; }
+.chat-attempt-status details { margin: 5px 0; }
+.chat-attempt-status summary { cursor: pointer; color: var(--muted); }
+.chat-attempt-status details time { display: block; font-size: 11px; }
+.chat-attempt-thinking { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; margin: 14px 0 24px; flex-wrap: wrap; }
+.chat-attempt-thinking button { border: 0; padding: 4px 6px; background: transparent; color: var(--muted); font: inherit; }
+.chat-attempt-thinking button:last-child { margin-left: auto; }
+.chat-thinking-dot,.chat-stream-cursor { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: chat-session-pulse 1.2s ease-in-out infinite; }
+.assistant-thread .assistant-copy { display: inline-flex; align-items: center; border: 0; padding: 5px; background: transparent; color: var(--muted); }
+.assistant-message-time[hidden] { display: none; }
+@media(prefers-reduced-motion:reduce) { .chat-thinking-dot,.chat-stream-cursor { animation: none; } }

@@ -246,7 +246,7 @@ export function sourceStatusRequest(){return request<{issues:SourceAlert[];check
 
 export async function subscriptionChatRequest<T=import('./subscriptionChat').SubscriptionWorkspace>(chat?:string,action?:Record<string,unknown>,before?:string,fast=false){
  const query=new URLSearchParams();if(fast)query.set('fast','1');if(chat)query.set('chat',chat);if(before)query.set('before',before)
- const token=getToken(),retryable=!action||['tool_begin','tool_call','tool_finish','relay_bind','relay_save'].includes(String(action.action))
+ const token=getToken(),retryable=!action||['tool_begin','tool_call','tool_finish','relay_bind','relay_save','relay_attempt_start','relay_attempt_update'].includes(String(action.action))
  for(let attempt=0;;attempt++){
   try{return await request<T>('/api/subscription-chat'+(query.size?'?'+query:''),action?{method:'POST',body:JSON.stringify(action)}:{})}
   catch(error){

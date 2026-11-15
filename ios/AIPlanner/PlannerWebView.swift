@@ -296,7 +296,7 @@ struct PlannerWebView: UIViewRepresentable {
                             relayOperationActive = true; defer { relayOperationActive = false }
                             attachRelayForRun()
                             do { try await controller.send(text: text, chatId: chatId, files: body["files"] as? [[String: Any]] ?? [], providerURL: body["url"] as? String, workMode: body["work"] as? Bool == true, context: body["context"] as? String ?? "") } catch { parkRelay(); throw error }
-                            replyHandler(["ok": true], nil); return
+                            replyHandler(["ok": true, "url": controller.conversationLink(chatId: chatId) as Any? ?? NSNull()], nil); return
                         }
                         if action == "chatGPTRelayStop" { try await controller.stopRelay(); parkRelay(); replyHandler(["ok": true], nil); return }
                         guard let parent = webView?.window?.rootViewController, parent.presentedViewController == nil, let portal = chatGPTPortal else { throw NativeError("Close the current menu first.") }
@@ -1196,15 +1196,13 @@ return {selectedModel:window.__plannerSelectedModel||'',sliders:ranges,summary:(
     func send(text: String, chatId: String, files: [[String: Any]] = [], providerURL: String? = nil, workMode: Bool = false, context: String = "") async throws {
         guard pendingChat == nil else { throw NativeError("A ChatGPT reply is still pending. Open the session before retrying.") }
         let key = "chatgpt-conversation:" + account + ":" + chatId
-        let stored = canonicalConversation(providerURL)
-        // The server binding is authoritative across devices. Restoring a Planner
-        // copy of a permanently deleted conversation must start a fresh remote chat.
-        if stored == nil && UserDefaults.standard.string(forKey: key) != nil {
-            UserDefaults.standard.removeObject(forKey: key)
-            if loadedChat == chatId { loadedChat = nil; loadHome() }
+        // Keep the same provider conversation across failures and app restarts.
+        let stored = canonicalConversation(providerURL) ?? canonicalConversation(UserDefaults.standard.string(forKey: key))
+        let startedKey = "chatgpt-conversation-started:" + account + ":" + chatId
+        guard stored != nil || !UserDefaults.standard.bool(forKey: startedKey) else {
+            throw NativeError("The existing ChatGPT conversation link is not available yet. Open the session to recover it; no replacement conversation was created.")
         }
-        let cold = loadedChat != chatId && stored == nil
-        let text = cold && !context.isEmpty ? "Conversation context for this Planner chat (earlier files may need restoring):\n" + String(context.suffix(24000)) + "\n\nCurrent user message:\n" + text : text
+        let text = "[Planner relay receipt: " + UUID().uuidString + "]\n\n" + text
         traceRelay("project-start"); let project = try await ensureRelayProject(); traceRelay("project-ready")
         if let project, let stored, !Self.belongsToProject(stored, project: project) {
             throw NativeError("This linked ChatGPT conversation is outside Test. Move it into the Test project in ChatGPT before continuing. No message was sent and no replacement chat was created.")
@@ -1331,6 +1329,9 @@ return {selectedModel:window.__plannerSelectedModel||'',sliders:ranges,summary:(
         traceRelay("submit-confirmed"); submittedDraftFingerprint=SHA256.hash(data:Data(text.trimmingCharacters(in:.whitespacesAndNewlines).utf8)).map{String(format:"%02x",$0)}.joined()
         _ = try? await browser.evaluateJavaScript("window.__plannerHumanDraft=false")
         pendingChat = chatId; pendingURL = target.path.contains("/c/") ? target.path : nil; baseline = state["count"] as? Int ?? 0; baselineReplyKey = state["replyKey"] as? String ?? ""; baselineReplyText = state["text"] as? String ?? ""; sawRunning = false; lastText = ""; changedAt = Date(); startedAt = Date()
+    }
+    func conversationLink(chatId: String) -> String? {
+        canonicalConversation(UserDefaults.standard.string(forKey: "chatgpt-conversation:" + account + ":" + chatId))?.absoluteString
     }
     // ChatGPT adds a human-readable slug after the stable project identifier.
     // Compare the complete stable ID, never a loose pathname prefix.
