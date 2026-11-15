@@ -1329,6 +1329,16 @@ return {selectedModel:window.__plannerSelectedModel||'',sliders:ranges,summary:(
         traceRelay("submit-confirmed"); submittedDraftFingerprint=SHA256.hash(data:Data(text.trimmingCharacters(in:.whitespacesAndNewlines).utf8)).map{String(format:"%02x",$0)}.joined()
         _ = try? await browser.evaluateJavaScript("window.__plannerHumanDraft=false")
         pendingChat = chatId; pendingURL = target.path.contains("/c/") ? target.path : nil; baseline = state["count"] as? Int ?? 0; baselineReplyKey = state["replyKey"] as? String ?? ""; baselineReplyText = state["text"] as? String ?? ""; sawRunning = false; lastText = ""; changedAt = Date(); startedAt = Date()
+        UserDefaults.standard.set(true, forKey: startedKey)
+        // Capture the link at submission, rather than waiting for a final reply.
+        for _ in 0..<20 {
+            if let link = canonicalConversation(browser.url?.absoluteString), project == nil || Self.belongsToProject(link, project: project!) {
+                UserDefaults.standard.set(link.absoluteString, forKey: key)
+                pendingURL = link.path
+                break
+            }
+            try await Task.sleep(for: .milliseconds(100))
+        }
     }
     func conversationLink(chatId: String) -> String? {
         canonicalConversation(UserDefaults.standard.string(forKey: "chatgpt-conversation:" + account + ":" + chatId))?.absoluteString
