@@ -42,7 +42,8 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
  const recoveryKey='planner-relay-recovery:'+username
  const [recovery,setRecovery]=useState<Recovery|null>(()=>{try{return JSON.parse(localStorage.getItem(recoveryKey)||'null')}catch{return null}})
  const savingReply=useRef(false)
- const sendLock=useRef(false)
+ const sendLock=useRef(false),restoreAttempted=useRef(new Set<string>())
+ const activeRequestKey='planner-relay-active:'+username
  const cancelRelay=useRef(false),mirrorLock=useRef(false),toolTurn=useRef<{chatId:string;turnId:string}|null>(null)
  const [interaction,setInteraction]=useState(false)
  const [syncing,setSyncing]=useState(false),[syncNotice,setSyncNotice]=useState('')
@@ -190,35 +191,41 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
   await refresh()
   }finally{savingReply.current=false}
  }
- async function send(override?:string,scheduledRunId?:string,displayLabel?:string){
+ async function send(override?:string,scheduledRunId?:string,displayLabel?:string,resuming?:SubscriptionAttempt){
   if(!native){await connect();return}
-  const prompt=override?.trim()||message.trim()||(attachments.length?'Please review the attached files.':''),id=chatId
+  const prompt=resuming?.prompt||override?.trim()||message.trim()||(attachments.length?'Please review the attached files.':''),id=resuming?.chat_id||chatId
   if(!prompt||!id||busy||sendLock.current||recovery)return
   if(attachments.length&&(window.plannerNativeChatGPTRelayVersion||0)<2){setError('Update the iPhone app to enable file forwarding.');return}
-  followThread.current=true;sendLock.current=true;setBusy(true);setError('');setRelayPrompt(displayLabel||(scheduledRunId?'Scheduled planner review':prompt));setRelayText('');setRelayPhase('Connecting…');setInteraction(false);cancelRelay.current=false
-  const turnId=crypto.randomUUID(),scope=epoch.current
-  let scheduledCompleted=false,attemptSaved=false,visibleReply='',failure='',lastSavedPartial='',lastPartialAt=0
+  followThread.current=true;sendLock.current=true;setBusy(true);setError('');setRelayPrompt(displayLabel||(scheduledRunId?'Scheduled planner review':prompt));setRelayText(resuming?.partial_reply||'');setRelayPhase(resuming?'Restoring reply…':'Connecting…');setInteraction(false);cancelRelay.current=false
+  const turnId=resuming?.id||crypto.randomUUID(),scope=epoch.current
+  let scheduledCompleted=false,attemptSaved=Boolean(resuming),visibleReply=resuming?.partial_reply||'',failure='',lastSavedPartial='',lastPartialAt=0
   const stamp=new Date().toISOString(),attemptPrompt=displayLabel||(scheduledRunId?'Scheduled planner review':prompt)
   setActiveAttempt(turnId)
-  const initialAttempt:SubscriptionAttempt={id:turnId,chat_id:id,prompt:attemptPrompt,status:'started',detail:'',partial_reply:'',submitted_at:null,created_at:stamp,updated_at:stamp}
+  const initialAttempt:SubscriptionAttempt=resuming||{id:turnId,chat_id:id,prompt:attemptPrompt,status:'started',detail:'',partial_reply:'',submitted_at:null,created_at:stamp,updated_at:stamp}
   rememberAttempt(initialAttempt)
   let currentAttempt=initialAttempt
   const record=async(status:'submitted'|'failed'|'interrupted',detail='')=>{currentAttempt={...currentAttempt,status,detail,partial_reply:visibleReply,submitted_at:currentAttempt.submitted_at||(status==='submitted'?new Date().toISOString():null),updated_at:new Date().toISOString()};rememberAttempt(currentAttempt);try{const attempt=await subscriptionChatRequest<SubscriptionAttempt>(undefined,{action:'relay_attempt_update',chatId:id,turnId,status,detail:detail.slice(0,1000),partialReply:visibleReply.slice(0,80000)});currentAttempt=attempt;rememberAttempt(attempt)}catch{setSyncNotice('Request status could not sync. Check ChatGPT before retrying.')}}
+  const toolsEnabled=(window.plannerNativeChatGPTRelayVersion||0)>=4
+  let savedPrompt=prompt,submitted:{url?:string|null},submittedURL=workspace?.chat.provider_url
   try{
+   if(resuming){
+    try{const saved=JSON.parse(localStorage.getItem(activeRequestKey)||'null');if(saved?.turnId===turnId&&saved.chatId===id&&typeof saved.prompt==='string')savedPrompt=saved.prompt}catch{/* Use the durable server receipt. */}
+    try{submitted=await nativeRequest({action:'chatGPTRelayResume',account:username,chatId:id,turnId,url:submittedURL})}catch(error){throw Error('A previous Planner tool turn is active. Could not restore its existing reply. Review ChatGPT before stopping or retrying. '+(error instanceof Error?error.message:''))}
+    if(toolsEnabled)toolTurn.current={chatId:id,turnId}
+   }else{
    currentAttempt=await subscriptionChatRequest<SubscriptionAttempt>(undefined,{action:'relay_attempt_start',chatId:id,turnId,prompt:attemptPrompt});rememberAttempt(currentAttempt);attemptSaved=true
    const inputLinks:string[]=[]
    for(const file of attachments){setRelayPhase('Uploading '+file.name+'…');inputLinks.push(relayFileLink(file.name,await storeRelayFile(id,file)))}
-   const savedPrompt=prompt+(inputLinks.length?'\n\n'+inputLinks.join('\n'):'')
+   savedPrompt=prompt+(inputLinks.length?'\n\n'+inputLinks.join('\n'):'')
    let relayMessage=prompt
-   const toolsEnabled=(window.plannerNativeChatGPTRelayVersion||0)>=4
    if(toolsEnabled){
     toolTurn.current={chatId:id,turnId}
     const setup=await subscriptionChatRequest<{instructions:string}>(undefined,{action:'tool_begin',chatId:id,turnId,prompt})
     relayMessage=toolTurnMessage(prompt,turnId,setup.instructions)
    }
    setRelayPhase('Sending to ChatGPT…')
-   const sendPayload={action:'chatGPTRelaySend',account:username,chatId:id,text:relayMessage,work:toolsEnabled,url:workspace?.chat.provider_url,files:attachments.map(({name,mime,size,data})=>({name,mime,size,data}))}
-   let submitted:{url?:string|null}
+   const sendPayload={action:'chatGPTRelaySend',account:username,chatId:id,turnId,text:relayMessage,work:toolsEnabled,url:workspace?.chat.provider_url,files:attachments.map(({name,mime,size,data})=>({name,mime,size,data}))}
+   try{localStorage.setItem(activeRequestKey,JSON.stringify({turnId,chatId:id,prompt:savedPrompt}))}catch{/* Server receipt and native ticket remain available. */}
    try{submitted=await nativeRequest(sendPayload)}catch(error){
     if(!/unsent draft/i.test(error instanceof Error?error.message:''))throw error
     const draft=await nativeRequest<{text:string;manual?:boolean}>({action:'chatGPTRelayDraft',account:username})
@@ -230,8 +237,8 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
     if(cancelRelay.current)throw error
     submitted=await nativeRequest(sendPayload)
    }
-   await record('submitted','Thinking…')
-   let submittedURL=workspace?.chat.provider_url
+   }
+   await record('submitted',resuming?'Restoring reply…':'Thinking…')
    if(submitted.url&&/^https:\/\/chatgpt\.com\/(?:g\/[A-Za-z0-9_-]+\/)?c\/[A-Za-z0-9_-]+$/.test(submitted.url)&&submitted.url!==submittedURL){await subscriptionChatRequest(undefined,{action:'relay_bind',chatId:id,url:submitted.url});submittedURL=submitted.url;setWorkspace(current=>current?{...current,chat:{...current.chat,provider_url:submitted.url},chats:current.chats.map(chat=>chat.id===id?{...chat,provider_url:submitted.url}:chat)}:current)}
    setRelayPhase('Thinking…')
    let toolRounds=0,boundURL=submittedURL,signInShown=false
@@ -258,7 +265,7 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
       invalidateFilesCache();window.dispatchEvent(new Event('planner-files-refresh'));window.dispatchEvent(new Event('planner-calendar-refresh'));window.dispatchEvent(new Event('planner-preferences-refresh'))
       const executed=calls.some(call=>call.name==='planner_client_control')?await (await import('../lib/clientControls')).executeClientResults(applied.results,calls,username,turnId,()=>!cancelRelay.current&&scope===epoch.current&&alive.current):applied.results
       if(cancelRelay.current||scope!==epoch.current||!alive.current)return
-      await nativeRequest({action:'chatGPTRelaySend',account:username,chatId:id,text:toolResultsMessage(executed,turnId),work:true,url:result.url,context:''})
+      await nativeRequest({action:'chatGPTRelaySend',account:username,chatId:id,turnId,text:toolResultsMessage(executed,turnId),work:true,url:result.url,context:''})
       setRelayPhase('Working… Keep Planner open.');continue
      }
      const value:Recovery={chatId:id,turnId,prompt:displayLabel||(scheduledRunId?'Scheduled planner review':savedPrompt),reply:toolsEnabled?relayVisible(result.text||''):result.text||'',toolTurnId:toolsEnabled?turnId:undefined,outputs:result.files||[],providerUrl:result.url&&/^https:\/\/chatgpt\.com\/(?:g\/[A-Za-z0-9_-]+\/)?c\/[A-Za-z0-9_-]+$/.test(result.url)?result.url:undefined}
@@ -267,8 +274,17 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
     }
     if(result.phase==='attention'||result.needsLogin)throw new Error(result.message||'ChatGPT needs attention. Open its session; do not resend until you check it.')
    }
-  }catch(e){failure=e instanceof Error?e.message:'Relay failed. Open the session before retrying.';setError(attemptSaved&&!/website sign-in|unsent draft|previous Planner tool turn/i.test(failure)?'':failure)}finally{if(!scheduledCompleted){const detail=failure||'Request interrupted before a final reply was saved.';if(attemptSaved)await record(cancelRelay.current?'interrupted':'failed',detail);else rememberAttempt({...initialAttempt,status:'failed',detail:'Could not save the request receipt. Your draft was kept.'})}setActiveAttempt(null);if(scheduledRunId)void subscriptionChatRequest(undefined,{action:'schedule_finish',runId:scheduledRunId,completed:scheduledCompleted}).catch(()=>setScheduleError('Review status could not save. Check the last Chat reply before retrying.'));if(toolTurn.current){const pending=toolTurn.current;void subscriptionChatRequest(undefined,{action:'tool_finish',...pending,cancelled:true}).catch(()=>{});toolTurn.current=null}sendLock.current=false;setBusy(false);setInteraction(false);setRelayPhase('');setRelayPrompt('');setRelayText('')}
+  }catch(e){failure=e instanceof Error?e.message:'Relay failed. Open the session before retrying.';setError(attemptSaved&&!/website sign-in|unsent draft|previous Planner tool turn/i.test(failure)?'':failure)}finally{if(!alive.current||scope!==epoch.current){sendLock.current=false;return}try{const saved=JSON.parse(localStorage.getItem(activeRequestKey)||'null');if(saved?.turnId===turnId)localStorage.removeItem(activeRequestKey)}catch{};if(!scheduledCompleted){const detail=failure||'Request interrupted before a final reply was saved.';if(attemptSaved)await record(cancelRelay.current?'interrupted':'failed',detail);else rememberAttempt({...initialAttempt,status:'failed',detail:'Could not save the request receipt. Your draft was kept.'})}setActiveAttempt(null);if(scheduledRunId)void subscriptionChatRequest(undefined,{action:'schedule_finish',runId:scheduledRunId,completed:scheduledCompleted}).catch(()=>setScheduleError('Review status could not save. Check the last Chat reply before retrying.'));if(toolTurn.current){const pending=toolTurn.current;void subscriptionChatRequest(undefined,{action:'tool_finish',...pending,cancelled:true}).catch(()=>{});toolTurn.current=null}sendLock.current=false;setBusy(false);setInteraction(false);setRelayPhase('');setRelayPrompt('');setRelayText('')}
  }
+ useEffect(()=>{
+  if(!active||!native||(window.plannerNativeChatGPTRelayVersion||0)<9||!relayReady||busy||sendLock.current||recovery||!workspace)return
+  const latestSaved=workspace.messages.reduce((latest,item)=>Math.max(latest,Date.parse(item.created_at)),0)
+  const candidate=(workspace.attempts||[]).filter(item=>['started','submitted'].includes(item.status)&&Date.parse(item.created_at)>=latestSaved).sort((a,b)=>b.created_at.localeCompare(a.created_at))[0]
+  if(!candidate||restoreAttempted.current.has(candidate.id))return
+  restoreAttempted.current.add(candidate.id)
+  const generation=epoch.current
+  void subscriptionChatRequest<{canResume:boolean}>(undefined,{action:'relay_resume_check',chatId:candidate.chat_id,turnId:candidate.id}).then(check=>{if(check.canResume&&alive.current&&generation===epoch.current){if(!sendLock.current)void send(undefined,undefined,undefined,candidate);else restoreAttempted.current.delete(candidate.id)}}).catch(()=>{restoreAttempted.current.delete(candidate.id);if(alive.current)setSyncNotice('The previous reply could not be checked. Review the session before retrying.')})
+ },[active,native,relayReady,busy,recovery,workspace?.chat.id,workspace?.attempts,workspace?.messages])
  async function stop(){cancelRelay.current=true;if(toolTurn.current)void subscriptionChatRequest(undefined,{action:'tool_finish',...toolTurn.current,cancelled:true}).catch(()=>{});try{await nativeRequest({action:'chatGPTRelayStop',account:username});setRelayPhase('Stopping…')}catch(e){setError(e instanceof Error?e.message:'Open the session to stop this response.')}}
  async function continueInChatGPT(){if(interaction&&(window.plannerNativeChatGPTRelayVersion||0)<5){setError('Update the iPhone app to sign in to websites inside Planner.');return}try{await nativeRequest({action:interaction?'chatGPTSiteSignIn':'chatGPTPortal',account:username,intent:interaction?'interaction':'inspect'})}catch(e){setError(e instanceof Error?e.message:'Could not open the secure session.')}}
  async function cancelUnfinished(){if(!chatId)return;try{await subscriptionChatRequest(undefined,{action:'tool_cancel_active',chatId});setError('');setSyncNotice('Stopped future tool execution. Read current app state before repeating earlier changes.')}catch(e){setError(e instanceof Error?e.message:'Could not stop unfinished request.')}}

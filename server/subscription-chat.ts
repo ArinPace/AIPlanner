@@ -37,6 +37,17 @@ export async function handleSubscriptionChat(request:Request,username:string){
  }
  if(request.method!=='POST')throw new ApiError(405,'Use GET or POST.')
  const input=await body(request)
+ if(input.action==='relay_resume_check'){
+  const args=z.object({chatId:z.string().uuid(),turnId:z.string().uuid()}).parse(input)
+  const chat=await owned(username,args.chatId)
+  if(chat.archived||chat.deleted_at)return json({canResume:false})
+  const [attempt,turn]=await Promise.all([
+   db().from('planner_subscription_attempts').select('status').eq('username',username).eq('chat_id',args.chatId).eq('id',args.turnId).maybeSingle(),
+   db().from('planner_subscription_tool_turns').select('status,expires_at').eq('username',username).eq('chat_id',args.chatId).eq('id',args.turnId).maybeSingle()
+  ])
+  const receipt=storage(attempt),active=storage(turn)
+  return json({canResume:Boolean(receipt&&['started','submitted'].includes(receipt.status)&&active?.status==='running'&&Date.parse(active.expires_at)>Date.now())})
+ }
  if(input.action==='relay_draft_check'){
   const args=z.object({chatId:z.string().uuid(),turnId:z.string().uuid(),prompt:z.string().min(1).max(30000)}).parse(input)
   const chat=await owned(username,args.chatId)

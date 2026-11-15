@@ -23,7 +23,7 @@ struct PlannerWebView: UIViewRepresentable {
         config.websiteDataStore = .default()
         config.allowsInlineMediaPlayback = true
         config.userContentController.addScriptMessageHandler(context.coordinator, contentWorld: .page, name: "plannerNative")
-        config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeScreenTime=true;window.plannerNativeChatGPTPortal=true;window.plannerNativeChatGPTRelayVersion=8;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true';document.documentElement.dataset.edgeToEdge='true';const inset=document.createElement('style');inset.id='planner-native-safe-area';inset.textContent=':root[data-iphone-app=true] .app-shell{padding-top:env(safe-area-inset-top);box-sizing:border-box}';document.head.append(inset)});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeScreenTime=true;window.plannerNativeChatGPTPortal=true;window.plannerNativeChatGPTRelayVersion=9;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true';document.documentElement.dataset.edgeToEdge='true';const inset=document.createElement('style');inset.id='planner-native-safe-area';inset.textContent=':root[data-iphone-app=true] .app-shell{padding-top:env(safe-area-inset-top);box-sizing:border-box}';document.head.append(inset)});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.userContentController.addUserScript(WKUserScript(source: """
             document.addEventListener('click', event => {
               const link = event.target instanceof Element && event.target.closest('a[href]');
@@ -90,6 +90,13 @@ struct PlannerWebView: UIViewRepresentable {
         web.scrollView.backgroundColor = model.backgroundColor
         web.underPageBackgroundColor = model.backgroundColor
         context.coordinator.webView = web
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-UITestSelectComposer") {
+            let select=UIButton(type:.system);select.setTitle("Select draft",for:.normal);select.accessibilityIdentifier="Select QA composer";select.translatesAutoresizingMaskIntoConstraints=false;web.addSubview(select)
+            NSLayoutConstraint.activate([select.topAnchor.constraint(equalTo:web.safeAreaLayoutGuide.topAnchor,constant:4),select.leadingAnchor.constraint(equalTo:web.leadingAnchor,constant:8),select.widthAnchor.constraint(equalToConstant:100),select.heightAnchor.constraint(equalToConstant:30)])
+            select.addTarget(context.coordinator,action:#selector(Coordinator.selectQAComposer),for:.touchUpInside)
+        }
+        #endif
         context.coordinator.authentication = NativeAuthentication(webView: web)
         model.reload = { [weak web, weak coordinator = context.coordinator] in
             guard let web else { return }
@@ -202,6 +209,12 @@ struct PlannerWebView: UIViewRepresentable {
             if let view = screenTimeHost?.view { web.bringSubviewToFront(view) }
         }
         var lastRecovery: Date?
+        #if DEBUG
+        @objc func selectQAComposer() {
+            webView?.becomeFirstResponder()
+            webView?.evaluateJavaScript("(()=>{const box=document.querySelector('#subscription-message');if(box&&!box.disabled){box.focus();box.setSelectionRange(0,box.value.length)}})()",completionHandler:nil)
+        }
+        #endif
         func checkPage(_ web: WKWebView, notifyFocus: Bool = false) {
             let script = "(() => { if (\(notifyFocus ? "true" : "false")) window.dispatchEvent(new Event('focus')); return location.pathname !== '/' || document.readyState === 'loading' || Boolean(document.getElementById('root')?.childElementCount); })()"
             web.evaluateJavaScript(script) { [weak self, weak web] value, error in
@@ -254,7 +267,7 @@ struct PlannerWebView: UIViewRepresentable {
                         guard let account = body["account"] as? String, let value = body["settings"], JSONSerialization.isValidJSONObject(value) else { throw NativeError("Missing notification settings.") }
                         let options = try JSONDecoder().decode(TaskNotificationOptions.self, from: JSONSerialization.data(withJSONObject: value))
                         try await PlannerTaskNotifications.shared.configure(account: account, options: options)
-                    case "chatGPTPortal", "chatGPTSiteSignIn", "chatGPTRelayStatus", "chatGPTRelaySend", "chatGPTRelayStop", "chatGPTRelayDraft", "chatGPTRelayClearDraft", "chatGPTRelayDownload", "chatGPTRelayMirror", "chatGPTRelayModel", "chatGPTRelayFind":
+                    case "chatGPTPortal", "chatGPTSiteSignIn", "chatGPTRelayStatus", "chatGPTRelaySend", "chatGPTRelayResume", "chatGPTRelayStop", "chatGPTRelayDraft", "chatGPTRelayClearDraft", "chatGPTRelayDownload", "chatGPTRelayMirror", "chatGPTRelayModel", "chatGPTRelayFind":
                         guard let account = body["account"] as? String else { throw NativeError("Sign into Planner first.") }
                         let controller = try relay(account: account)
                         if action == "chatGPTRelayStatus" {
@@ -291,11 +304,16 @@ struct PlannerWebView: UIViewRepresentable {
                             relayOperationActive = true; attachRelayForRun(); defer { relayOperationActive = false; parkRelay() }
                             replyHandler(try await controller.downloadResponse(key: key, providerURL: body["url"] as? String, expectedReply: body["reply"] as? String), nil); return
                         }
+                        if action == "chatGPTRelayResume" {
+                            guard let chatId=body["chatId"] as? String,UUID(uuidString:chatId) != nil,let turnId=body["turnId"] as? String,UUID(uuidString:turnId) != nil else{throw NativeError("Choose an existing request receipt.")}
+                            relayOperationActive=true;defer{relayOperationActive=false};attachRelayForRun()
+                            do {replyHandler(try await controller.resume(chatId:chatId,turnId:turnId,providerURL:body["url"] as? String),nil)}catch{parkRelay();throw error};return
+                        }
                         if action == "chatGPTRelaySend" {
                             guard let text = body["text"] as? String, let chatId = body["chatId"] as? String, UUID(uuidString: chatId) != nil, !text.isEmpty, text.count <= 100000 else { throw NativeError("Choose a chat and enter a message.") }
                             relayOperationActive = true; defer { relayOperationActive = false }
                             attachRelayForRun()
-                            do { try await controller.send(text: text, chatId: chatId, files: body["files"] as? [[String: Any]] ?? [], providerURL: body["url"] as? String, workMode: body["work"] as? Bool == true, context: body["context"] as? String ?? "") } catch { parkRelay(); throw error }
+                            do { try await controller.send(text: text, chatId: chatId, files: body["files"] as? [[String: Any]] ?? [], providerURL: body["url"] as? String, workMode: body["work"] as? Bool == true, context: body["context"] as? String ?? "", turnId:body["turnId"] as? String) } catch { parkRelay(); throw error }
                             replyHandler(["ok": true, "url": controller.conversationLink(chatId: chatId) as Any? ?? NSNull()], nil); return
                         }
                         if action == "chatGPTRelayStop" { try await controller.stopRelay(); parkRelay(); replyHandler(["ok": true], nil); return }
@@ -1300,7 +1318,27 @@ document.addEventListener('click',event=>capture(event.target.closest?.('a[href]
         if let data=try? JSONSerialization.data(withJSONObject:values){try? data.write(to:folder.appendingPathComponent("RelaySendStage.json"),options:.atomic)}
         #endif
     }
-    func send(text: String, chatId: String, files: [[String: Any]] = [], providerURL: String? = nil, workMode: Bool = false, context: String = "") async throws {
+    func resume(chatId:String,turnId:String,providerURL:String?) async throws -> [String:Any] {
+        guard pendingChat == nil || pendingChat == chatId else {throw NativeError("Another reply is already active.")}
+        guard let target=canonicalConversation(providerURL) ?? canonicalConversation(UserDefaults.standard.string(forKey:"chatgpt-conversation:"+account+":"+chatId)),let saved=UserDefaults.standard.string(forKey:"chatgpt-project:"+account+":Test"),let project=URL(string:saved),Self.belongsToProject(target,project:project) else {throw NativeError("The existing conversation link must be recovered in ChatGPT first.")}
+        let ticket=UserDefaults.standard.dictionary(forKey:"chatgpt-relay-request:"+account+":"+chatId)
+        if let previous=ticket?["turnId"] as? String,previous != turnId {throw NativeError("This device has a different request receipt. Review the existing session.")}
+        let receipt=ticket?["receipt"] as? String ?? "Planner relay response ID: "+turnId
+        if canonicalConversation(browser.url?.absoluteString) != target {documentCommitted=false;browser.load(URLRequest(url:target,timeoutInterval:30))}
+        var verified=false
+        for _ in 0..<60 {
+            try await Task.sleep(for:.milliseconds(500))
+            guard documentCommitted,!browser.isLoading,canonicalConversation(browser.url?.absoluteString)==target else {continue}
+            _ = try await browser.callAsyncJavaScript("window.__plannerPendingPrompt=receipt;return true",arguments:["receipt":receipt],in:nil,contentWorld:.page)
+            let state=try await snapshot()
+            if state["attributed"] as? Bool == true,(state["count"] as? Int ?? 0)>0 {verified=true;break}
+            if state["needsLogin"] as? Bool == true {break}
+        }
+        guard verified else {throw NativeError("The existing request could not be verified in this conversation. No message was resent.")}
+        pendingChat=chatId;loadedChat=chatId;pendingURL=target.path;baseline = -1;baselineReplyKey="";baselineReplyText="";lastText="";sawRunning=false;changedAt=Date();startedAt=Date()
+        return ["url":target.absoluteString]
+    }
+    func send(text: String, chatId: String, files: [[String: Any]] = [], providerURL: String? = nil, workMode: Bool = false, context: String = "", turnId:String? = nil) async throws {
         guard pendingChat == nil else { throw NativeError("A ChatGPT reply is still pending. Open the session before retrying.") }
         let key = "chatgpt-conversation:" + account + ":" + chatId
         // Keep the same provider conversation across failures and app restarts.
@@ -1309,7 +1347,8 @@ document.addEventListener('click',event=>capture(event.target.closest?.('a[href]
         guard stored != nil || !UserDefaults.standard.bool(forKey: startedKey) else {
             throw NativeError("The existing ChatGPT conversation link is not available yet. Open the session to recover it; no replacement conversation was created.")
         }
-        let text = "[Planner relay receipt: " + UUID().uuidString + "]\n\n" + text
+        let receipt = "[Planner relay receipt: " + UUID().uuidString + "]"
+        let text = receipt + "\n\n" + text
         traceRelay("project-start"); let project = try await ensureRelayProject(); traceRelay("project-ready")
         if let project, let stored, !Self.belongsToProject(stored, project: project) {
             throw NativeError("This linked ChatGPT conversation is outside Test. Move it into the Test project in ChatGPT before continuing. No message was sent and no replacement chat was created.")
@@ -1404,6 +1443,7 @@ document.addEventListener('click',event=>capture(event.target.closest?.('a[href]
         #if DEBUG
         clearTestDraft = ProcessInfo.processInfo.arguments.contains("-UITestClearRelayDraft")
         #endif
+        if let turnId,UUID(uuidString:turnId) != nil {UserDefaults.standard.set(["turnId":turnId,"receipt":receipt,"confirmed":false],forKey:"chatgpt-relay-request:"+account+":"+chatId)}
         traceRelay("submit-start"); browser.becomeFirstResponder()
         let result = try await browser.callAsyncJavaScript("""
         const inProject=()=>{const id=path=>{const parts=path.split('/');return parts[1]==='g'?(parts[2]?.match(/^g-p-[0-9a-f]{32}(?=-|$)/)?.[0]||parts[2]):null};const parts=location.pathname.split('/');return id(location.pathname)===id(projectPath)&&((parts.length===4&&parts[3]==='project')||(parts.length===5&&parts[3]==='c'&&/^[A-Za-z0-9_-]+$/.test(parts[4])))};
@@ -1442,6 +1482,7 @@ document.addEventListener('click',event=>capture(event.target.closest?.('a[href]
         _ = try? await browser.evaluateJavaScript("window.__plannerHumanDraft=false")
         pendingChat = chatId; pendingURL = target.path.contains("/c/") ? target.path : nil; baseline = state["count"] as? Int ?? 0; baselineReplyKey = state["replyKey"] as? String ?? ""; baselineReplyText = state["text"] as? String ?? ""; sawRunning = false; lastText = ""; changedAt = Date(); startedAt = Date()
         UserDefaults.standard.set(true, forKey: startedKey)
+        if let turnId,UUID(uuidString:turnId) != nil {UserDefaults.standard.set(["turnId":turnId,"receipt":receipt,"confirmed":true],forKey:"chatgpt-relay-request:"+account+":"+chatId)}
         // Capture the link at submission, rather than waiting for a final reply.
         for _ in 0..<20 {
             if let link = canonicalConversation(browser.url?.absoluteString), project == nil || Self.belongsToProject(link, project: project!) {
@@ -1591,6 +1632,7 @@ return {url:urls[0]||null};
         return state
     }
     func stopRelay() async throws {
+        if let chatId=pendingChat {UserDefaults.standard.removeObject(forKey:"chatgpt-relay-request:"+account+":"+chatId)}
         guard browser.url?.host == "chatgpt.com" else { return }
         _ = try await browser.evaluateJavaScript("[...document.querySelectorAll('button')].find(n=>n.dataset.testid==='stop-button'||/^(Stop|Stop generating|Stop streaming|Stop task)$/i.test(n.getAttribute('aria-label')||''))?.click()")
         pendingChat = nil
