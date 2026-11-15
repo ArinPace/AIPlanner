@@ -585,9 +585,9 @@ struct PlannerWebView: UIViewRepresentable {
       const domain=root=>(root.innerText.match(/sign in to\s+([a-z0-9.-]+\.[a-z]{2,})/i)||[])[1]||'';
       let current=null;
       const refresh=()=>{
-        if(current?.isConnected&&current.getClientRects().length)return {found:true,domain:domain(current)};
+        if(current?.isConnected&&current.getClientRects().length&&(window.__plannerSignInCurrent?.(current)??true))return {found:true,domain:domain(current)};
         clear();html.setAttribute('data-planner-site-signin','');html.setAttribute('data-planner-secure-waiting','');
-        const visible=n=>!!n.getClientRects().length,label=n=>(n.getAttribute('aria-label')||n.innerText||n.textContent||'').trim();
+        const visible=n=>!!n.getClientRects().length&&(window.__plannerSignInCurrent?.(n)??true),label=n=>(n.getAttribute('aria-label')||n.innerText||n.textContent||'').trim();
         let root=[...document.querySelectorAll('form')].find(n=>visible(n)&&(n.querySelector('input[type=password]')||/sign in to [a-z0-9.-]+[.][a-z]{2,}/i.test(n.textContent)));
         if(!root)root=[...document.querySelectorAll('[role=dialog],[role=alertdialog]')].find(n=>visible(n)&&/sign in|website|browser|access to|visit site/i.test(n.textContent)&&[...n.querySelectorAll('button')].some(b=>/^(Allow|Approve|Continue|Take over to sign in|Sign in on web page|Return control|I.m done)$/i.test(label(b))));
         if(!root){const button=[...document.querySelectorAll('button')].find(n=>visible(n)&&/^(Take over to sign in|Sign in on web page|Return control|I.m done|Use saved account|Other sign-in options)$/i.test(label(n)));if(button){
@@ -823,6 +823,24 @@ return {url:location.origin+location.pathname,name:projectName,created};
 // WebKit innerText can include CSS-generated placeholder text. It is not a draft.
 window.__plannerComposer=()=>{const visible=n=>n&&n.getClientRects().length;return [...document.querySelectorAll('#prompt-textarea,[data-composer-markdown][contenteditable="true"]')].find(visible)||[...document.querySelectorAll('[role="textbox"][contenteditable="true"],textarea')].find(visible)};
 window.__plannerComposerText=box=>!box?'':box.tagName==='TEXTAREA'?box.value:(box.textContent||'').trim()?(box.innerText||box.textContent||''):'';
+// Completed transcript cards must not masquerade as an active sign-in prompt.
+window.__plannerSignInCurrent=node=>{
+ if(!node?.getClientRects().length)return false;
+ if(node.closest('[aria-modal="true"]'))return true;
+ const turn=node.closest('[data-turn-key],[data-testid^="conversation-turn"],[data-message-author-role],[data-markdown-text-style],article');
+ if(!turn)return true;
+ const messages=[...document.querySelectorAll('[data-turn-key],[data-message-author-role],[data-markdown-text-style]')];
+ const latest=messages.at(-1);
+ if(latest&&!turn.contains(latest)&&!latest.contains(turn)&&(turn.compareDocumentPosition(latest)&Node.DOCUMENT_POSITION_FOLLOWING))return false;
+ return !turn.closest('[data-talvt-turn-state="complete"]')&&!turn.querySelector('[data-talvt-turn-state="complete"]');
+};
+window.__plannerSignInState=()=>{
+ const active=window.__plannerSignInCurrent,label=n=>(n.getAttribute('aria-label')||n.innerText||'').trim();
+ const buttons=[...document.querySelectorAll('button')].filter(active);
+ const secureForm=buttons.some(n=>/^(Take over to sign in|Sign in on web page|Return control|I.m done|Use saved account|Other sign-in options)$/i.test(label(n)))||[...document.querySelectorAll('form,[role="dialog"]')].filter(active).some(n=>/sign in to [a-z0-9.-]+[.][a-z]{2,}/i.test(n.innerText));
+ const approval=[...document.querySelectorAll('[role="dialog"],[role="alertdialog"]')].filter(active).some(n=>/website|browser|access to|visit site/i.test(n.innerText)&&[...n.querySelectorAll('button')].some(b=>active(b)&&/^(Allow|Approve|Continue)$/i.test(label(b))));
+ return {secureForm,approval,interaction:secureForm||approval};
+};
 window.__plannerHumanDraft=false;
 for(const type of ['input','keydown','pointerdown'])document.addEventListener(type,event=>{const box=window.__plannerComposer();if(event.isTrusted&&!window.__plannerRelayEditing&&box?.contains(event.target))window.__plannerHumanDraft=true},true);
 """# }
@@ -1011,9 +1029,7 @@ return {selectedModel:window.__plannerSelectedModel||'',sliders:ranges,summary:(
     const box=window.__plannerComposer();
     const buttons=[...document.querySelectorAll('button')].filter(visible);
     const label=n=>(n.getAttribute('aria-label')||n.innerText||'').trim();
-    const secureForm=buttons.some(n=>/^(Take over to sign in|Sign in on web page|Return control|I.m done|Use saved account|Other sign-in options)$/i.test(label(n)))||[...document.querySelectorAll('form,[role="dialog"]')].filter(visible).some(n=>/sign in to [a-z0-9.-]+[.][a-z]{2,}/i.test(n.innerText));
-    const approval=[...document.querySelectorAll('[role="dialog"],[role="alertdialog"]')].filter(visible).some(n=>/website|browser|access to|visit site/i.test(n.innerText)&&[...n.querySelectorAll('button')].some(b=>/^(Allow|Approve|Continue)$/i.test(label(b))));
-    const interaction=secureForm||approval;
+    const {secureForm=false,interaction=false}=window.__plannerSignInState?.()||{};
     // Keep the submitted turn mounted in ChatGPT's virtualized transcript.
     if(window.__plannerPendingPrompt)buttons.find(n=>/^Scroll to bottom$/i.test(label(n)))?.click();
     const guest=!secureForm&&buttons.some(n=>/^(Log in|Sign in)$/i.test(label(n)));
@@ -1048,7 +1064,7 @@ return {selectedModel:window.__plannerSelectedModel||'',sliders:ranges,summary:(
     const response=(clean?(clean.innerText||clean.textContent||'').trim():'').replace(/(PLANNER_TOOL_REQUEST\\s*)(?:json|planner-tools)\\s*(?=[{])/i,'$1');
     const outputs=turn?[...turn.querySelectorAll('a[download],a[href^="sandbox:"],a[href*="/backend-api/files/"],a[href*="/backend-api/estuary/content"],button[aria-label^="Download "],button[aria-label="Save image"],[data-file-reference="true"][role="button"][aria-label^="Download "]')].map((node,index)=>{node.dataset.plannerDownloadId ||= (last?.closest('[data-chatgpt-selection-message-id]')?.getAttribute('data-chatgpt-selection-message-id')||last?.getAttribute('data-message-id')||turn?.id||crypto.randomUUID())+':'+index;return {key:node.dataset.plannerDownloadId,name:(node.getAttribute('download')||node.innerText||node.getAttribute('aria-label')||'Download file').trim().slice(0,240)}}):[];
     const replyKey=last?.closest('[data-chatgpt-selection-message-id]')?.getAttribute('data-chatgpt-selection-message-id')||last?.getAttribute('data-message-id')||last?.closest('[data-message-id]')?.getAttribute('data-message-id')||turn?.id||turn?.getAttribute('data-testid')||'';
-    return {attributed,files:outputs,ready:!!box,needsLogin:(!box&&guest)||(!secureForm&&!!document.querySelector('input[type="password"]')),guest,interaction,running,count:replies.length,replyKey,text:response,final:workTurn?!!workFinal&&!!workTurn.querySelector('[data-talvt-turn-state="complete"]'):!!turn?.querySelector(completionSelector),url:location.href};})()
+    return {attributed,files:outputs,ready:!!box,needsLogin:(!box&&guest)||(!secureForm&&[...document.querySelectorAll('input[type="password"]')].some(n=>window.__plannerSignInCurrent?.(n))),guest,interaction,running,count:replies.length,replyKey,text:response,final:workTurn?!!workFinal&&!!workTurn.querySelector('[data-talvt-turn-state="complete"]'):!!turn?.querySelector(completionSelector),url:location.href};})()
     """ }
     private func snapshot() async throws -> [String: Any] {
         loadViewIfNeeded()
@@ -1284,7 +1300,7 @@ return {selectedModel:window.__plannerSelectedModel||'',sliders:ranges,summary:(
         if(projectPath && !inProject())throw Error('ChatGPT left the Test project. No message was sent.');
         const box=window.__plannerComposer();
         if(!box)throw Error('ChatGPT composer is unavailable.');
-        if(box.closest('[inert],[aria-hidden="true"]')||[...document.querySelectorAll('button')].some(n=>n.getClientRects().length&&/^(Use saved account|Other sign-in options|Take over to sign in|Return control|I.m done)$/i.test((n.getAttribute('aria-label')||n.innerText||'').trim())))throw Error('A website sign-in is pending. Finish or cancel it in Planner before sending another message.');
+        if(box.closest('[inert],[aria-hidden="true"]')||window.__plannerSignInState?.().interaction)throw Error('A website sign-in is pending. Finish or cancel it in Planner before sending another message.');
         if(clearTestDraft&&text==='Reply with exactly: Planner relay works.'&&window.__plannerComposerText(box).trim()===text){
           if(box.tagName==='TEXTAREA')Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(box,'');else box.textContent='';
           box.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'deleteContentBackward'}));await new Promise(resolve=>setTimeout(resolve,300));

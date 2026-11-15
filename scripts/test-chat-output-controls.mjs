@@ -12,7 +12,7 @@ try{
  await page.setContent(`<div contenteditable="true" data-composer-markdown=""></div><article><div data-message-author-role="assistant">Files ready.
  <span role="button" data-file-reference="true" aria-label="Download unchanged.zip">Download ZIP</span>
  <a href="/backend-api/estuary/content?file=fixture">PDF</a>
- <button aria-label="Download file">PNG</button></div><button aria-label="Copy">Copy</button></article>`)
+ <button aria-label="Download file">PNG</button></div><button aria-label="Copy response">Copy</button></article>`)
  await page.evaluate(composer)
  const result=await page.evaluate(snapshot)
  assert.equal(result.count,1);assert.equal(result.final,true);assert.equal(result.files.length,3)
@@ -27,6 +27,13 @@ try{
  assert.equal(savedAccount.interaction,true);assert.equal(savedAccount.needsLogin,false);assert(!JSON.stringify(savedAccount).includes('fixture-secret-do-not-export'))
  await page.locator('#secure').evaluate(n=>n.remove())
  const normal=await page.evaluate(snapshot);assert.equal(normal.interaction,false)
+ await page.evaluate(()=>{const history=document.createElement('article');history.id='old-signin';history.innerHTML='<div data-message-author-role="assistant"><form><h2>Sign in to brightspace.nyu.edu</h2><input type="password"><button>Use saved account</button><button>Take over to sign in</button></form></div>';document.body.prepend(history)})
+ const historical=await page.evaluate(snapshot);assert.equal(historical.interaction,false);assert.equal(historical.needsLogin,false)
+ await page.locator('#old-signin').evaluate(n=>n.remove())
+ await page.evaluate(()=>{const card=document.createElement('article');card.id='completed-signin';card.dataset.talvtTurnState='complete';card.innerHTML='<div data-message-author-role="assistant"><button>Take over to sign in</button></div>';document.body.append(card)})
+ assert.equal((await page.evaluate(snapshot)).interaction,false)
+ await page.locator('#completed-signin').evaluate(n=>n.remove())
+
  const request={turn:'current',calls:[{id:'save',name:'planner_save_note',arguments:{content:'A "quoted" note with a path C:'+String.fromCharCode(92)+'sample'}}]}
  await page.evaluate(request=>{const body=document.querySelector('[data-message-author-role="assistant"]');body.textContent='PLANNER_TOOL_REQUEST';const wrapper=document.createElement('div'),header=document.createElement('div'),pre=document.createElement('pre'),code=document.createElement('code');header.textContent='json';code.className='language-json';code.textContent=JSON.stringify(request);pre.append(code);wrapper.append(header,pre);body.append(wrapper,document.createTextNode('END_PLANNER_TOOL_REQUEST'))},request)
  const machine=await page.evaluate(snapshot)
