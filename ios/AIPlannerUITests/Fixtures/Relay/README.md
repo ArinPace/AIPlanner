@@ -8,6 +8,7 @@ These are authored disposable test files, not user documents. PDF, DOCX and XLSX
 | verification.pdf | PDF-4613 |
 | verification.docx | DOCX-7294 |
 | verification.xlsx | XLSX-5386 |
+| verification.pptx | PPTX-3841 |
 | verification.png | IMAGE-6042 |
 | verification.zip | ZIP-9327 |
 | verification.txt | TEXT-2468 |

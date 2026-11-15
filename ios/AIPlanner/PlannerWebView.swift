@@ -58,13 +58,13 @@ struct PlannerWebView: UIViewRepresentable {
         if ProcessInfo.processInfo.arguments.contains("-UITestRelayFileMatrix"), let group=ProcessInfo.processInfo.environment["PLANNER_TEST_FILE_GROUP"], ["documents","media"].contains(group), let folder=FileManager.default.urls(for:.cachesDirectory,in:.userDomainMask).first, let data=try? Data(contentsOf:folder.appendingPathComponent("RelayFileMatrix-"+group+".json")), let fixtures=String(data:data,encoding:.utf8) {
             let script="""
             const relayFixtures=\(fixtures);
-            document.addEventListener('DOMContentLoaded',()=>{const button=document.createElement('button');button.textContent='Attach matrix test';button.style.cssText='position:fixed;top:160px;right:0;z-index:100000;background:white;color:black';button.onclick=()=>{const input=[...document.querySelectorAll('input[type=file]')].find(n=>n.accept==='*/*');if(!input)return;const transfer=new DataTransfer();for(const f of relayFixtures){const binary=atob(f.data),bytes=Uint8Array.from(binary,c=>c.charCodeAt(0));transfer.items.add(new File([bytes],f.name,{type:f.mime}))}input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));button.remove()};document.body.append(button)});
+            document.addEventListener('DOMContentLoaded',()=>{const button=document.createElement('button');button.textContent='Attach matrix test';button.type='button';button.style.cssText='background:white;color:black;position:relative;z-index:100000';button.onclick=()=>{const input=document.querySelector('.subscription-compose input[type=file]');if(!input)return;const transfer=new DataTransfer();for(const f of relayFixtures){const binary=atob(f.data),bytes=Uint8Array.from(binary,c=>c.charCodeAt(0));transfer.items.add(new File([bytes],f.name,{type:f.mime}))}input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));button.remove()};const mount=()=>{const form=document.querySelector('.subscription-compose');if(form&&!form.contains(button))form.prepend(button)};new MutationObserver(mount).observe(document.body,{childList:true,subtree:true});mount()});
             """
             config.userContentController.addUserScript(WKUserScript(source:script,injectionTime:.atDocumentStart,forMainFrameOnly:true))
         }
         if ProcessInfo.processInfo.arguments.contains("-UITestRelayCSV") {
             config.userContentController.addUserScript(WKUserScript(source: """
-            document.addEventListener('DOMContentLoaded',()=>{const button=document.createElement('button');button.textContent='Attach CSV test';button.style.cssText='position:fixed;top:160px;right:0;z-index:100000;background:white;color:black';button.onclick=()=>{const input=[...document.querySelectorAll('input[type=file]')].find(n=>n.accept==='*/*');if(!input)return;const transfer=new DataTransfer();transfer.items.add(new File([['kind,value','relay,INPUT-7319',''].join(String.fromCharCode(10))],'relay-check.csv',{type:'text/csv'}));input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));};document.body.append(button)});
+            document.addEventListener('DOMContentLoaded',()=>{const button=document.createElement('button');button.textContent='Attach CSV test';button.type='button';button.style.cssText='background:white;color:black;position:relative;z-index:100000';button.onclick=()=>{const input=document.querySelector('.subscription-compose input[type=file]');if(!input)return;const transfer=new DataTransfer();transfer.items.add(new File([['kind,value','relay,INPUT-7319',''].join(String.fromCharCode(10))],'relay-check.csv',{type:'text/csv'}));input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));};const mount=()=>{const form=document.querySelector('.subscription-compose');if(form&&!form.contains(button))form.prepend(button)};new MutationObserver(mount).observe(document.body,{childList:true,subtree:true});mount()});
             """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         }
         #endif
@@ -287,7 +287,7 @@ struct PlannerWebView: UIViewRepresentable {
                             try await controller.clearDraft(expected: expected); replyHandler(["ok": true], nil); return
                         }
                         if action == "chatGPTRelayDownload" {
-                            guard let key = body["key"] as? String, UUID(uuidString: key) != nil else { throw NativeError("Choose a response file.") }
+                            guard let key = body["key"] as? String, key.count <= 150, key.range(of: #"^[A-Za-z0-9_-]+(?::[0-9]{1,3})?$"#, options: .regularExpression) != nil else { throw NativeError("Choose a response file.") }
                             relayOperationActive = true; attachRelayForRun(); defer { relayOperationActive = false; parkRelay() }
                             replyHandler(try await controller.downloadResponse(key: key, providerURL: body["url"] as? String, expectedReply: body["reply"] as? String), nil); return
                         }
@@ -547,6 +547,10 @@ struct PlannerWebView: UIViewRepresentable {
     var downloadResult: [String: Any]?
     var downloadFailure: String?
     private var responseDownloadPending = false
+    private var responseDownloadGeneration: UUID?
+    private var responseDownloadGenerations: [ObjectIdentifier: UUID] = [:]
+    private var responseDownloadPopups: [WKWebView] = []
+    private var blobDownloadBridge: PlannerRelayBlobBridge?
     var documentCommitted = false
     var webFailure: String?
     var recoveryCount = 0
@@ -649,6 +653,9 @@ struct PlannerWebView: UIViewRepresentable {
         #endif
         configuration.userContentController.addUserScript(WKUserScript(source: Self.composerReader, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         configuration.userContentController.addUserScript(WKUserScript(source: Self.deletionObserver, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        let blobBridge=PlannerRelayBlobBridge(owner:self);blobDownloadBridge=blobBridge
+        configuration.userContentController.addScriptMessageHandler(blobBridge,contentWorld:.page,name:"plannerResponseFile")
+        configuration.userContentController.addUserScript(WKUserScript(source:Self.blobDownloadCapture,injectionTime:.atDocumentStart,forMainFrameOnly:false))
         configuration.allowsInlineMediaPlayback = true
         browser = WKWebView(frame: .zero, configuration: configuration)
         browser.accessibilityIdentifier = "chatGPTPortalWebView"
@@ -738,6 +745,15 @@ struct PlannerWebView: UIViewRepresentable {
             Task { @MainActor [weak self] in
                 try? await Task.sleep(for:.seconds(5));guard let self else{return}
                 do{var result=try await self.modelMenu(operation:"open",id:nil);if let wanted=ProcessInfo.processInfo.environment["PLANNER_TEST_MODEL_OPTION"],let options=result["options"] as? [[String:Any]],let option=options.first(where:{$0["label"] as? String == wanted}),let id=option["id"] as? String {result=try await self.modelMenu(operation:"choose",id:id)};if ProcessInfo.processInfo.arguments.contains("-UITestModelSlider"),let ranges=result["sliders"] as? [[String:Any]],let range=ranges.first,let id=range["id"] as? String,let old=range["value"] as? Int,let max=range["max"] as? Int {let next=old<max ? old+1 : old-1;_ = try await self.modelMenu(operation:"adjust",id:id,value:next);result=try await self.modelMenu(operation:"adjust",id:id,value:old)};if ProcessInfo.processInfo.arguments.contains("-UITestModelFast"),let options=result["options"] as? [[String:Any]],let first=options.first(where:{($0["label"] as? String ?? "").lowercased().range(of:"(fast|standard) mode",options:.regularExpression) != nil}),let id=first["id"] as? String,let label=first["label"] as? String {_ = try await self.modelMenu(operation:"choose",id:id);let changed=try await self.modelMenu(operation:"open",id:nil);guard let changedOptions=changed["options"] as? [[String:Any]],let inverse=changedOptions.first(where:{($0["label"] as? String ?? "").lowercased().range(of:"(fast|standard) mode",options:.regularExpression) != nil&&(($0["selected"] as? Bool != first["selected"] as? Bool)||$0["label"] as? String != label)}),let inverseId=inverse["id"] as? String else {throw NativeError("Fast mode change was not confirmed.")};_ = try await self.modelMenu(operation:"choose",id:inverseId);result=try await self.modelMenu(operation:"open",id:nil);result["fastModeRestored"]=true};if ProcessInfo.processInfo.arguments.contains("-UITestModelFastOff"),let options=result["options"] as? [[String:Any]],let fast=options.first(where:{($0["label"] as? String ?? "").lowercased().range(of:"(fast|standard) mode",options:.regularExpression) != nil}),fast["selected"] as? Bool == true,let id=fast["id"] as? String {_ = try await self.modelMenu(operation:"choose",id:id);result=try await self.modelMenu(operation:"open",id:nil)};result["sliderDebug"]=try? await self.browser.evaluateJavaScript("[...document.querySelectorAll('[role=slider],input[type=range]')].map(n=>({html:n.outerHTML,parent:n.parentElement?.parentElement?.outerHTML.slice(0,10000),rect:n.getBoundingClientRect().toJSON(),hidden:n.closest('[aria-hidden=true]')?.tagName}))");if let folder=FileManager.default.urls(for:.cachesDirectory,in:.userDomainMask).first{try JSONSerialization.data(withJSONObject:result).write(to:folder.appendingPathComponent("ChatGPTModelOptions.json"),options:.atomic)};self.status.text="Model controls ready"}catch{self.status.text="Model controls: "+error.localizedDescription}
+            }
+        }
+        if ProcessInfo.processInfo.arguments.contains("-UITestInspectUpload") {
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for:.seconds(4));guard let self else{return}
+                let script = #"""
+                (()=>{const shape=()=>[...document.querySelectorAll('input[type=file]')].map(n=>({accept:n.accept,multiple:n.multiple,id:n.id,disabled:n.disabled,form:n.closest('form')?.id,visible:!!n.getClientRects().length}));const before=shape();const add=[...document.querySelectorAll('button')].find(n=>n.getClientRects().length&&/^(Add files and more|Attach files|Add photos & files)$/i.test(n.getAttribute('aria-label')||n.innerText||''));add?.click();return JSON.stringify({before,after:shape(),labels:[...document.querySelectorAll('[role=menuitem]')].map(n=>n.innerText)})})()
+                """#
+                if let value=try? await self.browser.evaluateJavaScript(script) as? String,let folder=FileManager.default.urls(for:.cachesDirectory,in:.userDomainMask).first{try? value.write(to:folder.appendingPathComponent("UploadControls.json"),atomically:true,encoding:.utf8)}
             }
         }
         guard ProcessInfo.processInfo.arguments.contains("-UITestInspectChatGPT") else { return }
@@ -1139,6 +1155,54 @@ return {selectedModel:window.__plannerSelectedModel||'',sliders:ranges,summary:(
         box.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'deleteContentBackward'}));}finally{window.__plannerRelayEditing=false}window.__plannerHumanDraft=false;await new Promise(r=>setTimeout(r,300));if(window.__plannerComposerText(box).trim())throw Error('Clearing the draft was not confirmed. Open the session to inspect it.');return true;
         """, arguments: ["expected": expected], in: nil, contentWorld: .page)
     }
+    private static var blobDownloadCapture: String { #"""
+// Capture only a page's public blob/data download anchor, after native confirms
+// an explicit response transfer is active. No cookies or private APIs are read.
+const captured=new WeakSet();
+const capture=anchor=>{
+ if(!anchor||captured.has(anchor)||!anchor.hasAttribute('download')&&! /^(blob:|data:)/i.test(anchor.href))return;
+ const bridge=window.webkit?.messageHandlers?.plannerResponseFile;if(!bridge)return;captured.add(anchor);
+ // Detached anchors do not bubble click events to document, and their blob URL
+ // may be revoked immediately after click. Start its local read before yielding.
+ const href=anchor.href,local=/^(blob:|data:)/i.test(href)?fetch(href).catch(()=>null):null,name=anchor.download||'download';
+ void bridge.postMessage({action:'check'}).then(async state=>{
+  if(!state.active){const unused=await local;void unused?.body?.cancel();return}if(!local){await bridge.postMessage({action:'link',href,name,generation:state.generation});return}const response=await local;if(!response)return;const blob=await response.blob();if(!blob.size||blob.size>25*1024*1024)throw Error('Response file exceeds the transfer limit.');
+  const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=reject;reader.readAsDataURL(blob)});
+  await bridge.postMessage({action:'file',generation:state.generation,name,mime:blob.type||'application/octet-stream',size:blob.size,data});
+ }).catch(()=>{});
+};
+const anchorClick=HTMLAnchorElement.prototype.click;
+HTMLAnchorElement.prototype.click=function(){capture(this);return anchorClick.call(this)};
+document.addEventListener('click',event=>capture(event.target.closest?.('a[href]')),true);
+"""# }
+    fileprivate func captureBlobDownload(_ message:WKScriptMessage,reply:@escaping(Any?,String?)->Void){
+        let host=message.frameInfo.securityOrigin.host
+        guard ["chatgpt.com","cdn.platform.openai.com"].contains(host),let body=message.body as? [String:Any] else{reply(nil,"Unsupported download frame.");return}
+        guard responseDownloadPending else{reply(["active":false],nil);return}
+        if body["action"] as? String == "check"{reply(["active":true,"generation":responseDownloadGeneration?.uuidString ?? ""],nil);return}
+        guard body["generation"] as? String == responseDownloadGeneration?.uuidString else{reply(nil,"This file transfer is no longer active.");return}
+        if body["action"] as? String == "link",let raw=body["href"] as? String,let url=URL(string:raw),url.scheme=="https",let host=url.host,["chatgpt.com","cdn.platform.openai.com"].contains(host)||host.hasSuffix(".oaiusercontent.com")||host.hasSuffix(".openaiusercontent.com")||host.hasSuffix(".blob.core.windows.net") {
+            traceDownload("direct-download",["host":host])
+            let generation=responseDownloadGeneration
+            browser.startDownload(using:URLRequest(url:url)){[weak self] download in
+                guard let self,let generation else{return};self.responseDownloadGenerations[ObjectIdentifier(download)]=generation;download.delegate=self
+            }
+            reply(["ok":true],nil);return
+        }
+        guard body["action"] as? String == "file",let name=body["name"] as? String,let raw=body["data"] as? String,raw.utf8.count<=36*1024*1024,let comma=raw.firstIndex(of:","),let bytes=Data(base64Encoded:String(raw[raw.index(after:comma)...])),!bytes.isEmpty,bytes.count<=25*1024*1024 else{reply(nil,"Invalid response file.");return}
+        let filename=URL(fileURLWithPath:name).lastPathComponent
+        traceDownload("blob-captured",["name":filename,"size":bytes.count])
+        downloadResult=["name":filename,"mime":body["mime"] as? String ?? "application/octet-stream","size":bytes.count,"data":raw]
+        reply(["ok":true],nil)
+    }
+    private func traceDownload(_ stage:String,_ details:[String:Any]=[:]) {
+        #if DEBUG
+        guard ProcessInfo.processInfo.arguments.contains("-UITestSignedRelayDiagnostics") || ProcessInfo.processInfo.arguments.contains("-UITestExportResponse"),let folder=FileManager.default.urls(for:.cachesDirectory,in:.userDomainMask).first else{return}
+        let path=folder.appendingPathComponent("RelayDownloadTrace.json")
+        var events=(try? Data(contentsOf:path)).flatMap{try? JSONSerialization.jsonObject(with:$0) as? [[String:Any]]} ?? []
+        events.append(["stage":stage,"details":details]);if let bytes=try? JSONSerialization.data(withJSONObject:Array(events.suffix(40))){try? bytes.write(to:path,options:.atomic)}
+        #endif
+    }
     func downloadResponse(key: String, providerURL: String? = nil, expectedReply: String? = nil) async throws -> [String: Any] {
         if let target = canonicalConversation(providerURL) {
             guard let saved = UserDefaults.standard.string(forKey: "chatgpt-project:" + account + ":Test"), let project = URL(string: saved), Self.belongsToProject(target, project: project) else { throw NativeError("The response file must belong to this Test conversation.") }
@@ -1164,33 +1228,46 @@ return {selectedModel:window.__plannerSelectedModel||'',sliders:ranges,summary:(
         // matches and this same conversation exposes exactly one attachment.
         if !outputs.contains(where: { $0["key"] as? String == key }), outputs.count == 1, let expectedReply, !expectedReply.isEmpty, state["text"] as? String == expectedReply, let current = outputs.first?["key"] as? String { resolvedKey = current }
         guard browser.url?.host == "chatgpt.com" else { throw NativeError("Load the ChatGPT conversation first.") }
-        downloadResult = nil; downloadFailure = nil
-        responseDownloadPending = true; defer { responseDownloadPending = false }
-        setInteractive(true); defer { setInteractive(false) }
-        _ = try await browser.callAsyncJavaScript("const node=[...document.querySelectorAll('[data-planner-download-id]')].find(n=>n.dataset.plannerDownloadId===key);if(!node)throw Error('The response file is no longer available.');if(node.tagName==='A'&&!node.hasAttribute('download'))node.setAttribute('download','');node.click();return true;", arguments: ["key": resolvedKey], in: nil, contentWorld: .page)
+        traceDownload("start");downloadResult = nil; downloadFailure = nil
+        let automaticWindows = browser.configuration.preferences.javaScriptCanOpenWindowsAutomatically
+        browser.configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
+        responseDownloadGeneration=UUID();responseDownloadPending = true; defer { responseDownloadGeneration=nil;downloadResult=nil;downloadFailure=nil;responseDownloadPending = false; browser.configuration.preferences.javaScriptCanOpenWindowsAutomatically = automaticWindows; responseDownloadPopups.forEach { $0.stopLoading(); $0.removeFromSuperview() }; responseDownloadPopups.removeAll() }
+        setInteractive(true);browser.becomeFirstResponder();defer { setInteractive(false) }
+        browser.callAsyncJavaScript("const node=[...document.querySelectorAll('[data-planner-download-id]')].find(n=>n.dataset.plannerDownloadId===key);if(!node)throw Error('The response file is no longer available.');if(node.tagName==='A'&&!node.hasAttribute('download'))node.setAttribute('download','');node.focus();for(const type of ['pointerdown','pointerup'])node.dispatchEvent(new PointerEvent(type,{bubbles:true,button:0,buttons:type==='pointerdown'?1:0,pointerId:1,isPrimary:true,pointerType:'mouse'}));node.click();return true;", arguments: ["key": resolvedKey], in: nil, in: .page) { [weak self] result in
+            self?.traceDownload("click-completed",["success":(try? result.get()) as? Bool == true])
+        }
+        var viewerDownloadClicked = false
         for _ in 0..<120 {
             try await Task.sleep(for: .milliseconds(500))
             if let result = downloadResult {
-                _ = try? await browser.evaluateJavaScript("[...document.querySelectorAll('button')].find(n=>(n.getAttribute('aria-label')||n.innerText||'').trim()==='Close viewer')?.click()")
+                browser.evaluateJavaScript("[...document.querySelectorAll('button')].find(n=>(n.getAttribute('aria-label')||n.innerText||'').trim()==='Close viewer')?.click()",completionHandler:nil)
                 return result
             }
             if let failure = downloadFailure { throw NativeError(failure) }
+            if !viewerDownloadClicked {
+                viewerDownloadClicked = true
+                browser.evaluateJavaScript("const buttons=[...document.querySelectorAll('button')].filter(n=>n.getClientRects().length);const label=n=>(n.getAttribute('aria-label')||n.innerText||'').trim();const close=buttons.find(n=>label(n)==='Close viewer');const download=close&&buttons.find(n=>label(n)==='Download');if(download){download.click();true}else{false}") { result, _ in
+                    if result as? Bool != true { viewerDownloadClicked = false }
+                }
+            }
         }
         throw NativeError("ChatGPT did not finish this download. Open the session to inspect it.")
     }
-    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) { decisionHandler(navigationAction.shouldPerformDownload ? .download : .allow) }
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) { if responseDownloadPending{traceDownload("navigation-action",["download":navigationAction.shouldPerformDownload,"scheme":navigationAction.request.url?.scheme ?? ""])};decisionHandler(navigationAction.shouldPerformDownload ? .download : .allow) }
     func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
         let attachment = (navigationResponse.response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Disposition")?.lowercased().contains("attachment") == true
         // ChatGPT's file cards can open an inline PDF/Office resource in a
         // new tab rather than an anchor with download. Capture that main-frame
         // resource while an explicit relay download is pending.
         let mime = navigationResponse.response.mimeType?.lowercased() ?? ""
+        if responseDownloadPending{traceDownload("navigation-response",["mime":mime,"main":navigationResponse.isForMainFrame,"status":(navigationResponse.response as? HTTPURLResponse)?.statusCode ?? 0,"host":navigationResponse.response.url?.host ?? "","path":navigationResponse.response.url?.path ?? ""])}
         let inlineFile = responseDownloadPending && navigationResponse.isForMainFrame && !mime.isEmpty && !["text/html", "application/xhtml+xml", "application/json"].contains(mime)
         decisionHandler(attachment || inlineFile || !navigationResponse.canShowMIMEType ? .download : .allow)
     }
-    func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) { download.delegate = self }
-    func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) { download.delegate = self }
+    func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) { if let generation=responseDownloadGeneration{responseDownloadGenerations[ObjectIdentifier(download)]=generation};traceDownload("became-download");download.delegate = self }
+    func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) { if let generation=responseDownloadGeneration{responseDownloadGenerations[ObjectIdentifier(download)]=generation};traceDownload("became-download");download.delegate = self }
     func download(_ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String, completionHandler: @escaping (URL?) -> Void) {
+        traceDownload("destination",["name":suggestedFilename,"mime":response.mimeType ?? ""])
         do {
             guard response.expectedContentLength <= 25 * 1024 * 1024 else { downloadFailure = "Response file exceeds 25 MB."; completionHandler(nil); return }
             let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -1201,8 +1278,10 @@ return {selectedModel:window.__plannerSelectedModel||'',sliders:ranges,summary:(
         } catch { downloadFailure = "Could not save the response file."; completionHandler(nil) }
     }
     func downloadDidFinish(_ download: WKDownload) {
-        documentCommitted = true; webFailure = nil
+        let generation=responseDownloadGenerations.removeValue(forKey:ObjectIdentifier(download))
         guard let url = pendingDownloads.removeValue(forKey: ObjectIdentifier(download)) else { return }
+        guard responseDownloadPending, generation != nil, generation == responseDownloadGeneration else{try? FileManager.default.removeItem(at:url.deletingLastPathComponent());downloadMimes.removeValue(forKey:ObjectIdentifier(download));return}
+        documentCommitted = true; webFailure = nil
         do {
             let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
             guard size <= 25 * 1024 * 1024 else { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()); throw NativeError("Response file exceeds 25 MB.") }
@@ -1213,7 +1292,7 @@ return {selectedModel:window.__plannerSelectedModel||'',sliders:ranges,summary:(
             downloadResult = ["name": url.lastPathComponent,"size": data.count,"mime": mime,"data": "data:" + mime + ";base64," + data.base64EncodedString()]
         } catch { downloadFailure = error.localizedDescription }
     }
-    func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) { if let url = pendingDownloads.removeValue(forKey: ObjectIdentifier(download)) { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }; downloadMimes.removeValue(forKey: ObjectIdentifier(download)); downloadFailure = error.localizedDescription }
+    func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) { if let url = pendingDownloads.removeValue(forKey: ObjectIdentifier(download)) { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }; downloadMimes.removeValue(forKey: ObjectIdentifier(download)); if responseDownloadGenerations.removeValue(forKey:ObjectIdentifier(download)) == responseDownloadGeneration && responseDownloadPending {downloadFailure = error.localizedDescription} }
     private func traceRelay(_ stage: String) {
         #if DEBUG
         guard ProcessInfo.processInfo.arguments.contains("-UITestSignedRelayDiagnostics"), let folder=FileManager.default.urls(for:.cachesDirectory,in:.userDomainMask).first else{return}
@@ -1302,8 +1381,13 @@ return {selectedModel:window.__plannerSelectedModel||'',sliders:ranges,summary:(
             guard total <= 50 * 1024 * 1024 else { throw NativeError("Attach at most 50 MB per message.") }
             traceRelay("upload-start")
             _ = try await browser.callAsyncJavaScript("""
-            let input=document.querySelector('input[type="file"][aria-label="Attach files"]')||[...document.querySelectorAll('input[type="file"]')].find(n=>n.multiple)||document.querySelector('input[type="file"]');
-            if(!input){const add=[...document.querySelectorAll('button')].find(n=>/^(Add files and more|Attach files|Add photos & files)$/i.test(n.getAttribute('aria-label')||n.innerText||''));add?.click();await new Promise(r=>setTimeout(r,300));input=document.querySelector('input[type="file"]');}
+            const chooseInput=()=>{
+              const inputs=[...document.querySelectorAll('input[type="file"]')].filter(n=>!n.disabled&&(files.length===1||n.multiple));
+              const general=n=>!n.accept.trim()||n.accept.trim()==='*/*';
+              return inputs.find(n=>n.multiple&&general(n))||inputs.find(general)||inputs.find(n=>files.every(file=>n.accept.split(',').some(raw=>{const accept=raw.trim().toLowerCase();return accept.startsWith('.')?file.name.toLowerCase().endsWith(accept):accept.endsWith('/*')?file.mime.toLowerCase().startsWith(accept.slice(0,-1)):accept===file.mime.toLowerCase()})));
+            };
+            let input=chooseInput();
+            if(!input){const add=[...document.querySelectorAll('button')].find(n=>/^(Add files and more|Attach files|Add photos & files)$/i.test(n.getAttribute('aria-label')||n.innerText||''));add?.click();await new Promise(r=>setTimeout(r,300));input=chooseInput();}
             if(!input)throw Error('ChatGPT file upload is unavailable in this session. Sign in if the website requests it.');
             const sameName=(actual,name)=>{if(actual===name)return true;const dot=name.lastIndexOf('.'),stem=dot>0?name.slice(0,dot):name,ext=dot>0?name.slice(dot):'';if(!actual.startsWith(stem)||!actual.endsWith(ext))return false;const suffix=actual.slice(stem.length,ext?-ext.length:undefined).trim();return /^[(][0-9]+[)]$/.test(suffix)};
             const attached=file=>[...document.querySelectorAll('button')].some(n=>n.getClientRects().length&&sameName((n.getAttribute('aria-label')||'').replace(/^Remove /,''),file.name));
@@ -1541,6 +1625,12 @@ return {url:urls[0]||null};
         else { webFailure = "ChatGPT's web session stopped. Open the session to check its result before retrying."; status.text = webFailure }
     }
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if responseDownloadPending {
+            let popup = WKWebView(frame:CGRect(x:0,y:0,width:1,height:1),configuration:configuration)
+            popup.navigationDelegate=self;popup.uiDelegate=self;popup.alpha=0.01;view.addSubview(popup);responseDownloadPopups.append(popup)
+            traceDownload("download-popup")
+            return popup
+        }
         // Preserve the conversation and window.opener during Microsoft/NYU login.
         guard navigationAction.targetFrame == nil, presentedViewController == nil else { return nil }
         let popup = PlannerWebsiteSignInPopup(configuration: configuration)
@@ -1554,7 +1644,7 @@ return {url:urls[0]||null};
 }
 
 // Provider-owned login stays in a separate browser with the supplied opener/session.
-// It has no Planner message handler and never reads or exports credential fields.
+// It has no Planner app-control handler and never reads or exports credential fields.
 @MainActor private final class PlannerWebsiteSignInPopup: UIViewController, WKNavigationDelegate, WKUIDelegate {
     let browser: WKWebView
     init(configuration: WKWebViewConfiguration) {
@@ -1578,5 +1668,13 @@ return {url:urls[0]||null};
         let popup = PlannerWebsiteSignInPopup(configuration: configuration); popup.loadViewIfNeeded()
         let navigation = UINavigationController(rootViewController: popup); navigation.modalPresentationStyle = .pageSheet
         present(navigation, animated: true); return popup.browser
+    }
+}
+
+private final class PlannerRelayBlobBridge: NSObject, WKScriptMessageHandlerWithReply {
+    weak var owner: PlannerChatGPTPortal?
+    init(owner:PlannerChatGPTPortal){self.owner=owner}
+    func userContentController(_ userContentController:WKUserContentController,didReceive message:WKScriptMessage,replyHandler:@escaping(Any?,String?)->Void){
+        Task { @MainActor in guard let owner else{replyHandler(nil,"Download session closed.");return};owner.captureBlobDownload(message,reply:replyHandler) }
     }
 }
