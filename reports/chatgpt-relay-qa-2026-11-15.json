@@ -1,0 +1,191 @@
+{
+  "status": "automated_core_passed; real website authentication awaiting account holder",
+  "tested_at_utc": "2026-11-15T09:17:49.820849+00:00",
+  "device": {
+    "environment": "Device Hub, real iPhone simulator",
+    "model": "iPhone 17 Pro",
+    "os": "iOS 26.5",
+    "udid": "89A369DA-6527-450D-B232-C55626656317",
+    "app": "com.arinpace.aiplanner",
+    "native_relay_version": 9,
+    "tested_web_commit": "a425a64"
+  },
+  "live_provider": "Existing signed-in ChatGPT website session in account-scoped iOS WebKit; real production Planner API; same original Main Chat provider conversation throughout.",
+  "live_checks": [
+    {
+      "scenario": "Send a unique reply, relaunch, recall a remembered code, type again across background polling",
+      "status": "passed",
+      "seconds": 69.693,
+      "evidence": "/tmp/relay-live-final-batch.log"
+    },
+    {
+      "scenario": "Force quit during a live response; recover its final answer without another send",
+      "status": "passed",
+      "seconds": 60.02,
+      "evidence": "/tmp/relay-live-final-three.log",
+      "database_verification": "Completed original receipt, exactly one saved request, expected final marker present."
+    },
+    {
+      "scenario": "Background, return, Stop a live stream, retain this exact request's partial response",
+      "status": "passed",
+      "seconds": 38.245,
+      "evidence": "/tmp/relay-live-final-three.log",
+      "database_verification": "Interrupted receipt retained 223 characters; tool authorization cancelled."
+    },
+    {
+      "scenario": "Read actual CSV, PDF, DOCX, XLSX attachment contents",
+      "status": "passed",
+      "evidence": "/tmp/relay-live-files-current.log",
+      "verification": "All four different markers recovered from the authored files; received response later saved without resending."
+    },
+    {
+      "scenario": "Attach CSV, generate an unchanged named copy, download, save, open saved preview and check the actual row",
+      "status": "passed",
+      "seconds": 57.289,
+      "evidence": "/tmp/relay-live-csv-verified-final.log",
+      "verification": "Unique output filename matched; saved preview contained relay,INPUT-7319."
+    },
+    {
+      "scenario": "Retain received text when ChatGPT reports a file download error; save text without resending",
+      "status": "passed",
+      "seconds": 9.703,
+      "evidence": "/tmp/relay-live-provider-error-recovery.log"
+    },
+    {
+      "scenario": "Planner tool discovery and response continuation",
+      "status": "passed",
+      "seconds": 50.411,
+      "evidence": "/tmp/relay-live-final-three.log",
+      "note": "Discovery is read-only and does not create a tool-call receipt."
+    },
+    {
+      "scenario": "Read-only planner_calendar_read, then response continuation",
+      "status": "passed",
+      "seconds": 55.275,
+      "evidence": "/tmp/relay-live-files-tools-final.log",
+      "database_verification": "One recorded planner_calendar_read call; completed request and tool turn."
+    },
+    {
+      "scenario": "Open Brightspace and reach the real website sign-in handoff",
+      "status": "handoff reached; authenticated completion pending account holder",
+      "seconds": 128.869,
+      "evidence": "/tmp/relay-live-site-handoff-final.log",
+      "note": "XCTest skipped the human authentication step. This is not an end-to-end authenticated pass. The original conversation is open in the simulator for private sign-in."
+    }
+  ],
+  "native_fixture_checks": {
+    "status": "passed",
+    "passed": 4,
+    "failed": 0,
+    "evidence": "/tmp/relay-native-fixtures-final.log",
+    "scenarios": [
+      "Long draft selection/deletion using real keyboard input",
+      "Header safe area and modal layout",
+      "Typing and draft preservation across hidden-browser polling",
+      "Original sign-in popup cancel/reopen, fixture typing, window.opener and window.close retain parent conversation"
+    ]
+  },
+  "server_checks": {
+    "status": "passed",
+    "passed": 16,
+    "failed": 0,
+    "skipped": 0,
+    "evidence": "/tmp/relay-server-full-tests.log",
+    "scenarios": [
+      "Owned chat/turn authorization",
+      "Unexpired active request resumption",
+      "No writes during resume verification",
+      "Inactive generated draft verification and manual-draft preservation",
+      "Tool call idempotency and call-ID mismatch rejection",
+      "Reply and file ownership, attempt persistence"
+    ]
+  },
+  "browser_fixture_checks": {
+    "status": "passed",
+    "evidence": [
+      "/tmp/relay-qa-final-fixtures.json",
+      "/tmp/relay-resume-fixture.log",
+      "/tmp/relay-resilience-final.log",
+      "/tmp/relay-output-scope-final.log",
+      "/tmp/relay-receipt-final.log",
+      "/tmp/relay-completion-final.log",
+      "/tmp/relay-blob-fixtures-final.log"
+    ],
+    "scenarios": [
+      "Receipt failure blocks delivery and keeps draft",
+      "Lost submission acknowledgement never auto-resends",
+      "Final-save failure/reload/retry saves existing reply",
+      "Duplicate submit results in one send",
+      "Unicode and multiline drafts survive failures",
+      "Generated stale draft recovery requires exact owned inactive request proof",
+      "Historical/different receipts are not current replies",
+      "Work user nodes outside assistant wrappers are associated safely",
+      "Explicit restore after failed verification never sends a new prompt",
+      "File-only final replies retain stable identifiers",
+      "Uploaded input download controls are excluded from assistant outputs",
+      "Hidden transcript scrolls immediately without animation-frame dependence",
+      "Displayed resource filenames are preserved",
+      "Detached blob anchors survive immediate URL revocation",
+      "Inactive/stale file transfers export nothing",
+      "Sign-in state ignores completed historical cards and exports no fixture password values"
+    ],
+    "legacy_note": "The old site-surface CSS fixture remains in the earlier fixture log; it is not evidence for the current runtime sign-in path. Runtime uses the original provider UI and a native popup, verified separately."
+  },
+  "file_transport_fixtures": {
+    "status": "passed",
+    "formats": [
+      "CSV",
+      "ZIP",
+      "PDF",
+      "PNG",
+      "TXT",
+      "DOCX",
+      "XLSX",
+      "PPTX"
+    ],
+    "evidence": "/tmp/relay-eight-format-matrix.log",
+    "verification": "SHA-256 input, forwarded, returned and saved download bytes match; Save to Planner Files creates the owned attachment. These are controlled fixtures, not eight live model-generation tests."
+  },
+  "fixes": [
+    "Recover only an exactly verified abandoned generated draft; preserve manual drafts",
+    "Handle WebKit collapsed blank paragraphs in restored drafts",
+    "Use a unique receipt when provider UI abbreviates long prompts",
+    "Preserve original secure sign-in UI, popup configuration and opener",
+    "Remove background metadata menus that steal composer focus",
+    "Resume the original owned active request after restart without resending",
+    "Prevent cold-start fallback from replacing a conversation recovery navigation",
+    "Keep the composer disabled while checking an unfinished request",
+    "Allow explicit Restore reply after verification fails",
+    "Select a file input compatible with every attached file",
+    "Support stable attachment IDs, browser/blob/data downloads and stale-generation rejection",
+    "Exclude input attachments from returned files",
+    "Keep the current virtualized transcript mounted using immediate scrolling",
+    "Recognize completed file-only replies",
+    "Preserve resource-card filenames when storage returns an original upload name",
+    "Report file-download failures, retain the received reply and permit text-only recovery"
+  ],
+  "test_harness_corrections": [
+    "Native test-only draft selection avoids stale WebKit accessibility coordinates; letters/deletion still use real UI keyboard events.",
+    "XCTest abort-on-failure cleanup now runs in tearDown because Swift defer may be skipped.",
+    "Generated file checks use the current unique filename, not markers in older replies.",
+    "iOS accessibility labels append region; preview selector accounts for the suffix."
+  ],
+  "safety": {
+    "calendar_writes": 0,
+    "external_messages_sent": 0,
+    "recorded_live_app_tools": {
+      "planner_calendar_read": 1
+    },
+    "original_provider_conversation_unchanged": true,
+    "real_passwords_or_mfa_codes_entered_by_automation": false,
+    "ordinary_drafts_automatically_cleared": false,
+    "remote_vm_or_api_key_added": false,
+    "live_messages": "Harmless QA prompts and authored disposable files added to the existing conversation."
+  },
+  "remaining": [
+    "Account holder must finish the real Brightspace/Microsoft/Duo sign-in, then verify the same request resumes to its final reply.",
+    "Physical microphone/camera behavior, genuine provider quota exhaustion and every third-party website were not exhaustively exercised.",
+    "Live model reads covered four document types and live output covered CSV; other listed formats were verified with byte-preserving fixtures."
+  ],
+  "scope_limit": "A finite regression matrix cannot prove every possible ChatGPT webpage scenario or guarantee parity after future provider UI changes."
+}

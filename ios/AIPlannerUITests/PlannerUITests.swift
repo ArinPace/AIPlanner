@@ -106,7 +106,7 @@ final class PlannerUITests: XCTestCase {
         XCTAssertTrue(fileLink.exists,"Wait for this request's unique saved output, not an older marker in chat history")
         ready()
         fileLink.tap()
-        let preview=web.otherElements.matching(identifier:"File contents").firstMatch
+        let preview=web.otherElements.matching(NSPredicate(format:"label BEGINSWITH %@","File contents")).firstMatch
         XCTAssertTrue(preview.waitForExistence(timeout:30))
         XCTAssertTrue(preview.staticTexts.matching(NSPredicate(format:"label CONTAINS %@","relay,INPUT-7319")).firstMatch.waitForExistence(timeout:30),"The saved output bytes must contain the original CSV row")
         web.buttons["Close file preview"].tap()
@@ -209,7 +209,7 @@ final class PlannerUITests: XCTestCase {
         try XCTSkipIf(backup.contains("\n"),"Preserve an existing multiline draft")
         defer {if input.isEnabled {clearComposer(input);if !backup.isEmpty {typeDraft(backup,into:input)}}}
         let marker="TOOLS-"+String(UUID().uuidString.prefix(6));clearComposer(input)
-        input.typeText("Relay check: invoke only the read-only relay_list_tools app tool exactly once. Do not invoke any other tools, create files, contact connected apps, or change Planner data. After its result arrives, reply with exactly \(marker).")
+        input.typeText("Relay check: invoke the read-only planner_calendar_read app tool exactly once with query relay-qa-readonly-\(marker) and limit 1. Use the app tool-request protocol and wait for its returned result before answering. Do not create files, contact connected apps, or change Planner data. After the read result arrives, reply with exactly \(marker).")
         let send=web.buttons["Send message"];expectation(for:NSPredicate(format:"enabled == true"),evaluatedWith:send);waitForExpectations(timeout:30);liveQARequestMayBeActive=true;send.tap()
         let final=web.otherElements.matching(identifier:"Assistant message").staticTexts[marker].firstMatch
         XCTAssertTrue(final.waitForExistence(timeout:180))

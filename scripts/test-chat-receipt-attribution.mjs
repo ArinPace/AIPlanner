@@ -18,5 +18,10 @@ try{
  assert.equal((await page.evaluate(snapshot)).attributed,true,'Work can mount the user request outside its assistant turn wrapper')
  await page.locator('[data-content-search-unit-key]').evaluate(n=>n.textContent='[Planner relay receipt: B1111111-1111-4111-8111-111111111111] Older question')
  assert.equal((await page.evaluate(snapshot)).attributed,false)
+ const composer=source.split('// BEGIN_CHAT_COMPOSER_READER')[1].split('#"""\n')[1].split('"""#')[0]
+ await page.evaluate(composer)
+ await page.setContent('<div id="transcript" style="height:100px;overflow-y:auto;scroll-behavior:smooth"><div style="height:3000px"></div><div data-turn-key="last"><p data-content-search-unit-key="last:user">Request</p></div></div>')
+ await page.evaluate(()=>window.__plannerScrollLatest())
+ assert.equal(await page.locator('#transcript').evaluate(n=>n.scrollTop),await page.locator('#transcript').evaluate(n=>n.scrollHeight-n.clientHeight),'Background transcript scrolling must not wait for animation frames')
  console.log('Abbreviated current receipt accepted; different receipts and unrelated historical prompts rejected.')
 }finally{await browser.close()}

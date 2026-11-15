@@ -907,6 +907,12 @@ window.__plannerSignInState=()=>{
  const approval=[...document.querySelectorAll('[role="dialog"],[role="alertdialog"]')].filter(active).some(n=>/website|browser|access to|visit site/i.test(n.innerText)&&[...n.querySelectorAll('button')].some(b=>active(b)&&/^(Allow|Approve|Continue)$/i.test(label(b))));
  return {secureForm,approval,interaction:secureForm||approval};
 };
+window.__plannerScrollLatest=()=>{
+ const jump=node=>{const previous=node.style.scrollBehavior;node.style.scrollBehavior='auto';node.scrollTop=node.scrollHeight;node.style.scrollBehavior=previous};
+ const seed=[...document.querySelectorAll('[data-turn-key],[data-message-author-role="user"],[data-content-search-unit-key$=":user"]')].at(-1);
+ for(let node=seed?.parentElement;node;node=node.parentElement){if(node.scrollHeight>node.clientHeight+1&&/auto|scroll/.test(getComputedStyle(node).overflowY))jump(node)}
+ const root=document.scrollingElement;if(root&&root.scrollHeight>root.clientHeight+1)jump(root);
+};
 window.__plannerHumanDraft=false;
 for(const type of ['input','keydown','pointerdown'])document.addEventListener(type,event=>{const box=window.__plannerComposer();if(event.isTrusted&&!window.__plannerRelayEditing&&box?.contains(event.target))window.__plannerHumanDraft=true},true);
 """# }
@@ -1097,10 +1103,11 @@ return {selectedModel:window.__plannerSelectedModel||'',sliders:ranges,summary:(
     const label=n=>(n.getAttribute('aria-label')||n.innerText||'').trim();
     const {secureForm=false,interaction=false}=window.__plannerSignInState?.()||{};
     // Keep the submitted turn mounted in ChatGPT's virtualized transcript.
-    if(window.__plannerPendingPrompt)buttons.find(n=>/^Scroll to bottom$/i.test(label(n)))?.click();
+    if(window.__plannerPendingPrompt&&!interaction){buttons.find(n=>/^Scroll to bottom$/i.test(label(n)))?.click();window.__plannerScrollLatest?.()}
     const guest=!secureForm&&buttons.some(n=>/^(Log in|Sign in)$/i.test(label(n)));
     const running=buttons.some(n=>/^(Stop|Stop generating|Stop streaming|Pause|Pause task|Stop task)$/i.test(label(n))||n.dataset.testid==='stop-button');
     let raw=[...document.querySelectorAll('[data-message-author-role="assistant"],[data-markdown-text-style="assistant-message"]')];
+    raw.push(...[...document.querySelectorAll('[data-local-conversation-final-assistant="true"]')].filter(n=>!n.querySelector('[data-message-author-role="assistant"],[data-markdown-text-style="assistant-message"]')&&n.querySelector('a[download],a[href^="sandbox:"],button[aria-label^="Download "],button[aria-label="Save image"]')));
     if(!raw.length)raw=[...document.querySelectorAll('button[aria-label="Copy response"]')].map(button=>button.closest('li')).filter(Boolean);
     const replies=raw.filter(n=>!raw.some(other=>other!==n&&other.contains(n)));
     const last=replies.at(-1);const workTurn=last?.closest('[data-turn-key]');let turn=last?.closest('[data-testid^="conversation-turn"],article,li')||last;
@@ -1129,9 +1136,10 @@ return {selectedModel:window.__plannerSelectedModel||'',sliders:ranges,summary:(
       const nl=String.fromCharCode(10);target.replaceWith(document.createTextNode(nl+(marked?text:'PLANNER_TOOL_REQUEST'+nl+text+nl+'END_PLANNER_TOOL_REQUEST')+nl));
     });
     const response=(clean?(clean.innerText||clean.textContent||'').trim():'').replace(/(PLANNER_TOOL_REQUEST\\s*)(?:json|planner-tools)\\s*(?=[{])/i,'$1');
+    const messageNode=last?.closest('[data-chatgpt-selection-message-id]')||last?.querySelector('[data-chatgpt-selection-message-id]');
     const outputScope=workFinal||turn;
-    const outputs=outputScope?[...outputScope.querySelectorAll('a[download],a[href^="sandbox:"],a[href*="/backend-api/files/"],a[href*="/backend-api/estuary/content"],button[aria-label^="Download "],button[aria-label="Save image"],[data-file-reference="true"][role="button"][aria-label^="Download "]')].map((node,index)=>{node.dataset.plannerDownloadId ||= (last?.closest('[data-chatgpt-selection-message-id]')?.getAttribute('data-chatgpt-selection-message-id')||last?.getAttribute('data-message-id')||turn?.id||crypto.randomUUID())+':'+index;return {key:node.dataset.plannerDownloadId,name:(node.getAttribute('download')||node.innerText||node.getAttribute('aria-label')||'Download file').trim().slice(0,240)}}):[];
-    const replyKey=last?.closest('[data-chatgpt-selection-message-id]')?.getAttribute('data-chatgpt-selection-message-id')||last?.getAttribute('data-message-id')||last?.closest('[data-message-id]')?.getAttribute('data-message-id')||turn?.id||turn?.getAttribute('data-testid')||'';
+    const outputs=outputScope?[...outputScope.querySelectorAll('a[download],a[href^="sandbox:"],a[href*="/backend-api/files/"],a[href*="/backend-api/estuary/content"],button[aria-label^="Download "],button[aria-label="Save image"],[data-file-reference="true"][role="button"][aria-label^="Download "]')].map((node,index)=>{node.dataset.plannerDownloadId ||= (messageNode?.getAttribute('data-chatgpt-selection-message-id')||last?.getAttribute('data-message-id')||turn?.id||crypto.randomUUID())+':'+index;let cardName='';if(node.getAttribute('aria-label')==='Download file'){for(let parent=node.parentElement,depth=0;parent&&depth<6;parent=parent.parentElement,depth++){const preview=[...parent.querySelectorAll('button[aria-label]')].find(n=>/^Open preview of /i.test(n.getAttribute('aria-label')));if(preview){cardName=preview.getAttribute('aria-label').replace(/^Open preview of /i,'');break}}}const name=(node.getAttribute('download')||cardName||node.innerText||node.getAttribute('aria-label')||'Download file').trim();return {key:node.dataset.plannerDownloadId,name:(cardName?name:name.replace(/^Download (?=.+[.][A-Za-z0-9]{1,12}$)/i,'')).slice(0,240)}}):[];
+    const replyKey=messageNode?.getAttribute('data-chatgpt-selection-message-id')||last?.getAttribute('data-message-id')||last?.closest('[data-message-id]')?.getAttribute('data-message-id')||turn?.id||turn?.getAttribute('data-testid')||'';
     return {attributed,files:outputs,ready:!!box,needsLogin:(!box&&guest)||(!secureForm&&[...document.querySelectorAll('input[type="password"]')].some(n=>window.__plannerSignInCurrent?.(n))),guest,interaction,running,count:replies.length,replyKey,text:response,final:workTurn?!!workFinal&&!!workTurn.querySelector('[data-talvt-turn-state="complete"]'):!!turn?.querySelector(completionSelector),url:location.href};})()
     """ }
     private func snapshot() async throws -> [String: Any] {
@@ -1242,7 +1250,7 @@ document.addEventListener('click',event=>capture(event.target.closest?.('a[href]
         }
         var state: [String: Any] = [:]
         for _ in 0..<60 {
-            _ = try? await browser.evaluateJavaScript("[...document.querySelectorAll('button')].find(n=>(n.getAttribute('aria-label')||n.innerText||'').trim()==='Scroll to bottom')?.click()")
+            _ = try? await browser.evaluateJavaScript("[...document.querySelectorAll('button')].find(n=>(n.getAttribute('aria-label')||n.innerText||'').trim()==='Scroll to bottom')?.click();window.__plannerScrollLatest?.()")
             state = try await snapshot()
             if !(state["files"] as? [[String: Any]] ?? []).isEmpty { break }
             try await Task.sleep(for: .milliseconds(500))
@@ -1252,6 +1260,7 @@ document.addEventListener('click',event=>capture(event.target.closest?.('a[href]
         // Upgrade a pre-stable-key recovery only when its exact response text
         // matches and this same conversation exposes exactly one attachment.
         if !outputs.contains(where: { $0["key"] as? String == key }), outputs.count == 1, let expectedReply, !expectedReply.isEmpty, state["text"] as? String == expectedReply, let current = outputs.first?["key"] as? String { resolvedKey = current }
+        let displayName=outputs.first(where:{$0["key"] as? String == resolvedKey})?["name"] as? String
         guard browser.url?.host == "chatgpt.com" else { throw NativeError("Load the ChatGPT conversation first.") }
         traceDownload("start");downloadResult = nil; downloadFailure = nil
         let downloadErrorScript="[...document.querySelectorAll('[role=alert],[role=status]')].some(n=>n.getClientRects().length&&/Failed to download file\\. Please try again later\\./i.test(n.textContent||''))"
@@ -1264,12 +1273,12 @@ document.addEventListener('click',event=>capture(event.target.closest?.('a[href]
             self?.traceDownload("click-completed",["success":(try? result.get()) as? Bool == true])
         }
         var viewerDownloadClicked = false
-        for attempt in 0..<120 {
+        for _ in 0..<120 {
             try await Task.sleep(for: .milliseconds(500))
-            if attempt == 5, downloadResult == nil {
-                _ = try? await browser.callAsyncJavaScript("const node=[...document.querySelectorAll('[data-planner-download-id]')].find(n=>n.dataset.plannerDownloadId===key);if((node?.getAttribute('aria-label')||'')!=='Download file')return false;for(let p=node.parentElement,depth=0;p&&depth<6;p=p.parentElement,depth++){const open=[...p.querySelectorAll('button')].find(n=>/^Open preview of /i.test(n.getAttribute('aria-label')||''));if(open){open.click();return true}}return false;",arguments:["key":resolvedKey],in:nil,contentWorld:.page)
-            }
-            if let result = downloadResult {
+            if var result = downloadResult {
+                // Work resource cards can name an unchanged copy differently
+                // from its storage response's original upload filename.
+                if let name=displayName,name.count<=240,name.contains("."),!name.contains("\\"),!name.utf8.contains(0),URL(fileURLWithPath:name).lastPathComponent==name {result["name"]=name}
                 browser.evaluateJavaScript("[...document.querySelectorAll('button')].find(n=>(n.getAttribute('aria-label')||n.innerText||'').trim()==='Close viewer')?.click()",completionHandler:nil)
                 return result
             }
@@ -1560,6 +1569,7 @@ document.addEventListener('click',event=>capture(event.target.closest?.('a[href]
         if text != lastText { lastText = text; changedAt = Date() }
         if (state["guest"] as? Bool == true || canonicalConversation(state["url"] as? String) != nil), newReply, (!text.isEmpty || !(state["files"] as? [[String: Any]] ?? []).isEmpty), state["running"] as? Bool != true, (state["final"] as? Bool == true || (state["guest"] as? Bool == true && sawRunning)), Date().timeIntervalSince(changedAt) >= 3 {
             state["phase"] = "completed"; pendingChat = nil
+            _ = try? await browser.evaluateJavaScript("window.__plannerPendingPrompt=\"\"")
             if let fingerprint=submittedDraftFingerprint, let value=UserDefaults.standard.string(forKey:"chatgpt-project:"+account+":Test"), let projectURL=URL(string:value), let current=canonicalConversation(state["url"] as? String), Self.belongsToProject(current, project: projectURL) {
                 let key="chatgpt-confirmed-project-drafts:"+account+":Test"
                 var values=UserDefaults.standard.stringArray(forKey:key) ?? [];values.removeAll{$0==fingerprint};values.append(fingerprint);UserDefaults.standard.set(Array(values.suffix(20)),forKey:key)
