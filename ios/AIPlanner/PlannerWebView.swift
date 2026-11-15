@@ -673,7 +673,7 @@ struct PlannerWebView: UIViewRepresentable {
           }
         }
         html.setAttribute('data-planner-site-signin','');
-        if(!root||root===document.body){current=null;html.setAttribute('data-planner-secure-waiting','');return {found:false,domain:targetDomain}}
+        if(!root||root===document.body){current=null;html.removeAttribute('data-planner-site-signin');html.removeAttribute('data-planner-secure-waiting');return {found:false,domain:targetDomain}}
         root.setAttribute(attr+'root','');let child=root;
         for(let parent=root.parentElement;parent;child=parent,parent=parent.parentElement){
           for(const sibling of parent.children)if(sibling!==child&&!['SCRIPT','STYLE','LINK'].includes(sibling.tagName))sibling.setAttribute(attr+'hidden','');

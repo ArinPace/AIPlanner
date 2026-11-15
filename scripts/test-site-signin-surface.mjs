@@ -26,7 +26,7 @@ try{
  await page.evaluate(()=>window.__plannerSiteSignIn.restore())
  await page.setContent('<main><h1>ChatGPT</h1><p>No sign-in available</p></main>')
  assert.equal((await page.evaluate(script)).found,false)
- assert.equal(await page.getByRole('heading',{name:'ChatGPT'}).isVisible(),false)
+ assert.equal(await page.getByRole('heading',{name:'ChatGPT'}).isVisible(),true)
  await page.evaluate(()=>window.__plannerSiteSignIn.restore())
  const composer=swift.split('// BEGIN_CHAT_COMPOSER_READER')[1].split('#"""\n')[1].split('"""#')[0]
  await page.evaluate(composer)
