@@ -27,5 +27,46 @@ try{
  await page.setContent('<main><h1>ChatGPT</h1><p>No sign-in available</p></main>')
  assert.equal((await page.evaluate(script)).found,false)
  assert.equal(await page.getByRole('heading',{name:'ChatGPT'}).isVisible(),false)
- console.log('Secure surface preserves original form/submit handlers, hides chat chrome, fits phone width, follows approval changes, restores layout and exports no credential values. DOM fixtures only.')
+ await page.evaluate(()=>window.__plannerSiteSignIn.restore())
+ const composer=swift.split('// BEGIN_CHAT_COMPOSER_READER')[1].split('#"""\n')[1].split('"""#')[0]
+ await page.evaluate(composer)
+ for(const width of [320,390,430]){
+  await page.setViewportSize({width,height:844})
+  await page.setContent(`<style>body{margin:0;font:16px system-ui}#host{position:fixed;left:50%;top:75%;width:640px;transform:translate(-50%,-50%)}#card{width:512px;padding:24px;border:1px solid gray}input{width:420px}button{white-space:nowrap;min-width:110px}</style><header id="chrome">ChatGPT</header><div id="react"><article id="history">Private conversation</article><div id="host"><section id="card"><p>https://login.microsoftonline.com</p><h2>Sign in to login.microsoftonline.com</h2><form><label>Password<input id="secret" aria-label="Fixture password" type="password"></label><p id="error" role="alert"></p><div style="display:flex;gap:12px;justify-content:flex-end"><button type="button" id="sso">Other sign-in options</button><button type="submit">Sign in</button></div></form></section></div><footer id="chat-compose"><textarea></textarea></footer></div>`)
+  await page.evaluate(()=>{
+   const input=document.querySelector('#secret'),value=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');window.secretReads=0;window.monitorSecret=true
+   Object.defineProperty(input,'value',{get(){if(window.monitorSecret)window.secretReads++;return value.get.call(this)},set(v){value.set.call(this,v)}})
+   window.originalParent=input.closest('form').parentElement;window.originalForm=input.closest('form');window.delegatedSubmits=0
+   document.querySelector('#react').addEventListener('submit',e=>{e.preventDefault();window.delegatedSubmits++;if(input.value!=='fixture-only')document.querySelector('#error').textContent='Try again';else document.querySelector('#error').textContent='Accepted'})
+   document.querySelector('#sso').onclick=()=>{const popup=window.open('about:blank','fixture-sso');popup.document.write('<h1>SSO fixture</h1><button onclick="opener.document.getElementById(\'error\').textContent=\'SSO returned\';window.close()">Return to sign-in</button>')}
+  })
+  const isolated=await page.evaluate(script);assert.equal(isolated.domain,'login.microsoftonline.com');assert.deepEqual(Object.keys(isolated).sort(),['domain','found'])
+  assert.equal(await page.evaluate(()=>window.secretReads),0)
+  assert(await page.evaluate(()=>document.querySelector('form')===window.originalForm&&window.originalForm.parentElement===window.originalParent))
+  for(const locator of [page.locator('#card'),page.getByLabel('Fixture password'),page.getByRole('button',{name:'Sign in',exact:true}),page.getByRole('button',{name:'Other sign-in options',exact:true})]){
+   const rect=await locator.boundingBox();assert(rect.x>=0&&rect.x+rect.width<=width+1,`${width}px: all form controls must fit`)
+  }
+  assert.equal(await page.locator('#chrome').isVisible(),false);assert.equal(await page.locator('#history').isVisible(),false);assert.equal(await page.locator('#chat-compose').isVisible(),false)
+  await page.evaluate(()=>window.monitorSecret=false)
+  await page.getByLabel('Fixture password').fill('fixture-only')
+  await page.getByLabel('Fixture password').focus()
+  await page.evaluate(()=>{window.monitorSecret=true;window.__plannerSiteSignIn.refresh()})
+  assert.equal(await page.evaluate(()=>window.secretReads),0);assert(await page.getByLabel('Fixture password').evaluate(n=>document.activeElement===n))
+  await page.evaluate(()=>window.monitorSecret=false)
+  await page.getByRole('button',{name:'Sign in',exact:true}).click();assert.equal(await page.evaluate(()=>window.delegatedSubmits),1)
+  await page.setViewportSize({width,height:340})
+  await page.getByRole('button',{name:'Other sign-in options',exact:true}).scrollIntoViewIfNeeded()
+  const popupEvent=page.waitForEvent('popup');await page.getByRole('button',{name:'Other sign-in options',exact:true}).click();const popup=await popupEvent
+  assert(await popup.evaluate(()=>Boolean(window.opener)));await popup.getByRole('button',{name:'Return to sign-in'}).click();await page.getByText('SSO returned',{exact:true}).waitFor()
+  await page.evaluate(()=>{document.querySelector('#card').innerHTML='<form><h2>Verify your identity</h2><input autocomplete="one-time-code" aria-label="Fixture code"><button>Verify</button></form>'})
+  await page.getByLabel('Fixture code').waitFor();assert.equal((await page.evaluate(()=>window.__plannerSiteSignIn.refresh())).domain,'login.microsoftonline.com')
+  await page.evaluate(()=>{const modal=document.createElement('section');modal.setAttribute('role','dialog');modal.style.cssText='position:fixed;width:600px;left:-100px;top:500px;transform:translateX(-40%)';modal.innerHTML='<h2>Allow browser access to this website?</h2><button>Allow</button>';document.body.append(modal)})
+  await page.getByRole('button',{name:'Allow',exact:true}).waitFor();assert.equal(await page.locator('#card').isVisible(),false)
+  const consent=await page.getByRole('dialog').boundingBox();assert(consent.x>=0&&consent.x+consent.width<=width+1)
+  await page.evaluate(()=>window.__plannerSiteSignIn.restore());assert(await page.locator('#history').isVisible());assert.equal(await page.locator('[data-planner-secure-root],[data-planner-secure-path],[data-planner-secure-fit]').count(),0)
+ }
+ await page.setContent('<main><article data-turn-key="old" data-talvt-turn-state="complete"><form><h2>Sign in to old.example.com</h2><input type="password"><button>Sign in</button></form></article><article data-turn-key="new"><div data-message-author-role="assistant">A newer reply</div></article></main>')
+ assert.equal((await page.evaluate(script)).found,false,'Completed historical forms must not become a login sheet')
+ await page.evaluate(()=>window.__plannerSiteSignIn.restore())
+ console.log('Focused Planner sign-in: responsive fixed/translated panels, keyboard-size viewport, original delegated submit handlers, popup/opener return, MFA and replacement consent dialogs, cancel/restore, historical-form rejection, and zero password reads passed.')
 }finally{await browser.close()}

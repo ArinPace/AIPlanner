@@ -224,7 +224,7 @@ final class PlannerUITests: XCTestCase {
         let input=web.textViews["Message ChatGPT"];XCTAssertTrue(input.waitForExistence(timeout:15));clearComposer(input)
         input.typeText("Relay check: open https://brightspace.nyu.edu/ in your browser and check only whether I am signed in. If already signed in, reply with exactly SITE-READY. If credentials or Duo are required, show the secure sign-in interface and wait for me there. Do not read course content or change Planner data.")
         let send=web.buttons["Send message"];expectation(for:NSPredicate(format:"enabled == true"),evaluatedWith:send);waitForExpectations(timeout:30);liveQARequestMayBeActive=true;send.tap()
-        let portal=app.webViews["chatGPTPortalWebView"],ready=web.staticTexts["SITE-READY"].firstMatch
+        let portal=app.webViews["websiteSignInWebView"],ready=web.staticTexts["SITE-READY"].firstMatch
         let result=XCTNSPredicateExpectation(predicate:NSPredicate{_,_ in portal.exists || ready.exists || input.isEnabled},object:app)
         XCTAssertEqual(XCTWaiter.wait(for:[result],timeout:180),.completed)
         if portal.exists {
@@ -232,6 +232,50 @@ final class PlannerUITests: XCTestCase {
             throw XCTSkip("The live secure website handoff opened. The account holder must complete Microsoft/Duo privately before this test can finish.")
         }
         XCTAssertTrue(ready.exists,"The site check must finish or expose a genuine secure sign-in handoff")
+    }
+    func testWebsiteSignInFitsPlannerAndKeepsOriginalFormWorking() {
+        let app=XCUIApplication()
+        app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"]="http://127.0.0.1:5174"
+        app.launchArguments=["-UITestFixture","-UITestSignedIn","-PlannerOpenChatGPT","-PlannerOpenSiteSignIn","-UITestWebsiteSignInSurface"]
+        app.launch()
+        let portal=app.webViews["websiteSignInWebView"],password=portal.secureTextFields["Fixture password"]
+        XCTAssertTrue(password.waitForExistence(timeout:30))
+        XCTAssertTrue(app.navigationBars["Connect website"].exists)
+        XCTAssertFalse(portal.staticTexts["ChatGPT conversation fixture"].exists)
+        XCTAssertFalse(portal.staticTexts["Private conversation must stay hidden"].exists)
+        for element in [password,portal.textFields["Fixture account"],portal.buttons["Sign in"],portal.buttons["Other sign-in options"]] {
+            XCTAssertGreaterThanOrEqual(element.frame.minX,portal.frame.minX+8)
+            XCTAssertLessThanOrEqual(element.frame.maxX,portal.frame.maxX-8)
+        }
+        portal.buttons["Other sign-in options"].coordinate(withNormalizedOffset:CGVector(dx:0.5,dy:0.5)).tap()
+        let popup=app.webViews["websiteSignInPopupWebView"]
+        XCTAssertTrue(popup.staticTexts["SSO fixture popup"].waitForExistence(timeout:10))
+        app.navigationBars.buttons["Back"].tap()
+        XCTAssertTrue(password.waitForExistence(timeout:10))
+        password.coordinate(withNormalizedOffset:CGVector(dx:0.5,dy:0.5)).tap();password.typeText("wrong\n")
+        XCTAssertTrue(portal.staticTexts["Try the fixture password"].waitForExistence(timeout:10),"The original submit and validation handlers must run")
+        password.coordinate(withNormalizedOffset:CGVector(dx:0.5,dy:0.5)).tap();password.typeText(String(repeating:XCUIKeyboardKey.delete.rawValue,count:5)+"fixture-only\n")
+        let returned=XCTNSPredicateExpectation(predicate:NSPredicate{_,_ in !app.navigationBars["Connect website"].exists},object:app)
+        XCTAssertEqual(XCTWaiter.wait(for:[returned],timeout:15),.completed,"Successful sign-in returns to Planner automatically")
+        let web=app.webViews["plannerWebView"],open=web.descendants(matching:.any).matching(identifier:"Open Main Chat").firstMatch
+        XCTAssertTrue(open.waitForExistence(timeout:15));open.tap()
+        web.buttons["ChatGPT session"].tap()
+        let original=app.webViews["chatGPTPortalWebView"]
+        XCTAssertTrue(original.staticTexts["Connected successfully"].waitForExistence(timeout:10))
+        XCTAssertTrue(original.staticTexts["ChatGPT conversation fixture"].exists,"Returning must retain and restore the original document")
+    }
+    func testWebsiteSignInCancelRestoresOriginalConversation() {
+        let app=XCUIApplication()
+        app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"]="http://127.0.0.1:5174"
+        app.launchArguments=["-UITestFixture","-UITestSignedIn","-PlannerOpenChatGPT","-PlannerOpenSiteSignIn","-UITestWebsiteSignInSurface"]
+        app.launch()
+        XCTAssertTrue(app.webViews["websiteSignInWebView"].secureTextFields["Fixture password"].waitForExistence(timeout:30))
+        app.navigationBars.buttons["Cancel"].tap()
+        let web=app.webViews["plannerWebView"],open=web.descendants(matching:.any).matching(identifier:"Open Main Chat").firstMatch
+        XCTAssertTrue(open.waitForExistence(timeout:15));open.tap();web.buttons["ChatGPT session"].tap()
+        let original=app.webViews["chatGPTPortalWebView"]
+        XCTAssertTrue(original.staticTexts["ChatGPT conversation fixture"].waitForExistence(timeout:10))
+        XCTAssertTrue(original.secureTextFields["Fixture password"].exists)
     }
     func testWebsiteSignInPopupPreservesOpenerAndConversation() {
         let app = XCUIApplication()
@@ -243,7 +287,7 @@ final class PlannerUITests: XCTestCase {
         portal.buttons["Open sign-in fixture"].tap()
         let popup = app.webViews["websiteSignInPopupWebView"]
         XCTAssertTrue(popup.staticTexts["Microsoft sign-in fixture"].waitForExistence(timeout: 15))
-        app.navigationBars.buttons["Back to ChatGPT"].tap()
+        app.navigationBars.buttons["Back"].tap()
         XCTAssertTrue(portal.staticTexts["Original conversation QA"].waitForExistence(timeout: 10))
         XCTAssertFalse(popup.exists)
         portal.buttons["Open sign-in fixture"].tap()

@@ -592,73 +592,136 @@ struct PlannerWebView: UIViewRepresentable {
     var browser: WKWebView!
     let status = UILabel()
     private var siteSignInMode = false
+    private var siteSignInSurfaceActive = false
     // BEGIN_SITE_SIGNIN_SURFACE
     static let siteSignInSurface = #"""
     (()=>{
       if(window.__plannerSiteSignIn)return window.__plannerSiteSignIn.refresh();
-      const attr='data-planner-secure-',html=document.documentElement;
-      const style=document.createElement('style');style.textContent=`
-        html[data-planner-site-signin] body{display:block!important;overflow:auto!important;min-height:100vh!important}
+      const html=document.documentElement,attr='data-planner-secure-';
+      const style=document.createElement('style');
+      style.textContent=`
+        html[data-planner-site-signin]{width:100%!important;max-width:100%!important;height:auto!important;min-height:100%!important;overflow-x:hidden!important;overflow-y:auto!important}
+        html[data-planner-site-signin] body{display:block!important;position:static!important;width:100%!important;max-width:100%!important;height:auto!important;min-height:100%!important;margin:0!important;padding:16px!important;overflow:visible!important;box-sizing:border-box!important}
         html[data-planner-site-signin][data-planner-secure-waiting] body{visibility:hidden!important}
-        [data-planner-secure-hidden]{display:none!important}
-        [data-planner-secure-path]{display:contents!important}
-        [data-planner-secure-root]{display:block!important;visibility:visible!important;position:relative!important;transform:none!important;width:calc(100% - 32px)!important;max-width:640px!important;min-width:0!important;margin:16px auto!important;padding:0!important;box-sizing:border-box!important}
-        [data-planner-secure-root]>div{width:100%!important;max-width:100%!important;min-width:0!important;box-sizing:border-box!important}
-        [data-planner-secure-root] input{font-size:16px!important}
-        [data-planner-secure-root] button{white-space:normal!important;height:auto!important;min-height:44px!important;max-width:100%!important;overflow-wrap:anywhere!important}
-        [data-planner-secure-root] button span{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;min-width:0!important}
-      `;document.head.append(style);
-      const clear=()=>document.querySelectorAll('[data-planner-secure-hidden],[data-planner-secure-path],[data-planner-secure-root]').forEach(n=>['hidden','path','root'].forEach(k=>n.removeAttribute(attr+k)));
-      const domain=root=>(root.innerText.match(/sign in to\s+([a-z0-9.-]+\.[a-z]{2,})/i)||[])[1]||'';
-      let current=null;
-      const refresh=()=>{
-        if(current?.isConnected&&current.getClientRects().length&&(window.__plannerSignInCurrent?.(current)??true))return {found:true,domain:domain(current)};
-        clear();html.setAttribute('data-planner-site-signin','');html.setAttribute('data-planner-secure-waiting','');
-        const visible=n=>!!n.getClientRects().length&&(window.__plannerSignInCurrent?.(n)??true),label=n=>(n.getAttribute('aria-label')||n.innerText||n.textContent||'').trim();
-        let root=[...document.querySelectorAll('form')].find(n=>visible(n)&&(n.querySelector('input[type=password]')||/sign in to [a-z0-9.-]+[.][a-z]{2,}/i.test(n.textContent)));
-        if(!root)root=[...document.querySelectorAll('[role=dialog],[role=alertdialog]')].find(n=>visible(n)&&/sign in|website|browser|access to|visit site/i.test(n.textContent)&&[...n.querySelectorAll('button')].some(b=>/^(Allow|Approve|Continue|Take over to sign in|Sign in on web page|Return control|I.m done)$/i.test(label(b))));
-        if(!root){const button=[...document.querySelectorAll('button')].find(n=>visible(n)&&/^(Take over to sign in|Sign in on web page|Return control|I.m done|Use saved account|Other sign-in options)$/i.test(label(n)));if(button){
-          root=button.closest('section,[role=region]');
-          if(!root){for(let node=button.parentElement;node&&node!==document.body;node=node.parentElement){if(node.querySelector('input[type=password]')||/Use this saved account\?/.test(node.textContent)){root=node;break}}}
-          root ||= button.parentElement;
-        }}
-        if(!root||root===document.body){current=null;return {found:false}}
-        root.setAttribute(attr+'root','');let child=root;
-        for(let parent=root.parentElement;parent;child=parent,parent=parent.parentElement){for(const sibling of parent.children)if(sibling!==child&&!['SCRIPT','STYLE','LINK'].includes(sibling.tagName))sibling.setAttribute(attr+'hidden','');if(parent===document.body)break;parent.setAttribute(attr+'path','');}
-        current=root;html.removeAttribute('data-planner-secure-waiting');return {found:true,domain:domain(root)};
+        html[data-planner-site-signin] [data-planner-secure-hidden]{display:none!important}
+        html[data-planner-site-signin] [data-planner-secure-path]{display:block!important;position:static!important;inset:auto!important;transform:none!important;translate:none!important;scale:none!important;rotate:none!important;width:100%!important;min-width:0!important;max-width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;margin:0!important;padding:0!important;overflow:visible!important;contain:none!important;content-visibility:visible!important;visibility:visible!important;opacity:1!important;box-shadow:none!important;border:0!important;background:none!important;box-sizing:border-box!important}
+        html[data-planner-site-signin] [data-planner-secure-root]{display:block!important;position:relative!important;inset:auto!important;transform:none!important;translate:none!important;scale:none!important;rotate:none!important;width:100%!important;min-width:0!important;max-width:520px!important;height:auto!important;min-height:0!important;max-height:none!important;margin:0 auto!important;overflow:visible!important;visibility:visible!important;opacity:1!important;box-sizing:border-box!important;overflow-wrap:anywhere!important}
+        html[data-planner-site-signin] [data-planner-secure-root]>div,
+        html[data-planner-site-signin] [data-planner-secure-root] form{width:100%!important;min-width:0!important;max-width:100%!important;box-sizing:border-box!important}
+        html[data-planner-site-signin] [data-planner-secure-fit]{position:relative!important;inset:auto!important;transform:none!important;translate:none!important;width:100%!important;min-width:0!important;max-width:100%!important;margin-inline:0!important;box-sizing:border-box!important}
+        html[data-planner-site-signin] [data-planner-secure-actions]{flex-wrap:wrap!important;min-width:0!important;max-width:100%!important}
+        html[data-planner-site-signin] [data-planner-secure-root] input:not([type=checkbox]):not([type=radio]):not([type=hidden]),
+        html[data-planner-site-signin] [data-planner-secure-root] select{font-size:16px!important;width:100%!important;min-width:0!important;max-width:100%!important;box-sizing:border-box!important}
+        html[data-planner-site-signin] [data-planner-secure-root] button{font-size:16px!important;white-space:normal!important;min-height:44px!important;min-width:0!important;max-width:100%!important;box-sizing:border-box!important;overflow-wrap:anywhere!important}
+        html[data-planner-site-signin] [data-planner-secure-root] button span{white-space:normal!important;min-width:0!important;overflow:visible!important;text-overflow:clip!important}
+        html[data-planner-site-signin] [data-planner-secure-root] h1,
+        html[data-planner-site-signin] [data-planner-secure-root] h2,
+        html[data-planner-site-signin] [data-planner-secure-root] h3{white-space:normal!important;overflow-wrap:anywhere!important}
+        html[data-planner-site-signin] [data-planner-secure-root] iframe{max-width:100%!important;box-sizing:border-box!important}
+      `;
+      document.head.append(style);
+      const marks=['hidden','path','root','fit','actions'];
+      const clear=()=>{for(const name of marks)document.querySelectorAll('['+attr+name+']').forEach(n=>n.removeAttribute(attr+name))};
+      const label=n=>(n.getAttribute('aria-label')||n.textContent||'').trim();
+      const headings=n=>[...n.querySelectorAll('h1,h2,h3,h4,legend,p,strong,[role=heading]')].map(n=>n.textContent||'').join('\n');
+      const currentNode=n=>!!n?.isConnected&&!!n.getClientRects().length&&!n.closest('[hidden],[inert],[aria-hidden=true],[data-state=closed]')&&(window.__plannerSignInCurrent?.(n)??true);
+      const actions=/^(Take over to sign in|Sign in on web page|Return control|I.m done|Use saved account|Other sign-in options|Use passkey)$/i;
+      const authHint=/sign in|log in|saved account|verify your identity|verification|security code|passcode|two.step|multi.factor|duo|approve|browser access|visit site|access to/i;
+      const isAuthForm=n=>!!n.querySelector('input[type=password],input[autocomplete=one-time-code]')||authHint.test(headings(n));
+      const isAuthDialog=n=>authHint.test(headings(n))&&[...n.querySelectorAll('button')].some(b=>/^(Sign in|Log in|Allow|Approve|Continue|Next|Verify)$/i.test(label(b))||actions.test(label(b)));
+      const domain=n=>{
+        const shown=headings(n),match=shown.match(/sign in to\s+([a-z0-9.-]+\.[a-z]{2,})/i);
+        if(match)return match[1].toLowerCase();
+        for(const p of n.querySelectorAll('p,span')){if(p.childElementCount)continue;const match=(p.textContent||'').trim().match(/^https?:\/\/([a-z0-9.-]+)(?:\/)?$/i);if(match)return match[1].toLowerCase()}
+        return '';
       };
-      // Returns only the displayed destination hostname, never input values.
-      const observer=new MutationObserver(()=>refresh());observer.observe(document.body,{childList:true,subtree:true});
+      let current=null,targetDomain='';
+      const fit=root=>{
+        const bounds=root.getBoundingClientRect();
+        for(const node of root.querySelectorAll('div,section,form,[role=dialog],[role=alertdialog]')){
+          const rect=node.getBoundingClientRect();
+          if(node.querySelector('input,button,iframe')&&(rect.width>bounds.width+1||rect.left<bounds.left-1||rect.right>bounds.right+1))node.setAttribute(attr+'fit','');
+          if(getComputedStyle(node).display==='flex'&&getComputedStyle(node).flexDirection==='row')node.setAttribute(attr+'actions','');
+        }
+        targetDomain=domain(root)||targetDomain;
+        return {found:true,domain:targetDomain};
+      };
+      const refresh=(rescan=false)=>{
+        if(!rescan&&currentNode(current))return fit(current);
+        // Keep every original node, React ancestor, iframe and submit handler in place.
+        // Disable our layout rules only for this synchronous discovery pass.
+        html.removeAttribute('data-planner-site-signin');clear();
+        let root=[...document.querySelectorAll('[role=dialog],[role=alertdialog]')].filter(n=>currentNode(n)&&isAuthDialog(n)).at(-1);
+        if(!root){
+          const form=[...document.querySelectorAll('form')].filter(n=>currentNode(n)&&isAuthForm(n)).at(-1);
+          if(form){
+            root=form;
+            for(let parent=form.parentElement,depth=0;parent&&parent!==document.body&&depth<4;parent=parent.parentElement,depth++){
+              if(parent.matches('main,article,[data-turn-key]')||parent.querySelector('#prompt-textarea,[data-composer-markdown]'))break;
+              if(parent.querySelectorAll('form').length<=1&&authHint.test(headings(parent))){root=parent;break}
+            }
+          }
+        }
+        if(!root){
+          const button=[...document.querySelectorAll('button')].filter(n=>currentNode(n)&&actions.test(label(n))).at(-1);
+          if(button){
+            for(let parent=button.parentElement,depth=0;parent&&parent!==document.body&&depth<5;parent=parent.parentElement,depth++){
+              if(parent.matches('main,article,[data-turn-key]')||parent.querySelector('#prompt-textarea,[data-composer-markdown]'))break;
+              if(authHint.test(headings(parent))||parent.querySelector('iframe')){root=parent;break}
+            }
+            root ||= button.parentElement;
+          }
+        }
+        html.setAttribute('data-planner-site-signin','');
+        if(!root||root===document.body){current=null;html.setAttribute('data-planner-secure-waiting','');return {found:false,domain:targetDomain}}
+        root.setAttribute(attr+'root','');let child=root;
+        for(let parent=root.parentElement;parent;child=parent,parent=parent.parentElement){
+          for(const sibling of parent.children)if(sibling!==child&&!['SCRIPT','STYLE','LINK'].includes(sibling.tagName))sibling.setAttribute(attr+'hidden','');
+          if(parent===document.body)break;
+          parent.setAttribute(attr+'path','');
+        }
+        current=root;html.removeAttribute('data-planner-secure-waiting');
+        return fit(root);
+      };
+      const observer=new MutationObserver(records=>{
+        const outside=records.some(record=>record.type==='attributes'||[...record.addedNodes].some(node=>node instanceof Element&&!current?.contains(node)&&(node.matches('form,[role=dialog],[role=alertdialog]')||node.querySelector('form,[role=dialog],[role=alertdialog]'))));
+        refresh(outside);
+      });
+      observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden','aria-hidden','data-state','data-talvt-turn-state']});
       window.__plannerSiteSignIn={refresh,restore:()=>{observer.disconnect();clear();style.remove();html.removeAttribute('data-planner-site-signin');html.removeAttribute('data-planner-secure-waiting');delete window.__plannerSiteSignIn}};
       return refresh();
     })()
     """#
     // END_SITE_SIGNIN_SURFACE
     func beginSiteSignIn() {
-        siteSignInMode = true;returnAfterWebsiteInteraction = true;observedWebsiteInteraction=false;browser.alpha = 1;title = "Website sign-in"
-        navigationItem.leftBarButtonItem = UIBarButtonItem(title:"Cancel",style:.plain,target:self,action:#selector(close))
-        navigationItem.rightBarButtonItems = nil
-        browser.evaluateJavaScript("window.__plannerSiteSignIn?.restore()", completionHandler: { _, _ in })
-        status.text = "Complete the website sign-in or approval below. Your chat stays open."
+        siteSignInMode = true;siteSignInSurfaceActive=false;returnAfterWebsiteInteraction=true;observedWebsiteInteraction=false
+        browser.alpha=1;browser.accessibilityIdentifier="websiteSignInWebView";title="Connect website"
+        navigationItem.leftBarButtonItem=UIBarButtonItem(title:"Cancel",style:.plain,target:self,action:#selector(close))
+        navigationItem.rightBarButtonItems=nil
+        status.text="Opening website sign-in…"
+        Task { @MainActor [weak self] in await self?.refreshSiteSignIn() }
     }
     func endSiteSignIn() {
-        guard siteSignInMode else{return};siteSignInMode = false
+        guard siteSignInMode else{return};siteSignInMode=false;siteSignInSurfaceActive=false
         browser.evaluateJavaScript("window.__plannerSiteSignIn?.restore()",completionHandler:{_,_ in})
-        browser.alpha = 1;title = "ChatGPT website"
-        navigationItem.leftBarButtonItem = UIBarButtonItem(title:"Planner",style:.done,target:self,action:#selector(close))
-        navigationItem.rightBarButtonItems = [UIBarButtonItem(title:"Safari",style:.plain,target:self,action:#selector(safari)),UIBarButtonItem(barButtonSystemItem:.refresh,target:self,action:#selector(reload))]
+        browser.alpha=1;browser.accessibilityIdentifier="chatGPTPortalWebView";title="ChatGPT website"
+        navigationItem.leftBarButtonItem=UIBarButtonItem(title:"Planner",style:.done,target:self,action:#selector(close))
+        navigationItem.rightBarButtonItems=[UIBarButtonItem(title:"Safari",style:.plain,target:self,action:#selector(safari)),UIBarButtonItem(barButtonSystemItem:.refresh,target:self,action:#selector(reload))]
     }
     private func refreshSiteSignIn() async {
         guard siteSignInMode else{return}
         if browser.url?.scheme == "https",let host=browser.url?.host,host != "chatgpt.com" {
-            observedWebsiteInteraction=true;browser.alpha = 1;status.text = "Secure sign-in · " + host;return
+            observedWebsiteInteraction=true;siteSignInSurfaceActive=true;browser.alpha=1;status.text="Sign in to "+host;return
         }
-        // Show the original secure browser UI. Reparenting its form breaks
-        // identity-provider popups, embedded frames and account-selection controls.
-        browser.alpha = 1
-        if let state = try? await snapshot(), state["interaction"] as? Bool == true { observedWebsiteInteraction = true }
-        status.text = "Complete the website sign-in or approval in ChatGPT below. Return to Planner is automatic."
-
+        guard documentCommitted else{status.text="Opening website sign-in…";return}
+        do {
+            let surface=try await browser.evaluateJavaScript(Self.siteSignInSurface) as? [String:Any] ?? [:]
+            guard siteSignInMode else{return}
+            siteSignInSurfaceActive=surface["found"] as? Bool == true
+            if siteSignInSurfaceActive {observedWebsiteInteraction=true}
+            let host=surface["domain"] as? String ?? ""
+            status.text=siteSignInSurfaceActive ? (host.isEmpty ? "Your chat continues after sign-in." : "Sign in to "+host) : "Waiting for the website…"
+        } catch {status.text="The sign-in form is loading…"}
     }
     init(account: String) { self.account = account; super.init(nibName: nil, bundle: nil) }
     required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
@@ -704,6 +767,12 @@ struct PlannerWebView: UIViewRepresentable {
         documentCommitted = false; webFailure = nil
         status.text = "Loading ChatGPT… Sign in here, then tap Planner to return."
         #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-UITestWebsiteSignInSurface") {
+            browser.loadHTMLString(#"""
+            <meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font:16px -apple-system;margin:0}#host{position:fixed;left:50%;top:65%;transform:translate(-50%,-50%);width:640px}#card{width:512px;padding:24px;border:1px solid #ddd;border-radius:16px;background:white}input,button{font:inherit;padding:12px;border:1px solid #aaa;border-radius:8px}label{display:block;margin:12px 0}button{cursor:pointer}</style>
+            <header>ChatGPT conversation fixture</header><article>Private conversation must stay hidden</article><div id="host"><section id="card"><p>https://login.microsoftonline.com</p><h2>Sign in to login.microsoftonline.com</h2><form onsubmit="event.preventDefault();if(document.getElementById('password').value!=='fixture-only'){document.getElementById('error').textContent='Try the fixture password';return}document.getElementById('card').setAttribute('data-talvt-turn-state','complete');document.getElementById('card').innerHTML='<h2>Connected successfully</h2>'"><label>Account<input aria-label="Fixture account" value="fixture@example.invalid" readonly></label><label>Password<input id="password" aria-label="Fixture password" type="password" autocomplete="off"></label><p id="error" role="alert"></p><div style="display:flex;justify-content:flex-end;gap:12px"><button type="button" onclick="window.open('about:blank','fixture-auth')?.document.write('<h1>SSO fixture popup</h1>')">Other sign-in options</button><button type="submit">Sign in</button></div></form></section></div><footer>Message ChatGPT<textarea aria-label="Fixture conversation composer"></textarea></footer>
+            """#,baseURL:URL(string:"https://chatgpt.com/c/signin-fixture"));return
+        }
         if ProcessInfo.processInfo.arguments.contains("-UITestWebsitePopup") {
             browser.loadHTMLString(#"""
             <meta name="viewport" content="width=device-width,initial-scale=1"><h1>Original conversation QA</h1><p id="result">Thread stays open</p><button onclick="const p=window.open('about:blank','login');p.document.write(`<meta name='viewport' content='width=device-width,initial-scale=1'><style>body{font:16px system-ui;padding:16px}label{display:block;margin-bottom:16px}input,button{display:block;box-sizing:border-box;font:inherit;width:100%;min-height:44px}</style><h1>Microsoft sign-in fixture</h1><label>Email<input id='email' aria-label='Fixture email'></label><label>Password<input id='password' type='password' aria-label='Fixture password'></label><button onclick='if(document.getElementById(&quot;email&quot;).value!==&quot;fixture@example.invalid&quot;||document.getElementById(&quot;password&quot;).value!==&quot;fixture-only&quot;){document.getElementById(&quot;error&quot;).textContent=&quot;Fixture input failed&quot;;return}opener.document.getElementById(&quot;result&quot;).textContent=&quot;Signed in; original thread remains&quot;;window.close()'>Continue fixture sign-in</button><p id='error'></p>`)">Open sign-in fixture</button>
@@ -828,7 +897,7 @@ struct PlannerWebView: UIViewRepresentable {
                 if let state = try? await self.snapshot() {
                     if state["guest"] as? Bool == true || state["needsLogin"] as? Bool == true || self.browser.url?.host != "chatgpt.com" { self.returnAfterAuthentication = true }
                     if state["interaction"] as? Bool == true {self.observedWebsiteInteraction=true}
-                    if (self.returnAfterAuthentication || (self.returnAfterWebsiteInteraction && self.observedWebsiteInteraction)) && state["interaction"] as? Bool != true && (state["ready"] as? Bool == true || state["running"] as? Bool == true) && state["guest"] as? Bool == false && state["needsLogin"] as? Bool != true { verified += 1 } else { verified = 0 }
+                    if (self.returnAfterAuthentication || (self.returnAfterWebsiteInteraction && self.observedWebsiteInteraction)) && !self.siteSignInSurfaceActive && state["interaction"] as? Bool != true && (state["ready"] as? Bool == true || state["running"] as? Bool == true) && state["guest"] as? Bool == false && state["needsLogin"] as? Bool != true { verified += 1 } else { verified = 0 }
                     if verified >= 2 { self.returnAfterAuthentication = false; self.returnAfterWebsiteInteraction = false; self.onClose?(); return }
                 }
                 try? await Task.sleep(for: .seconds(1))
@@ -1542,6 +1611,7 @@ document.addEventListener('click',event=>capture(event.target.closest?.('a[href]
     func relayStatus(peek: Bool = false) async throws -> [String: Any] {
         if let webFailure { return ["phase": "attention", "ready": false, "needsLogin": false, "message": webFailure] }
         var state = try await snapshot()
+        if siteSignInMode && siteSignInSurfaceActive {state["interaction"]=true}
         #if DEBUG
         var diagnostic = state; diagnostic.removeValue(forKey: "text"); diagnostic.removeValue(forKey: "url")
         diagnostic["visibility"] = try? await browser.evaluateJavaScript("({state:document.visibilityState,width:innerWidth,height:innerHeight})")
@@ -1674,11 +1744,11 @@ return {url:urls[0]||null};
         inspectPageForTest()
         #endif
         webFailure = nil; recoveryCount = 0
-        status.text = "ChatGPT session · Sign in or approve access, then tap Planner. No credentials are copied to Planner."
+        status.text = siteSignInMode ? "Opening website sign-in…" : "ChatGPT session · Sign in or approve access, then tap Planner. No credentials are copied to Planner."
     }
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         documentCommitted = false; webFailure = nil
-        status.text = "Loading ChatGPT…"
+        status.text = siteSignInMode ? "Opening website sign-in…" : "Loading ChatGPT…"
     }
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) { documentCommitted = true }
     private func failed(_ error: Error) {
@@ -1726,7 +1796,7 @@ return {url:urls[0]||null};
         browser.navigationDelegate = self; browser.uiDelegate = self
         browser.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(browser)
         NSLayoutConstraint.activate([browser.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),browser.leadingAnchor.constraint(equalTo: view.leadingAnchor),browser.trailingAnchor.constraint(equalTo: view.trailingAnchor),browser.bottomAnchor.constraint(equalTo: view.bottomAnchor)])
-        navigationItem.leftBarButtonItem = UIBarButtonItem(title: "Back to ChatGPT", style: .done, target: self, action: #selector(close))
+        navigationItem.leftBarButtonItem = UIBarButtonItem(title: "Back", style: .done, target: self, action: #selector(close))
     }
     @objc private func close() { browser.stopLoading(); dismiss(animated: true) }
     func webViewDidClose(_ webView: WKWebView) { dismiss(animated: true) }

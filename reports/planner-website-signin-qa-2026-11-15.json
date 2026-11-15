@@ -1,0 +1,69 @@
+{
+  "tested_at_utc": "2026-11-15T22:37:02.125681+00:00",
+  "status": "passed automated layout and form behavior; real Microsoft authentication remains manual",
+  "device": {
+    "environment": "Device Hub iPhone 17 Pro simulator",
+    "os": "iOS 26.5",
+    "udid": "89A369DA-6527-450D-B232-C55626656317"
+  },
+  "implementation": "Focused original provider sign-in form in Planner. CSS-only layout and visibility changes retain original DOM ancestors, delegated submit handlers, iframe context, popup configuration, opener and session. No password copying or custom credential forwarding.",
+  "native_build": {
+    "status": "passed",
+    "evidence": "/tmp/planner-focused-signin-build.log"
+  },
+  "native_tests": {
+    "passed": 3,
+    "failed": 0,
+    "seconds": 45.158,
+    "evidence": "/tmp/planner-focused-signin-native.log",
+    "scenarios": [
+      "Fixed/transformed desktop panel fits phone margins; original keyboard validation and submit; successful sign-in returns automatically and original document remains",
+      "Cancel restores original conversation and form",
+      "SSO popup cancel/reopen, typing, opener callback and window.close preserve parent conversation"
+    ]
+  },
+  "browser_tests": {
+    "status": "passed",
+    "evidence": "/tmp/planner-focused-signin-browser.log",
+    "scenarios": [
+      "320/390/430 px viewports and 340 px keyboard-height viewport",
+      "Original form identity and delegated submit handler preserved",
+      "Secret value getter instrumentation: zero reads by layout script",
+      "Focus preserved across refresh",
+      "SSO popup retains opener and returns",
+      "MFA replacement and outside consent dialog fit and remain usable",
+      "Completed historical sign-in form ignored",
+      "Cancel/restore removes all layout marks"
+    ]
+  },
+  "regressions": {
+    "status": "passed",
+    "checks": [
+      "node scripts/test-chat-output-controls.mjs",
+      "node scripts/test-chat-signin-recovery.mjs"
+    ]
+  },
+  "real_provider_layout": {
+    "status": "verified on existing conversation; no message resent",
+    "destination": "login.microsoftonline.com",
+    "form_bounds": {
+      "left": 16,
+      "right": 386,
+      "width": 370
+    },
+    "password_bounds": {
+      "left": 47,
+      "right": 315
+    },
+    "sign_in_button_bounds": {
+      "left": 293,
+      "right": 369,
+      "height": 44
+    },
+    "verification": "Read only tag/type/rectangle/button metadata; no credential values or input text collected. Real credential submission and MFA completion were not automated."
+  },
+  "limitations": [
+    "A provider-owned authentication step still authenticates the relay session; it is presented inside Planner rather than a ChatGPT conversation screen.",
+    "Real Microsoft/NYU password and MFA completion require the account holder."
+  ]
+}
