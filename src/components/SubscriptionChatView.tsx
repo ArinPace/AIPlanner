@@ -178,7 +178,16 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
   if(value.providerUrl)await subscriptionChatRequest(undefined,{action:'relay_bind',chatId:value.chatId,url:value.providerUrl})
   await subscriptionChatRequest(undefined,{action:'relay_save',chatId:value.chatId,turnId:value.turnId,prompt:value.prompt,reply:value.reply})
   if(value.toolTurnId)await subscriptionChatRequest(undefined,{action:'tool_finish',chatId:value.chatId,turnId:value.toolTurnId});toolTurn.current=null
-  localStorage.removeItem(recoveryKey);setRecovery(null);if(selected.current===value.chatId&&(!message.trim()||value.prompt===message.trim()||value.prompt.startsWith(message.trim()+'\n\n['))){setMessage('');setAttachments([])}const updated=await refresh();if(value.providerUrl&&updated?.chat.id===value.chatId){void mirrorChat(updated.chat).then(()=>{if(selected.current===value.chatId)setSyncNotice('ChatGPT conversation synced.')}).catch(e=>{if(selected.current===value.chatId)setSyncNotice(e instanceof Error?e.message:'Chat metadata sync pending.')})}
+  localStorage.removeItem(recoveryKey);setRecovery(null)
+  if(!selected.current||selected.current===value.chatId){
+   // Recovery can finish before the workspace has selected its saved draft.
+   selectDraft(value.chatId)
+   setMessage(current=>!current.trim()||value.prompt===current.trim()||value.prompt.startsWith(current.trim()+'\n\n[')?'':current)
+   if(!message.trim()||value.prompt===message.trim()||value.prompt.startsWith(message.trim()+'\n\n['))setAttachments([])
+  }
+  // Opening ChatGPT menus here steals the composer's keyboard after a reply.
+  // The conversation link was already bound at submission; metadata sync is manual.
+  await refresh()
   }finally{savingReply.current=false}
  }
  async function send(override?:string,scheduledRunId?:string,displayLabel?:string){
