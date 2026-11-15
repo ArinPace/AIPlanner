@@ -2,7 +2,7 @@ import {unpackRelayBundle} from '../lib/relayFileBundle'
 import {ChatAttempt} from './ChatAttempt'
 import {ChatFilePreview} from './ChatFilePreview'
 import {peekChatCache,readChatCache,writeChatCache} from '../lib/chatCache'
-import {toolTurnMessage,toolResultsMessage,relayCalls,relayVisible} from '../lib/subscriptionTools'
+import {toolTurnMessage,toolResultsMessage,relayCalls,relayVisible,unsentRelayRequest} from '../lib/subscriptionTools'
 import type {ChatMirror,ChatMirrorPlan} from '../lib/chatSync'
 import {prepareRelayFile,storeRelayFile,relayFileLink,RELAY_BATCH_MAX,type RelayFile} from '../lib/relayFiles'
 import {nativeRequest} from '../lib/platform'
@@ -208,7 +208,19 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
     relayMessage=toolTurnMessage(prompt,turnId,setup.instructions)
    }
    setRelayPhase('Sending to ChatGPT…')
-   const submitted=await nativeRequest<{url?:string|null}>({action:'chatGPTRelaySend',account:username,chatId:id,text:relayMessage,work:toolsEnabled,url:workspace?.chat.provider_url,files:attachments.map(({name,mime,size,data})=>({name,mime,size,data}))})
+   const sendPayload={action:'chatGPTRelaySend',account:username,chatId:id,text:relayMessage,work:toolsEnabled,url:workspace?.chat.provider_url,files:attachments.map(({name,mime,size,data})=>({name,mime,size,data}))}
+   let submitted:{url?:string|null}
+   try{submitted=await nativeRequest(sendPayload)}catch(error){
+    if(!/unsent draft/i.test(error instanceof Error?error.message:''))throw error
+    const draft=await nativeRequest<{text:string;manual?:boolean}>({action:'chatGPTRelayDraft',account:username})
+    const prior=draft.manual?null:unsentRelayRequest(draft.text)
+    if(!prior||prior.turnId===turnId)throw error
+    const check=await subscriptionChatRequest<{safeToClear:boolean}>(undefined,{action:'relay_draft_check',chatId:id,...prior})
+    if(!check.safeToClear)throw error
+    await nativeRequest({action:'chatGPTRelayClearDraft',account:username,expected:draft.text})
+    if(cancelRelay.current)throw error
+    submitted=await nativeRequest(sendPayload)
+   }
    await record('submitted','Thinking…')
    let submittedURL=workspace?.chat.provider_url
    if(submitted.url&&/^https:\/\/chatgpt\.com\/(?:g\/[A-Za-z0-9_-]+\/)?c\/[A-Za-z0-9_-]+$/.test(submitted.url)&&submitted.url!==submittedURL){await subscriptionChatRequest(undefined,{action:'relay_bind',chatId:id,url:submitted.url});submittedURL=submitted.url;setWorkspace(current=>current?{...current,chat:{...current.chat,provider_url:submitted.url},chats:current.chats.map(chat=>chat.id===id?{...chat,provider_url:submitted.url}:chat)}:current)}

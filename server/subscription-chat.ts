@@ -1,5 +1,6 @@
 import {planChatMirror,type ChatMirror} from '../src/lib/chatSync.js'
 import {z} from 'zod'
+import {createHash} from 'node:crypto'
 import {ApiError,body,db,json} from './cloud.js'
 import {storage} from './mcp-auth.js'
 import {googleCalendarStatus} from './agent.js'
@@ -36,6 +37,15 @@ export async function handleSubscriptionChat(request:Request,username:string){
  }
  if(request.method!=='POST')throw new ApiError(405,'Use GET or POST.')
  const input=await body(request)
+ if(input.action==='relay_draft_check'){
+  const args=z.object({chatId:z.string().uuid(),turnId:z.string().uuid(),prompt:z.string().min(1).max(30000)}).parse(input)
+  const chat=await owned(username,args.chatId)
+  if(chat.archived||chat.deleted_at)throw new ApiError(409,'Restore this chat before recovering its draft.')
+  const prior=storage(await db().from('planner_subscription_tool_turns').select('id,status,prompt_digest,created_at').eq('username',username).eq('chat_id',args.chatId).eq('id',args.turnId).maybeSingle())
+  const safe=prior&&args.prompt.length<=12000&&['cancelled','completed'].includes(prior.status)&&prior.prompt_digest===createHash('sha256').update(args.prompt).digest('hex')
+  if(safe&&prior.status==='cancelled')storage(await db().from('planner_subscription_attempts').upsert({id:args.turnId,username,chat_id:args.chatId,prompt:args.prompt,status:'interrupted',detail:'A generated unsent draft was recovered. No final reply was saved.',created_at:prior.created_at},{onConflict:'id',ignoreDuplicates:true}))
+  return json({safeToClear:Boolean(safe)})
+ }
  if(input.action==='relay_attempt_start'||input.action==='relay_attempt_update')return json(await subscriptionAttemptAction(username,input))
  if(typeof input.action==='string'&&input.action.startsWith('schedule_'))return json(await (await import('./subscription-schedule.js')).subscriptionScheduleAction(username,input))
  if(input.action==='tutor_sync')throw new ApiError(409,'Chat uses Main Chat only. Tutor conversations remain available in Agent.')
