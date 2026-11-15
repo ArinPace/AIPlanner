@@ -608,10 +608,11 @@ struct PlannerWebView: UIViewRepresentable {
     """#
     // END_SITE_SIGNIN_SURFACE
     func beginSiteSignIn() {
-        siteSignInMode = true;returnAfterWebsiteInteraction = true;observedWebsiteInteraction=false;browser.alpha = 0;title = "Connect website"
+        siteSignInMode = true;returnAfterWebsiteInteraction = true;observedWebsiteInteraction=false;browser.alpha = 1;title = "Website sign-in"
         navigationItem.leftBarButtonItem = UIBarButtonItem(title:"Cancel",style:.plain,target:self,action:#selector(close))
         navigationItem.rightBarButtonItems = nil
-        status.text = "Preparing secure sign-in…"
+        browser.evaluateJavaScript("window.__plannerSiteSignIn?.restore()", completionHandler: { _, _ in })
+        status.text = "Complete the website sign-in or approval below. Your chat stays open."
     }
     func endSiteSignIn() {
         guard siteSignInMode else{return};siteSignInMode = false
@@ -625,11 +626,12 @@ struct PlannerWebView: UIViewRepresentable {
         if browser.url?.scheme == "https",let host=browser.url?.host,host != "chatgpt.com" {
             observedWebsiteInteraction=true;browser.alpha = 1;status.text = "Secure sign-in · " + host;return
         }
-        let surface = try? await browser.evaluateJavaScript(Self.siteSignInSurface) as? [String:Any]
-        if surface?["found"] as? Bool == true {observedWebsiteInteraction=true}
-        browser.alpha = surface?["found"] as? Bool == true ? 1 : 0
-        let host=surface?["domain"] as? String ?? ""
-        status.text = surface?["found"] as? Bool == true ? (host.isEmpty ? "Approve access or sign in below. Return to Planner is automatic." : "Secure sign-in · " + host + "\nReturn to Planner is automatic.") : "Waiting for the website’s secure sign-in panel…"
+        // Show the original secure browser UI. Reparenting its form breaks
+        // identity-provider popups, embedded frames and account-selection controls.
+        browser.alpha = 1
+        if let state = try? await snapshot(), state["interaction"] as? Bool == true { observedWebsiteInteraction = true }
+        status.text = "Complete the website sign-in or approval in ChatGPT below. Return to Planner is automatic."
+
     }
     init(account: String) { self.account = account; super.init(nibName: nil, bundle: nil) }
     required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
@@ -672,6 +674,13 @@ struct PlannerWebView: UIViewRepresentable {
         documentCommitted = false; webFailure = nil
         status.text = "Loading ChatGPT… Sign in here, then tap Planner to return."
         #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-UITestWebsitePopup") {
+            browser.loadHTMLString(#"""
+            <meta name="viewport" content="width=device-width,initial-scale=1"><h1>Original conversation QA</h1><p id="result">Thread stays open</p><button onclick="const p=window.open('about:blank','login');p.document.write(`<meta name='viewport' content='width=device-width,initial-scale=1'><style>body{font:16px system-ui;padding:16px}label{display:block;margin-bottom:16px}input,button{display:block;box-sizing:border-box;font:inherit;width:100%;min-height:44px}</style><h1>Microsoft sign-in fixture</h1><label>Email<input id='email' aria-label='Fixture email'></label><label>Password<input id='password' type='password' aria-label='Fixture password'></label><button onclick='if(document.getElementById(&quot;email&quot;).value!==&quot;fixture@example.invalid&quot;||document.getElementById(&quot;password&quot;).value!==&quot;fixture-only&quot;){document.getElementById(&quot;error&quot;).textContent=&quot;Fixture input failed&quot;;return}opener.document.getElementById(&quot;result&quot;).textContent=&quot;Signed in; original thread remains&quot;;window.close()'>Continue fixture sign-in</button><p id='error'></p>`)">Open sign-in fixture</button>
+            """#, baseURL: URL(string: "http://127.0.0.1:5174")); return
+        }
+        #endif
+        #if DEBUG
         if let value=ProcessInfo.processInfo.environment["PLANNER_TEST_CHAT_URL"], let target=canonicalConversation(value) { browser.load(URLRequest(url:target,timeoutInterval:30));return }
         #endif
         browser.load(URLRequest(url: URL(string: "https://chatgpt.com/")!, timeoutInterval: 30))
@@ -705,6 +714,23 @@ struct PlannerWebView: UIViewRepresentable {
                     (()=>{const visible=n=>!!n.getClientRects().length;const shape=n=>({tag:n.tagName,id:n.id,role:n.getAttribute('role'),class:n.className,rect:n.getBoundingClientRect().toJSON()});const seeds=[...document.querySelectorAll('form,[role=dialog],input[type=password],button')].filter(visible).filter(n=>n.matches('form,[role=dialog],input[type=password]')||/^(Take over to sign in|Sign in on web page|Return control|I.m done|Sign in|Allow|Approve)$/i.test((n.getAttribute('aria-label')||n.innerText||'').trim()));return JSON.stringify({host:location.hostname,surfaces:seeds.map(n=>({node:shape(n),buttons:[...n.querySelectorAll('button')].map(b=>(b.getAttribute('aria-label')||b.innerText||'').trim()),inputs:[...n.querySelectorAll('input')].map(i=>({type:i.type})),parents:(()=>{const a=[];for(let p=n.parentElement;p&&a.length<6;p=p.parentElement)a.push(shape(p));return a})()}))})})()
                     """#
                     if let value=try? await self.browser.evaluateJavaScript(script) as? String,let folder=FileManager.default.urls(for:.cachesDirectory,in:.userDomainMask).first{try? value.write(to:folder.appendingPathComponent("SecureSurfaceStructure.json"),atomically:true,encoding:.utf8)}
+                }
+            }
+        }
+        if ProcessInfo.processInfo.arguments.contains("-UITestInspectDraftMetadata") {
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for:.seconds(4));guard let self else{return}
+                if let draft=try? await self.inspectDraft(),let text=draft["text"] as? String {
+                    let hash=SHA256.hash(data:Data(text.trimmingCharacters(in:.whitespacesAndNewlines).utf8)).map{String(format:"%02x",$0)}.joined()
+                    let confirmed=UserDefaults.standard.stringArray(forKey:"chatgpt-confirmed-project-drafts:"+self.account+":Test") ?? []
+                    var values:[String:Any] = ["length":text.count,"manual":draft["manual"] as? Bool ?? false,"confirmedSubmittedDraft":confirmed.contains(hash),"hasRelayReceipt":text.hasPrefix("[Planner relay receipt:"),"isConversation":self.canonicalConversation(self.browser.url?.absoluteString) != nil]
+                    values["hasRequestMarker"]=text.contains("Current user request:");values["hasResponseMarker"]=text.contains("Planner relay response ID:")
+                    if let match=text.range(of:#"Planner relay response ID: [a-fA-F0-9-]{36}\."#,options:[.regularExpression,.backwards]),let request=text.range(of:#"Current user request:\s*\n"#,options:[.regularExpression,.backwards]){
+                        let body=String(text[request.upperBound...]),end=[body.range(of:"File delivery (only when returning requested files):")?.lowerBound,body.range(of:"Planner relay response ID:")?.lowerBound].compactMap{$0}.min()
+                        values["turnId"]=String(text[match]).replacingOccurrences(of:"Planner relay response ID: ",with:"").dropLast().description
+                        if let end {let prompt=String(body[..<end]).trimmingCharacters(in:.whitespacesAndNewlines);values["promptLength"]=prompt.count;values["promptDigest"]=SHA256.hash(data:Data(prompt.utf8)).map{String(format:"%02x",$0)}.joined()}
+                    }
+                    if let folder=FileManager.default.urls(for:.cachesDirectory,in:.userDomainMask).first {try? JSONSerialization.data(withJSONObject:values).write(to:folder.appendingPathComponent("DraftMetadata.json"),options:.atomic)}
                 }
             }
         }
@@ -758,6 +784,7 @@ struct PlannerWebView: UIViewRepresentable {
         authenticationWatch = Task { @MainActor [weak self] in
             guard let self else { return }; var verified = 0
             while !Task.isCancelled, self.navigationController?.presentingViewController != nil {
+                if self.presentedViewController != nil { verified = 0; try? await Task.sleep(for: .seconds(1)); continue }
                 await self.refreshSiteSignIn()
                 if let state = try? await self.snapshot() {
                     if state["guest"] as? Bool == true || state["needsLogin"] as? Bool == true || self.browser.url?.host != "chatgpt.com" { self.returnAfterAuthentication = true }
@@ -1513,8 +1540,42 @@ return {url:urls[0]||null};
         else { webFailure = "ChatGPT's web session stopped. Open the session to check its result before retrying."; status.text = webFailure }
     }
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        // Keep sign-in links and user-opened tabs visible in this portal.
-        if navigationAction.targetFrame == nil { webView.load(navigationAction.request) }
-        return nil
+        // Preserve the conversation and window.opener during Microsoft/NYU login.
+        guard navigationAction.targetFrame == nil, presentedViewController == nil else { return nil }
+        let popup = PlannerWebsiteSignInPopup(configuration: configuration)
+        popup.loadViewIfNeeded()
+        let navigation = UINavigationController(rootViewController: popup)
+        navigation.modalPresentationStyle = .pageSheet
+        navigation.sheetPresentationController?.detents = [.large()]
+        present(navigation, animated: true)
+        return popup.browser
+    }
+}
+
+// Provider-owned login stays in a separate browser with the supplied opener/session.
+// It has no Planner message handler and never reads or exports credential fields.
+@MainActor private final class PlannerWebsiteSignInPopup: UIViewController, WKNavigationDelegate, WKUIDelegate {
+    let browser: WKWebView
+    init(configuration: WKWebViewConfiguration) {
+        browser = WKWebView(frame: .zero, configuration: configuration)
+        super.init(nibName: nil, bundle: nil)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
+    override func viewDidLoad() {
+        super.viewDidLoad(); view.backgroundColor = .systemBackground; title = "Website sign-in"
+        browser.accessibilityIdentifier = "websiteSignInPopupWebView"
+        browser.navigationDelegate = self; browser.uiDelegate = self
+        browser.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(browser)
+        NSLayoutConstraint.activate([browser.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),browser.leadingAnchor.constraint(equalTo: view.leadingAnchor),browser.trailingAnchor.constraint(equalTo: view.trailingAnchor),browser.bottomAnchor.constraint(equalTo: view.bottomAnchor)])
+        navigationItem.leftBarButtonItem = UIBarButtonItem(title: "Back to ChatGPT", style: .done, target: self, action: #selector(close))
+    }
+    @objc private func close() { browser.stopLoading(); dismiss(animated: true) }
+    func webViewDidClose(_ webView: WKWebView) { dismiss(animated: true) }
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { title = webView.url?.host ?? "Website sign-in" }
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        guard navigationAction.targetFrame == nil, presentedViewController == nil else { return nil }
+        let popup = PlannerWebsiteSignInPopup(configuration: configuration); popup.loadViewIfNeeded()
+        let navigation = UINavigationController(rootViewController: popup); navigation.modalPresentationStyle = .pageSheet
+        present(navigation, animated: true); return popup.browser
     }
 }

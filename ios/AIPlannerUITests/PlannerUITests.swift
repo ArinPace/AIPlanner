@@ -7,17 +7,79 @@ final class PlannerUITests: XCTestCase {
         app.launchArguments = ["-UITestFixture"] + (signedIn ? ["-UITestSignedIn"] : []) + (resumeSync ? ["-UITestResumeSync"] : []) + (focusZoom ? ["-UITestFocusZoom"] : [])
         app.launch(); return app
     }
+    func testLiveMainChatRelayContinuityAndRelaunch() throws {
+        // Explicit opt-in only: harmless messages in the existing Main Chat.
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
+        let app = XCUIApplication(); app.launchArguments = ["-UITestSignedRelayDiagnostics"]; app.launch()
+        let web = app.webViews["plannerWebView"]
+        let open = web.descendants(matching: .any).matching(identifier: "Open Main Chat").firstMatch
+        XCTAssertTrue(open.waitForExistence(timeout: 40)); open.tap()
+        var input = web.textViews["Message ChatGPT"]
+        XCTAssertTrue(input.waitForExistence(timeout: 20))
+        let backup = (input.value as? String).flatMap { $0 == "Ask anything…" ? nil : $0 } ?? ""
+        func clear(_ box: XCUIElement) {
+            box.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.95)).tap()
+            let text = (box.value as? String) ?? ""
+            if text != "Ask anything…" && !text.isEmpty { box.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: text.count + 2)) }
+        }
+        defer { if input.exists && input.isEnabled { clear(input); if !backup.isEmpty { input.typeText(backup) } } }
+        let nonce=String(UUID().uuidString.prefix(6)),ack="ACK-"+nonce,code="LANTERN-"+nonce
+        func send(_ prompt: String, expected: String) {
+            clear(input); input.typeText(prompt)
+            let send = web.buttons["Send message"]
+            expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: send); waitForExpectations(timeout: 45)
+            send.tap()
+            XCTAssertFalse(web.buttons["Review ChatGPT draft"].waitForExistence(timeout: 5), "Stale generated drafts must recover automatically")
+            let reply = web.staticTexts[expected].firstMatch
+            XCTAssertTrue(reply.waitForExistence(timeout: 150), "The exact live response must return to Planner")
+            expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: input); waitForExpectations(timeout: 30)
+        }
+        send("Relay check: remember the code \(code). Reply with exactly \(ack). Do not change Planner data or use connected apps.", expected: ack)
+        app.terminate(); app.launch()
+        XCTAssertTrue(open.waitForExistence(timeout: 30)); open.tap()
+        input = web.textViews["Message ChatGPT"]
+        XCTAssertTrue(input.waitForExistence(timeout: 20))
+        XCTAssertTrue(web.staticTexts[ack].firstMatch.waitForExistence(timeout: 20), "Completed replies must survive relaunch")
+        send("Relay check: what code did I just ask you to remember? Reply with only that code. Do not use tools or change Planner data.", expected: code)
+    }
+    func testWebsiteSignInPopupPreservesOpenerAndConversation() {
+        let app = XCUIApplication()
+        app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"
+        app.launchArguments = ["-UITestFixture","-UITestSignedIn","-PlannerOpenChatGPT","-UITestWebsitePopup","-UITestInspectChatGPT"]
+        app.launch()
+        let portal = app.webViews["chatGPTPortalWebView"]
+        XCTAssertTrue(portal.staticTexts["Original conversation QA"].waitForExistence(timeout: 30))
+        portal.buttons["Open sign-in fixture"].tap()
+        let popup = app.webViews["websiteSignInPopupWebView"]
+        XCTAssertTrue(popup.staticTexts["Microsoft sign-in fixture"].waitForExistence(timeout: 15))
+        app.navigationBars.buttons["Back to ChatGPT"].tap()
+        XCTAssertTrue(portal.staticTexts["Original conversation QA"].waitForExistence(timeout: 10))
+        XCTAssertFalse(popup.exists)
+        portal.buttons["Open sign-in fixture"].tap()
+        XCTAssertTrue(popup.staticTexts["Microsoft sign-in fixture"].waitForExistence(timeout: 15))
+        popup.textFields["Fixture email"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap(); popup.typeText("fixture@example.invalid")
+        popup.secureTextFields["Fixture password"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap(); popup.typeText("fixture-only")
+        popup.buttons["Continue fixture sign-in"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(portal.staticTexts["Signed in; original thread remains"].waitForExistence(timeout: 15))
+        XCTAssertTrue(portal.staticTexts["Original conversation QA"].exists)
+        XCTAssertFalse(popup.exists)
+    }
     func testMainChatTypingKeepsKeyboardAcrossSessionPolling() {
         let app = launch()
         let web = app.webViews["plannerWebView"]
         let open = web.descendants(matching: .any).matching(identifier: "Open Main Chat").firstMatch
         XCTAssertTrue(open.waitForExistence(timeout: 30)); open.tap()
         let input = web.textViews["Message ChatGPT"]
-        XCTAssertTrue(input.waitForExistence(timeout: 15)); input.tap()
+        XCTAssertTrue(input.waitForExistence(timeout: 15)); input.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.95)).tap()
+        let previous = (input.value as? String) ?? ""
+        if previous != "Ask anything…" && !previous.isEmpty { input.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: previous.count + 2)) }
         input.typeText("a")
         Thread.sleep(forTimeInterval: 6)
         app.typeText("bcdef")
         XCTAssertEqual(input.value as? String, "abcdef")
+        web.buttons["Close Main Chat"].tap()
+        open.tap()
+        XCTAssertEqual(input.value as? String, "abcdef", "Opening the chat again must preserve its draft")
     }
     func testFullHeightChromeBehindChatModal() {
         let app = launch()
