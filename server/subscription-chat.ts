@@ -46,7 +46,7 @@ export async function handleSubscriptionChat(request:Request,username:string){
    db().from('planner_subscription_tool_turns').select('status,expires_at').eq('username',username).eq('chat_id',args.chatId).eq('id',args.turnId).maybeSingle()
   ])
   const receipt=storage(attempt),active=storage(turn)
-  return json({canResume:Boolean(receipt&&['started','submitted'].includes(receipt.status)&&active?.status==='running'&&Date.parse(active.expires_at)>Date.now())})
+  return json({canResume:Boolean(receipt&&['started','submitted','failed'].includes(receipt.status)&&active?.status==='running'&&Date.parse(active.expires_at)>Date.now())})
  }
  if(input.action==='relay_draft_check'){
   const args=z.object({chatId:z.string().uuid(),turnId:z.string().uuid(),prompt:z.string().min(1).max(30000)}).parse(input)

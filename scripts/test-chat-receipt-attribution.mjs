@@ -14,5 +14,9 @@ try{
  assert.equal((await page.evaluate(snapshot)).attributed,false)
  await page.locator('[data-content-search-unit-key]').evaluate(n=>n.textContent='Unrelated prompt without a receipt')
  assert.equal((await page.evaluate(snapshot)).attributed,false)
+ await page.evaluate(receipt=>{const user=document.querySelector('[data-content-search-unit-key]');user.textContent=receipt+' Current request';document.body.insertBefore(user,document.querySelector('[data-turn-key]'))},receipt)
+ assert.equal((await page.evaluate(snapshot)).attributed,true,'Work can mount the user request outside its assistant turn wrapper')
+ await page.locator('[data-content-search-unit-key]').evaluate(n=>n.textContent='[Planner relay receipt: B1111111-1111-4111-8111-111111111111] Older question')
+ assert.equal((await page.evaluate(snapshot)).attributed,false)
  console.log('Abbreviated current receipt accepted; different receipts and unrelated historical prompts rejected.')
 }finally{await browser.close()}

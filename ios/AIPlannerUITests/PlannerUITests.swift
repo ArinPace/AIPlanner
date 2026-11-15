@@ -1,43 +1,68 @@
 import XCTest
 
 final class PlannerUITests: XCTestCase {
+    private var sensitiveSignInTest=false
+    private var liveDraftBackup:String?
+    private var liveQARequestMayBeActive=false
     private func launch(signedIn: Bool = true, resumeSync: Bool = false, focusZoom: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"] = "http://127.0.0.1:5174"
         app.launchArguments = ["-UITestFixture"] + (signedIn ? ["-UITestSignedIn"] : []) + (resumeSync ? ["-UITestResumeSync"] : []) + (focusZoom ? ["-UITestFocusZoom"] : [])
         app.launch(); return app
     }
+    private func clearComposer(_ input:XCUIElement) {
+        // Native test control supplies selection when iOS WebKit reports stale
+        // accessibility coordinates after the software keyboard resizes it.
+        let select=XCUIApplication().buttons["Select QA composer"]
+        if select.exists {select.tap()}else{input.tap();input.typeKey("a",modifierFlags:.command)}
+        let value=(input.value as? String) ?? ""
+        if !["","Ask anything…"].contains(value){input.typeText(XCUIKeyboardKey.delete.rawValue)}
+        XCTAssertTrue(["","Ask anything…"].contains((input.value as? String) ?? ""),"Never send a test prompt over an uncleared user draft")
+    }
+    private func typeDraft(_ text:String,into input:XCUIElement) {
+        // Live tests preserve multiline drafts by declining to replace them.
+        XCTAssertFalse(text.contains("\n"));if !text.isEmpty {input.typeText(text)}
+    }
+    func testComposerCanReplaceLongDraftUsingSystemSelection() {
+        let app=XCUIApplication();app.launchEnvironment["AI_PLANNER_TEST_ORIGIN"]="http://127.0.0.1:5174";app.launchArguments=["-UITestFixture","-UITestSignedIn","-UITestSelectComposer"];app.launch();let web=app.webViews["plannerWebView"]
+        let open=web.descendants(matching:.any).matching(identifier:"Open Main Chat").firstMatch
+        XCTAssertTrue(open.waitForExistence(timeout:30));open.tap()
+        let input=web.textViews["Message ChatGPT"];XCTAssertTrue(input.waitForExistence(timeout:15))
+        clearComposer(input);input.typeText(String(repeating:"Long editable draft. ",count:20));clearComposer(input)
+    }
     func testLiveMainChatRelayContinuityAndRelaunch() throws {
         // Explicit opt-in only: harmless messages in the existing Main Chat.
         try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
-        let app = XCUIApplication(); app.launchArguments = ["-UITestSignedRelayDiagnostics"]; app.launch()
+        let app = XCUIApplication(); app.launchArguments = ["-UITestSignedRelayDiagnostics","-UITestSelectComposer"]; app.launch()
         let web = app.webViews["plannerWebView"]
         let open = web.descendants(matching: .any).matching(identifier: "Open Main Chat").firstMatch
         XCTAssertTrue(open.waitForExistence(timeout: 40)); open.tap()
         var input = web.textViews["Message ChatGPT"]
         XCTAssertTrue(input.waitForExistence(timeout: 20))
         let backup = (input.value as? String).flatMap { $0 == "Ask anything…" ? nil : $0 } ?? ""
+        liveDraftBackup=backup
+        try XCTSkipIf(backup.contains("\n"),"Leave an existing multiline draft untouched during live QA")
         func clear(_ box: XCUIElement) {
-            box.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.95)).tap()
-            let text = (box.value as? String) ?? ""
-            if text != "Ask anything…" && !text.isEmpty { box.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: text.count + 2)) }
+            clearComposer(box)
         }
         defer {
             if input.exists && !input.isEnabled {
                 let stop=web.buttons["Stop reply"];if stop.exists && stop.isEnabled {stop.tap()}
                 _ = XCTWaiter.wait(for:[XCTNSPredicateExpectation(predicate:NSPredicate(format:"enabled == true"),object:input)],timeout:15)
             }
-            if input.exists && input.isEnabled { clear(input); if !backup.isEmpty { input.typeText(backup) } }
+            if input.exists && input.isEnabled { clear(input); if !backup.isEmpty { typeDraft(backup,into:input) } }
         }
         let nonce=String(UUID().uuidString.prefix(6)),ack="ACK-"+nonce,code="LANTERN-"+nonce
         func send(_ prompt: String, expected: String) {
             clear(input); input.typeText(prompt)
             let send = web.buttons["Send message"]
             expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: send); waitForExpectations(timeout: 45)
-            send.tap()
+            liveQARequestMayBeActive=true;send.tap()
             XCTAssertFalse(web.buttons["Review ChatGPT draft"].waitForExistence(timeout: 5), "Stale generated drafts must recover automatically")
             let reply = web.staticTexts[expected].firstMatch
-            XCTAssertTrue(reply.waitForExistence(timeout: 150), "The exact live response must return to Planner")
+            let settled=XCTNSPredicateExpectation(predicate:NSPredicate{_,_ in reply.exists || (input.isEnabled && !web.buttons["Stop reply"].exists)},object:app)
+            XCTAssertEqual(XCTWaiter.wait(for:[settled],timeout:150),.completed)
+            XCTAssertTrue(reply.exists, "The exact live response must return to Planner")
             expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: input); waitForExpectations(timeout: 30)
         }
         send("Relay check: remember the code \(code). Reply with exactly \(ack). Do not change Planner data or use connected apps.", expected: ack)
@@ -47,6 +72,160 @@ final class PlannerUITests: XCTestCase {
         XCTAssertTrue(input.waitForExistence(timeout: 20))
         XCTAssertTrue(web.staticTexts[ack].firstMatch.waitForExistence(timeout: 20), "Completed replies must survive relaunch")
         send("Relay check: what code did I just ask you to remember? Reply with only that code. Do not use tools or change Planner data.", expected: code)
+        input.coordinate(withNormalizedOffset:CGVector(dx:0.5,dy:0.5)).tap();input.typeText("typing after reply")
+        Thread.sleep(forTimeInterval:6);app.typeText(" still works")
+        XCTAssertEqual(input.value as? String,"typing after reply still works")
+    }
+    func testLiveCSVFileRoundTrip() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
+        let app=XCUIApplication();app.launchArguments=["-UITestRelayCSV","-UITestSignedRelayDiagnostics","-UITestSelectComposer"];app.launch()
+        let web=app.webViews["plannerWebView"],open=web.descendants(matching:.any).matching(identifier:"Open Main Chat").firstMatch
+        XCTAssertTrue(open.waitForExistence(timeout:30));open.tap()
+        let input=web.textViews["Message ChatGPT"];XCTAssertTrue(input.waitForExistence(timeout:15))
+        let backup=(input.value as? String).flatMap{$0=="Ask anything…" ? nil:$0} ?? ""
+        liveDraftBackup=backup
+        try XCTSkipIf(backup.contains("\n"),"Leave an existing multiline draft untouched during live QA")
+        func clear(){clearComposer(input)}
+        func ready(){expectation(for:NSPredicate(format:"enabled == true"),evaluatedWith:input);waitForExpectations(timeout:30)}
+        func send(_ text:String){clear();input.typeText(text);let button=web.buttons["Send message"];expectation(for:NSPredicate(format:"enabled == true"),evaluatedWith:button);waitForExpectations(timeout:30);liveQARequestMayBeActive=true;button.tap()}
+        defer {let textOnly=web.buttons["Save reply without files"];if textOnly.exists && textOnly.isEnabled {textOnly.tap();_ = XCTWaiter.wait(for:[XCTNSPredicateExpectation(predicate:NSPredicate{_,_ in !textOnly.exists},object:app)],timeout:30)};if !input.isEnabled {let stop=web.buttons["Stop reply"];if stop.exists && stop.isEnabled {stop.tap()};_ = XCTWaiter.wait(for:[XCTNSPredicateExpectation(predicate:NSPredicate(format:"enabled == true"),object:input)],timeout:15)};if input.isEnabled {clear();if !backup.isEmpty {typeDraft(backup,into:input)}}}
+        let nonce=String(UUID().uuidString.prefix(6))
+        web.buttons["Attach CSV test"].tap()
+        XCTAssertTrue(web.staticTexts.matching(NSPredicate(format:"label CONTAINS %@","relay-check.csv")).firstMatch.waitForExistence(timeout:15))
+        let file="relay-qa-\(nonce).csv"
+        send("Relay check: read relay-check.csv and reply with its relay row value. Create a real downloadable unchanged CSV copy named \(file). Use Python if needed. Do not use Planner tools, connected apps, or change calendar data.")
+        let fileLink=web.links.matching(NSPredicate(format:"label CONTAINS %@",file)).firstMatch
+        let finished=XCTNSPredicateExpectation(predicate:NSPredicate{_,_ in fileLink.exists || (web.buttons["Save reply without files"].exists && web.buttons["Save reply without files"].isEnabled)},object:app)
+        XCTAssertEqual(XCTWaiter.wait(for:[finished],timeout:180),.completed)
+        XCTAssertTrue(fileLink.exists,"Wait for this request's unique saved output, not an older marker in chat history")
+        ready()
+        fileLink.tap()
+        let preview=web.otherElements.matching(identifier:"File contents").firstMatch
+        XCTAssertTrue(preview.waitForExistence(timeout:30))
+        XCTAssertTrue(preview.staticTexts.matching(NSPredicate(format:"label CONTAINS %@","relay,INPUT-7319")).firstMatch.waitForExistence(timeout:30),"The saved output bytes must contain the original CSV row")
+        web.buttons["Close file preview"].tap()
+    }
+    func testLiveReadFourDocumentFormats() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
+        let app=XCUIApplication();app.launchArguments=["-UITestRelayFileMatrix","-UITestSignedRelayDiagnostics","-UITestSelectComposer"];app.launchEnvironment["PLANNER_TEST_FILE_GROUP"]="documents";app.launch()
+        let web=app.webViews["plannerWebView"],open=web.descendants(matching:.any).matching(identifier:"Open Main Chat").firstMatch
+        XCTAssertTrue(open.waitForExistence(timeout:30));open.tap()
+        let input=web.textViews["Message ChatGPT"];XCTAssertTrue(input.waitForExistence(timeout:15))
+        let backup=(input.value as? String).flatMap{$0=="Ask anything…" ? nil:$0} ?? ""
+        liveDraftBackup=backup
+        try XCTSkipIf(backup.contains("\n"),"Leave an existing multiline draft untouched during live QA")
+        func clear(){clearComposer(input)}
+        defer {if !input.isEnabled {let stop=web.buttons["Stop reply"];if stop.exists && stop.isEnabled {stop.tap()};_ = XCTWaiter.wait(for:[XCTNSPredicateExpectation(predicate:NSPredicate(format:"enabled == true"),object:input)],timeout:15)};if input.isEnabled {clear();if !backup.isEmpty {typeDraft(backup,into:input)}}}
+        web.buttons["Attach matrix test"].tap()
+        for ext in ["csv","pdf","docx","xlsx"] {XCTAssertTrue(web.staticTexts.matching(NSPredicate(format:"label CONTAINS %@","verification."+ext)).firstMatch.waitForExistence(timeout:15))}
+        clear();input.typeText("Relay check: read each of the four attached verification files. Reply with the filename and its marker from the actual file contents. Do not create files, use connected apps, or change Planner data.")
+        let send=web.buttons["Send message"];expectation(for:NSPredicate(format:"enabled == true"),evaluatedWith:send);waitForExpectations(timeout:30);liveQARequestMayBeActive=true;send.tap()
+        let firstMarker=web.staticTexts.matching(NSPredicate(format:"label CONTAINS %@","CSV-8172")).firstMatch
+        let settled=XCTNSPredicateExpectation(predicate:NSPredicate{_,_ in firstMarker.exists || input.isEnabled},object:app)
+        XCTAssertEqual(XCTWaiter.wait(for:[settled],timeout:180),.completed)
+        for marker in ["CSV-8172","PDF-4613","DOCX-7294","XLSX-5386"] {XCTAssertTrue(web.staticTexts.matching(NSPredicate(format:"label CONTAINS %@",marker)).firstMatch.waitForExistence(timeout:15),"Read actual bytes for "+marker)}
+        expectation(for:NSPredicate(format:"enabled == true"),evaluatedWith:input);waitForExpectations(timeout:45)
+    }
+    func testLiveRecoverReceivedFileTransferWithoutResending() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
+        let app=XCUIApplication();app.launchArguments=["-UITestSignedRelayDiagnostics","-UITestSelectComposer"];app.launch()
+        let web=app.webViews["plannerWebView"],open=web.descendants(matching:.any).matching(identifier:"Open Main Chat").firstMatch
+        XCTAssertTrue(open.waitForExistence(timeout:30));open.tap()
+        let retry=web.buttons["Retry file transfer"];XCTAssertTrue(retry.waitForExistence(timeout:20));retry.tap()
+        let finished=XCTNSPredicateExpectation(predicate:NSPredicate{_,_ in !retry.exists},object:app)
+        XCTAssertEqual(XCTWaiter.wait(for:[finished],timeout:240),.completed,"Recover the existing response; never resend its prompt")
+        XCTAssertFalse(web.buttons["Save reply"].exists)
+    }
+    func testLiveSaveReceivedTextAfterProviderDownloadError() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
+        let app=XCUIApplication();app.launchArguments=["-UITestSignedRelayDiagnostics","-UITestSelectComposer"];app.launch()
+        let web=app.webViews["plannerWebView"],open=web.descendants(matching:.any).matching(identifier:"Open Main Chat").firstMatch
+        XCTAssertTrue(open.waitForExistence(timeout:30));open.tap()
+        let save=web.buttons["Save reply without files"];XCTAssertTrue(save.waitForExistence(timeout:30));save.tap()
+        let done=XCTNSPredicateExpectation(predicate:NSPredicate{_,_ in !save.exists},object:app)
+        XCTAssertEqual(XCTWaiter.wait(for:[done],timeout:30),.completed)
+        XCTAssertTrue(web.staticTexts.matching(NSPredicate(format:"label CONTAINS %@","INPUT-7319")).firstMatch.exists)
+        XCTAssertFalse(web.buttons["Retry file transfer"].exists)
+    }
+    func testLiveForceQuitDuringReplyRecoversSameRequest() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
+        let app=XCUIApplication();app.launchArguments=["-UITestSignedRelayDiagnostics","-UITestSelectComposer"];app.launch()
+        let web=app.webViews["plannerWebView"],open=web.descendants(matching:.any).matching(identifier:"Open Main Chat").firstMatch
+        XCTAssertTrue(open.waitForExistence(timeout:30));open.tap()
+        var input=web.textViews["Message ChatGPT"];XCTAssertTrue(input.waitForExistence(timeout:15))
+        expectation(for:NSPredicate(format:"enabled == true"),evaluatedWith:input);waitForExpectations(timeout:60)
+        let backup=(input.value as? String).flatMap{$0=="Ask anything…" ? nil:$0} ?? ""
+        liveDraftBackup=backup
+        try XCTSkipIf(backup.contains("\n"),"Preserve an existing multiline draft")
+        defer {if input.isEnabled {clearComposer(input);if !backup.isEmpty {typeDraft(backup,into:input)}}}
+        let marker="RESUME-"+String(UUID().uuidString.prefix(6));clearComposer(input)
+        let prompt="Relay check: start with \(marker), then count from 1 to 120 on separate lines, and end with DONE-\(marker). Do not use tools, connected apps, or change Planner data."
+        input.typeText(prompt)
+        let send=web.buttons["Send message"];expectation(for:NSPredicate(format:"enabled == true"),evaluatedWith:send);waitForExpectations(timeout:30);liveQARequestMayBeActive=true;send.tap()
+        let streaming=web.otherElements.matching(identifier:"Assistant reply in progress").staticTexts.matching(NSPredicate(format:"label CONTAINS %@",marker)).firstMatch
+        XCTAssertTrue(streaming.waitForExistence(timeout:100))
+        app.terminate();app.launch();XCTAssertTrue(open.waitForExistence(timeout:30));open.tap()
+        input=web.textViews["Message ChatGPT"]
+        let final=web.otherElements.matching(identifier:"Assistant message").staticTexts.matching(NSPredicate(format:"label CONTAINS %@","DONE-"+marker)).firstMatch
+        XCTAssertTrue(final.waitForExistence(timeout:240),"Recover the final response after terminating during streaming")
+        expectation(for:NSPredicate(format:"enabled == true"),evaluatedWith:input);waitForExpectations(timeout:30)
+        XCTAssertEqual(web.otherElements.matching(identifier:"Your message").containing(NSPredicate(format:"label CONTAINS %@",marker)).count,1,"One original request, no automatic resend")
+    }
+    func testLiveStreamingStopRetainsPartialAcrossBackground() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
+        let app=XCUIApplication();app.launchArguments=["-UITestSignedRelayDiagnostics","-UITestSelectComposer"];app.launch()
+        let web=app.webViews["plannerWebView"],open=web.descendants(matching:.any).matching(identifier:"Open Main Chat").firstMatch
+        XCTAssertTrue(open.waitForExistence(timeout:30));open.tap()
+        let input=web.textViews["Message ChatGPT"];XCTAssertTrue(input.waitForExistence(timeout:15))
+        let backup=(input.value as? String).flatMap{$0=="Ask anything…" ? nil:$0} ?? ""
+        liveDraftBackup=backup
+        try XCTSkipIf(backup.contains("\n"),"Leave an existing multiline draft untouched during live QA")
+        defer {if !input.isEnabled {let stop=web.buttons["Stop reply"];if stop.exists && stop.isEnabled {stop.tap()};_ = XCTWaiter.wait(for:[XCTNSPredicateExpectation(predicate:NSPredicate(format:"enabled == true"),object:input)],timeout:15)};if input.isEnabled {clearComposer(input);if !backup.isEmpty {typeDraft(backup,into:input)}}}
+        let marker="STREAM-"+String(UUID().uuidString.prefix(6));clearComposer(input)
+        input.typeText("Relay check: start with \(marker), then count from 1 to 600 on separate lines. Do not use tools, connected apps, or change Planner data.")
+        let send=web.buttons["Send message"];expectation(for:NSPredicate(format:"enabled == true"),evaluatedWith:send);waitForExpectations(timeout:30);liveQARequestMayBeActive=true;send.tap()
+        let streaming=web.otherElements.matching(identifier:"Assistant reply in progress").staticTexts.matching(NSPredicate(format:"label CONTAINS %@",marker)).firstMatch
+        XCTAssertTrue(streaming.waitForExistence(timeout:100),"Wait for a complete identifying marker in the partial stream")
+        XCUIDevice.shared.press(.home);app.activate()
+        let stop=web.buttons["Stop reply"];XCTAssertTrue(stop.waitForExistence(timeout:15));XCTAssertTrue(stop.isEnabled);stop.tap()
+        expectation(for:NSPredicate(format:"enabled == true"),evaluatedWith:input);waitForExpectations(timeout:30)
+        let retained=web.otherElements.matching(identifier:"Partial assistant reply").staticTexts.matching(NSPredicate(format:"label CONTAINS %@",marker)).firstMatch
+        XCTAssertTrue(retained.waitForExistence(timeout:15),"Retain this exact request's partial answer after Stop and backgrounding")
+    }
+    func testLiveReadOnlyPlannerToolRoundTrip() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
+        let app=XCUIApplication();app.launchArguments=["-UITestSignedRelayDiagnostics","-UITestSelectComposer"];app.launch()
+        let web=app.webViews["plannerWebView"],open=web.descendants(matching:.any).matching(identifier:"Open Main Chat").firstMatch
+        XCTAssertTrue(open.waitForExistence(timeout:30));open.tap()
+        let input=web.textViews["Message ChatGPT"];XCTAssertTrue(input.waitForExistence(timeout:15))
+        let backup=(input.value as? String).flatMap{$0=="Ask anything…" ? nil:$0} ?? ""
+        liveDraftBackup=backup
+        try XCTSkipIf(backup.contains("\n"),"Preserve an existing multiline draft")
+        defer {if input.isEnabled {clearComposer(input);if !backup.isEmpty {typeDraft(backup,into:input)}}}
+        let marker="TOOLS-"+String(UUID().uuidString.prefix(6));clearComposer(input)
+        input.typeText("Relay check: invoke only the read-only relay_list_tools app tool exactly once. Do not invoke any other tools, create files, contact connected apps, or change Planner data. After its result arrives, reply with exactly \(marker).")
+        let send=web.buttons["Send message"];expectation(for:NSPredicate(format:"enabled == true"),evaluatedWith:send);waitForExpectations(timeout:30);liveQARequestMayBeActive=true;send.tap()
+        let final=web.otherElements.matching(identifier:"Assistant message").staticTexts[marker].firstMatch
+        XCTAssertTrue(final.waitForExistence(timeout:180))
+        expectation(for:NSPredicate(format:"enabled == true"),evaluatedWith:input);waitForExpectations(timeout:30)
+    }
+    func testLiveWebsiteSignInHandoff() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["PLANNER_LIVE_CHAT_RELAY_TEST"] == "1")
+        sensitiveSignInTest=true
+        let app=XCUIApplication();app.launchArguments=["-UITestSignedRelayDiagnostics","-UITestSelectComposer"];app.launch()
+        let web=app.webViews["plannerWebView"],open=web.descendants(matching:.any).matching(identifier:"Open Main Chat").firstMatch
+        XCTAssertTrue(open.waitForExistence(timeout:30));open.tap()
+        let input=web.textViews["Message ChatGPT"];XCTAssertTrue(input.waitForExistence(timeout:15));clearComposer(input)
+        input.typeText("Relay check: open https://brightspace.nyu.edu/ in your browser and check only whether I am signed in. If already signed in, reply with exactly SITE-READY. If credentials or Duo are required, show the secure sign-in interface and wait for me there. Do not read course content or change Planner data.")
+        let send=web.buttons["Send message"];expectation(for:NSPredicate(format:"enabled == true"),evaluatedWith:send);waitForExpectations(timeout:30);liveQARequestMayBeActive=true;send.tap()
+        let portal=app.webViews["chatGPTPortalWebView"],ready=web.staticTexts["SITE-READY"].firstMatch
+        let result=XCTNSPredicateExpectation(predicate:NSPredicate{_,_ in portal.exists || ready.exists || input.isEnabled},object:app)
+        XCTAssertEqual(XCTWaiter.wait(for:[result],timeout:180),.completed)
+        if portal.exists {
+            print("LIVE_SITE_SIGNIN_HANDOFF_OPEN")
+            throw XCTSkip("The live secure website handoff opened. The account holder must complete Microsoft/Duo privately before this test can finish.")
+        }
+        XCTAssertTrue(ready.exists,"The site check must finish or expose a genuine secure sign-in handoff")
     }
     func testWebsiteSignInPopupPreservesOpenerAndConversation() {
         let app = XCUIApplication()
@@ -101,6 +280,18 @@ final class PlannerUITests: XCTestCase {
     }
     override func setUpWithError() throws { continueAfterFailure = false }
     override func tearDownWithError() throws {
+        guard !sensitiveSignInTest else{return}
+        // XCTest's abort-on-failure can skip Swift defer blocks. Clean up only
+        // the harmless live request started by this test, even after assertion failure.
+        let app=XCUIApplication(),web=XCUIApplication().webViews["plannerWebView"]
+        if liveQARequestMayBeActive,app.state == .runningForeground {
+            let stop=web.buttons["Stop reply"]
+            if stop.exists && stop.isEnabled {stop.tap();let input=web.textViews["Message ChatGPT"];_ = XCTWaiter.wait(for:[XCTNSPredicateExpectation(predicate:NSPredicate(format:"enabled == true"),object:input)],timeout:20)}
+        }
+        if let backup=liveDraftBackup,!backup.contains("\n"),app.state == .runningForeground {
+            let input=web.textViews["Message ChatGPT"]
+            if input.exists && input.isEnabled {let actual=(input.value as? String) ?? "";if actual != backup && !(backup.isEmpty && actual=="Ask anything…"){clearComposer(input);if !backup.isEmpty {typeDraft(backup,into:input)}}}
+        }
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = name; screenshot.lifetime = .keepAlways; add(screenshot)
     }

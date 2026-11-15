@@ -152,12 +152,16 @@ struct PlannerWebView: UIViewRepresentable {
             return controller
         }
         func attachRelayForRun() {
+            if relayOperationActive {(chatGPTPortal?.viewControllers.first as? PlannerChatGPTPortal)?.isNavigatingForRelay=true}
             guard let nav = chatGPTPortal, nav.parent == nil, nav.presentingViewController == nil, let web = webView, let parent = web.window?.rootViewController else { return }
             parent.addChild(nav); web.insertSubview(nav.view, at: 0); nav.didMove(toParent: parent)
-            nav.view.frame = web.bounds; nav.view.alpha = 0.01; nav.view.isUserInteractionEnabled = false; nav.view.accessibilityElementsHidden = true
+            nav.view.frame = web.bounds; nav.view.alpha = 1; nav.view.isUserInteractionEnabled = false; nav.view.accessibilityElementsHidden = true
+            // The visible Planner web view covers this browser. Keep full opacity
+            // so WebKit continues rendering Work turns and file-download workers.
             nav.view.layoutIfNeeded()
         }
         func parkRelay() {
+            (chatGPTPortal?.viewControllers.first as? PlannerChatGPTPortal)?.isNavigatingForRelay=false
             guard let nav = chatGPTPortal, let web = webView, nav.presentingViewController == nil else { return }
             if nav.parent == nil && nav.viewIfLoaded?.isUserInteractionEnabled == false { return }
             // Keep the relay retained but outside the visible view tree. A nested
@@ -575,6 +579,7 @@ struct PlannerWebView: UIViewRepresentable {
     var preparedFileFingerprint: String?
     var loadedChat: String?
     var pendingURL: String?
+    var isNavigatingForRelay=false
     var pendingChat: String?
     var submittedDraftFingerprint: String?
     var baseline = 0
@@ -716,13 +721,13 @@ struct PlannerWebView: UIViewRepresentable {
         browser.setNeedsLayout(); browser.layoutIfNeeded()
         // A cold offscreen WebKit load can remain provisional. Start it again
         // once visible, without reloading a committed sign-in page or active turn.
-        if pendingChat == nil && !documentCommitted && (browser.url == nil || (browser.url?.host == "chatgpt.com" && browser.url?.path == "/")) {
+        if pendingChat == nil && !isNavigatingForRelay && !documentCommitted && (browser.url == nil || (browser.url?.host == "chatgpt.com" && browser.url?.path == "/")) {
             browser.stopLoading(); loadHome()
         }
         Task { @MainActor [weak self] in
             guard let self else { return }
             try? await Task.sleep(for: .seconds(2))
-            guard self.view.window != nil, self.pendingChat == nil, !self.browser.isLoading else { return }
+            guard self.view.window != nil, self.pendingChat == nil, !self.isNavigatingForRelay, !self.browser.isLoading else { return }
             let blank = (try? await self.browser.evaluateJavaScript("!document.body || document.body.childElementCount === 0")) as? Bool ?? true
             if blank { self.loadHome() }
 
@@ -1104,7 +1109,7 @@ return {selectedModel:window.__plannerSelectedModel||'',sliders:ranges,summary:(
     const normalized=value=>(value||'').replace(/\\s+/g,' ').trim();
     const expected=normalized(window.__plannerPendingPrompt);
     let user=workTurn?.querySelector('[data-content-search-unit-key$=":user"]');
-    if(!user&&last)user=[...document.querySelectorAll('[data-message-author-role="user"]')].filter(n=>n.compareDocumentPosition(last)&Node.DOCUMENT_POSITION_FOLLOWING).at(-1);
+    if(!user&&last)user=[...document.querySelectorAll('[data-message-author-role="user"],[data-content-search-unit-key$=":user"]')].filter(n=>n.compareDocumentPosition(last)&Node.DOCUMENT_POSITION_FOLLOWING).at(-1);
     const receipt=expected.match(/^\\[Planner relay receipt: [A-F0-9-]{36}\\]/i)?.[0];
     const attributed=!expected||!!user&&normalized(user.textContent).includes(receipt||expected);
     if(expected&&!attributed&&user){const expand=[...user.querySelectorAll('button')].find(n=>/^Show more$/i.test(label(n)));expand?.click()}
@@ -1530,6 +1535,7 @@ document.addEventListener('click',event=>capture(event.target.closest?.('a[href]
         var state = try await snapshot()
         #if DEBUG
         var diagnostic = state; diagnostic.removeValue(forKey: "text"); diagnostic.removeValue(forKey: "url")
+        diagnostic["visibility"] = try? await browser.evaluateJavaScript("({state:document.visibilityState,width:innerWidth,height:innerHeight})")
         diagnostic["textLength"] = (state["text"] as? String)?.count ?? 0
         diagnostic["baseline"] = baseline; diagnostic["hasPending"] = pendingChat != nil; diagnostic["committed"] = documentCommitted; diagnostic["loading"] = browser.isLoading
         if let data = try? JSONSerialization.data(withJSONObject: diagnostic), let folder = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first { try? data.write(to: folder.appendingPathComponent("ChatRelayDiagnostics.json"), options: .atomic) }

@@ -17,7 +17,8 @@ test('resumption requires an owned current receipt and an unexpired running tool
  const call=async(extra={})=>(await handleSubscriptionChat(new Request('https://planner.test/api/subscription-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'relay_resume_check',chatId:chat,turnId:turn,...extra})}),'owner')).json() as Promise<{canResume:boolean}>
  try{
   assert.equal((await call()).canResume,true);status='started';assert.equal((await call()).canResume,true)
-  for(const value of ['missing','completed','failed','interrupted']){status=value;assert.equal((await call()).canResume,false)}
+  for(const value of ['missing','completed','interrupted']){status=value;assert.equal((await call()).canResume,false)}
+  status='failed';assert.equal((await call()).canResume,true)
   status='submitted'
   for(const value of ['missing','completed','cancelled']){toolStatus=value;assert.equal((await call()).canResume,false)}
   toolStatus='running';expires=Date.now()-1000;assert.equal((await call()).canResume,false)
