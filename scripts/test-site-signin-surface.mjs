@@ -65,6 +65,11 @@ try{
   const consent=await page.getByRole('dialog').boundingBox();assert(consent.x>=0&&consent.x+consent.width<=width+1)
   await page.evaluate(()=>window.__plannerSiteSignIn.restore());assert(await page.locator('#history').isVisible());assert.equal(await page.locator('[data-planner-secure-root],[data-planner-secure-path],[data-planner-secure-fit]').count(),0)
  }
+ await page.setContent('<header id="thread">Private conversation</header><section><p>Something went wrong, please take over to sign in</p><div><button>Not now</button><button>Take over</button></div></section>')
+ assert.equal((await page.evaluate(script)).found,true)
+ assert.equal(await page.locator('#thread').isVisible(),false)
+ assert(await page.getByRole('button',{name:'Take over',exact:true}).isVisible())
+ await page.evaluate(()=>window.__plannerSiteSignIn.restore())
  await page.setContent('<main><article data-turn-key="old" data-talvt-turn-state="complete"><form><h2>Sign in to old.example.com</h2><input type="password"><button>Sign in</button></form></article><article data-turn-key="new"><div data-message-author-role="assistant">A newer reply</div></article></main>')
  assert.equal((await page.evaluate(script)).found,false,'Completed historical forms must not become a login sheet')
  await page.evaluate(()=>window.__plannerSiteSignIn.restore())

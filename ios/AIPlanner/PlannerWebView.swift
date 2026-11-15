@@ -625,7 +625,7 @@ struct PlannerWebView: UIViewRepresentable {
       const label=n=>(n.getAttribute('aria-label')||n.textContent||'').trim();
       const headings=n=>[...n.querySelectorAll('h1,h2,h3,h4,legend,p,strong,[role=heading]')].map(n=>n.textContent||'').join('\n');
       const currentNode=n=>!!n?.isConnected&&!!n.getClientRects().length&&!n.closest('[hidden],[inert],[aria-hidden=true],[data-state=closed]')&&(window.__plannerSignInCurrent?.(n)??true);
-      const actions=/^(Take over to sign in|Sign in on web page|Return control|I.m done|Use saved account|Other sign-in options|Use passkey)$/i;
+      const actions=/^(Take over|Take over to sign in|Sign in on web page|Return control|I.m done|Use saved account|Other sign-in options|Use passkey)$/i;
       const authHint=/sign in|log in|saved account|verify your identity|verification|security code|passcode|two.step|multi.factor|duo|approve|browser access|visit site|access to/i;
       const isAuthForm=n=>!!n.querySelector('input[type=password],input[autocomplete=one-time-code]')||authHint.test(headings(n));
       const isAuthDialog=n=>authHint.test(headings(n))&&[...n.querySelectorAll('button')].some(b=>/^(Sign in|Log in|Allow|Approve|Continue|Next|Verify)$/i.test(label(b))||actions.test(label(b)));
@@ -667,7 +667,7 @@ struct PlannerWebView: UIViewRepresentable {
           if(button){
             for(let parent=button.parentElement,depth=0;parent&&parent!==document.body&&depth<5;parent=parent.parentElement,depth++){
               if(parent.matches('main,article,[data-turn-key]')||parent.querySelector('#prompt-textarea,[data-composer-markdown]'))break;
-              if(authHint.test(headings(parent))||parent.querySelector('iframe')){root=parent;break}
+              if(authHint.test(headings(parent))||authHint.test(parent.textContent||'')||parent.querySelector('iframe')){root=parent;break}
             }
             root ||= button.parentElement;
           }
@@ -743,6 +743,7 @@ struct PlannerWebView: UIViewRepresentable {
         configuration.userContentController.addScriptMessageHandler(blobBridge,contentWorld:.page,name:"plannerResponseFile")
         configuration.userContentController.addUserScript(WKUserScript(source:Self.blobDownloadCapture,injectionTime:.atDocumentStart,forMainFrameOnly:false))
         configuration.allowsInlineMediaPlayback = true
+        configuration.mediaTypesRequiringUserActionForPlayback = []
         browser = WKWebView(frame: .zero, configuration: configuration)
         browser.accessibilityIdentifier = "chatGPTPortalWebView"
         browser.navigationDelegate = self; browser.uiDelegate = self
@@ -810,7 +811,7 @@ struct PlannerWebView: UIViewRepresentable {
                 for _ in 0..<30 {
                     try? await Task.sleep(for:.seconds(1));guard let self else{return}
                     let script = #"""
-                    (()=>{const visible=n=>!!n.getClientRects().length;const shape=n=>({tag:n.tagName,id:n.id,role:n.getAttribute('role'),class:n.className,rect:n.getBoundingClientRect().toJSON()});const seeds=[...document.querySelectorAll('form,[role=dialog],input[type=password],button')].filter(visible).filter(n=>n.matches('form,[role=dialog],input[type=password]')||/^(Take over to sign in|Sign in on web page|Return control|I.m done|Sign in|Allow|Approve)$/i.test((n.getAttribute('aria-label')||n.innerText||'').trim()));return JSON.stringify({host:location.hostname,surfaces:seeds.map(n=>({node:shape(n),buttons:[...n.querySelectorAll('button')].map(b=>(b.getAttribute('aria-label')||b.innerText||'').trim()),inputs:[...n.querySelectorAll('input')].map(i=>({type:i.type})),parents:(()=>{const a=[];for(let p=n.parentElement;p&&a.length<6;p=p.parentElement)a.push(shape(p));return a})()}))})})()
+                    (()=>{const visible=n=>!!n.getClientRects().length;const shape=n=>({tag:n.tagName,id:n.id,role:n.getAttribute('role'),class:n.className,rect:n.getBoundingClientRect().toJSON()});const seeds=[...document.querySelectorAll('form,[role=dialog],input[type=password],button')].filter(visible).filter(n=>n.matches('form,[role=dialog],input[type=password]')||/^(Take over|Take over to sign in|Sign in on web page|Return control|I.m done|Sign in|Allow|Approve)$/i.test((n.getAttribute('aria-label')||n.innerText||'').trim()));return JSON.stringify({host:location.hostname,media:[...document.querySelectorAll('video')].map(v=>({paused:v.paused,readyState:v.readyState,width:v.videoWidth,height:v.videoHeight,muted:v.muted,error:v.error?.code||null,tracks:v.srcObject?.getTracks?.().map(t=>({kind:t.kind,readyState:t.readyState,enabled:t.enabled,muted:t.muted}))||[]})),canvases:[...document.querySelectorAll('canvas')].map(c=>({width:c.width,height:c.height})),surfaces:seeds.map(n=>({node:shape(n),buttons:[...n.querySelectorAll('button')].map(b=>(b.getAttribute('aria-label')||b.innerText||'').trim()),inputs:[...n.querySelectorAll('input')].map(i=>({type:i.type})),parents:(()=>{const a=[];for(let p=n.parentElement;p&&a.length<6;p=p.parentElement)a.push(shape(p));return a})()}))})})()
                     """#
                     if let value=try? await self.browser.evaluateJavaScript(script) as? String,let folder=FileManager.default.urls(for:.cachesDirectory,in:.userDomainMask).first{try? value.write(to:folder.appendingPathComponent("SecureSurfaceStructure.json"),atomically:true,encoding:.utf8)}
                 }
@@ -972,7 +973,7 @@ window.__plannerSignInCurrent=node=>{
 window.__plannerSignInState=()=>{
  const active=window.__plannerSignInCurrent,label=n=>(n.getAttribute('aria-label')||n.innerText||'').trim();
  const buttons=[...document.querySelectorAll('button')].filter(active);
- const secureForm=buttons.some(n=>/^(Take over to sign in|Sign in on web page|Return control|I.m done|Use saved account|Other sign-in options)$/i.test(label(n)))||[...document.querySelectorAll('form,[role="dialog"]')].filter(active).some(n=>/sign in to [a-z0-9.-]+[.][a-z]{2,}/i.test(n.innerText));
+ const secureForm=buttons.some(n=>/^(Take over|Take over to sign in|Sign in on web page|Return control|I.m done|Use saved account|Other sign-in options)$/i.test(label(n)))||[...document.querySelectorAll('form,[role="dialog"]')].filter(active).some(n=>/sign in to [a-z0-9.-]+[.][a-z]{2,}/i.test(n.innerText));
  const approval=[...document.querySelectorAll('[role="dialog"],[role="alertdialog"]')].filter(active).some(n=>/website|browser|access to|visit site/i.test(n.innerText)&&[...n.querySelectorAll('button')].some(b=>active(b)&&/^(Allow|Approve|Continue)$/i.test(label(b))));
  return {secureForm,approval,interaction:secureForm||approval};
 };
