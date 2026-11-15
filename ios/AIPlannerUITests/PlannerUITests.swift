@@ -7,6 +7,18 @@ final class PlannerUITests: XCTestCase {
         app.launchArguments = ["-UITestFixture"] + (signedIn ? ["-UITestSignedIn"] : []) + (resumeSync ? ["-UITestResumeSync"] : []) + (focusZoom ? ["-UITestFocusZoom"] : [])
         app.launch(); return app
     }
+    func testMainChatTypingKeepsKeyboardAcrossSessionPolling() {
+        let app = launch()
+        let web = app.webViews["plannerWebView"]
+        let open = web.descendants(matching: .any).matching(identifier: "Open Main Chat").firstMatch
+        XCTAssertTrue(open.waitForExistence(timeout: 30)); open.tap()
+        let input = web.textViews["Message ChatGPT"]
+        XCTAssertTrue(input.waitForExistence(timeout: 15)); input.tap()
+        input.typeText("a")
+        Thread.sleep(forTimeInterval: 6)
+        app.typeText("bcdef")
+        XCTAssertEqual(input.value as? String, "abcdef")
+    }
     func testFullHeightChromeBehindChatModal() {
         let app = launch()
         let web = app.webViews["plannerWebView"]

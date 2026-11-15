@@ -152,6 +152,7 @@ struct PlannerWebView: UIViewRepresentable {
         }
         func parkRelay() {
             guard let nav = chatGPTPortal, let web = webView, nav.presentingViewController == nil else { return }
+            if nav.parent == nil && nav.viewIfLoaded?.isUserInteractionEnabled == false { return }
             // Keep the relay retained but outside the visible view tree. A nested
             // WKWebView can steal keyboard focus and leak hidden accessibility nodes.
             if nav.parent != nil { nav.willMove(toParent: nil); nav.view.removeFromSuperview(); nav.removeFromParent() }
@@ -1058,7 +1059,15 @@ return {selectedModel:window.__plannerSelectedModel||'',sliders:ranges,summary:(
     func setInteractive(_ allowed: Bool) {
         if !allowed && navigationController?.presentingViewController != nil { return }
         browser?.evaluateJavaScript("if(document.body)document.body.inert=" + (allowed ? "false" : "true"), completionHandler: { _, _ in })
-        if !allowed { browser?.endEditing(true) }
+        if !allowed, let browser {
+            // Resign only a responder owned by this hidden browser. endEditing
+            // can disturb the visible Planner web view's keyboard session.
+            func resignOwnedResponder(_ view: UIView) {
+                if view.isFirstResponder { view.resignFirstResponder() }
+                for child in view.subviews { resignOwnedResponder(child) }
+            }
+            resignOwnedResponder(browser)
+        }
     }
     func inspectDraft() async throws -> [String: Any] {
         guard browser.url?.host == "chatgpt.com" else { throw NativeError("Load ChatGPT first.") }
