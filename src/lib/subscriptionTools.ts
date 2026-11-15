@@ -19,7 +19,7 @@ export function toolResultsMessage(results:unknown[],turnId:string){
 // Recognize only our generated envelope, never a normal draft or credential form.
 export function unsentRelayRequest(text:string){
  if(!/^\[Planner relay receipt: [A-F0-9-]{36}\]/i.test(text))return null
- const turnId=text.match(/Planner relay response ID: ([a-f0-9-]{36})\./i)?.[1]
+ const turnId=[...text.matchAll(/Planner relay response ID: ([a-f0-9-]{36})\./ig)].at(-1)?.[1]
  const marker='\n\nCurrent user request:\n',start=text.lastIndexOf(marker)
  if(!turnId||start<0)return null
  const body=text.slice(start+marker.length),ends=['\n\nFile delivery (only when returning requested files):','\n\nPlanner relay response ID:'].map(marker=>body.indexOf(marker)).filter(index=>index>=0)
