@@ -20,10 +20,11 @@ export function toolResultsMessage(results:unknown[],turnId:string){
 export function unsentRelayRequest(text:string){
  if(!/^\[Planner relay receipt: [A-F0-9-]{36}\]/i.test(text))return null
  const turnId=[...text.matchAll(/Planner relay response ID: ([a-f0-9-]{36})\./ig)].at(-1)?.[1]
- const marker='\n\nCurrent user request:\n',start=text.lastIndexOf(marker)
- if(!turnId||start<0)return null
- const body=text.slice(start+marker.length),ends=['\n\nFile delivery (only when returning requested files):','\n\nPlanner relay response ID:'].map(marker=>body.indexOf(marker)).filter(index=>index>=0)
- if(!ends.length)return null
- const prompt=body.slice(0,Math.min(...ends)).trim()
+ // WebKit contenteditable can collapse blank paragraphs in restored drafts.
+ const marker=[...text.matchAll(/(?:^|\r?\n)Current user request:[ \t]*\r?\n/g)].at(-1)
+ if(!turnId||!marker)return null
+ const body=text.slice(marker.index!+marker[0].length),end=body.search(/\r?\n(?:File delivery \(only when returning requested files\):|Planner relay response ID:)/)
+ if(end<0)return null
+ const prompt=body.slice(0,end).trim()
  return prompt&&prompt.length<=30000?{turnId,prompt}:null
 }

@@ -8,6 +8,8 @@ test('draft recognition requires a generated receipt and preserves the original 
  const prompt='Can you read my course messages?'
  const envelope='[Planner relay receipt: '+turn+']\n'+toolTurnMessage(prompt,turn,'Fixture integration instructions')
  assert.deepEqual(unsentRelayRequest(envelope),{turnId:turn,prompt})
+ assert.deepEqual(unsentRelayRequest(envelope.replaceAll('\n\n','\n')),{turnId:turn,prompt})
+ assert.deepEqual(unsentRelayRequest(envelope.replaceAll('\n','\r\n')),{turnId:turn,prompt})
  const withExample='[Planner relay receipt: '+turn+']\n'+toolTurnMessage(prompt,turn,'An old example: Planner relay response ID: c1111111-1111-4111-8111-111111111111.')
  assert.deepEqual(unsentRelayRequest(withExample),{turnId:turn,prompt})
  for(const value of [prompt,'fixture@example.invalid','password',toolTurnMessage(prompt,turn),'[Planner relay receipt: '+turn+']\nIncomplete request'])assert.equal(unsentRelayRequest(value),null)
