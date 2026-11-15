@@ -22,7 +22,13 @@ final class PlannerUITests: XCTestCase {
             let text = (box.value as? String) ?? ""
             if text != "Ask anything…" && !text.isEmpty { box.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: text.count + 2)) }
         }
-        defer { if input.exists && input.isEnabled { clear(input); if !backup.isEmpty { input.typeText(backup) } } }
+        defer {
+            if input.exists && !input.isEnabled {
+                let stop=web.buttons["Stop reply"];if stop.exists && stop.isEnabled {stop.tap()}
+                _ = XCTWaiter.wait(for:[XCTNSPredicateExpectation(predicate:NSPredicate(format:"enabled == true"),object:input)],timeout:15)
+            }
+            if input.exists && input.isEnabled { clear(input); if !backup.isEmpty { input.typeText(backup) } }
+        }
         let nonce=String(UUID().uuidString.prefix(6)),ack="ACK-"+nonce,code="LANTERN-"+nonce
         func send(_ prompt: String, expected: String) {
             clear(input); input.typeText(prompt)

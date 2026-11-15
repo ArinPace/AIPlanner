@@ -1071,7 +1071,8 @@ return {selectedModel:window.__plannerSelectedModel||'',sliders:ranges,summary:(
     const expected=normalized(window.__plannerPendingPrompt);
     let user=workTurn?.querySelector('[data-content-search-unit-key$=":user"]');
     if(!user&&last)user=[...document.querySelectorAll('[data-message-author-role="user"]')].filter(n=>n.compareDocumentPosition(last)&Node.DOCUMENT_POSITION_FOLLOWING).at(-1);
-    const attributed=!expected||!!user&&normalized(user.textContent).includes(expected);
+    const receipt=expected.match(/^\\[Planner relay receipt: [A-F0-9-]{36}\\]/i)?.[0];
+    const attributed=!expected||!!user&&normalized(user.textContent).includes(receipt||expected);
     if(expected&&!attributed&&user){const expand=[...user.querySelectorAll('button')].find(n=>/^Show more$/i.test(label(n)));expand?.click()}
     const completionSelector='[data-testid="copy-turn-action-button"],button[aria-label="Copy response"],button[aria-label="Good response"],button[aria-label="Read aloud"]';
     const workFinal=last?.closest('[data-local-conversation-final-assistant="true"]');
