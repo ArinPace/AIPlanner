@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import assert from 'node:assert/strict'
 const browser=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true})
 try{
- for(const mode of ['receipt-failed','lost-ack','save-failed','double-send']){
+ for(const mode of ['receipt-failed','lost-ack','save-failed','double-send','file-provider-error']){
   const page=await browser.newPage({viewport:{width:393,height:852}});page.setDefaultTimeout(12000)
   const fixture=fs.readFileSync(new URL('../ios/AIPlanner/UITestFixture.js',import.meta.url),'utf8').replace("if(input.action==='file_start')","if(input.action==='tool_begin')value={instructions:'Reply to the user.'};else if(input.action==='tool_finish')value={ok:true};else if(input.action==='file_start')")
   await page.addInitScript({content:'globalThis.__plannerFixtureSignedIn=true;'+fixture})
@@ -18,8 +18,8 @@ try{
    window.plannerNativeChatGPTPortal=true;window.plannerNativeChatGPTRelayVersion=8
    window.webkit={messageHandlers:{plannerNative:{postMessage:async input=>{
     if(input.action==='chatGPTRelaySend'){window.sends++;window.sent=true;if(mode==='lost-ack')throw Error('The connection was interrupted after submission. Inspect the session.');await new Promise(r=>setTimeout(r,250));return {ok:true}}
-    if(input.action==='chatGPTRelayMirror')window.mirrors++
-    if(input.action==='chatGPTRelayStatus')return {ready:true,phase:window.sent?'completed':'idle',text:window.sent?'Saved exactly once.':''}
+    if(input.action==='chatGPTRelayDownload'&&mode==='file-provider-error')throw Error('ChatGPT could not download this file.');if(input.action==='chatGPTRelayMirror')window.mirrors++
+    if(input.action==='chatGPTRelayStatus')return {ready:true,phase:window.sent?'completed':'idle',text:window.sent?'Saved exactly once.':'',files:mode==='file-provider-error'&&window.sent?[{key:'output:0',name:'result.csv'}]:[]}
     return {ok:true}
    }}}}
   },mode)
@@ -38,6 +38,7 @@ try{
     const retry=chat.getByRole('button',{name:'Save reply',exact:true});await retry.waitFor();assert.equal(await send.isEnabled(),false)
     await page.reload();await page.getByRole('button',{name:'Open Main Chat'}).click();await retry.waitFor();await retry.click()
    }
+   if(mode==='file-provider-error'){await chat.getByRole('button',{name:'Save reply without files',exact:true}).click()}
    await page.waitForFunction(()=>document.getElementById('subscription-message').value==='')
    assert.equal(await chat.getByText('Saved exactly once.',{exact:true}).count(),1)
    assert.equal(await page.evaluate(()=>window.sends),mode==='save-failed'?0:1,'Saving a recovered reply cannot send the prompt again')
@@ -45,5 +46,5 @@ try{
   }
   await page.close()
  }
- console.log('Receipt failure, lost submission acknowledgement, final-save recovery across reload, duplicate-send lock, and Unicode/multiline draft preservation passed.')
+ console.log('Receipt failure, lost submission acknowledgement, final-save recovery across reload, duplicate-send lock, provider download-error text recovery, and Unicode/multiline draft preservation passed.')
 }finally{await browser.close()}

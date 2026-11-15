@@ -20,8 +20,8 @@ try{for(const [name,mime,bytes] of files){
    return {ok:true}
   }}}}
  })
- await page.goto('http://127.0.0.1:5174');await page.getByRole('button',{name:'Chat',exact:true}).click()
- await page.locator('.assistant-chat-title').getByText('Connected',{exact:true}).waitFor()
+ await page.goto('http://127.0.0.1:5174');await page.getByRole('button',{name:'Open Main Chat',exact:true}).click()
+ await page.getByRole('dialog',{name:'Main Chat',exact:true}).getByRole('textbox',{name:'Message ChatGPT'}).waitFor()
  await page.locator('input[type=file][accept="*/*"]').setInputFiles({name,mimeType:mime,buffer:bytes})
  await page.getByRole('textbox',{name:'Message ChatGPT'}).fill('Transport fixture test, not a real AI reply.')
  await page.getByRole('button',{name:'Send message',exact:true}).click()

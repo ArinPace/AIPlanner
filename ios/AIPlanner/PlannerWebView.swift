@@ -1124,7 +1124,8 @@ return {selectedModel:window.__plannerSelectedModel||'',sliders:ranges,summary:(
       const nl=String.fromCharCode(10);target.replaceWith(document.createTextNode(nl+(marked?text:'PLANNER_TOOL_REQUEST'+nl+text+nl+'END_PLANNER_TOOL_REQUEST')+nl));
     });
     const response=(clean?(clean.innerText||clean.textContent||'').trim():'').replace(/(PLANNER_TOOL_REQUEST\\s*)(?:json|planner-tools)\\s*(?=[{])/i,'$1');
-    const outputs=turn?[...turn.querySelectorAll('a[download],a[href^="sandbox:"],a[href*="/backend-api/files/"],a[href*="/backend-api/estuary/content"],button[aria-label^="Download "],button[aria-label="Save image"],[data-file-reference="true"][role="button"][aria-label^="Download "]')].map((node,index)=>{node.dataset.plannerDownloadId ||= (last?.closest('[data-chatgpt-selection-message-id]')?.getAttribute('data-chatgpt-selection-message-id')||last?.getAttribute('data-message-id')||turn?.id||crypto.randomUUID())+':'+index;return {key:node.dataset.plannerDownloadId,name:(node.getAttribute('download')||node.innerText||node.getAttribute('aria-label')||'Download file').trim().slice(0,240)}}):[];
+    const outputScope=workFinal||turn;
+    const outputs=outputScope?[...outputScope.querySelectorAll('a[download],a[href^="sandbox:"],a[href*="/backend-api/files/"],a[href*="/backend-api/estuary/content"],button[aria-label^="Download "],button[aria-label="Save image"],[data-file-reference="true"][role="button"][aria-label^="Download "]')].map((node,index)=>{node.dataset.plannerDownloadId ||= (last?.closest('[data-chatgpt-selection-message-id]')?.getAttribute('data-chatgpt-selection-message-id')||last?.getAttribute('data-message-id')||turn?.id||crypto.randomUUID())+':'+index;return {key:node.dataset.plannerDownloadId,name:(node.getAttribute('download')||node.innerText||node.getAttribute('aria-label')||'Download file').trim().slice(0,240)}}):[];
     const replyKey=last?.closest('[data-chatgpt-selection-message-id]')?.getAttribute('data-chatgpt-selection-message-id')||last?.getAttribute('data-message-id')||last?.closest('[data-message-id]')?.getAttribute('data-message-id')||turn?.id||turn?.getAttribute('data-testid')||'';
     return {attributed,files:outputs,ready:!!box,needsLogin:(!box&&guest)||(!secureForm&&[...document.querySelectorAll('input[type="password"]')].some(n=>window.__plannerSignInCurrent?.(n))),guest,interaction,running,count:replies.length,replyKey,text:response,final:workTurn?!!workFinal&&!!workTurn.querySelector('[data-talvt-turn-state="complete"]'):!!turn?.querySelector(completionSelector),url:location.href};})()
     """ }
@@ -1195,6 +1196,7 @@ document.addEventListener('click',event=>capture(event.target.closest?.('a[href]
 """# }
     fileprivate func captureBlobDownload(_ message:WKScriptMessage,reply:@escaping(Any?,String?)->Void){
         let host=message.frameInfo.securityOrigin.host
+        traceDownload("capture-frame",["origin":host,"host":message.frameInfo.request.url?.host ?? "","path":message.frameInfo.request.url?.path ?? ""])
         guard ["chatgpt.com","cdn.platform.openai.com"].contains(host),let body=message.body as? [String:Any] else{reply(nil,"Unsupported download frame.");return}
         guard responseDownloadPending else{reply(["active":false],nil);return}
         if body["action"] as? String == "check"{reply(["active":true,"generation":responseDownloadGeneration?.uuidString ?? ""],nil);return}
@@ -1247,6 +1249,8 @@ document.addEventListener('click',event=>capture(event.target.closest?.('a[href]
         if !outputs.contains(where: { $0["key"] as? String == key }), outputs.count == 1, let expectedReply, !expectedReply.isEmpty, state["text"] as? String == expectedReply, let current = outputs.first?["key"] as? String { resolvedKey = current }
         guard browser.url?.host == "chatgpt.com" else { throw NativeError("Load the ChatGPT conversation first.") }
         traceDownload("start");downloadResult = nil; downloadFailure = nil
+        let downloadErrorScript="[...document.querySelectorAll('[role=alert],[role=status]')].some(n=>n.getClientRects().length&&/Failed to download file\\. Please try again later\\./i.test(n.textContent||''))"
+        var downloadErrorVisible=(try? await browser.evaluateJavaScript(downloadErrorScript)) as? Bool ?? false
         let automaticWindows = browser.configuration.preferences.javaScriptCanOpenWindowsAutomatically
         browser.configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
         responseDownloadGeneration=UUID();responseDownloadPending = true; defer { responseDownloadGeneration=nil;downloadResult=nil;downloadFailure=nil;responseDownloadPending = false; browser.configuration.preferences.javaScriptCanOpenWindowsAutomatically = automaticWindows; responseDownloadPopups.forEach { $0.stopLoading(); $0.removeFromSuperview() }; responseDownloadPopups.removeAll() }
@@ -1255,16 +1259,22 @@ document.addEventListener('click',event=>capture(event.target.closest?.('a[href]
             self?.traceDownload("click-completed",["success":(try? result.get()) as? Bool == true])
         }
         var viewerDownloadClicked = false
-        for _ in 0..<120 {
+        for attempt in 0..<120 {
             try await Task.sleep(for: .milliseconds(500))
+            if attempt == 5, downloadResult == nil {
+                _ = try? await browser.callAsyncJavaScript("const node=[...document.querySelectorAll('[data-planner-download-id]')].find(n=>n.dataset.plannerDownloadId===key);if((node?.getAttribute('aria-label')||'')!=='Download file')return false;for(let p=node.parentElement,depth=0;p&&depth<6;p=p.parentElement,depth++){const open=[...p.querySelectorAll('button')].find(n=>/^Open preview of /i.test(n.getAttribute('aria-label')||''));if(open){open.click();return true}}return false;",arguments:["key":resolvedKey],in:nil,contentWorld:.page)
+            }
             if let result = downloadResult {
                 browser.evaluateJavaScript("[...document.querySelectorAll('button')].find(n=>(n.getAttribute('aria-label')||n.innerText||'').trim()==='Close viewer')?.click()",completionHandler:nil)
                 return result
             }
             if let failure = downloadFailure { throw NativeError(failure) }
+            let providerFailed=(try? await browser.evaluateJavaScript(downloadErrorScript)) as? Bool ?? false
+            if providerFailed && !downloadErrorVisible {throw NativeError("ChatGPT could not download this file. Your reply is retained; retry the file or save the text to continue.")}
+            downloadErrorVisible=providerFailed
             if !viewerDownloadClicked {
                 viewerDownloadClicked = true
-                browser.evaluateJavaScript("const buttons=[...document.querySelectorAll('button')].filter(n=>n.getClientRects().length);const label=n=>(n.getAttribute('aria-label')||n.innerText||'').trim();const close=buttons.find(n=>label(n)==='Close viewer');const download=close&&buttons.find(n=>label(n)==='Download');if(download){download.click();true}else{false}") { result, _ in
+                browser.evaluateJavaScript("const buttons=[...document.querySelectorAll('button')].filter(n=>n.getClientRects().length);const label=n=>(n.getAttribute('aria-label')||n.innerText||'').trim();const dialog=[...document.querySelectorAll('[role=dialog]')].filter(n=>n.getClientRects().length).at(-1);const close=buttons.find(n=>/^(Close viewer|Close preview|Close file preview)$/i.test(label(n)));const candidates=dialog?[...dialog.querySelectorAll('button')].filter(n=>n.getClientRects().length):close?buttons:[];const download=candidates.find(n=>/^Download(?: .+)?$/i.test(label(n)));if(download){download.click();true}else{false}") { result, _ in
                     if result as? Bool != true { viewerDownloadClicked = false }
                 }
             }
