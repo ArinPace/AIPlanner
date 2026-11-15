@@ -11,6 +11,12 @@ final class PlannerUITests: XCTestCase {
         app.launch(); return app
     }
     private func clearComposer(_ input:XCUIElement) {
+        var readySince:Date?
+        let stable=XCTNSPredicateExpectation(predicate:NSPredicate{_,_ in
+            guard input.exists,input.isEnabled else {readySince=nil;return false}
+            if readySince == nil {readySince=Date()};return Date().timeIntervalSince(readySince!)>=1
+        },object:XCUIApplication())
+        XCTAssertEqual(XCTWaiter.wait(for:[stable],timeout:60),.completed,"Wait for recovery to finish before editing a draft")
         // Native test control supplies selection when iOS WebKit reports stale
         // accessibility coordinates after the software keyboard resizes it.
         let select=XCUIApplication().buttons["Select QA composer"]
