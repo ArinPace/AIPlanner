@@ -2963,3 +2963,6 @@ html, body { touch-action: pan-x pan-y; }
 .main-ai-sheet.is-closing { transition: transform 240ms cubic-bezier(.22,.68,.2,1); pointer-events: none; }
 .chat-connection-notice { display: flex; align-items: center; gap: 10px; margin: 0; padding: 8px 14px; color: var(--muted); font-size: .875rem; }
 @media(prefers-reduced-motion:reduce) { .main-ai-sheet.is-closing { transition: none; } }
+
+.week-folder-indicator { font-weight: 600; }
+.week-event-card.is-nested { outline: 1px solid var(--line); outline-offset: -1px; }
