@@ -1,3 +1,4 @@
+import {albertWatchSchema,readAlbertWatches,saveAlbertWatch} from './albert-watches.js'
 import {registerMcpFileTools} from './mcp-files.js'
 import {registerEventChecklistTools} from './event-checklist.js'
 import {PDF_MAX_BYTES} from '../src/lib/files.js'
@@ -74,6 +75,8 @@ export function createPlannerMcp(username: string, scopes: string[]) {
   registerMcpFileTools(add,username)
   registerPlannerControls(add,username)
   registerAppSettingsTools(add,username)
+  add('planner_albert_watch_read','Read actual saved Albert class-availability monitors, last checked status/errors and queued alert job IDs. A configured monitor is not a verified live monitor until last_checked_at is populated and last_error is null; a queued alert is not proof of WhatsApp delivery.',{},'planner:read',true,()=>readAlbertWatches(username))
+  add('planner_albert_watch_save','Create or update a persistent read-only Albert class-availability monitor on the existing Agent VM. Discover and test the exact class URL, identity row and status selector using the real signed-in browser first. Use unique class/section identityText. Steps replay only read-only class-search navigation, never enrollment or credentials. Poll quietly; only verified openings queue Agent notifications. Read existing monitors before saving and reuse IDs. enabled true keeps the existing VM available. notify whatsapp:Arnav is only for the user-requested verified Arnav conversation.',albertWatchSchema.shape,'planner:write',false,args=>saveAlbertWatch(username,args))
   registerWhoopReviewTools(add,username)
   registerClientControlTools(add,username)
   registerEventChecklistTools(add,username)

@@ -38,3 +38,26 @@ test('empty MCP approval forms require a real user decision and preserve accept/
  assert.throws(()=>runtimeQuestions('mcpServer/elicitation/request',{...params,message:''}))
  assert.throws(()=>runtimeQuestions('mcpServer/elicitation/request',{...params,requestedSchema:{type:'string'}}))
 })
+
+test('command and file approvals relay actual user decisions without inventing persistent grants',async()=>{
+ for(const method of ['item/commandExecution/requestApproval','item/fileChange/requestApproval']){
+  const params={itemId:'item',threadId:'thread',turnId:'turn',command:'node --test monitor.test.mjs',cwd:'/workspace',grantRoot:'/workspace/monitors',availableDecisions:['accept','decline','cancel']}
+  const question=runtimeQuestions(method,params)[0];assert(question.question.includes(method.includes('command')?'node --test':'/workspace/monitors'))
+  for(const [choice,decision] of [['Allow once','accept'],['Decline','decline'],['Cancel task','cancel'],['Allow for this session','decline']]){
+   const result=await relayApproval(method,params,{wait:async()=>{},job:{id:'job',lease:'lease'},report:async()=>{},api:async(_a,input)=>input.action==='create'?{id:'approval',expires_at:new Date(Date.now()+60000).toISOString()}:{answers:{runtime:choice}}})
+   assert.deepEqual(result,{decision})
+  }
+ }
+ const params={itemId:'item',threadId:'thread',turnId:'turn',command:'node monitor.mjs',availableDecisions:['acceptForSession','decline']}
+ assert.deepEqual(runtimeQuestions('item/commandExecution/requestApproval',params)[0].options,['Allow for this session','Decline','Cancel task'])
+})
+
+test('permission requests expose exact scopes and grant only the explicitly chosen turn',async()=>{
+ const params={itemId:'item',threadId:'thread',turnId:'turn',cwd:'/workspace',permissions:{network:{enabled:true},fileSystem:{write:['/workspace/monitors']}}}
+ assert(runtimeQuestions('item/permissions/requestApproval',params)[0].question.includes('/workspace/monitors'))
+ for(const [choice,permissions] of [['Allow for this turn',params.permissions],['Decline',{}],['Allow for this session',{}]]){
+  const result=await relayApproval('item/permissions/requestApproval',params,{wait:async()=>{},job:{id:'job',lease:'lease'},report:async()=>{},api:async(_a,input)=>input.action==='create'?{id:'approval',expires_at:new Date(Date.now()+60000).toISOString()}:{answers:{permissions:choice}}})
+  assert.deepEqual(result,{permissions,scope:'turn'})
+ }
+ assert.throws(()=>runtimeQuestions('item/permissions/requestApproval',{...params,permissions:{macos:{}}}))
+})

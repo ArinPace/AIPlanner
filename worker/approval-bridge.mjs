@@ -5,6 +5,22 @@ export function approvalPersistence(params){
   return (Array.isArray(value)?value:[value]).filter(x=>x==='session' || x==='always')
 }
 export function runtimeQuestions(method, params) {
+  if(method==='item/permissions/requestApproval'){
+    if(!params.itemId||!params.threadId||!params.turnId||!params.permissions||typeof params.permissions!=='object'||Object.keys(params.permissions).some(key=>!['network','fileSystem'].includes(key)))throw new Error('Unsupported permission profile.')
+    const question=['Allow these additional permissions for this turn?',params.reason,'Working directory: '+params.cwd,JSON.stringify(params.permissions)].filter(Boolean).join('\n')
+    if(question.length>12000)throw new Error('Permission details are too large to review safely.')
+    return [{id:'permissions',question,options:['Allow for this turn','Decline']}]
+  }
+  if(['item/commandExecution/requestApproval','item/fileChange/requestApproval'].includes(method)){
+    if(!params.itemId||!params.threadId||!params.turnId)throw new Error('Incomplete runtime approval request.')
+    const command=method==='item/commandExecution/requestApproval'
+    if(command&&!params.command)throw new Error('Command approval is missing its command.')
+    const offered=command?(params.availableDecisions||['accept','decline','cancel']):['accept','decline','cancel']
+    const options=[...(offered.includes('accept')?['Allow once']:[]),...(command&&offered.includes('acceptForSession')?['Allow for this session']:[]),'Decline','Cancel task']
+    const detail=[command?'Run this command?':'Allow these file changes?',params.reason,command?params.command:('Requested root: '+(params.grantRoot||'Current workspace')+(params.changes?'\nChanges: '+JSON.stringify(params.changes):'')),command&&params.cwd?'Working directory: '+params.cwd:null,params.additionalPermissions?'Additional permissions: '+JSON.stringify(params.additionalPermissions):null].filter(Boolean).join('\n')
+    if(detail.length>12000)throw new Error('Approval details are too large to review safely.')
+    return [{id:'runtime',question:detail,options}]
+  }
   if(method==='mcpServer/elicitation/request') {
     if(!['form','openai/form','openaiForm'].includes(params.mode))throw new Error('Unsupported approval mode.')
     if(params.requestedSchema?.type!=='object')throw new Error('Unsupported approval schema.')
@@ -28,14 +44,20 @@ export function runtimeQuestions(method, params) {
     return {id:q.id,question:q.question,options:q.options.map(o=>o.label)}
   })
 }
-export async function relayApproval(method,params,{api,job,report}){
+export async function relayApproval(method,params,{api,job,report,wait=ms=>new Promise(r=>setTimeout(r,ms))}){
   const questions=runtimeQuestions(method,params)
   const request=await api('approval',{action:'create',jobId:job.id,lease:job.lease,questions})
   await report()
   while(Date.now()<Date.parse(request.expires_at)){
-    await new Promise(r=>setTimeout(r,2000))
+    await wait(2000)
     const status=await api('approval',{action:'poll',id:request.id,jobId:job.id,lease:job.lease})
     if(status.answers){
+      if(method==='item/permissions/requestApproval')return {permissions:status.answers.permissions==='Allow for this turn'?params.permissions:{},scope:'turn'}
+      if(['item/commandExecution/requestApproval','item/fileChange/requestApproval'].includes(method)){
+        const choice=status.answers.runtime
+        const allowed=questions[0].options.includes(choice)
+        return {decision:!allowed?'decline':choice==='Allow once'?'accept':choice==='Allow for this session'?'acceptForSession':choice==='Cancel task'?'cancel':'decline'}
+      }
       if(method==='mcpServer/elicitation/request'){
         if(!Object.keys(params.requestedSchema.properties || {}).length){
           const choice=status.answers.confirmation

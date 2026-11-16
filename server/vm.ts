@@ -82,6 +82,7 @@ export async function handleVmWorker(request: Request, path: string) {
     try { return await transport.handleRequest(request) } finally { await server.close() }
   }
   const input = await body(request)
+  if (path === '/api/agent/vm/worker/albert-watch')return (await import('./albert-watches.js')).workerAlbertWatch(host,input)
   if (path === '/api/agent/vm/worker/approval') return workerApproval(host,input)
   if (path === '/api/agent/vm/worker/claim') {
     const capabilities = safeWorkerStatus(input)

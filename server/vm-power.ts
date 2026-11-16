@@ -33,7 +33,8 @@ export function deferredReviewSlot(start: Date, end: Date, schedule: VmSchedule)
   }
   return scheduleSlot(new Date(earliest), schedule, false)
 }
-export function shouldRunVm(input: { wakeUntil?: string | null; rolloverAt?:string|null; whoopAt?:string|null; jobs: { chat_id?:string|null; status: string; kind: string; result?: { expiresAt?: string }; schedule_slot?: string | null; finished_at?: string | null }[]; scheduled: boolean; schedule?: VmSchedule }, now = new Date()): boolean {
+export function shouldRunVm(input: { hasMonitors?:boolean;wakeUntil?: string | null; rolloverAt?:string|null; whoopAt?:string|null; jobs: { chat_id?:string|null; status: string; kind: string; result?: { expiresAt?: string }; schedule_slot?: string | null; finished_at?: string | null }[]; scheduled: boolean; schedule?: VmSchedule }, now = new Date()): boolean {
+  if(input.hasMonitors)return true
   if (input.wakeUntil && Date.parse(input.wakeUntil) > now.getTime()) return true
   if (input.jobs.some(j => ['queued', 'running'].includes(j.status) || (j.status==='waiting' && !input.jobs.some(p=>p.status==='paused' && p.chat_id===j.chat_id)))) return true
   // Keep the computer warm between conversational turns instead of rebooting
