@@ -196,6 +196,8 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
   const prompt=resuming?.prompt||override?.trim()||message.trim()||(attachments.length?'Please review the attached files.':''),id=resuming?.chat_id||chatId
   if(!prompt||!id||busy||!resuming&&restoring||sendLock.current||recovery)return
   if(attachments.length&&(window.plannerNativeChatGPTRelayVersion||0)<2){setError('Update the iPhone app to enable file forwarding.');return}
+  const submittedDraft=message,clearComposer=!resuming&&!override&&!scheduledRunId
+  if(clearComposer)setMessage('')
   followThread.current=true;sendLock.current=true;setBusy(true);setError('');setRelayPrompt(displayLabel||(scheduledRunId?'Scheduled planner review':prompt));setRelayText(resuming?.partial_reply||'');setRelayPhase(resuming?'Restoring reply…':'Connecting…');setInteraction(false);cancelRelay.current=false
   const turnId=resuming?.id||crypto.randomUUID(),scope=epoch.current
   let resumeVerified=false,scheduledCompleted=false,attemptSaved=Boolean(resuming),visibleReply=resuming?.partial_reply||'',failure='',lastSavedPartial='',lastPartialAt=0
@@ -280,6 +282,7 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
    const preserveForRestore=Boolean(resuming&&!resumeVerified&&failure)
    if(!preserveForRestore){try{const saved=JSON.parse(localStorage.getItem(activeRequestKey)||'null');if(saved?.turnId===turnId)localStorage.removeItem(activeRequestKey)}catch{}}
    if(!scheduledCompleted){
+    if(clearComposer)setMessage(current=>current||submittedDraft)
     const detail=failure||'Request interrupted before a final reply was saved.'
     if(attemptSaved)await record(preserveForRestore?'submitted':cancelRelay.current?'interrupted':'failed',detail)
     else rememberAttempt({...initialAttempt,status:'failed',detail:'Could not save the request receipt. Your draft was kept.'})

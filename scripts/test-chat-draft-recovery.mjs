@@ -12,10 +12,10 @@ try{
    const raw='[Planner relay receipt: a1111111-1111-4111-8111-111111111111]\nPlanner app integration instructions:\nFixture\n\nCurrent user request:\nEarlier question\n\nFile delivery (only when returning requested files): Fixture\n\nPlanner relay response ID: b1111111-1111-4111-8111-111111111111.'
    window.plannerNativeChatGPTPortal=true;window.plannerNativeChatGPTRelayVersion=8
    window.webkit={messageHandlers:{plannerNative:{postMessage:async input=>{
-    if(input.action==='chatGPTRelaySend'){if(++window.sends===1)throw Error('ChatGPT has an unsent draft. Open the session and send or clear it first.');window.sent=true;return {ok:true}}
+    if(input.action==='chatGPTRelaySend'){if(++window.sends===1){await new Promise(resolve=>window.releaseSubmission=resolve);throw Error('ChatGPT has an unsent draft. Open the session and send or clear it first.')}window.sent=true;return {ok:true}}
     if(input.action==='chatGPTRelayDraft')return {text:mode==='unrecognized'?'My manual note':raw,manual:mode==='manual'}
     if(input.action==='chatGPTRelayClearDraft'){window.clears++;assertExpected(input.expected);if(mode==='changed')throw Error('The draft changed. Read it again.');return {ok:true}}
-    if(input.action==='chatGPTRelayStatus')return {ready:true,phase:window.sent?'completed':'idle',text:window.sent?'Recovered safely.':''}
+    if(input.action==='chatGPTRelayStatus')return {ready:true,phase:window.sent?(window.finishReply?'completed':'working'):'idle',text:window.sent?'Recovered safely.\n\n[Open syllabus](https://example.invalid/syllabus.pdf)':''}
     return {ok:true}
    }}}}
    function assertExpected(value){if(value!==raw)throw Error('Must compare the exact draft before clearing')}
@@ -24,7 +24,21 @@ try{
   await page.getByRole('button',{name:'Open Main Chat',exact:true}).click()
   const chat=page.getByRole('dialog',{name:'Main Chat',exact:true}),input=chat.getByRole('textbox',{name:'Message ChatGPT'})
   await input.fill('Current authorized question');await chat.getByRole('button',{name:'Send message',exact:true}).click()
-  if(mode==='verified')await chat.getByText('Recovered safely.',{exact:true}).first().waitFor()
+  await page.waitForFunction(()=>typeof window.releaseSubmission==='function')
+  assert.equal(await input.inputValue(),'','Clear the composer while submission is still pending')
+  await page.evaluate(()=>window.releaseSubmission())
+  if(mode==='verified'){
+   await chat.getByRole('group',{name:'Assistant reply in progress',exact:true}).waitFor()
+   assert.equal(await chat.locator('.chat-stream-cursor,.chat-thinking-dot').count(),1,'Show a single streaming indicator')
+   assert.equal(await input.inputValue(),'','Keep the composer empty while the reply streams')
+   const link=chat.getByRole('link',{name:'Open syllabus',exact:true})
+   assert.equal(await link.getAttribute('href'),'https://example.invalid/syllabus.pdf')
+   await page.context().route('https://example.invalid/**',route=>route.fulfill({contentType:'text/html',body:'<p>Syllabus fixture</p>'}))
+   const opened=page.waitForEvent('popup');await link.click();const target=await opened
+   await target.waitForLoadState();assert.equal(target.url(),'https://example.invalid/syllabus.pdf');await target.close()
+   await page.evaluate(()=>window.finishReply=true)
+   await chat.getByText('Recovered safely.',{exact:true}).first().waitFor()
+  }
   else{await page.waitForFunction(()=>JSON.parse(localStorage.getItem('fixture-chat-attempts')||'[]').some(a=>a.status==='failed'));assert.equal(await input.inputValue(),'Current authorized question')}
   const state=await page.evaluate(()=>({sends:window.sends,clears:window.clears,checks:window.draftChecks}))
   assert.deepEqual(state,{sends:mode==='verified'?2:1,clears:['verified','changed'].includes(mode)?1:0,checks:['manual','unrecognized'].includes(mode)?0:1},mode)

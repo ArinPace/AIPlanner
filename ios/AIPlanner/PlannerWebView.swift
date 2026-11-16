@@ -1054,7 +1054,7 @@ window.__plannerSignInCurrent=(node,allowCompleted=false)=>{
  const messages=[...document.querySelectorAll('[data-turn-key],[data-message-author-role],[data-markdown-text-style]')];
  const latest=messages.at(-1);
  if(latest&&!turn.contains(latest)&&!latest.contains(turn)&&(turn.compareDocumentPosition(latest)&Node.DOCUMENT_POSITION_FOLLOWING))return false;
- return allowCompleted||(!turn.closest('[data-talvt-turn-state="complete"]')&&!turn.querySelector('[data-talvt-turn-state="complete"]'));
+ return allowCompleted===true||(!turn.closest('[data-talvt-turn-state="complete"]')&&!turn.querySelector('[data-talvt-turn-state="complete"]'));
 };
 window.__plannerSignInState=()=>{
  const active=window.__plannerSignInCurrent,label=n=>(n.getAttribute('aria-label')||n.innerText||'').trim();
@@ -1284,6 +1284,17 @@ return {selectedModel:window.__plannerSelectedModel||'',sliders:ranges,summary:(
       if(other)break;if(node.querySelector(completionSelector)){turn=node;break}
     }
     const clean=last?.cloneNode(true);clean?.querySelectorAll('button,svg,script,style').forEach(node=>node.remove());
+    // Preserve rendered links before extracting plain text for Planner Markdown.
+    // File download controls keep their separate authenticated transfer path.
+    clean?.querySelectorAll('a[href]').forEach(link=>{
+      if(link.closest('pre,code'))return;
+      const raw=link.getAttribute('href')||'';if(!raw||raw.startsWith('#'))return;
+      let url;try{url=new URL(raw,location.href)}catch{return}
+      if(!['https:','http:','mailto:'].includes(url.protocol)||url.origin===location.origin&&/^\\/backend-api\\/(files|estuary)\\//.test(url.pathname))return;
+      const slash=String.fromCharCode(92),label=(link.textContent||url.href).split(slash).join(slash+slash).split('[').join(slash+'[').split(']').join(slash+']');
+      const href=url.href.split('<').join('%3C').split('>').join('%3E');
+      link.replaceWith(document.createTextNode('['+label+'](<'+href+'>)'));
+    });
     // Preserve machine JSON verbatim: rendered Markdown can remove escapes.
     clean?.querySelectorAll('pre').forEach(pre=>{const code=pre.querySelector('code');if(!code)return;const text=code.textContent||'';let data;try{data=JSON.parse(text)}catch{return}if(typeof data.turn!=='string'||!Array.isArray(data.calls))return;
       const marked=clean.textContent.includes('PLANNER_TOOL_REQUEST'),legacy=(code.className||'').includes('language-planner-tools');if(!marked&&!legacy)return;
