@@ -1,5 +1,5 @@
 {
-  "tested_at": "2026-11-16T01:24:51.876306+00:00",
+  "tested_at": "2026-11-16T01:42:15.861671+00:00",
   "status": "Live Brightspace authentication and same-browser session reuse verified; native return-flow regressions passed",
   "live_verified": [
     "Original conversation and existing browser retained",
@@ -10,7 +10,9 @@
     "Microsoft Stay signed in accepted",
     "Authenticated Brightspace dashboard observed",
     "Provider reopened Brightspace and verified no password or Duo prompt",
-    "Provider retained preference in same original conversation"
+    "Provider retained preference in same original conversation",
+    "A real Planner chat prompt returned BRIGHTSPACE-SESSION-READY without another sign-in sheet",
+    "Reply restored after app relaunch; composer became enabled"
   ],
   "remaining": [
     "Long-term session expiry remains controlled by NYU/Microsoft/Duo",
@@ -35,5 +37,15 @@
     "/tmp/duo-resend-current.png",
     "/tmp/remember-reconnect.png",
     "/tmp/brightspace-persistence-result.png"
-  ]
+  ],
+  "planner_chat_reuse": {
+    "prompt_evidence": "/tmp/planner-brightspace-reuse-stable-live.log",
+    "result_evidence": "/tmp/planner-brightspace-reuse-result-live.log",
+    "status": "Saved result and ready composer verified after relaunch",
+    "test_corrections": [
+      "First attempt typed a truncated prompt before composer restoration; not counted",
+      "Second attempt verified full prompt and received reply; immediate enabled assertion raced reply persistence",
+      "Read-only follow-up verified existing reply and waited for composer readiness; no duplicate prompt sent"
+    ]
+  }
 }
