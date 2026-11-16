@@ -14,13 +14,21 @@ try{for(const width of [393,1200]){
  const week=page.getByLabel('Week calendar',{exact:true});await week.waitFor();assert.equal(await week.locator('.week-card-day').count(),7)
  assert.equal(await week.locator('.week-event-card').count(),1)
  await week.getByRole('button',{name:'Expand folder Study folder',exact:true}).click();assert.equal(await week.locator('.week-event-card').count(),10)
+ await page.waitForTimeout(550);
+ const reveal=week.locator('.calendar-folder-reveal.is-horizontal').first();assert((await reveal.boundingBox()).width>0);
+ const parentBox=await week.locator('.week-event-card').first().boundingBox(),childBox=await week.locator('.week-event-card.is-nested').first().boundingBox();assert(childBox.y>=parentBox.y+7,'Children are visibly indented');
  await week.getByRole('button',{name:'Expand folder Nested folder',exact:true}).click();assert.equal(await week.locator('.week-event-card').count(),11)
  assert.equal(await week.getByRole('button',{name:'Collapse folder Study folder',exact:true}).getAttribute('aria-expanded'),'true')
  const strip=week.locator('.week-event-strip').filter({has:page.getByRole('button',{name:'Collapse folder Study folder',exact:true})})
  assert(await strip.evaluate(e=>e.scrollWidth>e.clientWidth))
  const sizes=await strip.locator('.week-event-card').evaluateAll(es=>es.map(e=>e.getBoundingClientRect().width));assert(sizes.every(x=>Math.abs(x-sizes[0])<1),'Expanded cards retain five-across sizing')
  await week.getByRole('button',{name:'Study session 0',exact:false}).click();await page.locator('.event-modal').waitFor();await page.getByRole('button',{name:'Cancel',exact:true}).click()
- await week.getByRole('button',{name:'Collapse folder Study folder',exact:true}).click();assert.equal(await week.locator('.week-event-card').count(),1)
+ await strip.evaluate(e=>e.scrollLeft=0);await page.waitForTimeout(200);
+ const beforeClose=(await reveal.boundingBox()).width;
+ await week.getByRole('button',{name:'Collapse folder Study folder',exact:true}).click();await page.waitForTimeout(120);
+ const closing=(await reveal.boundingBox()).width;assert(closing>0&&closing<beforeClose,'Closing retracts instead of disappearing');assert(await reveal.evaluate(e=>e.inert));
+ await page.waitForTimeout(500);assert.equal(await week.locator('.week-event-card').count(),1)
+ await page.emulateMedia({reducedMotion:'reduce'});await week.getByRole('button',{name:'Expand folder Study folder',exact:true}).click();assert.equal(await week.locator('.calendar-folder-reveal.is-horizontal').first().getAttribute('data-animated'),'false')
  const first=await week.locator('[data-week-day]').first().getAttribute('data-week-day');await page.getByRole('button',{name:'Next',exact:true}).click();assert.notEqual(await week.locator('[data-week-day]').first().getAttribute('data-week-day'),first)
  await page.close();console.log(width+'px: folders, nested expansion, collapse, five-card sizing, event editing and week navigation passed.')
 }}finally{await browser.close()}

@@ -2966,3 +2966,16 @@ html, body { touch-action: pan-x pan-y; }
 
 .week-folder-indicator { font-weight: 600; }
 .week-event-card.is-nested { outline: 1px solid var(--line); outline-offset: -1px; }
+
+/* Week folders use the day-view reveal timing along the horizontal event strip. */
+.week-event-strip { container-type: inline-size; --week-card-width: calc((100cqw - 16px) / 5); }
+.week-event-strip .week-event-card { flex: 0 0 var(--week-card-width); width: var(--week-card-width); }
+.week-event-card.is-nested { margin-top: calc(8px * var(--week-folder-depth)); min-height: calc(140px - 8px * var(--week-folder-depth)); }
+.calendar-folder-reveal.is-horizontal { display: block; flex: 0 0 auto; width: 0; min-width: 0; margin-left: -4px; overflow: hidden; transition: width 480ms cubic-bezier(.25,.1,.25,1); }
+.calendar-folder-reveal.is-horizontal.is-open { width: calc((var(--week-card-width) + 4px) * var(--week-folder-count)); }
+.calendar-folder-reveal.is-horizontal > .calendar-folder-reveal-body { display: flex; gap: 4px; width: max-content; height: 100%; padding-left: 4px; transform: translateX(-18px); }
+.calendar-folder-reveal.is-horizontal.is-open > .calendar-folder-reveal-body { transform: translateX(0); }
+@media(min-width:800px) { .week-event-card.is-nested { min-height: calc(154px - 8px * var(--week-folder-depth)); } }
+@media(prefers-reduced-motion:reduce) { .calendar-folder-reveal.is-horizontal { transition: none; } }
+
+.calendar-folder-reveal.is-horizontal[data-animated=false] { transition: none; }
