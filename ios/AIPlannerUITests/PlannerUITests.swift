@@ -241,7 +241,8 @@ final class PlannerUITests: XCTestCase {
         let portal=app.webViews["websiteSignInWebView"],password=portal.secureTextFields["Fixture password"]
         XCTAssertTrue(password.waitForExistence(timeout:30))
         XCTAssertTrue(app.navigationBars["Connect website"].exists)
-        XCTAssertFalse(portal.staticTexts["ChatGPT conversation fixture"].exists)
+        let focused=XCTNSPredicateExpectation(predicate:NSPredicate(format:"exists == false"),object:portal.staticTexts["ChatGPT conversation fixture"])
+        XCTAssertEqual(XCTWaiter.wait(for:[focused],timeout:5),.completed)
         XCTAssertFalse(portal.staticTexts["Private conversation must stay hidden"].exists)
         for element in [password,portal.textFields["Fixture account"],portal.buttons["Sign in"],portal.buttons["Other sign-in options"]] {
             XCTAssertGreaterThanOrEqual(element.frame.minX,portal.frame.minX+8)
@@ -258,7 +259,7 @@ final class PlannerUITests: XCTestCase {
         XCTAssertTrue(portal.buttons["Send fixture push"].waitForExistence(timeout:15),"Keep the sheet open through the delay between password submission and MFA")
         XCTAssertTrue(app.navigationBars["Connect website"].exists)
         XCTAssertTrue(portal.staticTexts["No MFA method selected"].exists)
-        app.navigationBars.buttons["Cancel"].tap()
+        app.navigationBars.buttons["Done"].tap()
         let web=app.webViews["plannerWebView"],open=web.descendants(matching:.any).matching(identifier:"Open Main Chat").firstMatch
         XCTAssertTrue(open.waitForExistence(timeout:15));open.tap()
         web.buttons["ChatGPT session"].tap()

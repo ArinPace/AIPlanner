@@ -702,6 +702,17 @@ struct PlannerWebView: UIViewRepresentable {
       const label=n=>(n.getAttribute('aria-label')||n.innerText||n.textContent||'').trim();
       const current=n=>window.__plannerSignInCurrent?.(n,true)??true;
       const buttons=[...document.querySelectorAll('button,a[href]')].filter(current);
+      // Closing the original browser pane is an explicit return to chat, not
+      // proof of successful authentication. Do not reopen its old transcript link.
+      if(window.__plannerWebsiteBrowserVisible&&!document.querySelector('video')){
+        const credential=[...document.querySelectorAll('input[type=password],input[autocomplete=one-time-code]')].some(n=>window.__plannerSignInCurrent?.(n)??true);
+        if(credential){delete window.__plannerWebsiteBrowserVisible;delete window.__plannerWebsiteBrowserGoneAt;delete window.__plannerWebsiteHandoffOpened;return {kind:'form'}}
+        if(!credential){
+          window.__plannerWebsiteBrowserGoneAt ||= Date.now();
+          if(Date.now()-window.__plannerWebsiteBrowserGoneAt>=1500)return {kind:'returned'};
+          return {kind:'opening'};
+        }
+      }else{delete window.__plannerWebsiteBrowserGoneAt}
       const retry=buttons.find(n=>/^Click to connect$/i.test(label(n)));
       if(retry&&!retry.disabled){
         const count=window.__plannerWebsiteRetries||0;
@@ -714,6 +725,7 @@ struct PlannerWebView: UIViewRepresentable {
       }
       const videos=[...document.querySelectorAll('video')].filter(v=>v.srcObject?.getVideoTracks?.().some(t=>t.readyState==='live'));
       if(videos.length){
+        window.__plannerWebsiteBrowserVisible=true;
         window.__plannerSiteSignIn?.restore();
         const ready=!document.body.innerText.includes('Connecting to ChatGPT')&&videos.some(v=>v.readyState>=2&&v.videoWidth>0);
         if(ready&&!window.__plannerWebsiteControlRequested){
@@ -740,13 +752,25 @@ struct PlannerWebView: UIViewRepresentable {
         siteSignInMode = true;siteSignInSurfaceActive=false;returnAfterWebsiteInteraction=true;observedWebsiteInteraction=false
         browser.alpha=1;browser.accessibilityIdentifier="websiteSignInWebView";title="Connect website"
         navigationItem.leftBarButtonItem=UIBarButtonItem(title:"Cancel",style:.plain,target:self,action:#selector(close))
-        navigationItem.rightBarButtonItems=nil
+        navigationItem.rightBarButtonItems=[UIBarButtonItem(title:"Done",style:.done,target:self,action:#selector(finishSiteSignIn))]
         status.text="Opening website sign-in…";siteSignInLoading.isHidden=false
         Task { @MainActor [weak self] in await self?.refreshSiteSignIn() }
     }
+    @objc private func finishSiteSignIn() {
+        guard siteSignInMode else{return}
+        Task { @MainActor [weak self] in
+            guard let self else{return}
+            // Give the original provider browser back to the assistant before
+            // returning to the existing Planner conversation. Never reload it.
+            _ = try? await self.browser.evaluateJavaScript(#"""
+            (()=>{const label=n=>(n.getAttribute('aria-label')||n.innerText||'').trim();const button=[...document.querySelectorAll('button')].filter(n=>n.getClientRects().length&&/^(Return control|I.m done)$/i.test(label(n))).at(-1);button?.click()})()
+            """#)
+            self.onClose?()
+        }
+    }
     func endSiteSignIn() {
         guard siteSignInMode else{return};siteSignInMode=false;siteSignInSurfaceActive=false;siteSignInLoading.isHidden=true;returnAfterWebsiteInteraction=false;observedWebsiteInteraction=false
-        browser.evaluateJavaScript("window.__plannerSiteSignIn?.restore();delete window.__plannerWebsiteHandoffOpened;delete window.__plannerWebsiteControlRequested;delete window.__plannerWebsiteRetries;delete window.__plannerWebsiteRetryAt",completionHandler:{_,_ in})
+        browser.evaluateJavaScript("window.__plannerSiteSignIn?.restore();delete window.__plannerWebsiteHandoffOpened;delete window.__plannerWebsiteControlRequested;delete window.__plannerWebsiteRetries;delete window.__plannerWebsiteRetryAt;delete window.__plannerWebsiteBrowserVisible;delete window.__plannerWebsiteBrowserGoneAt",completionHandler:{_,_ in})
         browser.alpha=1;browser.accessibilityIdentifier="chatGPTPortalWebView";title="ChatGPT website"
         navigationItem.leftBarButtonItem=UIBarButtonItem(title:"Planner",style:.done,target:self,action:#selector(close))
         navigationItem.rightBarButtonItems=[UIBarButtonItem(title:"Safari",style:.plain,target:self,action:#selector(safari)),UIBarButtonItem(barButtonSystemItem:.refresh,target:self,action:#selector(reload))]
@@ -762,6 +786,7 @@ struct PlannerWebView: UIViewRepresentable {
             // Its virtualized conversation and WebRTC player keep their original layout.
             let handoff=try await browser.evaluateJavaScript(Self.siteSignInHandoff) as? [String:Any] ?? [:]
             guard siteSignInMode else{return}
+            if handoff["kind"] as? String == "returned" { onClose?();return }
             if ["browser","opening"].contains(handoff["kind"] as? String ?? "") {
                 siteSignInSurfaceActive=true;observedWebsiteInteraction=true
                 let ready=handoff["ready"] as? Bool == true

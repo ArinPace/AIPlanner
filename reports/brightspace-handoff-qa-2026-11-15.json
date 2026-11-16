@@ -1,26 +1,39 @@
 {
-  "tested_at": "2026-11-16T01:01:44.688461+00:00",
-  "status": "Native and browser regression passed; live Brightspace authentication awaiting permission to open Duo provider entry",
+  "tested_at": "2026-11-16T01:24:51.876306+00:00",
+  "status": "Live Brightspace authentication and same-browser session reuse verified; native return-flow regressions passed",
   "live_verified": [
     "Original conversation and existing browser retained",
     "Saved credential accepted privately by original provider",
     "Microsoft Verify your identity screen displayed",
-    "Trusted simulator taps operate remote browser"
+    "Trusted simulator taps operate remote browser",
+    "User completed Duo; Success page observed",
+    "Microsoft Stay signed in accepted",
+    "Authenticated Brightspace dashboard observed",
+    "Provider reopened Brightspace and verified no password or Duo prompt",
+    "Provider retained preference in same original conversation"
   ],
   "remaining": [
-    "Duo method choices and user MFA",
-    "Authenticated Brightspace availability check"
+    "Long-term session expiry remains controlled by NYU/Microsoft/Duo",
+    "Automatic provider-pane closure verified in browser fixture, not claimed as live authenticated signal"
   ],
-  "approval_block": "Provider browser automatic approval review declined opening Duo because its default can immediately send a push. User clarification requested; no bypass attempted.",
-  "native_build": "/tmp/planner-duo-verified-build.log",
-  "native_tests": "/tmp/planner-duo-transition-regression.log",
+  "approval_block": "Resolved: user explicitly authorized opening Duo and its automatic push",
+  "native_build": "/tmp/planner-signin-return-checked-build.log",
+  "native_tests": "/tmp/planner-signin-return-checked-tests.log",
   "browser_tests": "node scripts/test-site-signin-surface.mjs",
   "changes": [
     "Mount latest virtualized handoff before discovery",
     "Open original cloud browser control and bounded reconnect",
     "Preserve live browser layout and media playback",
-    "Keep website sheet open across delayed MFA transitions"
+    "Keep website sheet open across delayed MFA transitions",
+    "Done returns original browser control before closing the sheet",
+    "Explicitly closed browser pane returns to chat after debounce without reopening historical handoff",
+    "Subsequent credential steps remain available"
   ],
   "discarded_hypothesis": "Clipboard compatibility shim removed: no denied clipboard operation observed",
-  "credential_handling": "No password values read, typed, copied or exported; provider saved-account control used"
+  "credential_handling": "No password values read, typed, copied or exported; provider saved-account control used",
+  "live_evidence": [
+    "/tmp/duo-resend-current.png",
+    "/tmp/remember-reconnect.png",
+    "/tmp/brightspace-persistence-result.png"
+  ]
 }
