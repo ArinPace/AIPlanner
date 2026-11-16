@@ -18,5 +18,11 @@
       "destination": "/api/index?route=:path*"
     }
   ],
-  "installCommand": "ONNXRUNTIME_NODE_INSTALL=skip npm ci"
+  "installCommand": "ONNXRUNTIME_NODE_INSTALL=skip npm ci",
+  "crons": [
+    {
+      "path": "/api/whoop/reconcile",
+      "schedule": "17 11 * * *"
+    }
+  ]
 }

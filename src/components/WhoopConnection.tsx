@@ -1,0 +1,18 @@
+import {useEffect,useState} from 'react'
+import {agentAction,agentRequest} from '../lib/agent'
+import {isIPhoneApp,nativeRequest} from '../lib/platform'
+import './WhoopConnection.css'
+type Status={configured:boolean;connected:boolean;needsReconnect:boolean;lastSyncedAt:string|null;lastWebhookAt:string|null;error:string|null;execution:string}
+export function WhoopConnection(){
+ const [status,setStatus]=useState<Status|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[link,setLink]=useState('')
+ useEffect(()=>{let active=true;const read=()=>void agentRequest<Status>('whoop').then(s=>{if(active){setStatus(s);setError('')}}).catch(()=>{if(active)setError('Could not check WHOOP. Reopen connections to retry.')});read();window.addEventListener('focus',read);const visibility=()=>{if(document.visibilityState==='visible')read()};document.addEventListener('visibilitychange',visibility);return()=>{active=false;window.removeEventListener('focus',read);document.removeEventListener('visibilitychange',visibility)}},[])
+ async function connect(){
+  setBusy(true);setError('')
+  try{const result=await agentAction<{url:string}>('whoop',{action:'connect'});setLink(result.url);if(isIPhoneApp())await nativeRequest({action:'openExternalLink',url:result.url});else window.location.assign(result.url)}catch(e){setError(e instanceof Error?e.message:'Could not connect WHOOP.')}finally{setBusy(false)}
+ }
+ async function disconnect(){setBusy(true);setError('');try{await agentRequest('whoop',{method:'DELETE'});setStatus(await agentRequest<Status>('whoop'));setLink('')}catch(e){setError(e instanceof Error?e.message:'Could not disconnect WHOOP.')}finally{setBusy(false)}}
+ return <div className="whoop-connection"><div className="whoop-connection-heading"><span><strong>WHOOP</strong><small>{!status?'Checking connection…':!status.configured?'Developer app setup needed':status.needsReconnect?'Reconnect needed':status.connected?'Connected · automatic updates':'Not connected'}</small></span>{status?.configured&&<button type="button" disabled={busy} onClick={()=>void connect()}>{status.needsReconnect?'Reconnect':status.connected?'Reconnect':'Connect'}</button>}</div>
+ {status?.connected&&<><p className="quiet">New sleep and recovery data trigger enabled reviews. Unchanged data stays quiet.</p>{status.lastSyncedAt&&<small>Last synced {new Date(status.lastSyncedAt).toLocaleString()}</small>}<p className="quiet">Updates arrive even with Planner closed. ChatGPT relay reviews run when Planner is open.</p><button type="button" className="text-btn" disabled={busy} onClick={()=>void disconnect()}>Disconnect WHOOP</button></>}
+ {status&&!status.configured&&<details><summary>Set up automatic updates</summary><p>Create an app in the <a href="https://developer-dashboard.whoop.com" target="_blank" rel="noreferrer">WHOOP developer dashboard</a>. Add its client ID and secret to Vercel as <code>WHOOP_CLIENT_ID</code> and <code>WHOOP_CLIENT_SECRET</code>, then redeploy.</p><p>Redirect URL</p><code>https://aiplanner-ten.vercel.app/api/whoop/callback</code><p>Webhook URL · v2</p><code>https://aiplanner-ten.vercel.app/api/whoop/webhook</code><p>Read permissions: profile, sleep, recovery, and offline access. After setup, return here and connect your account.</p></details>}
+ {link&&<a href={link} target="_blank" rel="noreferrer">Continue WHOOP connection</a>}{(error||status?.error)&&<p role="alert" className="form-error">{error||status?.error}</p>}</div>
+}

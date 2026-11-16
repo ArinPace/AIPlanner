@@ -1,0 +1,9 @@
+.whoop-connection { min-width:0; width:100%; }
+.whoop-connection-heading { display:flex; align-items:center; gap:12px; }
+.whoop-connection-heading>span { flex:1; min-width:0; }
+.whoop-connection small { display:block; color:var(--text-muted,#777); margin-top:4px; }
+.whoop-connection p { font-size:14px; line-height:1.45; }
+.whoop-connection code { overflow-wrap:anywhere; font-size:12px; }
+.whoop-background-check { margin:12px 0; color:var(--text-muted,#777); font-size:14px; }
+.whoop-background-check>summary { cursor:pointer; padding:10px 0; }
+.whoop-background-check .assistant-turn { color:var(--text-color,inherit); }

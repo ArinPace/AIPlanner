@@ -107,6 +107,7 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
   const path = url.searchParams.get('route') ? `/api/${url.searchParams.get('route')}` : url.pathname.replace(/\/$/, '')
   const method = request.method
   try {
+    if(path.startsWith('/api/whoop/'))return await (await import('./whoop-api.js')).handleWhoopPublic(request,path)
     if(path.startsWith('/api/auth/') || (path==='/api/agent/oauth/callback/google' && url.searchParams.get('state')?.startsWith('login_'))){
       const response=await (await import('./account-auth.js')).handleAccountAuth(request,path)
       if(response)return response
@@ -158,6 +159,13 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
     if(path==='/api/calendar/display-settings'&&['GET','PATCH'].includes(method)){const {calendarDisplaySettings}=await import('./calendar-display.js');return json(await calendarDisplaySettings(username,method==='PATCH'?await body(request):undefined))}
     if(path==='/api/screentime/dns')return await (await import('./cloud-dns.js')).handleCloudDNS(request,username)
     if(path==='/api/device/commands')return await (await import('./device-commands.js')).handleDeviceCommands(request,username)
+    if(path==='/api/agent/whoop'){
+      const whoop=await import('./whoop-api.js')
+      if(method==='GET')return json(await whoop.readWhoopData(username))
+      if(method==='DELETE')return json(await whoop.disconnectWhoop(username))
+      if(method==='POST'){const input=await body(request);if(input.action==='connect')return json(await whoop.startWhoop(username));if(input.action==='sync')return json(await whoop.syncWhoop(username))}
+      throw new ApiError(405,'Unsupported WHOOP action.')
+    }
     if(path==='/api/subscription-chat')return await (await import('./subscription-chat.js')).handleSubscriptionChat(request,username)
     if(path==='/api/sources/status'&&method==='GET')return json(await (await import('./source-health.js')).sourceHealthStatus(username))
     if(path==='/api/notifications'&&['GET','PUT'].includes(method)){const {taskNotificationSettings}=await import('./task-notifications.js');return json(await taskNotificationSettings(username,method==='PUT'?await body(request):undefined))}

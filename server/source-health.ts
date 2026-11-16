@@ -15,11 +15,12 @@ export async function withSourceHealth<T>(username:string,source:VmSource,key:st
 }
 export async function sourceHealthStatus(username:string){
  const [{googleCalendarStatus},{fixedSyncStatus}]=await Promise.all([import('./agent.js'),import('./google-fixed-sync.js')])
- const [settings,health,google,sync]=await Promise.all([
+ const [settings,health,google,sync,whoop]=await Promise.all([
   db().from('planner_vm_settings').select('sources,sites').eq('username',username).maybeSingle(),
   db().from('planner_source_health').select('source,connection_key,incident_id,error,first_detected_at').eq('username',username).not('error','is',null).order('first_detected_at').limit(100),
-  googleCalendarStatus(username),fixedSyncStatus(username)
+  googleCalendarStatus(username),fixedSyncStatus(username),import('./whoop-api.js').then(w=>w.whoopStatus(username))
  ])
  const prefs=storage(settings)||{sources:[],sites:{}}
- return {issues:sourceAlerts(prefs as VmState['settings'],google,sync,storage(health)),checkedAt:new Date().toISOString()}
+ if(whoop.connected)prefs.sites={...prefs.sites,whoop:{ready:!whoop.needsReconnect,verifiedAt:whoop.lastSyncedAt||whoop.connectedAt}}
+ return {issues:sourceAlerts(prefs as VmState['settings'],google,sync,storage(health).filter(row=>!(row.source==='whoop'&&whoop.connected&&!whoop.needsReconnect))),checkedAt:new Date().toISOString()}
 }
