@@ -121,10 +121,10 @@ async function googleTokens(username: string) {
   return { tokens, identity:connection.identity }
 }
 export async function googleCalendarStatus(username: string) {
-  const [rows,selected]=await Promise.all([db().from('planner_google_accounts').select('id,identity,credentials,updated_at,read_enabled').eq('username',username).order('updated_at',{ascending:false}),db().from('planner_vm_settings').select('google_account_id,google_export_enabled').eq('username',username).maybeSingle()])
+  const [rows,selected]=await Promise.all([db().from('planner_google_accounts').select('id,identity,credentials,updated_at,read_enabled').eq('username',username).order('updated_at',{ascending:false}),db().from('planner_vm_settings').select('google_account_id,google_export_enabled,google_review_required').eq('username',username).maybeSingle()])
   const accounts=check(rows).map(row=>({id:row.id,identity:row.identity,updatedAt:row.updated_at,readEnabled:row.read_enabled!==false,canReadMail:String(decrypt(row.credentials).scope||'').split(' ').includes(GOOGLE_MAIL_READ_SCOPE),connected:String(decrypt(row.credentials).scope || '').split(' ').some(scope=>[GOOGLE_CALENDAR_SCOPE,GOOGLE_CALENDAR_WRITE_SCOPE,'https://www.googleapis.com/auth/calendar'].includes(scope)),canEdit:String(decrypt(row.credentials).scope || '').split(' ').some(scope=>[GOOGLE_CALENDAR_WRITE_SCOPE,'https://www.googleapis.com/auth/calendar'].includes(scope))}))
   const active=accounts.find(a=>a.id===check(selected)?.google_account_id) || accounts[0]
-  return { exportEnabled:check(selected)?.google_export_enabled!==false, configured:Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET), connected:active?.connected || false, canEdit:active?.canEdit || false, identity:active?.identity || null, updatedAt:active?.updatedAt || null, activeAccountId:active?.id || null, accounts }
+  return { requireGoogleReview:check(selected)?.google_review_required===true, exportEnabled:check(selected)?.google_export_enabled!==false, configured:Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET), connected:active?.connected || false, canEdit:active?.canEdit || false, identity:active?.identity || null, updatedAt:active?.updatedAt || null, activeAccountId:active?.id || null, accounts }
 }
 export async function selectGoogleAccount(username:string,id:string) {
   const account=check(await db().from('planner_google_accounts').select('id').eq('id',id).eq('username',username).maybeSingle())

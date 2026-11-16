@@ -17,7 +17,7 @@ import type {CalendarEvent,StoredState} from '../src/types.js'
 
 const base='https://www.googleapis.com/calendar/v3/calendars/primary/events'
 type Remote=Record<string,any>
-export type Stage={username:string;id:string;version:number;base_revision:number;account_id:string;status:string;approved_revision:number|null;review_summary?:string;payload:{baseCalendar?:StoredState;calendar:StoredState;google:{events:Remote[];mappings:Remote[];timeMin:string;timeMax:string;sources?:{accountId:string;identity:string;events:Remote[]}[]};issues:{id:string;message:string}[];resolutions:Record<string,string>;googleDecisions?:Record<string,'restore'|'preserve_cancelled'>;widgetFeedback?:TaskFeedback[]}}
+export type Stage={username:string;id:string;version:number;base_revision:number;account_id:string|null;status:string;approved_revision:number|null;review_summary?:string;payload:{baseCalendar?:StoredState;calendar:StoredState;google:{reviewSkipped?:boolean;events:Remote[];mappings:Remote[];timeMin:string;timeMax:string;sources?:{accountId:string;identity:string;events:Remote[]}[]};issues:{id:string;message:string}[];resolutions:Record<string,string>;googleDecisions?:Record<string,'restore'|'preserve_cancelled'>;widgetFeedback?:TaskFeedback[]}}
 export {STAGED_CALENDAR_RULES} from './calendar-staging-rules.js'
 export function sameGoogleEvent(a:Remote,b:Remote){
  const time=(v:any)=>v?.date|| (v?.dateTime?new Date(v.dateTime).toISOString():null)
@@ -40,10 +40,16 @@ export function sourceCalendarIssues(calendar:StoredState,sources:NonNullable<St
  return sources.flatMap(source=>stageIssues(calendar,{events:source.events,mappings:[],timeMin:'',timeMax:''}).filter(issue=>issue.id.startsWith('google-overlap:')).map(issue=>({...issue,id:'source:'+source.accountId+':'+issue.id,message:source.identity+': '+issue.message})))
 }
 async function googleSnapshot(username:string,window?:{timeMin:string;timeMax:string}){
+ const status=await googleCalendarStatus(username)
+ if(!status.exportEnabled&&!status.requireGoogleReview)return googleSnapshotUnchecked(username,window)
  return withSourceHealth(username,'calendar','staging',()=>googleSnapshotUnchecked(username,window))
 }
 async function googleSnapshotUnchecked(username:string,window?:{timeMin:string;timeMax:string}){
- const exportEnabled=(await googleCalendarStatus(username)).exportEnabled
+ const status=await googleCalendarStatus(username),exportEnabled=status.exportEnabled
+ if(!exportEnabled&&!status.requireGoogleReview){
+  const bounds=window||{timeMin:new Date(Date.now()-30*86400000).toISOString(),timeMax:new Date(Date.now()+366*86400000).toISOString()}
+  return {accountId:status.activeAccountId,identity:status.identity,google:{...bounds,reviewSkipped:true,events:[] as Remote[],mappings:[] as Remote[],sources:[]}}
+ }
  const session=await googleCalendarSession(username)
  const mappings=storage(await db().from('planner_google_fixed_events').select('*').eq('username',username).eq('account_id',session.accountId))
  const local=await calendarRow(username)
@@ -56,7 +62,6 @@ async function googleSnapshotUnchecked(username:string,window?:{timeMin:string;t
  do{if(page)params.set('pageToken',page);const result=await read(base+'?'+params);if(!result)throw new ApiError(502,'Google snapshot unavailable.');events.push(...(result.items||[]));page=result.nextPageToken;if(events.length>10000)throw new ApiError(413,'Google review window is too large; no partial snapshot was saved.')}while(page)
  // Exact linked masters/occurrences must be reviewed even outside the window.
  for(const mapping of mappings)if(!events.some(e=>e.id===mapping.remote_id)){const event=await read(base+'/'+encodeURIComponent(mapping.remote_id));events.push(event||{id:mapping.remote_id,status:'cancelled',etag:null})}
- const status=await googleCalendarStatus(username)
  const sources:NonNullable<Stage['payload']['google']['sources']>=[]
  for(const account of status.accounts.filter(a=>a.id!==session.accountId&&a.readEnabled)){
   if(!account.connected)throw new ApiError(409,'Reconnect '+account.identity+' or disable its calendar source before reviewing.')
@@ -114,14 +119,15 @@ export function stageIssues(calendar:StoredState,google:Stage['payload']['google
 }
 export async function prepareCalendarStage(username:string,refresh=false){
  const [row,old]=await Promise.all([calendarRow(username),stagingRow(username)])
- if(!refresh&&old?.status==='draft'&&old.base_revision===row.revision)return stageSummary(old)
+ const status=await googleCalendarStatus(username),googleChecksRequired=status.exportEnabled||status.requireGoogleReview
+ if(!refresh&&old?.status==='draft'&&old.base_revision===row.revision&&Boolean(old.payload.google.reviewSkipped)===!googleChecksRequired)return stageSummary(old)
  const snapshot=await googleSnapshot(username)
  const stage:Stage={username,id:randomUUID(),version:1,base_revision:row.revision,account_id:snapshot.accountId,status:'draft',approved_revision:null,payload:{baseCalendar:structuredClone(row.state),calendar:row.state,google:snapshot.google,issues:[...stageIssues(row.state,snapshot.google),...sourceCalendarIssues(row.state,snapshot.google.sources||[])],resolutions:{}}}
  const saved=await db().from('planner_calendar_staging').insert(stage).select('id')
  if(!storage(saved)?.length)throw new ApiError(409,'Staging changed while preparing. Read it again.')
  return stageSummary(stage)
 }
-function stageSummary(stage:Stage){return {id:stage.id,version:stage.version,status:stage.status,baseRevision:stage.base_revision,approvedRevision:stage.approved_revision,accountId:stage.account_id,issues:stage.payload.issues,resolutions:stage.payload.resolutions,calendarEvents:stage.payload.calendar.events.length,googleEvents:stage.payload.google.events.length+(stage.payload.google.sources||[]).reduce((n,s)=>n+s.events.length,0),sourceAccounts:(stage.payload.google.sources||[]).map(({accountId,identity,events})=>({accountId,identity,events:events.length,readOnly:true})),widgetFeedback:stage.payload.widgetFeedback||[],googleDecisions:stage.payload.googleDecisions||{},googleWindow:{timeMin:stage.payload.google.timeMin,timeMax:stage.payload.google.timeMax},coverage:'Google series/occurrences in the stated window plus every linked Google event; internal overlap checks expand recurrence and folder exclusions within the stated window; Google overlap hints still require explicit recurrence review.',download:'/api/calendar/staging.json'}}
+function stageSummary(stage:Stage){return {id:stage.id,version:stage.version,status:stage.status,baseRevision:stage.base_revision,approvedRevision:stage.approved_revision,accountId:stage.account_id,issues:stage.payload.issues,resolutions:stage.payload.resolutions,calendarEvents:stage.payload.calendar.events.length,googleEvents:stage.payload.google.events.length+(stage.payload.google.sources||[]).reduce((n,s)=>n+s.events.length,0),sourceAccounts:(stage.payload.google.sources||[]).map(({accountId,identity,events})=>({accountId,identity,events:events.length,readOnly:true})),widgetFeedback:stage.payload.widgetFeedback||[],googleDecisions:stage.payload.googleDecisions||{},googleWindow:{timeMin:stage.payload.google.timeMin,timeMax:stage.payload.google.timeMax},googleReviewSkipped:stage.payload.google.reviewSkipped===true,coverage:stage.payload.google.reviewSkipped?'Google checks skipped by your setting. Planner revision, task coverage, folder and internal conflict checks still apply.':'Google series/occurrences in the stated window plus every linked Google event; internal overlap checks expand recurrence and folder exclusions within the stated window; Google overlap hints still require explicit recurrence review.',download:'/api/calendar/staging.json'}}
 export async function readCalendarStage(username:string,section='summary',offset=0,limit=100,id?:string){
  const stage=await stagingRow(username,id);if(!stage)throw new ApiError(404,'Prepare a calendar draft first.')
  const items=section==='google'?[...stage.payload.google.events.map(e=>({...e,accountId:stage.account_id,exportTarget:true})),...(stage.payload.google.sources||[]).flatMap(source=>source.events.map(e=>({...e,accountId:source.accountId,accountIdentity:source.identity,exportTarget:false})))]:stage.payload.calendar.events
@@ -201,10 +207,11 @@ export async function publishCalendarStage(username:string,args:{id:string;versi
  }
  const problems=widgetDraftProblems(current.state,stage.payload.calendar,stage.payload.widgetFeedback||[])
  if(problems.length)throw new ApiError(409,'The revised plan is not ready. Fix draft conflicts before publishing: '+problems.join('; '))
- const exportEnabled=(await googleCalendarStatus(username)).exportEnabled
- if(exportEnabled){
- // Exporting a reviewed draft requires Google's write permission.
- await googleCalendarSession(username,stage.account_id,true)
+ const status=await googleCalendarStatus(username),exportEnabled=status.exportEnabled
+ if(exportEnabled||status.requireGoogleReview){
+ if(stage.payload.google.reviewSkipped)throw new ApiError(409,'Google checks are now required. Prepare a fresh draft before publishing.')
+ // Google writes always require reconciliation and event-edit consent.
+ if(exportEnabled)await googleCalendarSession(username,stage.account_id||undefined,true)
  const fresh=await googleSnapshot(username,stage.payload.google)
  const pendingExports = storage(await db().from('planner_calendar_staging').select('id')
   .eq('username',username).eq('status','approved').neq('id',stage.id).lte('approved_revision',stage.base_revision).limit(1))

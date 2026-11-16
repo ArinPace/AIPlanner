@@ -277,4 +277,5 @@ export function sendWidgetCompletion(feedback: import('./widgetTaskFeedback').Ta
  return request<{ok: boolean; merged?: boolean}>('/api/widget/feedback', {method: 'POST', body: JSON.stringify(feedback)})
 }
 
+export function setGoogleReviewRequired(requireGoogleReview:boolean){return request('/api/calendar/google-sync',{method:'PATCH',body:JSON.stringify({requireGoogleReview})})}
 export function setGoogleExportEnabled(exportEnabled:boolean){return request('/api/calendar/google-sync',{method:'PATCH',body:JSON.stringify({exportEnabled})})}
