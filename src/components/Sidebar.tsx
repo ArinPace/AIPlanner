@@ -84,7 +84,7 @@ export function Sidebar({
         <h2>Show events</h2>
         <label><input type="checkbox" checked={!hiddenTypes.includes('fixed')} onChange={()=>onToggleType('fixed')}/>Fixed events</label>
         <label><input type="checkbox" checked={!hiddenTypes.includes('planned')} onChange={()=>onToggleType('planned')}/>Agent-planned events</label>
-        <FixedCalendarSync/>
+        <div hidden><FixedCalendarSync/></div>
       </section>
 
       <section className="tag-section">
