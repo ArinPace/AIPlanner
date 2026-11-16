@@ -19,6 +19,7 @@ import {RenameDialog} from './RenameDialog'
 import {AgentInstructions} from './AgentInstructions'
 import {ConnectedApps} from './ConnectedApps'
 import {SourceConnectionAlerts} from './SourceConnectionAlerts'
+const chatConnectionError=(error:unknown)=>error instanceof Error&&(/Could not reach the server|Server temporarily unavailable|Load failed|Failed to fetch/i.test(error.message)||[408,429,500,502,503,504].includes((error as Error&{status?:number}).status||0))
 export function SubscriptionChatView({username,active,sidebar,setSidebar}:{username:string;active:boolean;sidebar:boolean;setSidebar:(value:boolean)=>void}){
  const [tutorOpen,setTutorOpen]=useState(false)
  const [schedulePrefs,setSchedulePrefs]=useState<{enabled:boolean;schedule:{times:string[];timezone:string;instructions?:string};updatedAt:string|null}|null>(null)
@@ -67,6 +68,7 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
  const composerInput=useRef<HTMLTextAreaElement>(null)
  useLayoutEffect(()=>{if(active&&followThread.current&&thread.current)thread.current.scrollTop=thread.current.scrollHeight},[active,relayText,relayPhase])
  useLayoutEffect(()=>{const input=composerInput.current;if(input){input.style.height='38px';input.style.height=Math.min(144,Math.max(38,input.scrollHeight))+'px'}},[message])
+ const [connectionIssue,setConnectionIssue]=useState(false)
  const [error,setError]=useState(''),[restoring,setRestoring]=useState(false),[busy,setBusy]=useState(false),[loading,setLoading]=useState(false),[older,setOlder]=useState(false)
  const [panel,setPanel]=useState<'connections'|'settings'|null>(null),[filter,setFilter]=useState<'active'|'archived'|'bin'>('active')
  const [rename,setRename]=useState<SubscriptionChat|null>(null),[attachments,setAttachments]=useState<RelayFile[]>([]),[preparing,setPreparing]=useState(false),[dictating,setDictating]=useState(false)
@@ -75,8 +77,9 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
  const latestRefresh=useRef(0)
  const refresh=useCallback(async(id=selected.current,fast=false)=>{
   const generation=epoch.current,refreshVersion=++latestRefresh.current
-  const result=await subscriptionChatRequest(id||undefined,undefined,undefined,fast)
-  if(!alive.current||generation!==epoch.current||refreshVersion!==latestRefresh.current)return
+  const result=await subscriptionChatRequest(id||undefined,undefined,undefined,fast).catch(error=>{if(!alive.current||generation!==epoch.current||refreshVersion!==latestRefresh.current)return null;throw error})
+  if(!result||!alive.current||generation!==epoch.current||refreshVersion!==latestRefresh.current)return
+  setConnectionIssue(false);setError(current=>chatConnectionError(new Error(current))?'':current)
   selected.current=result.chat.id;setChatId(result.chat.id);setWorkspace(result)
   if(result.chat.is_main)writeChatCache(username,'subscription-main',{...result,messages:result.messages.slice(-8),hasOlder:result.hasOlder||result.messages.length>8,google:undefined})
   return result
@@ -85,10 +88,12 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
   if(!active)return
   let cancelled=false,fresh=false;setLoading(!workspaceRef.current)
   if(!workspaceRef.current)void readChatCache<SubscriptionWorkspace>(username,'subscription-main').then(saved=>{if(saved&&!cancelled&&!fresh&&!workspaceRef.current){selected.current=saved.chat.id;setChatId(saved.chat.id);setWorkspace(saved);selectDraft(saved.chat.id);setLoading(false)}})
-  void refresh(selected.current,true).then(result=>{fresh=true;if(result&&!cancelled){selectDraft(result.chat.id);setLoading(false);void refresh().catch(e=>{if(!cancelled)setError(e.message)})}}).catch(e=>{if(!cancelled)setError(e.message)}).finally(()=>{if(!cancelled)setLoading(false)})
-  const update=()=>void refresh().catch(e=>{if(!cancelled)setError(e.message)})
-  const timer=setInterval(update,30000);window.addEventListener('focus',update)
-  return()=>{cancelled=true;clearInterval(timer);window.removeEventListener('focus',update)}
+  let retry:ReturnType<typeof setTimeout>|undefined,failures=0
+  const failed=(error:Error)=>{if(cancelled)return;if(chatConnectionError(error)){setConnectionIssue(true);if(retry)clearTimeout(retry);retry=setTimeout(update,Math.min(30000,1500*2**Math.min(5,failures++)))}else setError(error.message)}
+  const update=()=>void refresh().then(()=>{failures=0;if(retry)clearTimeout(retry)}).catch(failed)
+  void refresh(selected.current,true).then(result=>{fresh=true;if(result&&!cancelled){selectDraft(result.chat.id);setLoading(false);update()}}).catch(failed).finally(()=>{if(!cancelled)setLoading(false)})
+  const timer=setInterval(update,30000);window.addEventListener('focus',update);window.addEventListener('online',update)
+  return()=>{cancelled=true;clearInterval(timer);if(retry)clearTimeout(retry);window.removeEventListener('focus',update);window.removeEventListener('online',update)}
  },[active,refresh,selectDraft])
  async function choose(chat:SubscriptionChat){
   if(relayPrompt)return
@@ -339,6 +344,7 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
 </aside>}
  {sidebar&&<button type="button" className="assistant-sidebar-scrim" aria-label="Close chat sidebar" onClick={()=>setSidebar(false)}/>}
  <section className="assistant-chat" aria-label="Subscription conversation" inert={Boolean(panel||rename||previewFile)}><header className="assistant-chat-header"><div>{!sidebar&&<button type="button" className="icon-btn" aria-label="Show chat sidebar" onClick={()=>setSidebar(true)}><MenuIcon/></button>}<button type="button" className="icon-btn" aria-label="New chat" disabled={busy||syncing} onClick={()=>void create()}><PlusIcon/></button><div className="assistant-chat-title"><strong>{chat?.title||'Main Chat'}</strong><span>ChatGPT subscription</span><span role="status">{window.plannerNativeChatGPTPortal?signedIn?'Connected':relayReady?'Guest session':sessionState==='checking'?'Restoring session…':'Connect ChatGPT':'Not connected'}</span></div></div><div>{native&&<button type="button" className="assistant-sites-button" onClick={()=>void connect()}>ChatGPT session</button>}<button type="button" className="assistant-sites-button" onClick={()=>setPanel('connections')}>Add sites</button><button type="button" className="icon-btn" aria-label="Chat settings" onClick={()=>setPanel('settings')}><SettingsIcon/></button></div></header>
+ {connectionIssue&&<p role="status" className="chat-connection-notice">Connection interrupted. Reconnecting… <button type="button" className="text-btn" onClick={()=>void refresh().catch(e=>{if(!chatConnectionError(e))setError(e.message)})}>Retry connection</button></p>}
  {error&&<p role="alert" className="assistant-error">{error}{native&&/Could not restore its existing reply/i.test(error)&&<button type="button" disabled={busy} onClick={()=>{restoreAttempted.current.clear();void refresh().catch(e=>setError(e.message))}}>Restore reply</button>}{native&&/previous Planner tool turn/i.test(error)&&<button type="button" onClick={()=>void cancelUnfinished()}>Stop unfinished request</button>}{native&&/website sign-in is pending/i.test(error)&&<button type="button" disabled={busy||syncing} onClick={()=>void nativeRequest({action:'chatGPTSiteSignIn',account:username,intent:'interaction'}).catch(e=>setError(e instanceof Error?e.message:'Could not open website sign-in.'))}>Finish website sign-in</button>}{native&&/unsent draft/i.test(error)&&<button type="button" disabled={busy||syncing} onClick={()=>void inspectRemoteDraft()}>Review ChatGPT draft</button>}<button type="button" className="icon-btn" aria-label="Dismiss chat error" onClick={()=>setError('')}>×</button></p>}
  {(chat?.archived||chat?.deleted_at)&&<p className="agent-banner">This chat is {chat.deleted_at?'in Bin':'archived'}. Restore it from the sidebar to continue.</p>}
  <div ref={thread} className="assistant-thread" onScroll={e=>{const element=e.currentTarget;followThread.current=element.scrollHeight-element.clientHeight-element.scrollTop<80}}><div className="assistant-thread-content">{workspace?.hasOlder&&<button type="button" disabled={older} onClick={()=>{const first=workspace.messages[0];if(!first)return;followThread.current=false;setOlder(true);void subscriptionChatRequest<SubscriptionWorkspace>(chatId||undefined,undefined,first.id).then(result=>setWorkspace(current=>current?.chat.id===result.chat.id?{...current,hasOlder:result.hasOlder,messages:[...result.messages,...current.messages.filter(item=>!result.messages.some(older=>older.id===item.id))]}:current)).catch(e=>setError(e.message)).finally(()=>setOlder(false))}}>Load earlier messages</button>}

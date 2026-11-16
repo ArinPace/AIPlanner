@@ -45,7 +45,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if(token!==getToken())throw new Error('Your account changed. Reload your current plan.')
   const data = (await response.json().catch(() => ({}))) as T & { error?: string }
   if (!response.ok) {
-    throw new Error(data.error || 'Request failed')
+    throw Object.assign(new Error(data.error || (response.status>=500?'Server temporarily unavailable. Please try again.':'Request failed')),{status:response.status})
   }
   if(['/api/session','/api/login','/api/register','/api/auth/google/finish','/api/auth/google/link','/api/auth/google/create'].includes(path)){
     const identity=(data as unknown as {username?:unknown})?.username
@@ -248,11 +248,11 @@ export async function subscriptionChatRequest<T=import('./subscriptionChat').Sub
  const query=new URLSearchParams();if(fast)query.set('fast','1');if(chat)query.set('chat',chat);if(before)query.set('before',before)
  const token=getToken(),retryable=!action||['tool_begin','tool_call','tool_finish','relay_bind','relay_save','relay_attempt_start','relay_attempt_update'].includes(String(action.action))
  for(let attempt=0;;attempt++){
-  try{return await request<T>('/api/subscription-chat'+(query.size?'?'+query:''),action?{method:'POST',body:JSON.stringify(action)}:{})}
+  try{return await request<T>('/api/subscription-chat'+(query.size?'?'+query:''),{...(action?{method:'POST',body:JSON.stringify(action)}:{}),signal:typeof AbortSignal.timeout==='function'?AbortSignal.timeout(20000):undefined})}
   catch(error){
    // These writes have stable turn/call receipts or set the same owned URL.
    // Never resend ChatGPT messages or non-idempotent chat creation here.
-   if(!retryable||attempt>=2||token!==getToken()||!(error instanceof Error)||error.message!=='Could not reach the server. Check your connection and try again.')throw error
+   if(!retryable||attempt>=2||token!==getToken()||!(error instanceof Error)||!(error.message==='Could not reach the server. Check your connection and try again.'||[408,429,500,502,503,504].includes((error as Error&{status?:number}).status||0)))throw error
    await new Promise(resolve=>setTimeout(resolve,500*(attempt+1)))
    if(token!==getToken())throw new Error('Your account changed. Reload your current plan.')
   }
