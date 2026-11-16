@@ -1,0 +1,22 @@
+import {chromium} from 'playwright-core';import fs from 'node:fs';import assert from 'node:assert/strict'
+const b=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true})
+try{const p=await b.newPage({viewport:{width:393,height:852}});p.setDefaultTimeout(10000)
+ const description='Evidence gathering and review.\nSource: https://brightspace.nyu.edu/d2l/example?x=1&y=2\n\nTask ID: 2ad2e674-079a-4343-b775-27c798d0747a\nLocation: Library.'
+ let f=fs.readFileSync(new URL('../ios/AIPlanner/UITestFixture.js',import.meta.url),'utf8').replace("description:'',allDay:false,tagIds:[],recurrence:",`description:${JSON.stringify(description)},allDay:false,tagIds:[],recurrence:`)
+ await p.addInitScript({content:'globalThis.__plannerFixtureSignedIn=true;globalThis.__plannerFixtureWidgets=true;'+f})
+ await p.addInitScript(()=>{const original=window.fetch;window.calendarWrites=[];window.fetch=(url,options)=>{if(String(url)==='/api/calendar'&&options?.method==='PUT')window.calendarWrites.push(JSON.parse(options.body));return original(url,options)}})
+ await p.goto(process.env.PLANNER_TEST_ORIGIN||'http://127.0.0.1:5174');await p.locator('.event-chip[title="Widget current activity"]').first().click()
+ const dialog=p.getByRole('dialog',{name:'Calendar event',exact:true});await dialog.waitFor()
+ assert.equal(await dialog.getByText(/Task ID:/).count(),0)
+ const link=dialog.getByRole('link',{name:'https://brightspace.nyu.edu/d2l/example?x=1&y=2',exact:true});assert.equal(await link.getAttribute('href'),'https://brightspace.nyu.edu/d2l/example?x=1&y=2')
+ await p.context().route('https://brightspace.nyu.edu/**',route=>route.fulfill({contentType:'text/html',body:'Source fixture'}))
+ const opened=p.waitForEvent('popup');await link.click();const source=await opened;await source.waitForLoadState();assert.equal(source.url(),'https://brightspace.nyu.edu/d2l/example?x=1&y=2');await source.close()
+ await dialog.getByRole('button',{name:'Edit description',exact:true}).click();const input=dialog.getByRole('textbox',{name:'Description',exact:true});assert(!(await input.inputValue()).includes('Task ID:'))
+ await input.fill('Updated description.\nhttps://example.invalid/source\n');assert((await input.inputValue()).endsWith('\n'))
+ await dialog.getByRole('button',{name:'Done editing description',exact:true}).click();assert.equal(await dialog.getByRole('link',{name:'https://example.invalid/source',exact:true}).count(),1)
+ await dialog.getByRole('button',{name:'Save',exact:true}).click()
+ await p.waitForFunction(()=>window.calendarWrites.length>0)
+ const saved=await p.evaluate(()=>window.calendarWrites.at(-1).events.find(e=>e.id==='widget-test').description)
+ assert(saved.includes('Task ID: 2ad2e674-079a-4343-b775-27c798d0747a'));assert(saved.includes('Updated description.'))
+ console.log('Hidden task metadata survives editing; descriptions render clickable links; multiline editing retained passed.')
+}finally{await b.close()}

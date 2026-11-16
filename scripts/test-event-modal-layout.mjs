@@ -7,7 +7,7 @@ try {
   const page=await browser.newPage({viewport,isMobile:viewport.width<900,hasTouch:viewport.width<900})
   await page.addInitScript({content:`globalThis.__plannerFixtureSignedIn=true;${fs.readFileSync(new URL('../ios/AIPlanner/UITestFixture.js',import.meta.url),'utf8')}`})
   await page.goto('http://127.0.0.1:5174')
-  await page.getByRole('button',{name:'Create',exact:true}).filter({visible:true}).click()
+  await page.getByRole('button',{name:'Create event',exact:true}).filter({visible:true}).click()
   const dialog=page.getByRole('dialog',{name:'Calendar event',exact:true})
   await dialog.getByPlaceholder('Add title').fill('Walk from basement laundry room to dorm — a long event title')
   await dialog.getByLabel('Repeats',{exact:true}).selectOption('custom')

@@ -1,3 +1,4 @@
+import {ChatMarkdown} from './ChatMarkdown'
 import {supportsScreenTime} from '../lib/platform'
 import {TaskScreenTimeButton} from './TaskScreenTimeButton'
 import type {TaskScreenTimeWindow} from '../lib/taskScreenTime'
@@ -45,6 +46,11 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
   const titleRef = useRef<HTMLInputElement>(null)
   const backdropRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState('')
+  const [editingDescription,setEditingDescription]=useState(mode==='create'||!draft.description.trim())
+  const internalDescriptionLine=(line:string)=>/^\s*Task\s+ID\s*:\s*\S+\s*$/i.test(line)
+  const [descriptionText,setDescriptionText]=useState(()=>draft.description.split('\n').filter(line=>!internalDescriptionLine(line)).join('\n').trim())
+  const descriptionLines=draft.description.split('\n'),internalDescription=descriptionLines.filter(internalDescriptionLine)
+  const visibleDescription=descriptionLines.filter(line=>!internalDescriptionLine(line)).join('\n').replace(/\n{3,}/g,'\n\n').trim()
   const [child,setChild]=useState<{id:string;draft:EventDraft}|null>(null)
   const folder=draft.eventKind==='folder'
   const childOpen=child!==null
@@ -252,16 +258,17 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
           </div>
         )}
 
-        <label className="field">
+        <div className="field">
           <span>Description</span>
-          <textarea
+          {editingDescription?<><textarea
+            aria-label="Description"
             rows={3}
-            value={draft.description}
-            onChange={(event) => update('description', event.target.value)}
+            value={descriptionText}
+            onChange={event=>{setDescriptionText(event.target.value);update('description',[event.target.value,...internalDescription].filter(Boolean).join('\n\n'))}}
             placeholder="Add a description"
             maxLength={2000}
-          />
-        </label>
+          /><button type="button" className="text-btn event-description-edit" onClick={()=>setEditingDescription(false)}>Done editing description</button></>:<><div className="event-description-preview"><ChatMarkdown text={visibleDescription||'No description'}/></div><button type="button" className="text-btn event-description-edit" onClick={()=>setEditingDescription(true)}>Edit description</button></>}
+        </div>
 
         <label className="field"><span>Scheduling type</span><select aria-label="Scheduling type" value={draft.scheduleType||'fixed'} onChange={event=>update('scheduleType',event.target.value as 'fixed'|'planned')}><option value="fixed">{folder?'Fixed grouping':'Fixed event \u00b7 sync to Google Calendar'}</option><option value="planned">Agent-planned event</option></select></label>
         <div className="field">

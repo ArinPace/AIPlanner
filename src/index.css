@@ -2953,3 +2953,7 @@ html, body { touch-action: pan-x pan-y; }
 .assistant-thread .assistant-copy { display: inline-flex; align-items: center; border: 0; padding: 5px; background: transparent; color: var(--muted); }
 .assistant-message-time[hidden] { display: none; }
 @media(prefers-reduced-motion:reduce) { .chat-thinking-dot,.chat-stream-cursor { animation: none; } }
+
+.event-description-preview { border: 1px solid var(--border); border-radius: 8px; padding: 12px; min-width: 0; overflow-wrap: anywhere; }
+.event-description-preview .chat-markdown { white-space: pre-wrap; line-height: 1.45; }
+.event-description-edit { align-self: flex-start; font-size: .875rem; }
