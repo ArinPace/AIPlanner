@@ -88,6 +88,13 @@ export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=tr
     return()=>window.clearInterval(timer)
   },[active])
   const previousLayout = useRef<{key:string;hourHeight:number;gridWeek:boolean}|null>(null)
+  const [optimisticDone,setOptimisticDone]=useState<Set<string>>(()=>new Set())
+  const completionKey=(item:Occurrence)=>item.event.id+'/'+item.start.toISOString()
+  const leafCompleted=(item:Occurrence)=>optimisticDone.has(completionKey(item))||occurrenceChecked(item.event,item.start)
+  useEffect(()=>{
+    const saved=new Set(busyOccurrences.filter(item=>occurrenceChecked(item.event,item.start)).map(completionKey))
+    setOptimisticDone(current=>{const next=new Set([...current].filter(key=>!saved.has(key)));return next.size===current.size?current:next})
+  },[busyOccurrences])
   const bodyRef=useRef<HTMLDivElement>(null)
   const [openedFolders,setOpenedFolders]=useState<Set<string>>(()=>new Set())
   const now=new Date(),grouped=occurrenceFolderGroups(view==='week'&&weekLayout!=='grid'?busyOccurrences:occurrences),busyGrouped=occurrenceFolderGroups(busyOccurrences)
@@ -112,14 +119,15 @@ export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=tr
   const todayKey=toDateInput(now),mobileWeek=view==='week' && !regularWeek
   const containsToday=days.some(day=>toDateInput(day)===todayKey)
   useLayoutEffect(() => {
-    if(!active){previousLayout.current=null;return}
+    if(!active)return
     const node = mobileWeek?weekScrollRef.current:scrollRef.current
     if (!node) return
-    const key=view+'/'+dayKey+'/'+todayKey+'/'+(mobileWeek?'mobile':'grid')+'/'+(mobileWeek&&scaleToDuration),previous=previousLayout.current
+    const key=view+'/'+cursor.getTime()+'/'+dayKey+'/'+todayKey+'/'+(mobileWeek?'mobile':'grid')+'/'+(mobileWeek&&scaleToDuration),previous=previousLayout.current
     const keepGridPosition = regularWeek && previous?.gridWeek
     if(previous?.key!==key && !keepGridPosition){
       if(mobileWeek){
-        const target=dayKey===todayKey?mobileNowRef.current:node.querySelector<HTMLElement>('[data-calendar-day="'+dayKey+'"]')
+        const dayHeader=node.querySelector<HTMLElement>('[data-calendar-day="'+dayKey+'"]')
+        const target=dayKey===todayKey?(mobileNowRef.current??dayHeader):dayHeader
         node.scrollTop=target?Math.max(0,node.scrollTop+target.getBoundingClientRect().top-node.getBoundingClientRect().top-(dayKey===todayKey?node.clientHeight*.25:0)):0
       }else{
         const current=new Date(),showNow=containsToday
@@ -131,17 +139,17 @@ export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=tr
       node.scrollTop=midpoint/previous.hourHeight*hourHeight-node.clientHeight/2
     }
     previousLayout.current={key,hourHeight,gridWeek:regularWeek}
-  }, [active,view,dayKey,todayKey,mobileWeek,hourHeight,containsToday,scaleToDuration,regularWeek])
+  }, [active,view,cursor,dayKey,todayKey,mobileWeek,hourHeight,containsToday,scaleToDuration,regularWeek])
 
   const extensionRef=useRef(onAgendaExtend);extensionRef.current=onAgendaExtend
-  const pendingExtension=useRef<{height:number;top:number;prepend:boolean}|null>(null)
+  const pendingExtension=useRef<{height:number;top:number;prepend:boolean;anchor:number}|null>(null)
   const rangeKey=days[0]?.toISOString()+'/'+days[days.length-1]?.toISOString()
   useLayoutEffect(()=>{
     const node=weekScrollRef.current,pending=pendingExtension.current
     if(!node||!pending)return
-    if(pending.prepend)node.scrollTop=pending.top+node.scrollHeight-pending.height
+    if(pending.anchor===cursor.getTime()&&pending.prepend)node.scrollTop=pending.top+node.scrollHeight-pending.height
     pendingExtension.current=null
-  },[rangeKey])
+  },[rangeKey,cursor])
   const visibleDateCallback=useRef(onVisibleDateChange)
   visibleDateCallback.current=onVisibleDateChange
   useEffect(()=>{
@@ -155,12 +163,12 @@ export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=tr
       const section=sections.find(section=>section.getBoundingClientRect().bottom>top)
       const key=section?.dataset.calendarDay
       if(key&&key!==last){last=key;visibleDateCallback.current?.(new Date(key+'T12:00:00'))}
-      if(extensionRef.current&&!pendingExtension.current){const prepend=node.scrollTop<240;if(prepend||node.scrollHeight-node.clientHeight-node.scrollTop<400){pendingExtension.current={height:node.scrollHeight,top:node.scrollTop,prepend};extensionRef.current(prepend?-1:1)}}
+      if(extensionRef.current&&!pendingExtension.current){const prepend=node.scrollTop<240;if(prepend||node.scrollHeight-node.clientHeight-node.scrollTop<400){pendingExtension.current={height:node.scrollHeight,top:node.scrollTop,prepend,anchor:cursor.getTime()};extensionRef.current(prepend?-1:1)}}
     }
     const scroll=()=>{if(!frame)frame=requestAnimationFrame(report)}
     node.addEventListener('scroll',scroll,{passive:true});scroll()
     return()=>{node.removeEventListener('scroll',scroll);cancelAnimationFrame(frame)}
-  },[active,mobileWeek,dayKey,rangeKey])
+  },[active,mobileWeek,dayKey,rangeKey,cursor])
 
   const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 60) * hourHeight
   const busyEvents = busyOccurrences.map(item => item.event)
@@ -173,16 +181,24 @@ export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=tr
     return !repeatsWithAncestors(item.event, busyEvents) && (insideFolder || item.event.checklistLinks?.length) ? [item] : []
   }
   function completed(item: Occurrence): boolean {
-    if (occurrenceChecked(item.event, item.start)) return true
+    if (leafCompleted(item)) return true
     if (item.event.eventKind !== 'folder') return false
     const leaves = completionLeaves(item)
-    return leaves.length > 0 && leaves.every(leaf => occurrenceChecked(leaf.event, leaf.start))
+    return leaves.length > 0 && leaves.every(leafCompleted)
   }
   const appearance = (item: Occurrence) => completed(item) || ('freeTime' in item && item.freeTime)
     ? freeTimeAppearance : eventAppearance(eventColor(item.event,tags),item.event.reminder)
   const completionClass = (item: Occurrence) => completed(item) ? ' is-completed-free-time' : ''
   const selectEvent=(item:ScheduleRow)=>item.freeTime?(onFreeTimeClick?onFreeTimeClick(item):onSlotClick(item.start)):onEventClick(item.event,item.start)
-  const doneButton=(item:Occurrence,checkbox=false)=><CalendarDoneButton checkbox={checkbox} item={item} leaves={completionLeaves(item)} onDone={onEventDone}/>
+  const doneButton=(item:Occurrence,checkbox=false)=>{
+    const leaves=completionLeaves(item)
+    const shown=leaves.map(leaf=>optimisticDone.has(completionKey(leaf))?{...leaf,event:{...leaf.event,completedStarts:[...(leaf.event.completedStarts||[]),leaf.start.toISOString()]}}:leaf)
+    return <CalendarDoneButton checkbox={checkbox} item={item} leaves={shown} onDone={async(event,start)=>{
+      const keys=leaves.map(completionKey)
+      setOptimisticDone(current=>new Set([...current,...keys]))
+      try{return await onEventDone(event,start)}catch(error){setOptimisticDone(current=>{const next=new Set(current);keys.forEach(key=>next.delete(key));return next});throw error}
+    }}/>
+  }
   function dayFolderBody(item:Occurrence,day:Date):ReactNode{
     const open=folderOpen(item),children=(grouped.children.get(folderOccurrenceKey(item))||[]).filter(child=>clipToDay(child,day))
     return <><div className="folder-event-header"><button type="button" className="agenda-disclosure grid-folder-disclosure" aria-label={(open?'Collapse folder ':'Expand folder ')+item.event.title} aria-expanded={open} onClick={()=>toggleFolder(item)}><FolderChevron open={open}/></button><button type="button" className={"folder-grid-toggle"+completionClass(item)} onClick={()=>toggleFolder(item)} aria-expanded={open} style={appearance(item)}> {item.event.title}<small>{formatTimeCompact(item.start)}–{formatTimeCompact(item.end)}{showItemCounts&&<> · {children.length} {children.length===1?'item':'items'}</>}</small></button><button type="button" className="folder-pencil" style={appearance(item)} aria-label={'Edit folder '+item.event.title} onClick={()=>onEventClick(item.event,item.start)}><EditIcon size={18}/></button></div><FolderReveal open={open}>{()=><div className="folder-day-children">{folderChildren(item,day).map(child=>child.event.eventKind==='folder'?<div className="nested-day-folder" key={child.event.id}>{dayFolderBody(child,day)}</div>:<div key={child.event.id} className="calendar-task-with-actions"><button type="button" className={"event-chip folder-child-event"+completionClass(child)} onClick={()=>selectEvent(child)} style={appearance(child)}><span>{formatTimeCompact(child.start)}–{formatTimeCompact(child.end)}</span><strong className="event-title">{child.event.title}</strong></button>{!child.freeTime&&doneButton(child)}</div>)}</div>}</FolderReveal></>

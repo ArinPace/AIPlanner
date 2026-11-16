@@ -504,7 +504,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
         calendarDisplay={calendarDisplay}
         username={username}
         onNavigate={navigate}
-        onToday={() => setCursor(new Date())}
+        onToday={() => {setAgendaWindow(null);setCursor(new Date())}}
         onDateChange={setCursor}
         onToggleSidebar={() => {if(tab==='files'||tab==='todo'||tab==='work')setFilesSidebar(v=>!v);else if(tab==='agent')setAgentSidebar(v=>!v);else if(tab==='chat')setMainChatOpen(v=>!v);else setSidebarOpen(v=>!v)}}
         onCreate={() => openCreate(cursor)}
