@@ -742,7 +742,7 @@ struct PlannerWebView: UIViewRepresentable {
         }
         return {kind:'browser',ready,controlling:document.body.innerText.includes('You have control')};
       }
-      const entry=buttons.filter(n=>/^(Open cloud browser|Take over to sign in|Take over)$/i.test(label(n))&&(window.__plannerSignInCurrent?.(n,true)??true)).at(-1);
+      const entry=buttons.filter(n=>/^(Open cloud browser|Take over to sign in|Take over)$/i.test(label(n))&&current(n)).at(-1);
       if(entry){
         window.__plannerSiteSignIn?.restore();
         if(!window.__plannerWebsiteHandoffOpened){window.__plannerWebsiteHandoffOpened=true;entry.click()}
