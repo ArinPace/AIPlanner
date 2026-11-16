@@ -30,6 +30,8 @@ begin
  if planner_claim_whoop_chat(u) is not null then raise exception 'Data was claimed twice'; end if;
  perform planner_store_whoop_record(u,c,'sleep',event_id,'{"deleted":true}','deleted',now());
  if not exists(select 1 from planner_whoop_reviews where username=u and channel='chat' and next_at is not null) then raise exception 'Recent known deletion was ignored'; end if;
+ perform planner_store_whoop_record(u,c,'workout',event_id,jsonb_build_object('scoreState','SCORED','workoutEnd',now()-interval '1 hour','record',jsonb_build_object('sport_name','Running','score',jsonb_build_object('strain',12))),'workout',now());
+ if not exists(select 1 from planner_whoop_records where username=u and kind='workout' and data->'record'->>'sport_name'='Running') then raise exception 'Full workout data was not retained'; end if;
  perform planner_disconnect_whoop(u);
  if exists(select 1 from planner_whoop_connections where username=u) or exists(select 1 from planner_whoop_records where username=u) then raise exception 'Unlink retained credentials or records'; end if;
  if not exists(select 1 from planner_vm_settings where username=u and sources=array['gmail']) then raise exception 'Unlink changed unrelated sources'; end if;

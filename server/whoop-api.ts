@@ -6,7 +6,7 @@ import {sealVmCredential,openVmCredential} from './vm-vault.js'
 
 const API='https://api.prod.whoop.com/developer/v2'
 const AUTH='https://api.prod.whoop.com/oauth/oauth2/'
-export const WHOOP_SCOPES='offline read:profile read:sleep read:recovery'
+export const WHOOP_SCOPES='offline read:profile read:sleep read:recovery read:cycles read:workout read:body_measurement'
 const origin=()=>process.env.APP_ORIGIN||'https://aiplanner-ten.vercel.app'
 const sha=(value:string)=>createHash('sha256').update(value).digest('hex')
 const callback=()=>origin()+'/api/whoop/callback'
@@ -27,12 +27,64 @@ export function normalizedSleep(input:unknown,userId:number,id?:string){
  const stages=s.score?.stage_summary
  const actualSleepMinutes=s.score_state==='SCORED'&&stages?(stages.total_light_sleep_time_milli+stages.total_slow_wave_sleep_time_milli+stages.total_rem_sleep_time_milli)/60000:null
  if(actualSleepMinutes!==null&&actualSleepMinutes>(Date.parse(s.end)-Date.parse(s.start))/60000+1)throw new ApiError(502,'WHOOP returned inconsistent sleep durations.')
- return {id:s.id,cycleId:s.cycle_id,updatedAt:s.updated_at,data:{sleepStart:s.start,sleepEnd:s.end,timezoneOffset:s.timezone_offset,nap:s.nap,scoreState:s.score_state,actualSleepMinutes,sourceUrl:API+'/activity/sleep/'+s.id}}
+ return {id:s.id,cycleId:s.cycle_id,updatedAt:s.updated_at,data:{sleepStart:s.start,sleepEnd:s.end,timezoneOffset:s.timezone_offset,nap:s.nap,scoreState:s.score_state,actualSleepMinutes,record:input,sourceUrl:API+'/activity/sleep/'+s.id}}
 }
 export function normalizedRecovery(input:unknown,userId:number,sleepId:string){
  const r=recoverySchema.parse(input)
  if(r.user_id!==userId||r.sleep_id!==sleepId)throw new ApiError(502,'WHOOP returned an unexpected recovery record.')
- return {id:sleepId,updatedAt:r.updated_at,data:{scoreState:r.score_state,recoveryScore:r.score_state==='SCORED'?r.score?.recovery_score??null:null,sourceUrl:API+'/cycle/'+r.cycle_id+'/recovery'}}
+ return {id:sleepId,updatedAt:r.updated_at,data:{scoreState:r.score_state,recoveryScore:r.score_state==='SCORED'?r.score?.recovery_score??null:null,record:input,sourceUrl:API+'/cycle/'+r.cycle_id+'/recovery'}}
+}
+export function normalizedWorkout(input:unknown,userId:number,id?:string){
+ const w=z.object({id:uuid,user_id:z.number().int().positive().safe(),updated_at:date,start:date,end:date,score_state:scoreState}).parse(input)
+ if(w.user_id!==userId||(id&&w.id!==id)||Date.parse(w.end)<=Date.parse(w.start))throw new ApiError(502,'WHOOP returned an unexpected workout record.')
+ return {id:w.id,updatedAt:w.updated_at,data:{workoutStart:w.start,workoutEnd:w.end,scoreState:w.score_state,record:input,sourceUrl:API+'/activity/workout/'+w.id}}
+}
+function semanticRecord(value:unknown):unknown{
+ if(Array.isArray(value))return value.map(semanticRecord)
+ if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).filter(([key])=>!['updated_at','created_at'].includes(key)).sort(([a],[b])=>a.localeCompare(b)).map(([key,item])=>[key,semanticRecord(item)]))
+ return value
+}
+function verifyOwnData(data:unknown,userId:number,body=false){
+ if(data===null)return
+ const object=z.record(z.string(),z.unknown()).parse(data)
+ const records=Array.isArray(object.records)?object.records:[object]
+ for(const value of records){const record=z.record(z.string(),z.unknown()).parse(value);if(!body&&record.user_id!==userId)throw new ApiError(502,'WHOOP returned data for an unexpected account.')}
+}
+export const whoopApiReadSchema=z.object({kind:z.enum(['profile','body','cycles','workouts','sleep','recovery']),id:z.string().max(100).optional(),start:date.optional(),end:date.optional(),nextToken:z.string().max(2000).optional(),limit:z.number().int().min(1).max(25).default(25)}).strict()
+export async function readWhoopApi(username:string,input:unknown){
+ const args=whoopApiReadSchema.parse(input),c=await connection(username);if(!c)throw new ApiError(409,'Connect WHOOP first.')
+ if(args.start&&args.end&&Date.parse(args.start)>=Date.parse(args.end))throw new ApiError(400,'Choose a chronological WHOOP date range.')
+ const paths={profile:'/user/profile/basic',body:'/user/measurement/body',cycles:'/cycle',workouts:'/activity/workout',sleep:'/activity/sleep',recovery:'/recovery'}
+ let path=paths[args.kind]
+ if(args.id){
+  if(args.kind==='profile'||args.kind==='body')throw new ApiError(400,'Profile and body reads always use your own account.')
+  if(args.kind==='cycles'||args.kind==='recovery'){if(!/^[1-9][0-9]{0,15}$/.test(args.id)||!Number.isSafeInteger(Number(args.id)))throw new ApiError(400,'Choose a valid WHOOP cycle ID.');path='/cycle/'+args.id+(args.kind==='recovery'?'/recovery':'')}
+  else path+='/'+uuid.parse(args.id)
+ }else if(!['profile','body'].includes(args.kind)){
+  const params=new URLSearchParams({limit:String(args.limit)})
+  if(args.start)params.set('start',args.start);if(args.end)params.set('end',args.end);if(args.nextToken)params.set('nextToken',args.nextToken)
+  path+='?'+params
+ }
+ const data=await get(c,path,true)
+ verifyOwnData(data,c.whoop_user_id,args.kind==='body')
+ return {kind:args.kind,sourceUrl:API+path,data,available:data!==null,note:'All provider-returned fields are preserved. Follow next_token with nextToken to retrieve the next page; one response is not complete history.'}
+}
+async function syncWorkout(c:Connection,id:string,eventType:string,deadline:number){
+ const raw=await get(c,'/activity/workout/'+uuid.parse(id),true,deadline)
+ if(raw){const w=normalizedWorkout(raw,c.whoop_user_id,id);await store(c,'workout',w.id,w.data,w.updatedAt)}
+ else if(eventType==='workout.deleted')await store(c,'workout',id,{deleted:true},new Date().toISOString())
+ else throw new ApiError(503,'WHOOP is still making this workout available.')
+}
+async function syncOverview(c:Connection,deadline:number){
+ const snapshot:Record<string,unknown>={}
+ for(const [kind,path] of Object.entries({profile:'/user/profile/basic',body:'/user/measurement/body',cycles:'/cycle?limit=5'})){
+  const data=await get(c,path,true,deadline)
+  verifyOwnData(data,c.whoop_user_id,kind==='body')
+  snapshot[kind]={sourceUrl:API+path,data}
+ }
+ const page=z.object({records:z.array(z.unknown())}).parse(await get(c,'/activity/workout?limit=5&start='+encodeURIComponent(new Date(Date.now()-7*86400000).toISOString()),false,deadline))
+ for(const raw of page.records){const w=normalizedWorkout(raw,c.whoop_user_id);await store(c,'workout',w.id,w.data,w.updatedAt)}
+ storage(await db().from('planner_whoop_connections').update({snapshot,snapshot_at:new Date().toISOString()}).eq('username',c.username).eq('connected_at',c.connected_at))
 }
 export function verifyWhoopSignature(raw:string,signature:string,timestamp:string,secret:string,now=Date.now()){
  if(!secret||!/^\d{13}$/.test(timestamp)||Math.abs(now-Number(timestamp))>300000||!signature)return false
@@ -43,8 +95,8 @@ function configured(){return !!(process.env.WHOOP_CLIENT_ID&&process.env.WHOOP_C
 function requireConfig(){if(!configured())throw new ApiError(503,'WHOOP OAuth needs a registered developer app. Configure WHOOP_CLIENT_ID and WHOOP_CLIENT_SECRET on Vercel first.')}
 async function connection(username:string):Promise<Connection|null>{return storage(await db().from('planner_whoop_connections').select('username,whoop_user_id,credentials,connected_at,refresh_lease_until').eq('username',username).maybeSingle())}
 export async function whoopStatus(username:string){
- const row=storage(await db().from('planner_whoop_connections').select('connected_at,last_synced_at,last_webhook_at,last_error').eq('username',username).maybeSingle())
- return {configured:configured(),connected:!!row,needsReconnect:row?.last_error==='reconnect',connectedAt:row?.connected_at||null,lastSyncedAt:row?.last_synced_at||null,lastWebhookAt:row?.last_webhook_at||null,error:row?.last_error==='reconnect'?'Reconnect WHOOP to renew access.':row?.last_error?'WHOOP sync needs another attempt.':null,delivery:'webhook',execution:'Updates are received in the cloud. ChatGPT relay reviews require Planner open; no remote computer is started.'}
+ const row=storage(await db().from('planner_whoop_connections').select('connected_at,last_synced_at,last_webhook_at,last_error,granted_scopes').eq('username',username).maybeSingle())
+ return {configured:configured(),connected:!!row,needsReconnect:row?.last_error==='reconnect'||!!(row?.granted_scopes&&WHOOP_SCOPES.split(' ').some(scope=>!row.granted_scopes.split(' ').includes(scope))),connectedAt:row?.connected_at||null,lastSyncedAt:row?.last_synced_at||null,lastWebhookAt:row?.last_webhook_at||null,error:row?.last_error==='reconnect'?'Reconnect WHOOP to renew access.':row?.last_error?'WHOOP sync needs another attempt.':null,delivery:'webhook',execution:'Updates are received in the cloud. ChatGPT relay reviews require Planner open; no remote computer is started.'}
 }
 function apiTimeout(deadline:number,max:number){const remaining=deadline-Date.now();if(remaining<=0)throw new ApiError(503,'WHOOP background check will retry.');return AbortSignal.timeout(Math.max(1,Math.min(max,remaining)))}
 async function tokenRequest(form:URLSearchParams,deadline=Date.now()+15000){
@@ -52,7 +104,7 @@ async function tokenRequest(form:URLSearchParams,deadline=Date.now()+15000){
  const r=await fetch(AUTH+'token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:form,signal:apiTimeout(deadline,12000)})
  if(!r.ok)throw new ApiError(r.status===400||r.status===401?401:502,'WHOOP authorization could not be renewed. Reconnect WHOOP if this persists.')
  const t=tokensSchema.parse(await r.json())
- if(WHOOP_SCOPES.split(' ').some(scope=>!t.scope.split(' ').includes(scope)))throw new ApiError(400,'WHOOP did not grant all requested read permissions. Reconnect and approve sleep and recovery access.')
+ if(WHOOP_SCOPES.split(' ').some(scope=>!t.scope.split(' ').includes(scope)))throw new ApiError(400,'WHOOP did not grant all requested read permissions. Reconnect and approve all requested WHOOP read permissions.')
  return {access_token:t.access_token,refresh_token:t.refresh_token,scope:t.scope,expires_at:Date.now()+t.expires_in*1000}
 }
 async function access(c:Connection,force=false,deadline=Date.now()+20000):Promise<Tokens>{
@@ -79,11 +131,12 @@ async function get(c:Connection,path:string,missing=false,deadline=Date.now()+35
  if(!r.ok)throw new ApiError(502,'WHOOP data is temporarily unavailable. The background check will retry.')
  return r.json()
 }
-async function store(c:Connection,kind:'sleep'|'recovery',id:string,data:Record<string,unknown>,updatedAt:string){
- return storage(await db().rpc('planner_store_whoop_record',{p_username:c.username,p_connection_at:c.connected_at,p_kind:kind,p_id:id,p_data:data,p_fingerprint:sha(JSON.stringify(data)),p_provider_updated_at:updatedAt}))
+async function store(c:Connection,kind:'sleep'|'recovery'|'workout',id:string,data:Record<string,unknown>,updatedAt:string){
+ return storage(await db().rpc('planner_store_whoop_record',{p_username:c.username,p_connection_at:c.connected_at,p_kind:kind,p_id:id,p_data:data,p_fingerprint:sha(JSON.stringify({...data,...(data.record?{record:semanticRecord(data.record)}:{})})),p_provider_updated_at:updatedAt}))
 }
 export async function syncWhoop(username:string,sleepId?:string,eventType?:string,deadline=Date.now()+35000){
  const c=await connection(username);if(!c)throw new ApiError(409,'Connect WHOOP first.')
+ if(eventType?.startsWith('workout.')&&sleepId){await syncWorkout(c,sleepId,eventType,deadline);storage(await db().from('planner_whoop_connections').update({last_synced_at:new Date().toISOString(),last_error:null}).eq('username',username).eq('connected_at',c.connected_at));return readWhoopData(username)}
  let sleeps:unknown[]
  if(sleepId){const s=await get(c,'/activity/sleep/'+uuid.parse(sleepId),true,deadline);sleeps=s?[s]:[]}
  else{const page=z.object({records:z.array(z.unknown())}).parse(await get(c,'/activity/sleep?limit=2&start='+encodeURIComponent(new Date(Date.now()-3*86400000).toISOString()),false,deadline));sleeps=page.records}
@@ -98,12 +151,13 @@ export async function syncWhoop(username:string,sleepId?:string,eventType?:strin
   if(raw){const r=normalizedRecovery(raw,c.whoop_user_id,s.id);await store(c,'recovery',r.id,{...r.data,sleepEnd:s.data.sleepEnd},r.updatedAt)}
   else if(eventType==='recovery.deleted')await store(c,'recovery',s.id,{deleted:true},new Date().toISOString())
  }
+ if(!sleepId)await syncOverview(c,deadline)
  storage(await db().from('planner_whoop_connections').update({last_synced_at:new Date().toISOString(),last_error:null}).eq('username',username).eq('connected_at',c.connected_at))
  return readWhoopData(username)
 }
 export async function readWhoopData(username:string){
- const [status,records]=await Promise.all([whoopStatus(username),db().from('planner_whoop_records').select('kind,object_id,data,observed_at').eq('username',username).order('observed_at',{ascending:false}).limit(20)])
- return {...status,records:storage(records),note:'API sleep start/end are recorded sleep bounds; actualSleepMinutes is the sum of sleep stages, not time in bed. timezoneOffset is the recorded numeric offset, not an IANA timezone. Pending scores and deleted records are not evidence of current sleep or wakefulness.'}
+ const [status,records,overview]=await Promise.all([whoopStatus(username),db().from('planner_whoop_records').select('kind,object_id,data,observed_at').eq('username',username).order('observed_at',{ascending:false}).limit(20),db().from('planner_whoop_connections').select('snapshot,snapshot_at').eq('username',username).maybeSingle()])
+ return {...status,records:storage(records),overview:storage(overview),historyTool:'planner_whoop_api_read provides all fields and paginated history for every authorized API category.',note:'API sleep start/end are recorded sleep bounds; actualSleepMinutes is the sum of sleep stages, not time in bed. timezoneOffset is the recorded numeric offset, not an IANA timezone. Pending scores and deleted records are not evidence of current sleep or wakefulness.'}
 }
 export async function startWhoop(username:string){
  requireConfig()
@@ -136,6 +190,7 @@ async function oauthCallback(request:Request){
  if(!r.ok)throw new ApiError(502,'WHOOP identity could not be verified.')
  const identity=identitySchema.parse(await r.json())
  storage(await db().rpc('planner_connect_whoop',{p_username:attempt.username,p_user_id:identity.user_id,p_credentials:sealVmCredential(tokens)}))
+ storage(await db().from('planner_whoop_connections').update({granted_scopes:tokens.scope}).eq('username',attempt.username).eq('whoop_user_id',identity.user_id))
  // Initial sync is optional: the authorized connection survives a temporary provider outage.
  await syncWhoop(attempt.username,undefined,undefined,deadline).catch(async()=>{storage(await db().from('planner_whoop_connections').update({last_error:'sync'}).eq('username',attempt.username))})
  return new Response(null,{status:303,headers:{...headers,Location:origin()+'/?connection=whoop'}})
@@ -152,7 +207,6 @@ export async function whoopWebhook(request:Request){
  if(!verifyWhoopSignature(raw,request.headers.get('x-whoop-signature')||'',request.headers.get('x-whoop-signature-timestamp')||'',process.env.WHOOP_CLIENT_SECRET!))throw new ApiError(401,'Invalid WHOOP signature.')
  let parsed:unknown;try{parsed=JSON.parse(raw)}catch{throw new ApiError(400,'Invalid WHOOP notification.')}
  const event=whoopEventSchema.parse(parsed)
- if(event.type.startsWith('workout.'))return json({received:true})
  const c=storage(await db().from('planner_whoop_connections').select('username').eq('whoop_user_id',event.user_id).maybeSingle())
  if(!c)return json({received:true})
  const insert=await db().from('planner_whoop_events').insert({trace_id:event.trace_id,username:c.username,event}).select('trace_id').single()
