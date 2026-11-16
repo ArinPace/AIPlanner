@@ -20,6 +20,7 @@ export async function checkAlbertWatch(context,watch){
  const c=watch.config,page=await context.newPage()
  async function verify(){if(!allowed(page.url())||await page.locator('input[type=password]:visible').count())throw Error('Albert needs sign-in or the page changed. No class availability was inferred.')}
  try{
+  if(!allowed(watch.url))throw Error('Use an HTTPS Albert class search URL.')
   await page.goto(watch.url,{waitUntil:'domcontentloaded',timeout:30000});await verify()
   for(const step of c.steps){
    const locator=await unique(page,step.selector)
