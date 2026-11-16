@@ -70,6 +70,15 @@ export const UrgencyTaskItem=TaskItem.extend({
      props.editor.view.focus()
     }
    }})
+   const checkbox=view.dom.querySelector<HTMLInputElement>('input[type=checkbox]')
+   checkbox?.addEventListener('pointerdown',event=>event.preventDefault())
+   checkbox?.addEventListener('change',event=>{
+    event.stopImmediatePropagation()
+    const position=props.getPos()
+    if(typeof position!=='number'||!props.editor.isEditable)return
+    const node=props.editor.state.doc.nodeAt(position)
+    if(node)props.editor.view.dispatch(props.editor.state.tr.setNodeMarkup(position,undefined,{...node.attrs,checked:checkbox.checked}))
+   },true)
    const update=view.update,stop=view.stopEvent,ignore=view.ignoreMutation
    view.update=(node,...rest)=>{const accepted=update?.(node,...rest)??false;if(accepted)sync(node);return accepted}
    view.stopEvent=event=>event.target===input || (stop?.(event)??false)

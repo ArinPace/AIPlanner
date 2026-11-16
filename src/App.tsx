@@ -168,8 +168,6 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   const [filesUnsaved, setFilesUnsaved] = useState(false)
   const fileDirty=useRef({files:false,todo:false,work:false})
   const fileDirtyHandlers=useMemo(()=>Object.fromEntries((['files','todo','work'] as const).map(key=>[key,(value:boolean)=>{fileDirty.current[key]=value;setFilesUnsaved(Object.values(fileDirty.current).some(Boolean))}])) as Record<'files'|'todo'|'work',(value:boolean)=>void>,[])
-  const [visitedNotes,setVisitedNotes]=useState({todo:false,work:false})
-  useEffect(()=>{if(tab==='todo'||tab==='work')setVisitedNotes(previous=>previous[tab]?previous:{...previous,[tab]:true})},[tab])
   const [cursor, setCursor] = useState(() => new Date())
   const [agendaWindow,setAgendaWindow]=useState<{anchor:string;start:Date;end:Date}|null>(null)
   const [view, setView] = useState<CalendarView>('day')
@@ -522,12 +520,12 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
 
       <div className="files-tab-panel" hidden={tab!=='files'}><FilesView sidebar={filesSidebar} setSidebar={setFilesSidebar} username={username} active={tab==='files'} onUnsavedChange={fileDirtyHandlers.files}/></div>
       <ChecklistSheet open={tab==='todo'||tab==='work'} title={tab==='work'?'Work':'Tasks'} page={tab==='work'?'work':'todo'} onPageChange={next=>{setTodoRequest(n=>n+1);setTab(next)}} onClose={()=>setTab('calendar')}>
-      {(visitedNotes.todo||visitedNotes.work||tab==='todo'||tab==='work')&&<div className="files-tab-panel" data-checklist-page="todo" data-checklist-active={tab==='todo'} inert={tab!=='todo'} aria-hidden={tab!=='todo'}><FilesView preloadChecklist={tab==='todo'||tab==='work'} calendarEvents={events} standaloneTodo sidebar={false} setSidebar={setFilesSidebar} username={username} active={tab==='todo'} todoRequest={todoRequest||1} onUnsavedChange={fileDirtyHandlers.todo}/></div>}
-      {(visitedNotes.todo||visitedNotes.work||tab==='todo'||tab==='work')&&<div className="files-tab-panel" data-checklist-page="work" data-checklist-active={tab==='work'} inert={tab!=='work'} aria-hidden={tab!=='work'}><FilesView preloadChecklist={tab==='todo'||tab==='work'} calendarEvents={events} standaloneTodo workMode sidebar={false} setSidebar={setFilesSidebar} username={username} active={tab==='work'} todoRequest={todoRequest||1} onUnsavedChange={fileDirtyHandlers.work}/></div>}
+      <div className="files-tab-panel" data-checklist-page="todo" data-checklist-active={tab==='todo'} inert={tab!=='todo'} aria-hidden={tab!=='todo'}><FilesView preloadChecklist calendarEvents={events} standaloneTodo sidebar={false} setSidebar={setFilesSidebar} username={username} active={tab==='todo'} todoRequest={todoRequest||1} onUnsavedChange={fileDirtyHandlers.todo}/></div>
+      <div className="files-tab-panel" data-checklist-page="work" data-checklist-active={tab==='work'} inert={tab!=='work'} aria-hidden={tab!=='work'}><FilesView preloadChecklist calendarEvents={events} standaloneTodo workMode sidebar={false} setSidebar={setFilesSidebar} username={username} active={tab==='work'} todoRequest={todoRequest||1} onUnsavedChange={fileDirtyHandlers.work}/></div>
       </ChecklistSheet>
       {tab==='screentime' && <ScreenTimePanel/>}
       {!hideAgent&&<div className="agent-tab-panel" hidden={tab !== 'agent'}><AgentView username={username} sidebar={agentSidebar} setSidebar={setAgentSidebar} active={tab === 'agent'} /></div>}
-      {!draft&&<BottomWorkspaceNav tab={tab} onChange={next=>{if((filesUnsaved||draft)&&next!==tab&&!window.confirm('Discard unsaved changes and switch tabs?'))return;if(next==='todo'||next==='work')setTodoRequest(n=>n+1);setTab(next)}}/>}
+      {!draft&&<BottomWorkspaceNav tab={tab} onChange={next=>{if((fileDirty.current.files||draft)&&next!==tab&&!window.confirm('Discard unsaved changes and switch tabs?'))return;if(next==='todo'||next==='work')setTodoRequest(n=>n+1);setTab(next)}}/>}
       {!draft&&<MainChatBubble key={username} username={username} open={mainChatOpen} onOpenChange={setMainChatOpen}/>}
       <div className="app-body" hidden={tab !== 'calendar'&&tab!=='todo'&&tab!=='work'}>
         <Sidebar
