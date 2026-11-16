@@ -608,8 +608,8 @@ struct PlannerWebView: UIViewRepresentable {
         html[data-planner-site-signin] body{display:block!important;position:static!important;width:100%!important;max-width:100%!important;height:auto!important;min-height:100%!important;margin:0!important;padding:16px!important;overflow:visible!important;box-sizing:border-box!important}
         html[data-planner-site-signin][data-planner-secure-waiting] body{visibility:hidden!important}
         html[data-planner-site-signin] [data-planner-secure-hidden]{display:none!important}
-        html[data-planner-site-signin] [data-planner-secure-path]{display:block!important;position:static!important;inset:auto!important;transform:none!important;translate:none!important;scale:none!important;rotate:none!important;width:100%!important;min-width:0!important;max-width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;margin:0!important;padding:0!important;overflow:visible!important;contain:none!important;content-visibility:visible!important;visibility:visible!important;opacity:1!important;box-shadow:none!important;border:0!important;background:none!important;box-sizing:border-box!important}
-        html[data-planner-site-signin] [data-planner-secure-root]{display:block!important;position:relative!important;inset:auto!important;transform:none!important;translate:none!important;scale:none!important;rotate:none!important;width:100%!important;min-width:0!important;max-width:520px!important;height:auto!important;min-height:0!important;max-height:none!important;margin:0 auto!important;overflow:visible!important;visibility:visible!important;opacity:1!important;box-sizing:border-box!important;overflow-wrap:anywhere!important}
+        html[data-planner-site-signin] [data-planner-secure-path]{display:block!important;position:static!important;inset:auto!important;transform:none!important;translate:none!important;scale:none!important;rotate:none!important;width:100%!important;min-width:0!important;max-width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;margin:0!important;padding:0!important;overflow:visible!important;clip:auto!important;clip-path:none!important;contain:none!important;content-visibility:visible!important;visibility:visible!important;opacity:1!important;box-shadow:none!important;border:0!important;background:none!important;box-sizing:border-box!important}
+        html[data-planner-site-signin] [data-planner-secure-root]{display:block!important;position:relative!important;inset:auto!important;transform:none!important;translate:none!important;scale:none!important;rotate:none!important;width:100%!important;min-width:0!important;max-width:520px!important;height:auto!important;min-height:0!important;max-height:none!important;margin:0 auto!important;overflow:visible!important;clip:auto!important;clip-path:none!important;visibility:visible!important;opacity:1!important;box-sizing:border-box!important;overflow-wrap:anywhere!important}
         html[data-planner-site-signin] [data-planner-secure-root]>div,
         html[data-planner-site-signin] [data-planner-secure-root] form{width:100%!important;min-width:0!important;max-width:100%!important;box-sizing:border-box!important}
         html[data-planner-site-signin] [data-planner-secure-fit]{position:relative!important;inset:auto!important;transform:none!important;translate:none!important;width:100%!important;min-width:0!important;max-width:100%!important;margin-inline:0!important;box-sizing:border-box!important}
@@ -652,7 +652,7 @@ struct PlannerWebView: UIViewRepresentable {
       };
       const refresh=(rescan=false)=>{
         if([...document.querySelectorAll('video')].some(video=>video.srcObject?.getVideoTracks?.().some(track=>track.readyState==='live'))){clear();html.removeAttribute('data-planner-site-signin');html.removeAttribute('data-planner-secure-waiting');current=null;return {found:true,domain:targetDomain}}
-        if(!rescan&&currentNode(current))return fit(current);
+        if(!rescan&&currentNode(current)&&(isAuthForm(current)||isAuthDialog(current)||[...current.querySelectorAll('button,a[href]')].some(n=>actions.test(label(n)))))return fit(current);
         // Keep every original node, React ancestor, iframe and submit handler in place.
         // Disable our layout rules only for this synchronous discovery pass.
         html.removeAttribute('data-planner-site-signin');clear();
@@ -673,13 +673,13 @@ struct PlannerWebView: UIViewRepresentable {
             if(/^Open cloud browser$/i.test(label(button)))root=button;
             for(let parent=root?null:button.parentElement,depth=0;parent&&parent!==document.body&&depth<5;parent=parent.parentElement,depth++){
               if(parent.matches('main,article,[data-turn-key]')||parent.querySelector('#prompt-textarea,[data-composer-markdown]'))break;
-              if(authHint.test(headings(parent))||authHint.test(parent.textContent||'')||parent.querySelector('iframe')){root=parent;break}
+              if(authHint.test(headings(parent))||parent.querySelector('input:not([type=hidden]),iframe')){root=parent;break}
             }
             root ||= button.parentElement;
           }
         }
         html.setAttribute('data-planner-site-signin','');
-        if(!root||root===document.body){current=null;html.removeAttribute('data-planner-site-signin');html.removeAttribute('data-planner-secure-waiting');return {found:false,domain:targetDomain}}
+        if(!root||root===document.body){current=null;html.removeAttribute('data-planner-site-signin');html.removeAttribute('data-planner-secure-waiting');const active=document.activeElement;if(active?.matches('input,textarea,[contenteditable=true]'))active.blur();return {found:false,domain:targetDomain}}
         root.setAttribute(attr+'root','');let child=root;
         for(let parent=root.parentElement;parent;child=parent,parent=parent.parentElement){
           for(const sibling of parent.children)if(sibling!==child&&!['SCRIPT','STYLE','LINK'].includes(sibling.tagName))sibling.setAttribute(attr+'hidden','');
@@ -690,7 +690,7 @@ struct PlannerWebView: UIViewRepresentable {
         return fit(root);
       };
       const observer=new MutationObserver(records=>{
-        const outside=records.some(record=>record.type==='attributes'||[...record.addedNodes].some(node=>node instanceof Element&&!current?.contains(node)&&(node.matches('form,[role=dialog],[role=alertdialog]')||node.querySelector('form,[role=dialog],[role=alertdialog]'))));
+        const outside=records.some(record=>record.type==='attributes'||[...record.addedNodes].some(node=>node instanceof Element&&!current?.contains(node)&&(node.matches('form,[role=dialog],[role=alertdialog],input,button,iframe,h1,h2,h3')||node.querySelector('form,[role=dialog],[role=alertdialog],input,button,iframe,h1,h2,h3'))));
         refresh(outside);
       });
       observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden','aria-hidden','data-state','data-talvt-turn-state']});
@@ -801,7 +801,7 @@ struct PlannerWebView: UIViewRepresentable {
             let surface=try await browser.evaluateJavaScript(Self.siteSignInSurface) as? [String:Any] ?? [:]
             guard siteSignInMode else{return}
             siteSignInSurfaceActive=surface["found"] as? Bool == true
-            siteSignInLoading.isHidden=siteSignInSurfaceActive
+            siteSignInLoading.isHidden=siteSignInSurfaceActive || observedWebsiteInteraction
             if siteSignInSurfaceActive {observedWebsiteInteraction=true}
             let host=surface["domain"] as? String ?? ""
             status.text=siteSignInSurfaceActive ? (host.isEmpty ? "Your chat continues after sign-in." : "Sign in to "+host) : "Waiting for the website…"

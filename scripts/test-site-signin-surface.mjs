@@ -28,6 +28,14 @@ try{
  assert.equal((await page.evaluate(script)).found,false)
  assert.equal(await page.getByRole('heading',{name:'ChatGPT'}).isVisible(),true)
  await page.evaluate(()=>window.__plannerSiteSignIn.restore())
+ await page.setContent('<article id="history">Conversation</article><section id="account-card"><h2>Use this saved account?</h2><p>Sign in to login.microsoftonline.com</p><div><div style="display:flex;width:640px;overflow:hidden"><button>Use saved account</button><button aria-label="Other sign-in options">⌄</button></div></div></section>')
+ await page.evaluate(script)
+ assert(await page.getByRole('heading',{name:'Use this saved account?'}).isVisible(),'Keep the entire saved-account card, not just its action row')
+ assert.equal(await page.locator('[data-planner-secure-root]').getAttribute('id'),'account-card')
+ await page.evaluate(()=>{document.querySelector('#account-card').remove();const next=document.createElement('div');next.id='next-auth';next.innerHTML='<h2>Verify your identity</h2><button>Use passkey</button>';document.body.append(next)})
+ await page.getByRole('heading',{name:'Verify your identity'}).waitFor({state:'visible'})
+ assert.equal(await page.locator('[data-planner-secure-root]').getAttribute('id'),'next-auth','Discover replacement auth cards without form/dialog roles')
+ await page.evaluate(()=>window.__plannerSiteSignIn.restore())
  const composer=swift.split('// BEGIN_CHAT_COMPOSER_READER')[1].split('#"""\n')[1].split('"""#')[0]
  await page.evaluate(composer)
  for(const width of [320,390,430]){
