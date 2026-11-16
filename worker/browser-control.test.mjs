@@ -46,7 +46,7 @@ test('real Chromium MCP flow keeps tabs, clicks Sleep, hovers canvas, captures p
  const call=async(name,args)=>{const r=await client.callTool({name,arguments:args});assert(!r.isError,JSON.stringify(r));return r.content[0].type==='text'?JSON.parse(r.content[0].text):r}
  const find=(state,name)=>state.frames.flatMap(f=>f.elements).find(e=>e.name===name)?.ref
  try{
-  const tools=await client.listTools();assert.deepEqual(tools.tools.map(t=>t.name).sort(),['browser_action','browser_navigate','browser_screenshot','browser_snapshot','browser_tabs'].sort())
+  const tools=await client.listTools();assert.deepEqual(tools.tools.map(t=>t.name).sort(),['browser_action','browser_albert_watch_inspect','browser_albert_watch_test','browser_navigate','browser_screenshot','browser_snapshot','browser_tabs'].sort())
   assert.equal(tools.tools.find(t=>t.name==='browser_action').annotations.readOnlyHint,false)
   let state=await call('browser_navigate',{url:sources.whoop}),tabId=state.tabId
   assert(!JSON.stringify(state).includes('fixture-secret'))

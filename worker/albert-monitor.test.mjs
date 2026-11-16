@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {chromium} from 'playwright'
+import {inspectAlbertPage} from './albert-inspect.mjs'
 import {availability,checkAlbertWatch} from './albert-monitor.mjs'
 const config={steps:[],rowSelector:'#course',statusSelector:'.status',identityText:'Class 12345',openValues:['Open','Available'],closedValues:['Closed','Waitlist','Wait List','Full']}
 test('only exact unambiguous availability states count as open',()=>{
@@ -15,6 +16,12 @@ test('Albert checks read the verified class, reject enrollment and never infer f
  const watch={url:'https://albert.nyu.edu/fixture',config}
  try{
   assert.equal((await checkAlbertWatch(context,watch)).status,'open')
+  const inspectionPage=await context.newPage();await inspectionPage.goto(watch.url)
+  const inspected=await inspectAlbertPage(inspectionPage,'Class 12345')
+  const candidate=inspected.frames[0].candidates[0]
+  assert.equal(candidate.statuses[0].status,'Open')
+  assert.equal((await checkAlbertWatch(context,{...watch,config:{...config,rowSelector:candidate.rowSelector,statusSelector:candidate.statuses[0].statusSelector}})).status,'open')
+  await inspectionPage.close()
   status='Closed';assert.equal((await checkAlbertWatch(context,watch)).status,'closed')
   status='not open';assert.equal((await checkAlbertWatch(context,watch)).status,'unknown')
   image=true;assert.equal((await checkAlbertWatch(context,watch)).status,'open')
