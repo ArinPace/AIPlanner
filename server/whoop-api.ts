@@ -159,31 +159,44 @@ export async function readWhoopData(username:string){
  const [status,records,overview]=await Promise.all([whoopStatus(username),db().from('planner_whoop_records').select('kind,object_id,data,observed_at').eq('username',username).order('observed_at',{ascending:false}).limit(20),db().from('planner_whoop_connections').select('snapshot,snapshot_at').eq('username',username).maybeSingle()])
  return {...status,records:storage(records),overview:storage(overview),historyTool:'planner_whoop_api_read provides all fields and paginated history for every authorized API category.',note:'API sleep start/end are recorded sleep bounds; actualSleepMinutes is the sum of sleep stages, not time in bed. timezoneOffset is the recorded numeric offset, not an IANA timezone. Pending scores and deleted records are not evidence of current sleep or wakefulness.'}
 }
-export async function startWhoop(username:string){
+export async function startWhoop(username:string,nativeState?:unknown){
+ const returnState=nativeState===undefined?undefined:z.string().regex(/^[A-Za-z0-9_-]{20,100}$/).parse(nativeState)
  requireConfig()
  const state=randomBytes(24).toString('hex'),browser=randomBytes(24).toString('hex'),expires=Date.now()+600000
  storage(await db().from('planner_whoop_oauth_attempts').delete().lt('expires_at',new Date().toISOString()))
  storage(await db().from('planner_whoop_oauth_attempts').insert({username,state_hash:sha(state),browser_hash:sha(browser),expires_at:new Date(expires).toISOString()}))
  // An encrypted, short-lived handoff sets the binding cookie in the actual OAuth browser, including Safari on iPhone.
- const ticket=sealVmCredential({kind:'whoop-oauth',state,browser,expires})
- return {url:origin()+'/api/whoop/authorize?ticket='+encodeURIComponent(ticket)}
+ const ticket=sealVmCredential({kind:'whoop-oauth',state,browser,expires,returnState})
+ return {url:origin()+'/api/whoop/authorize?ticket='+encodeURIComponent(ticket)+(returnState?'&nativeState='+encodeURIComponent(returnState):'')}
 }
 async function authorize(request:Request){
- requireConfig();let handoff:{kind:string;state:string;browser:string;expires:number}
+ requireConfig();let handoff:{kind:string;state:string;browser:string;expires:number;returnState?:string}
  try{handoff=openVmCredential(new URL(request.url).searchParams.get('ticket')||'') as unknown as typeof handoff}catch{throw new ApiError(400,'WHOOP connection expired. Start again from Planner.')}
  if(handoff.kind!=='whoop-oauth'||handoff.expires<Date.now())throw new ApiError(400,'WHOOP connection expired. Start again from Planner.')
  const attempt=storage(await db().from('planner_whoop_oauth_attempts').select('browser_hash').eq('state_hash',sha(handoff.state)).gt('expires_at',new Date().toISOString()).maybeSingle())
  if(!attempt||attempt.browser_hash!==sha(handoff.browser))throw new ApiError(400,'WHOOP connection expired. Start again from Planner.')
  const url=new URL(AUTH+'auth');url.search=new URLSearchParams({client_id:process.env.WHOOP_CLIENT_ID!,redirect_uri:callback(),response_type:'code',scope:WHOOP_SCOPES,state:handoff.state}).toString()
- return new Response(null,{status:303,headers:{Location:url.toString(),'Set-Cookie':`planner-whoop=${handoff.browser}; HttpOnly; Secure; SameSite=Lax; Path=/api/whoop; Max-Age=600`,'Cache-Control':'no-store','Referrer-Policy':'no-referrer'}})
+ const headers=new Headers({Location:url.toString(),'Set-Cookie':`planner-whoop=${handoff.browser}; HttpOnly; Secure; SameSite=Lax; Path=/api/whoop; Max-Age=600`,'Cache-Control':'no-store','Referrer-Policy':'no-referrer'})
+ if(!handoff.returnState)headers.append('Set-Cookie','planner-whoop-return=; HttpOnly; Secure; SameSite=Lax; Path=/api/whoop; Max-Age=0')
+ if(handoff.returnState)headers.append('Set-Cookie',`planner-whoop-return=${sealVmCredential({state:handoff.state,browser:handoff.browser,returnState:handoff.returnState,expires:handoff.expires})}; HttpOnly; Secure; SameSite=Lax; Path=/api/whoop; Max-Age=600`)
+ return new Response(null,{status:303,headers})
 }
 async function oauthCallback(request:Request){
  requireConfig();const deadline=Date.now()+45000;const url=new URL(request.url),state=url.searchParams.get('state')||'',browser=request.headers.get('cookie')?.split(';').map(x=>x.trim()).find(x=>x.startsWith('planner-whoop='))?.slice('planner-whoop='.length)||''
  if(!state||!browser)throw new ApiError(400,'WHOOP connection could not be verified. Start again from Planner.')
  const attempt=storage(await db().from('planner_whoop_oauth_attempts').delete().eq('state_hash',sha(state)).eq('browser_hash',sha(browser)).gt('expires_at',new Date().toISOString()).select('username').maybeSingle())
  if(!attempt)throw new ApiError(400,'WHOOP connection expired or was already completed.')
- const headers={'Set-Cookie':'planner-whoop=; HttpOnly; Secure; SameSite=Lax; Path=/api/whoop; Max-Age=0','Cache-Control':'no-store','Referrer-Policy':'no-referrer'}
- if(url.searchParams.has('error'))return new Response(null,{status:303,headers:{...headers,Location:origin()+'/?connection=cancelled'}})
+ let nativeState:string|undefined
+ const returnCookie=request.headers.get('cookie')?.split(';').map(x=>x.trim()).find(x=>x.startsWith('planner-whoop-return='))?.slice('planner-whoop-return='.length)
+ if(returnCookie){
+  const saved=openVmCredential(returnCookie) as unknown as {state:string;browser:string;returnState:string;expires:number}
+  if(saved.state!==state||saved.browser!==browser||saved.expires<Date.now()||! /^[A-Za-z0-9_-]{20,100}$/.test(saved.returnState))throw new ApiError(400,'WHOOP app return could not be verified. Start again from Planner.')
+  nativeState=saved.returnState
+ }
+ const headers=new Headers({'Set-Cookie':'planner-whoop=; HttpOnly; Secure; SameSite=Lax; Path=/api/whoop; Max-Age=0','Cache-Control':'no-store','Referrer-Policy':'no-referrer'})
+ headers.append('Set-Cookie','planner-whoop-return=; HttpOnly; Secure; SameSite=Lax; Path=/api/whoop; Max-Age=0')
+ const finish=(status:'connected'|'cancelled')=>{headers.set('Location',nativeState?'aiplanner://whoop?'+new URLSearchParams({status,state:nativeState}):origin()+'/?connection='+(status==='connected'?'whoop':'cancelled'));return new Response(null,{status:303,headers})}
+ if(url.searchParams.has('error'))return finish('cancelled')
  const code=url.searchParams.get('code');if(!code)throw new ApiError(400,'WHOOP did not return an authorization code.')
  const tokens=await tokenRequest(new URLSearchParams({grant_type:'authorization_code',code,redirect_uri:callback()}),deadline)
  const r=await fetch(API+'/user/profile/basic',{headers:{Authorization:'Bearer '+tokens.access_token},signal:apiTimeout(deadline,10000)})
@@ -193,7 +206,7 @@ async function oauthCallback(request:Request){
  storage(await db().from('planner_whoop_connections').update({granted_scopes:tokens.scope}).eq('username',attempt.username).eq('whoop_user_id',identity.user_id))
  // Initial sync is optional: the authorized connection survives a temporary provider outage.
  await syncWhoop(attempt.username,undefined,undefined,deadline).catch(async()=>{storage(await db().from('planner_whoop_connections').update({last_error:'sync'}).eq('username',attempt.username))})
- return new Response(null,{status:303,headers:{...headers,Location:origin()+'/?connection=whoop'}})
+ return finish('connected')
 }
 async function processEvent(event:WhoopEvent,username:string,deadline=Date.now()+35000){
  try{

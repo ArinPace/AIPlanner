@@ -72,6 +72,7 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
  const [connectionIssue,setConnectionIssue]=useState(false)
  const [error,setError]=useState(''),[restoring,setRestoring]=useState(false),[busy,setBusy]=useState(false),[loading,setLoading]=useState(false),[older,setOlder]=useState(false)
  const [panel,setPanel]=useState<'connections'|'settings'|null>(null),[filter,setFilter]=useState<'active'|'archived'|'bin'>('active')
+ useEffect(()=>{const connected=()=>setPanel(null);window.addEventListener('planner-whoop-connected',connected);return()=>window.removeEventListener('planner-whoop-connected',connected)},[])
  const [rename,setRename]=useState<SubscriptionChat|null>(null),[attachments,setAttachments]=useState<RelayFile[]>([]),[preparing,setPreparing]=useState(false),[dictating,setDictating]=useState(false)
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;epoch.current++}},[])
  useEffect(()=>{if(!panel)return;const key=(e:KeyboardEvent)=>{if(e.key==='Escape')setPanel(null)};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)},[panel])

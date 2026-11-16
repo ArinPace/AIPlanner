@@ -163,7 +163,7 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
       const whoop=await import('./whoop-api.js')
       if(method==='GET')return json(await whoop.readWhoopData(username))
       if(method==='DELETE')return json(await whoop.disconnectWhoop(username))
-      if(method==='POST'){const input=await body(request);if(input.action==='connect')return json(await whoop.startWhoop(username));if(input.action==='sync')return json(await whoop.syncWhoop(username))}
+      if(method==='POST'){const input=await body(request);if(input.action==='connect')return json(await whoop.startWhoop(username,input.nativeState));if(input.action==='sync')return json(await whoop.syncWhoop(username))}
       throw new ApiError(405,'Unsupported WHOOP action.')
     }
     if(path==='/api/subscription-chat')return await (await import('./subscription-chat.js')).handleSubscriptionChat(request,username)

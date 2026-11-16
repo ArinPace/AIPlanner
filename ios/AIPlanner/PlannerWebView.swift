@@ -459,6 +459,9 @@ struct PlannerWebView: UIViewRepresentable {
                     case "googleConnection":
                         guard let raw = body["url"] as? String, let url = URL(string: raw) else { throw NativeError("Missing connection URL.") }
                         try await authentication?.connectGoogle(url)
+                    case "whoopConnection":
+                        guard let raw = body["url"] as? String, let url = URL(string: raw), let authentication else { throw NativeError("Missing WHOOP connection URL.") }
+                        try await authentication.connectWhoop(url)
                     case "openExternalLink":
                         guard let raw = body["url"] as? String, let url = URL(string: raw),
                               ["https", "http"].contains(url.scheme ?? "") else { throw NativeError("Invalid web address.") }

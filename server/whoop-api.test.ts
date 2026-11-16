@@ -100,16 +100,22 @@ test('OAuth handoff, owner-bound state, token rotation, retryable deliveries, de
   return new Request('https://planner.test/api/whoop/webhook',{method:'POST',body:raw,headers:{'x-whoop-signature-timestamp':ts,'x-whoop-signature':createHmac('sha256','fixture-secret').update(ts+raw).digest('base64')}})
  }
  try{
-  const started=await startWhoop('owner');assert(started.url.includes('/api/whoop/authorize?ticket='));assert(!started.url.includes('fixture-secret'))
+  const nativeState='fixture-native-return-state-1234'
+  const started=await startWhoop('owner',nativeState);assert(started.url.includes('/api/whoop/authorize?ticket='));assert(!started.url.includes('fixture-secret'))
   const auth=await handleWhoopPublic(new Request(started.url),'/api/whoop/authorize'),authUrl=new URL(auth.headers.get('location')!)
   assert.equal(authUrl.hostname,'api.prod.whoop.com');assert.equal(authUrl.searchParams.get('scope'),WHOOP_SCOPES);assert(auth.headers.get('set-cookie')?.includes('HttpOnly'))
-  const state=authUrl.searchParams.get('state'),cookie=auth.headers.get('set-cookie')!.split(';')[0]
+  const state=authUrl.searchParams.get('state'),cookie=auth.headers.getSetCookie().map(value=>value.split(';')[0]).join('; ')
   const cb=(stateValue=state,cookieValue=cookie)=>new Request('https://planner.test/api/whoop/callback?state='+stateValue+'&code=fixture-code',{headers:{cookie:cookieValue}})
   await assert.rejects(()=>handleWhoopPublic(cb('wrong'),'/api/whoop/callback'),/expired/)
   await assert.rejects(()=>handleWhoopPublic(cb(state,'planner-whoop=wrong'),'/api/whoop/callback'),/expired/)
-  const connected=await handleWhoopPublic(cb(),'/api/whoop/callback');assert.equal(connected.status,303);assert.equal(tokenCalls,1);assert.equal(records.length,3)
+  const connected=await handleWhoopPublic(cb(),'/api/whoop/callback');assert.equal(connected.status,303);assert.equal(connected.headers.get('location'),'aiplanner://whoop?status=connected&state='+nativeState);assert.equal(tokenCalls,1);assert.equal(records.length,3)
   assert.notEqual(c.credentials,'fixture-access-1');assert.equal((openVmCredential(c.credentials) as any).access_token,'fixture-access-1')
   await assert.rejects(()=>handleWhoopPublic(cb(),'/api/whoop/callback'),/expired/)
+  const webStart=await startWhoop('owner')
+  const webAuth=await handleWhoopPublic(new Request(webStart.url),'/api/whoop/authorize')
+  const webState=new URL(webAuth.headers.get('location')!).searchParams.get('state')
+  const cancelled=await handleWhoopPublic(new Request('https://planner.test/api/whoop/callback?error=access_denied&state='+webState,{headers:{cookie:webAuth.headers.getSetCookie().map(v=>v.split(';')[0]).join('; ')}}),'/api/whoop/callback')
+  assert.match(cancelled.headers.get('location')!,/^https:.*connection=cancelled$/)
   const profile=await readWhoopApi('owner',{kind:'profile'});assert.equal((profile.data as any).email,'fixture@example.invalid')
   const fullSleep=await readWhoopApi('owner',{kind:'sleep'});assert.equal((fullSleep.data as any).records[0].score.stage_summary.total_rem_sleep_time_milli,2*3600000)
   const fullRecovery=await readWhoopApi('owner',{kind:'recovery'});assert.equal((fullRecovery.data as any).records[0].score.hrv_rmssd_milli,31.5)

@@ -53,6 +53,16 @@ import WebKit
         guard result.host == "connection", query.first(where: { $0.name == "state" })?.value == state,
               query.first(where: { $0.name == "status" })?.value == "connected" else { throw NativeError("Google connection was cancelled or could not finish.") }
     }
+    func connectWhoop(_ url: URL) async throws {
+        guard AppConfiguration.isPlanner(url), url.path == "/api/whoop/authorize",
+              let state = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "nativeState" })?.value,
+              state.count >= 20 else { throw NativeError("Invalid WHOOP connection URL.") }
+        let result = try await authenticate(url)
+        let query = URLComponents(url: result, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        guard result.host == "whoop", query.first(where: { $0.name == "state" })?.value == state else { throw NativeError("WHOOP connection could not be verified.") }
+        if query.first(where: { $0.name == "status" })?.value == "cancelled" { throw NativeAuthenticationCancelled() }
+        guard query.first(where: { $0.name == "status" })?.value == "connected" else { throw NativeError("WHOOP connection could not finish.") }
+    }
     private func authenticate(_ url: URL) async throws -> URL {
         guard session == nil else { throw NativeError("A sign-in is already open.") }
         return try await withCheckedThrowingContinuation { continuation in
