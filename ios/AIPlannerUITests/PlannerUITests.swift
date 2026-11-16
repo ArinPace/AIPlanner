@@ -255,13 +255,15 @@ final class PlannerUITests: XCTestCase {
         password.coordinate(withNormalizedOffset:CGVector(dx:0.5,dy:0.5)).tap();password.typeText("wrong\n")
         XCTAssertTrue(portal.staticTexts["Try the fixture password"].waitForExistence(timeout:10),"The original submit and validation handlers must run")
         password.coordinate(withNormalizedOffset:CGVector(dx:0.5,dy:0.5)).tap();password.typeText(String(repeating:XCUIKeyboardKey.delete.rawValue,count:5)+"fixture-only\n")
-        let returned=XCTNSPredicateExpectation(predicate:NSPredicate{_,_ in !app.navigationBars["Connect website"].exists},object:app)
-        XCTAssertEqual(XCTWaiter.wait(for:[returned],timeout:15),.completed,"Successful sign-in returns to Planner automatically")
+        XCTAssertTrue(portal.buttons["Send fixture push"].waitForExistence(timeout:15),"Keep the sheet open through the delay between password submission and MFA")
+        XCTAssertTrue(app.navigationBars["Connect website"].exists)
+        XCTAssertTrue(portal.staticTexts["No MFA method selected"].exists)
+        app.navigationBars.buttons["Cancel"].tap()
         let web=app.webViews["plannerWebView"],open=web.descendants(matching:.any).matching(identifier:"Open Main Chat").firstMatch
         XCTAssertTrue(open.waitForExistence(timeout:15));open.tap()
         web.buttons["ChatGPT session"].tap()
         let original=app.webViews["chatGPTPortalWebView"]
-        XCTAssertTrue(original.staticTexts["Connected successfully"].waitForExistence(timeout:10))
+        XCTAssertTrue(original.staticTexts["No MFA method selected"].waitForExistence(timeout:10))
         XCTAssertTrue(original.staticTexts["ChatGPT conversation fixture"].exists,"Returning must retain and restore the original document")
     }
     func testWebsiteSignInCancelRestoresOriginalConversation() {
