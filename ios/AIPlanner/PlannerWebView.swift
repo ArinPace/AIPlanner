@@ -322,6 +322,9 @@ struct PlannerWebView: UIViewRepresentable {
                         }
                         if action == "chatGPTRelayStop" { try await controller.stopRelay(); parkRelay(); replyHandler(["ok": true], nil); return }
                         guard let parent = webView?.window?.rootViewController, parent.presentedViewController == nil, let portal = chatGPTPortal else { throw NativeError("Close the current menu first.") }
+                        if let chatId = body["chatId"] as? String {
+                            try controller.prepareWebsiteView(chatId: chatId, providerURL: body["url"] as? String)
+                        }
                         portal.willMove(toParent: nil); portal.view.removeFromSuperview(); portal.removeFromParent()
                         portal.view.alpha = 1; portal.view.isUserInteractionEnabled = true; portal.view.accessibilityElementsHidden = false
                         controller.returnAfterAuthentication = body["intent"] as? String == "connect"
@@ -703,7 +706,9 @@ struct PlannerWebView: UIViewRepresentable {
     static let siteSignInHandoff = #"""
     (()=>{
       const label=n=>(n.getAttribute('aria-label')||n.innerText||n.textContent||'').trim();
-      const current=n=>window.__plannerSignInCurrent?.(n,true)??true;
+      const latest=[...document.querySelectorAll('[data-message-author-role=assistant],article,[data-turn-key]')].at(-1)?.innerText||'';
+      const pendingDuo=/duo/i.test(latest)&&/pending|timed out|try again|approve.*push/i.test(latest);
+      const current=n=>(window.__plannerSignInCurrent?.(n,true)??true)||(pendingDuo&&n.getClientRects().length>0&&!n.closest('[hidden],[inert],[aria-hidden=true]'));
       const buttons=[...document.querySelectorAll('button,a[href]')].filter(current);
       // Closing the original browser pane is an explicit return to chat, not
       // proof of successful authentication. Do not reopen its old transcript link.
@@ -1686,6 +1691,16 @@ document.addEventListener('click',event=>capture(event.target.closest?.('a[href]
             }
             try await Task.sleep(for: .milliseconds(100))
         }
+    }
+    func prepareWebsiteView(chatId: String, providerURL: String?) throws {
+        guard UUID(uuidString: chatId) != nil, pendingChat == nil || pendingChat == chatId else { throw NativeError("Another conversation is still active.") }
+        guard let target = canonicalConversation(providerURL) ?? canonicalConversation(conversationLink(chatId: chatId)) else { throw NativeError("This chat has no saved ChatGPT conversation yet.") }
+        // Preserve a live external sign-in page. Otherwise restore this exact chat,
+        // rather than exposing whichever home screen a background sync left open.
+        if browser.url?.host == nil || browser.url?.host == "chatgpt.com", canonicalConversation(browser.url?.absoluteString)?.lastPathComponent != target.lastPathComponent {
+            documentCommitted = false; browser.load(URLRequest(url: target, timeoutInterval: 30))
+        }
+        loadedChat = chatId
     }
     func conversationLink(chatId: String) -> String? {
         canonicalConversation(UserDefaults.standard.string(forKey: "chatgpt-conversation:" + account + ":" + chatId))?.absoluteString

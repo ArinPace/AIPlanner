@@ -126,5 +126,9 @@ try{
  }
  assert.equal(await page.evaluate(()=>window.retries),3)
  assert.deepEqual(await page.evaluate(handoff),{kind:'browser',ready:false,failed:true},'Leave the original reconnect control available after bounded retries')
+ await page.setContent('<article data-turn-key="old"><button id="resume-duo">Open cloud browser</button></article><article data-turn-key="latest">Duo push timed out. Sign-in is pending. Tap Try again.</article>')
+ await page.evaluate(()=>{window.__plannerSignInCurrent=n=>n.closest('[data-turn-key]')?.getAttribute('data-turn-key')==='latest';delete window.__plannerWebsiteHandoffOpened;delete window.__plannerWebsiteControlRequested;delete window.__plannerWebsiteBrowserVisible;delete window.__plannerWebsiteBrowserGoneAt;window.resumedDuo=0;document.querySelector('#resume-duo').onclick=()=>window.resumedDuo++})
+ assert.deepEqual(await page.evaluate(handoff),{kind:'opening'})
+ assert.equal(await page.evaluate(()=>window.resumedDuo),1,'A pending Duo continuation can reopen its preceding browser handoff')
  console.log('Focused Planner sign-in: responsive fixed/translated panels, keyboard-size viewport, original delegated submit handlers, popup/opener return, MFA and replacement consent dialogs, cancel/restore, historical-form rejection, virtualized handoff discovery, bounded reconnect, untouched MFA choices, and zero password reads passed.')
 }finally{await browser.close()}
