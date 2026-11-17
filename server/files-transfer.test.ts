@@ -51,26 +51,20 @@ test('deployed API entry point forwards PATCH into authenticated handling',async
  assert.match(result.error,/sign in/)
 })
 
-test('agent item reads transfer only the requested item and re-index a concurrent revision once',async()=>{
+test('agent item reads return one owner-scoped item and matching revision without computing a manifest',async()=>{
  const {readFilesItemById}=await import('./files-transfer.js')
  const before=globalThis.fetch,keys=['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','SUPABASE_SECRET_KEY'] as const,env=Object.fromEntries(keys.map(k=>[k,process.env[k]]))
  process.env.SUPABASE_URL='https://transfer.test';process.env.SUPABASE_SERVICE_ROLE_KEY='test';delete process.env.SUPABASE_SECRET_KEY
- let manifests=0,reads=0,race=true
+ let reads=0
  globalThis.fetch=async(input,init)=>{
   const req=new Request(input,init),url=new URL(req.url)
-  if(url.pathname.endsWith('/rpc/planner_files_manifest')){
-   assert.equal((await req.json() as {p_username:string}).p_username,'arin');manifests++
-   return Response.json({revision:manifests===1?7:8,items:[{section:'files',id:'note-8',index:manifests===1?8:9,etag:'hash'},{section:'documents',id:'link',index:0,etag:'link',value:{id:'link',kind:'link',url:'https://example.org',name:'Reading',folderId:null,updatedAt:'2026-11-03'}}]})
-  }
-  reads++;assert.equal(url.searchParams.get('username'),'eq.arin');assert(!url.searchParams.get('select')!.includes('state,'))
-  if(race&&reads===1)return Response.json(null)
-  assert.equal(url.searchParams.get('select'),'revision,item:state->files->9');assert.equal(url.searchParams.get('revision'),'eq.8')
-  return Response.json({revision:8,item:note(8)})
+  assert(url.pathname.endsWith('/rpc/planner_read_file_item'),'No full Files manifest is needed')
+  const args=await req.json() as {p_username:string;p_id:string};assert.equal(args.p_username,'arin');reads++
+  return Response.json(args.p_id==='note-8'?{revision:8,section:'files',item:note(8)}:args.p_id==='link'?{revision:9,section:'documents',item:{id:'link',kind:'link',url:'https://example.org',name:'Reading'}}:null)
  }
  try{
-  const result=await readFilesItemById('arin','note-8');assert.equal(result.item.id,'note-8');assert.equal(result.revision,8);assert.equal(manifests,2);assert.equal(reads,2)
-  race=false
-  const link=await readFilesItemById('arin','link');assert.equal(link.item.id,'link');assert.equal(reads,2)
+  const result=await readFilesItemById('arin','note-8');assert.equal(result.item.id,'note-8');assert.equal(result.revision,8);assert.equal(reads,1)
+  const link=await readFilesItemById('arin','link');assert.equal(link.item.id,'link');assert.equal(link.revision,9)
   await assert.rejects(()=>readFilesItemById('arin','missing'),/File not found/)
  }finally{globalThis.fetch=before;for(const key of keys){if(env[key]===undefined)delete process.env[key];else process.env[key]=env[key]}}
 })

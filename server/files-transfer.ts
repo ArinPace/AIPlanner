@@ -25,21 +25,12 @@ export async function readFilesTransferItem(username:string,url:URL){
  return row
 }
 
-// Agent reads need one item, not a multi-megabyte workspace per page/readback.
-// Re-index once on a concurrent revision change; never return an item at a stale index.
+// Read one item and its revision in a single database snapshot. No workspace
+// manifest hashing or separate index lookup on every pagination/readback call.
 export async function readFilesItemById(username:string,id:string){
- for(let attempt=0;attempt<2;attempt++){
-  const manifest=await cloudFilesManifest(username)
-  const entry=manifest.items.find(item=>item.id===id&&['files','documents'].includes(item.section))
-  if(!entry)throw new ApiError(404,'File not found.')
-  if(entry.value)return {revision:manifest.revision,section:entry.section,item:entry.value}
-  const url=new URL('https://planner.internal/api/files/item')
-  for(const [key,value] of Object.entries({section:entry.section,index:String(entry.index),revision:String(manifest.revision),id}))url.searchParams.set(key,value)
-  try{return {...await readFilesTransferItem(username,url),section:entry.section}}catch(error){
-   if(!(error instanceof ApiError)||error.status!==409||attempt===1)throw error
-  }
- }
- throw new ApiError(409,'Files changed while loading. Retry with the latest index.')
+ const row=storage(await db().rpc('planner_read_file_item',{p_username:username,p_id:id})) as {revision:number;section:FilesSection;item:WorkspaceItem}|null
+ if(!row||!['files','documents'].includes(row.section)||row.item?.id!==id)throw new ApiError(404,'File not found.')
+ return row
 }
 
 export function singleFilePatch(patch:import('../src/lib/filesTransfer.js').FilesPatch,state:FilesState){
