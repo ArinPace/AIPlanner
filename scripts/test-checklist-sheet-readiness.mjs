@@ -30,6 +30,11 @@ try{
  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await page.waitForTimeout(350)
  assert.equal(await sheet.getAttribute('aria-label'),'Tasks')
  await sheet.getByRole('button',{name:'Add item',exact:true}).click()
- assert.equal(await page.evaluate(()=>document.activeElement?.matches('[contenteditable=true]')),true,'Adding an item should still focus text intentionally')
+ assert.equal(await page.evaluate(()=>document.activeElement?.matches('input.task-urgency')),true,'Add item focuses urgency first')
+ await page.keyboard.type('75');await page.keyboard.press('Enter')
+ assert.equal(await page.evaluate(()=>document.activeElement?.matches('[contenteditable=true]')),true,'Enter moves from urgency to item text')
+ await page.keyboard.type('Urgency-first task')
+ assert.equal(await sheet.locator('[data-checklist-active=true] .task-urgency').first().inputValue(),'75')
+ assert.match(await sheet.locator('[data-checklist-active=true] .apple-note-document').innerText(),/Urgency-first task/)
  console.log('Both editors ready before opening; checkbox does not focus text; drag tracks continuously, holds halfway, and snaps on release passed.')
 }finally{await browser.close()}
