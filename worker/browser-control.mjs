@@ -57,6 +57,19 @@ export class InteractiveBrowser {
   const id=randomUUID();this.tabs.set(id,{route,index:context.pages().indexOf(page),marker,refs:new Map(),epoch:0});return id
  }
  allowed(href){try{return enabledBrowserUrl(href,this.enabled,this.sources)}catch(error){if(this.external.has(publicBrowserUrl(href)))return publicBrowserUrl(href);throw error}}
+ rememberReadLinks(result,route){
+  this.allowed(route)
+  let visited=0,remembered=0
+  const walk=value=>{
+   if(!value||typeof value!=='object'||++visited>2000)return
+   if(Array.isArray(value)){for(const child of value)walk(child);return}
+   if(Array.isArray(value.links))for(const link of value.links.slice(0,300)){
+    try{const href=publicBrowserUrl(link.url||link.href);this.external.set(href,route);remembered++}catch{}
+   }
+   for(const [key,child] of Object.entries(value))if(key!=='links')walk(child)
+  }
+  walk(result);return remembered
+ }
  async navigate({url,tabId}){
   const resolved=await this.resolveUrl(url),href=this.allowed(resolved)
   if(tabId)return this.use(tabId,async(page,entry)=>{await page.goto(href,{waitUntil:'domcontentloaded',timeout:45000});return this.snapshotPage(page,entry,tabId)})
@@ -200,4 +213,5 @@ export function registerBrowserControl(server,{queued,...options}){
  add('browser_snapshot','Inspect the actual current rendered page, buttons, forms, links and iframe content. Paginate text/controls if needed. Refs remain valid until the next snapshot/action on this tab.',{tabId:tab,offset:z.number().int().min(0).optional(),elementOffset:z.number().int().min(0).optional()},a=>browser.snapshot(a),true)
  add('browser_screenshot','Capture the actual viewport or full page, including canvas/SVG charts and tooltips. For inner scrolling app panels, fullPage returns ordered viewport tiles and restores the scroll position; inspect all tiles and check truncated. Password inputs are masked. Coordinate clicks use viewport CSS pixels.',{tabId:tab,fullPage:z.boolean().optional()},a=>browser.screenshot(a),true)
  add('browser_action','Operate the actual browser: click, hover, fill, keypress, dropdown, checkbox, scroll, drag, navigation, upload, close. Actions can submit forms and send messages as requested. Use refs or viewport x/y. waitForDownload saves a clicked download in the working folder. accept controls JavaScript confirmation dialogs triggered by the action; omitted/false dismisses them. Returns fresh page state and newly opened tabs.',browserActionSchema,a=>browser.action(a))
+ return browser
 }

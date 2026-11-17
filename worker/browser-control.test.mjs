@@ -72,3 +72,13 @@ test('real Chromium MCP flow keeps tabs, clicks Sleep, hovers canvas, captures p
   state=await call('browser_snapshot',{tabId});assert(state.frames.flatMap(f=>f.elements).some(e=>e.scroll?.top===37))
  }finally{await client.close();await server.close();await context.close();await rm(directory,{recursive:true,force:true})}
 })
+
+test('links observed by source readers authorize interactive navigation without allowing arbitrary output URLs',()=>{
+ const browser=new InteractiveBrowser({enabled:['brightspace'],sources:{brightspace:'https://brightspace.nyu.edu/'}})
+ assert.throws(()=>browser.allowed('https://nyu.zoom.us/rec/play/verified'))
+ browser.rememberReadLinks({url:'https://evil.example/not-a-link',courseContent:{modules:[{links:[{url:'https://nyu.zoom.us/rec/play/verified'},{url:'http://127.0.0.1/private'}]}]}},'https://brightspace.nyu.edu/')
+ assert.equal(browser.allowed('https://nyu.zoom.us/rec/play/verified'),'https://nyu.zoom.us/rec/play/verified')
+ assert.throws(()=>browser.allowed('https://evil.example/not-a-link'))
+ assert.throws(()=>browser.allowed('http://127.0.0.1/private'))
+ assert.throws(()=>browser.rememberReadLinks({links:[{url:'https://evil.example/'}]},'https://unknown.example/'))
+})

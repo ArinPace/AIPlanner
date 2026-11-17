@@ -6,6 +6,7 @@ import { messageImages } from './message-images.mjs'
 import {importPdf,importDownloadedPdf,pdfWorkerCall} from './pdf-import.mjs'
 import { browserQueue } from './browser-queue.mjs'
 const queued=browserQueue()
+let interactiveBrowser
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { chromium } from 'playwright'
@@ -67,6 +68,7 @@ server.registerTool('browser_read', {
     }
     const page = JSON.parse(output.content[0].text)
     await rememberLanding(process.env.PLANNER_DATA_DIR || '/var/lib/planner','slack',page.url).catch(()=>{})
+    interactiveBrowser?.rememberReadLinks(page,destination)
     return output
   } catch (error) { const known=['SLACK_NOT_READY','GMAIL_NOT_READY','FORM_NOT_READY','WHATSAPP_NOT_READY','NEEDS_LOGIN'].includes(error.code);return { isError: true, content: [{ type: 'text', text:JSON.stringify({code:known?error.code:'READ_FAILED',needsLogin:error.code==='NEEDS_LOGIN',message:known?error.message:'This page could not be read. Check whether it is enabled and signed in, and report incomplete access.'}) }] } }
   finally { if (connection) await connection.close() }
@@ -177,6 +179,6 @@ if(process.env.PLANNER_BROWSER_CONTROL==='1')server.registerTool('browser_read_d
  description:'Read the actual Word DOCX saved by browser_action waitForDownload, including document text, comments and footnotes. Use this when an original syllabus or marked essay is Word rather than PDF; never manufacture a source PDF. Only files in browser-downloads are readable. Paginate until hasMore=false; text extraction is not visual/layout review.',
  inputSchema:{localFile:z.string().min(1).max(500),offset:z.number().int().min(0).optional(),limit:z.number().int().min(1).max(30000).optional()},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false},
 },async args=>queued(async()=>{try{return {content:[{type:'text',text:JSON.stringify(await readDownloadedDocx(path.join(process.env.PLANNER_DATA_DIR||'/var/lib/planner','workspace'),args))}]}}catch(error){return {isError:true,content:[{type:'text',text:error.message||'DOCX read failed.'}]}}}))
-if(process.env.PLANNER_BROWSER_CONTROL==='1')registerBrowserControl(server,{queued,enabled,sources,connect:connectBrowser,profiles:async()=>(await siteLaunches(process.env.PLANNER_DATA_DIR||'/var/lib/planner')).browserProfiles,resolveUrl:async url=>selectedBrowserDestination(url,await siteLaunches(process.env.PLANNER_DATA_DIR||'/var/lib/planner')),workspace:path.join(process.env.PLANNER_DATA_DIR||'/var/lib/planner','workspace')})
+if(process.env.PLANNER_BROWSER_CONTROL==='1')interactiveBrowser=registerBrowserControl(server,{queued,enabled,sources,connect:connectBrowser,profiles:async()=>(await siteLaunches(process.env.PLANNER_DATA_DIR||'/var/lib/planner')).browserProfiles,resolveUrl:async url=>selectedBrowserDestination(url,await siteLaunches(process.env.PLANNER_DATA_DIR||'/var/lib/planner')),workspace:path.join(process.env.PLANNER_DATA_DIR||'/var/lib/planner','workspace')})
 
 await server.connect(new StdioServerTransport())
