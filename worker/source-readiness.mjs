@@ -63,6 +63,14 @@ export async function findSlackChannel(page,name,{workspace,timeout=30000}={}) {
 export async function waitForSource(page,target,{timeout=30000}={}) {
   const host=target.hostname
   if(host==='mail.google.com'){
+    // Gmail's observed "View entire message" and print links are standalone
+    // documents, not inbox lists; waiting for inbox rows can never succeed.
+    const standalone=['lg','pt'].includes(target.searchParams.get('view'))&&['permmsgid','th','message_id'].some(key=>target.searchParams.has(key))
+    if(standalone){
+      await page.waitForFunction(()=>document.readyState==='complete'&&!!document.body?.innerText?.trim(),null,{timeout})
+      return {kind:'gmail-document'}
+    }
+
     const thread=/^#(?:inbox|all|sent|starred|important|snoozed|label\/[^/]+|search\/[^/]+)\/(?:[a-f0-9]{12,}|[A-Za-z][A-Za-z0-9_-]{18,})(?:\?|$)/.test(target.hash)
     try{
       await page.waitForFunction(({thread})=>{
@@ -83,6 +91,11 @@ export async function waitForSource(page,target,{timeout=30000}={}) {
 }
 
 export async function gmailContent(page,kind) {
+  if(kind==='gmail-document'){
+    const text=await page.locator('body').innerText()
+    return {document:{text:text.slice(0,100000),truncated:text.length>100000},coverage:'Rendered standalone Gmail message/print document only. Inspect the text for access errors and clipping; this does not verify other thread messages, attachments, hidden content or mailbox identity.'}
+  }
+
   if(kind==='gmail-thread'){
     const expand=page.locator('[aria-label="Expand all"],[data-tooltip="Expand all"],[title="Expand all"]').first()
     if(await expand.isVisible().catch(()=>false)){

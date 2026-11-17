@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { chromium } from 'playwright-core'
 import { readBrowserPage } from './page-reader.mjs'
 import { readGoogleDocument } from './google-doc-reader.mjs'
-import { gmailContent } from './source-readiness.mjs'
+import { gmailContent,waitForSource } from './source-readiness.mjs'
 import { slackChannels,findSlackChannel } from './source-readiness.mjs'
 import { readableUrl } from './browser-access.mjs'
 import { browserEndpoint } from './browser-routing.mjs'
@@ -90,5 +90,17 @@ test('modern Slack channel IDs and workspace selection never substitute another 
   const found=await findSlackChannel(page,'#general',{workspace:'NYU Stern',timeout:1000})
   assert.equal(found.channel.url,'https://app.slack.com/client/E123/C123')
   assert.equal((await findSlackChannel(page,'general',{workspace:'Stern',timeout:1000})).channel.url,found.channel.url)
+ }finally{await browser.close()}
+})
+
+test('standalone Gmail entire-message documents do not wait for inbox rows or claim full-thread coverage',async()=>{
+ const browser=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true})
+ try{
+  const page=await browser.newPage();await page.setContent('<h1>ICC newsletter</h1><p>Friday event from the previously clipped message.</p>')
+  for(const view of ['lg','pt']){
+   const ready=await waitForSource(page,new URL('https://mail.google.com/mail/u/1/?view='+view+'&permmsgid=msg-f:fixture'),{timeout:1000})
+   assert.equal(ready.kind,'gmail-document')
+   const result=await gmailContent(page,ready.kind);assert.match(result.document.text,/Friday event/);assert.match(result.coverage,/does not verify other thread messages/)
+  }
  }finally{await browser.close()}
 })
