@@ -51,7 +51,7 @@ type TimeGridViewProps = {
   occurrences: Occurrence[]
   tags: Tag[]
   onSlotClick: (date: Date, allDay?: boolean) => void
-  onEventDone: (event:CalendarEvent,start:Date)=>Promise<string>
+  onEventDone: (event:CalendarEvent,start:Date,checked?:boolean)=>Promise<string>
   onEventClick: (event: CalendarEvent, occurrenceStart: Date) => void
 }
 
@@ -88,12 +88,14 @@ export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=tr
     return()=>window.clearInterval(timer)
   },[active])
   const previousLayout = useRef<{key:string;hourHeight:number;gridWeek:boolean}|null>(null)
-  const [optimisticDone,setOptimisticDone]=useState<Set<string>>(()=>new Set())
+  const [optimisticDone,setOptimisticDone]=useState<Map<string,boolean>>(()=>new Map())
+  const [completing,setCompleting]=useState<Set<string>>(()=>new Set())
+  const completingTimers=useRef<ReturnType<typeof setTimeout>[]>([]),pendingCompletion=useRef(new Set<string>())
+  useEffect(()=>()=>completingTimers.current.forEach(clearTimeout),[])
   const completionKey=(item:Occurrence)=>item.event.id+'/'+item.start.toISOString()
-  const leafCompleted=(item:Occurrence)=>optimisticDone.has(completionKey(item))||occurrenceChecked(item.event,item.start)
+  const leafCompleted=(item:Occurrence)=>optimisticDone.get(completionKey(item))??occurrenceChecked(item.event,item.start)
   useEffect(()=>{
-    const saved=new Set(busyOccurrences.filter(item=>occurrenceChecked(item.event,item.start)).map(completionKey))
-    setOptimisticDone(current=>{const next=new Set([...current].filter(key=>!saved.has(key)));return next.size===current.size?current:next})
+    setOptimisticDone(current=>{const next=new Map(current);for(const item of busyOccurrences){const key=completionKey(item);if(next.get(key)===occurrenceChecked(item.event,item.start))next.delete(key)}return next.size===current.size?current:next})
   },[busyOccurrences])
   const bodyRef=useRef<HTMLDivElement>(null)
   const [openedFolders,setOpenedFolders]=useState<Set<string>>(()=>new Set())
@@ -186,22 +188,30 @@ export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=tr
     const leaves = completionLeaves(item)
     return leaves.length > 0 && leaves.every(leafCompleted)
   }
-  const appearance = (item: Occurrence) => completed(item) || ('freeTime' in item && item.freeTime)
-    ? freeTimeAppearance : eventAppearance(eventColor(item.event,tags),item.event.reminder)
-  const completionClass = (item: Occurrence) => completed(item) ? ' is-completed-free-time' : ''
-  const selectEvent=(item:ScheduleRow)=>item.freeTime?(onFreeTimeClick?onFreeTimeClick(item):onSlotClick(item.start)):onEventClick(item.event,item.start)
+  const appearance = (item: Occurrence) => {
+    const original=eventAppearance(eventColor(item.event,tags),item.event.reminder)
+    return {...(completed(item)||('freeTime' in item&&item.freeTime)?freeTimeAppearance:original),'--completion-original-bg':original.background,'--completion-original-color':original.color} as CSSProperties & Record<`--${string}`,string>
+  }
+  const completionClass = (item: Occurrence) => (completed(item)?' is-completed-free-time':'')+(completing.has(completionKey(item))?' is-completing':'')
+  async function saveCompletion(item:Occurrence,checked:boolean){
+    const leaves=completionLeaves(item),keys=leaves.map(completionKey),key=completionKey(item)
+    if(pendingCompletion.current.has(key))return 'Saving…'
+    pendingCompletion.current.add(key)
+    setOptimisticDone(current=>{const next=new Map(current);keys.forEach(key=>next.set(key,checked));return next})
+    setCompleting(current=>{const next=new Set(current);if(checked)next.add(key);else next.delete(key);return next})
+    completingTimers.current.push(setTimeout(()=>setCompleting(current=>{const next=new Set(current);next.delete(key);return next}),1600))
+    try{return await onEventDone(item.event,item.start,checked)}catch(error){setOptimisticDone(current=>{const next=new Map(current);keys.forEach(key=>next.delete(key));return next});setCompleting(current=>{const next=new Set(current);next.delete(key);return next});throw error}finally{pendingCompletion.current.delete(key)}
+  }
+  const selectEvent=(item:ScheduleRow)=>completed(item)&&item.event.eventKind!=='folder'?void saveCompletion(item,false).catch(error=>window.alert(error instanceof Error?error.message:'Could not restore event.')):item.freeTime?(onFreeTimeClick?onFreeTimeClick(item):onSlotClick(item.start)):onEventClick(item.event,item.start)
+  const titleContent=(item:Occurrence)=><><span className="event-free-label" aria-hidden={!completed(item)}>Free time · </span><span className="event-original-title">{item.event.title||'(No title)'}</span></>
   const doneButton=(item:Occurrence,checkbox=false)=>{
     const leaves=completionLeaves(item)
-    const shown=leaves.map(leaf=>optimisticDone.has(completionKey(leaf))?{...leaf,event:{...leaf.event,completedStarts:[...(leaf.event.completedStarts||[]),leaf.start.toISOString()]}}:leaf)
-    return <CalendarDoneButton checkbox={checkbox} item={item} leaves={shown} onDone={async(event,start)=>{
-      const keys=leaves.map(completionKey)
-      setOptimisticDone(current=>new Set([...current,...keys]))
-      try{return await onEventDone(event,start)}catch(error){setOptimisticDone(current=>{const next=new Set(current);keys.forEach(key=>next.delete(key));return next});throw error}
-    }}/>
+    const shown=leaves.map(leaf=>({...leaf,event:{...leaf.event,completedStarts:leafCompleted(leaf)?[...(leaf.event.completedStarts||[]),leaf.start.toISOString()]:(leaf.event.completedStarts||[]).filter(value=>Date.parse(value)!==leaf.start.getTime())}}))
+    return <CalendarDoneButton checkbox={checkbox} item={item} leaves={shown} onDone={async(_event,_start,checked)=>saveCompletion(item,checked!==false)}/>
   }
   function dayFolderBody(item:Occurrence,day:Date):ReactNode{
     const open=folderOpen(item),children=(grouped.children.get(folderOccurrenceKey(item))||[]).filter(child=>clipToDay(child,day))
-    return <><div className="folder-event-header"><button type="button" className="agenda-disclosure grid-folder-disclosure" aria-label={(open?'Collapse folder ':'Expand folder ')+item.event.title} aria-expanded={open} onClick={()=>toggleFolder(item)}><FolderChevron open={open}/></button><button type="button" className={"folder-grid-toggle"+completionClass(item)} onClick={()=>toggleFolder(item)} aria-expanded={open} style={appearance(item)}> {item.event.title}<small>{formatTimeCompact(item.start)}–{formatTimeCompact(item.end)}{showItemCounts&&<> · {children.length} {children.length===1?'item':'items'}</>}</small></button><button type="button" className="folder-pencil" style={appearance(item)} aria-label={'Edit folder '+item.event.title} onClick={()=>onEventClick(item.event,item.start)}><EditIcon size={18}/></button></div><FolderReveal open={open}>{()=><div className="folder-day-children">{folderChildren(item,day).map(child=>child.event.eventKind==='folder'?<div className="nested-day-folder" key={child.event.id}>{dayFolderBody(child,day)}</div>:<div key={child.event.id} className="calendar-task-with-actions"><button type="button" className={"event-chip folder-child-event"+completionClass(child)} onClick={()=>selectEvent(child)} style={appearance(child)}><span>{formatTimeCompact(child.start)}–{formatTimeCompact(child.end)}</span><strong className="event-title">{child.event.title}</strong></button>{!child.freeTime&&doneButton(child)}</div>)}</div>}</FolderReveal></>
+    return <><div className="folder-event-header"><button type="button" className="agenda-disclosure grid-folder-disclosure" aria-label={(open?'Collapse folder ':'Expand folder ')+item.event.title} aria-expanded={open} onClick={()=>toggleFolder(item)}><FolderChevron open={open}/></button><button type="button" className={"folder-grid-toggle"+completionClass(item)} onClick={()=>toggleFolder(item)} aria-expanded={open} style={appearance(item)}> {item.event.title}<small>{formatTimeCompact(item.start)}–{formatTimeCompact(item.end)}{showItemCounts&&<> · {children.length} {children.length===1?'item':'items'}</>}</small></button><button type="button" className="folder-pencil" style={appearance(item)} aria-label={'Edit folder '+item.event.title} onClick={()=>onEventClick(item.event,item.start)}><EditIcon size={18}/></button></div><FolderReveal open={open}>{()=><div className="folder-day-children">{folderChildren(item,day).map(child=>child.event.eventKind==='folder'?<div className="nested-day-folder" key={child.event.id}>{dayFolderBody(child,day)}</div>:<div key={child.event.id} className="calendar-task-with-actions"><button type="button" className={"event-chip folder-child-event"+completionClass(child)} onClick={()=>selectEvent(child)} style={appearance(child)}><span>{formatTimeCompact(child.start)}–{formatTimeCompact(child.end)}</span><strong className="event-title">{titleContent(child)}</strong></button>{!child.freeTime&&doneButton(child)}</div>)}</div>}</FolderReveal></>
   }
   function agendaRows(items:ScheduleRow[],day:Date,showNow:boolean,depth=0):ReactNode{
     const currentFolder=items.find(item=>item.event.eventKind==='folder'&&item.start<=now&&now<item.end)
@@ -212,11 +222,11 @@ export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=tr
       const rowAppearance=appearance(item)
       const filtered=hiddenRow(item)
       const eligible=!folder&&!item.freeTime&&completionLeaves(item).length>0
-      const row=<div className={'agenda-grid-row'+(eligible?' has-completion':'')+(folder?' is-folder-row':'')+(depth?' is-nested':'')+(filtered?' is-filtered':'')+(rowControls==='left'?' has-left-controls':'')} style={{...rowAppearance,background:depth?'transparent':rowAppearance.background,'--agenda-row-border':('border' in rowAppearance?rowAppearance.border:'none'),'--agenda-row-fill':rowAppearance.background==='transparent'?'var(--bg)':rowAppearance.background} as CSSProperties & {[key:`--${string}`]:string|number|undefined}} data-depth={depth} inert={filtered} aria-hidden={filtered?true:undefined}>
+      const row=<div className={'agenda-grid-row'+completionClass(item)+(eligible?' has-completion':'')+(folder?' is-folder-row':'')+(depth?' is-nested':'')+(filtered?' is-filtered':'')+(rowControls==='left'?' has-left-controls':'')} style={{...rowAppearance,background:depth?'transparent':rowAppearance.background,'--agenda-row-border':('border' in rowAppearance?rowAppearance.border:'none'),'--agenda-row-fill':rowAppearance.background==='transparent'?'var(--bg)':rowAppearance.background} as CSSProperties & {[key:`--${string}`]:string|number|undefined}} data-depth={depth} inert={filtered} aria-hidden={filtered?true:undefined}>
         <div className="agenda-indent">{depth>0&&<span className="agenda-tree-line" aria-hidden="true"/>}{folder?<button type="button" className="agenda-disclosure" aria-label={(open?'Collapse folder ':'Expand folder ')+item.event.title} aria-expanded={Boolean(open)} onClick={()=>toggleFolder(item)}><FolderChevron open={Boolean(open)}/></button>:rowControls==='left'?(eligible?doneButton(item,true):<span className="agenda-event-bullet" aria-hidden="true"/>):null}</div>
         <button type="button" className={'event-chip mobile-week-event'+(folder?' is-folder':'')+completionClass(item)} style={{...(depth?rowAppearance:{}),...(scaleToDuration&&view==='week'?{height:folder&&open&&!item.event.allDay&&!item.event.reminder?Math.max(40,40*zoom):durationHeight(item,'week',zoom,startOfDay(day).getTime(),addDays(startOfDay(day),1).getTime())}:{}),...(folder?{transition:folderAnimations?'height 480ms cubic-bezier(.25,.1,.25,1)':'none'}:{})}} title={item.event.title} aria-expanded={folder?Boolean(open):undefined} onClick={()=>folder?toggleFolder(item):selectEvent(item)}>
           <span className="mobile-week-time">{item.event.allDay?(item.event.reminder?'Reminder':'All day'):item.event.reminder?formatTimeCompact(item.start):formatTimeCompact(item.start)+'–'+formatTimeCompact(item.end)}</span>
-          <span className="event-title">{item.event.urgency!=null&&<span className="event-urgency-badge" style={urgencyColor(item.event.urgency)}>{item.event.urgency}</span>}{item.event.title||'(No title)'}</span>
+          <span className="event-title">{item.event.urgency!=null&&<span className="event-urgency-badge" style={urgencyColor(item.event.urgency)}>{item.event.urgency}</span>}{titleContent(item)}</span>
           {folder&&showItemCounts&&<small className="folder-event-count">{children.length} {children.length===1?'item':'items'}</small>}
         </button>
         {folder&&<button type="button" className="folder-pencil" style={rowAppearance} aria-label={'Edit folder '+item.event.title} onClick={()=>onEventClick(item.event,item.start)}><EditIcon size={18}/></button>}
@@ -273,7 +283,7 @@ export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=tr
                       onEventClick(item.event, item.start)
                     }}
                   >
-                    <span className="event-title">{item.event.urgency!=null && <span className="event-urgency-badge" style={urgencyColor(item.event.urgency)} aria-label={'Urgency '+item.event.urgency}>{item.event.urgency}</span>}{item.event.title || '(No title)'}</span>
+                    <span className="event-title">{item.event.urgency!=null && <span className="event-urgency-badge" style={urgencyColor(item.event.urgency)} aria-label={'Urgency '+item.event.urgency}>{item.event.urgency}</span>}{titleContent(item)}</span>
                   </button>
                 )
               })}
@@ -351,7 +361,7 @@ export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=tr
                     >
                       <span className="event-title">
                         {item.event.urgency!=null && <span className="event-urgency-badge" style={urgencyColor(item.event.urgency)} aria-label={'Urgency '+item.event.urgency}>{item.event.urgency}</span>}
-                        {item.event.title || '(No title)'}
+                        {titleContent(item)}
                       </span>
                       <span className="event-time">{item.event.reminder?'Reminder \u00b7 '+formatTimeCompact(item.start):formatTimeCompact(item.start)+' \u2013 '+formatTimeCompact(item.end)}</span>
                     </button>{!regularWeek&&!item.freeTime&&!item.event.reminder&&doneButton(item)}</div>

@@ -2979,3 +2979,24 @@ html, body { touch-action: pan-x pan-y; }
 @media(prefers-reduced-motion:reduce) { .calendar-folder-reveal.is-horizontal { transition: none; } }
 
 .calendar-folder-reveal.is-horizontal[data-animated=false] { transition: none; }
+
+/* Completion unfolds locally; persisted completed rows render in their final state. */
+.is-completed-free-time .event-title { text-decoration: none; }
+.is-completed-free-time .event-title::before { content: none; }
+.event-free-label { display: inline-block; max-width: 0; opacity: 0; overflow: hidden; vertical-align: bottom; white-space: nowrap; }
+.is-completed-free-time .event-free-label { max-width: 110px; opacity: 1; }
+.event-original-title { position: relative; display: inline-block; max-width: 100%; vertical-align: bottom; }
+.event-original-title::after { content: ''; position: absolute; left: 0; right: 0; top: 52%; height: 1.5px; background: currentColor; transform: scaleX(0); transform-origin: left center; }
+.is-completed-free-time .event-original-title::after { transform: scaleX(1); }
+.is-completing .event-original-title::after { animation: calendar-completion-strike 450ms ease-out both; }
+.is-completing .event-original-title { animation: calendar-completion-shift 850ms ease both; }
+.is-completing .event-free-label { animation: calendar-completion-label 350ms 650ms ease both; }
+.event-chip, .agenda-grid-row { transition: background-color 450ms ease, color 450ms ease, border-color 450ms ease; }
+.is-completing.event-chip, .is-completing.agenda-grid-row { animation: calendar-completion-colors 1500ms ease both; }
+@keyframes calendar-completion-strike { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes calendar-completion-shift { 0%, 52% { transform: translateX(0); } 76% { transform: translateX(-8px); } 100% { transform: translateX(0); } }
+@keyframes calendar-completion-label { from { max-width: 0; opacity: 0; } to { max-width: 110px; opacity: 1; } }
+@keyframes calendar-completion-colors { 0%, 60% { background: var(--completion-original-bg); color: var(--completion-original-color); border-color: transparent; } 100% { background: var(--calendar-free-fill, #fff); color: var(--calendar-free-text, #000); border-color: var(--calendar-free-border, #000); } }
+@media (prefers-reduced-motion: reduce) { .is-completing, .is-completing .event-original-title, .is-completing .event-original-title::after, .is-completing .event-free-label { animation: none !important; } }
+.mobile-week .is-completing.agenda-grid-row.has-completion:not(.has-left-controls):not(.is-nested)::before { animation: calendar-completion-colors 1500ms ease both; }
+@media (prefers-reduced-motion: reduce) { .mobile-week .is-completing.agenda-grid-row::before { animation: none !important; } }

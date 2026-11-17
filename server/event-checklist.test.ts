@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {completeChecklistBlocks,linkChecklistBlocks} from './event-checklist.js'
+import {completeChecklistBlocks,linkChecklistBlocks,completeEventChecklist} from './event-checklist.js'
 import {checklistItems} from '../src/lib/checklistItems.js'
 import {mergeAdjacentEvents} from '../src/lib/eventFolders.js'
 import {calendarScheduleIdentity} from '../src/lib/eventChecklist.js'
@@ -81,4 +81,38 @@ test('folder Done releases its unlinked buffers as well as linked work without a
  assert.ok(result.calendar.events.filter(event => event.eventKind !== 'folder').every(event => event.completedStarts?.length === 1))
  assert.equal(result.progress[0].total, 1)
  assert.equal(result.progress[0].checked, true)
+})
+
+test('explicit undo restores one block and reopens its parent while retaining sibling progress',()=>{
+ const original=state(event('a'),event('b','2026-11-11T13:00:00Z','2026-11-11T14:00:00Z'))
+ const first=completeChecklistBlocks(original,[note],done('a'))
+ const finished=completeChecklistBlocks(first.calendar,[note],done('b','2026-11-11T13:00:00Z'))
+ const undone=completeChecklistBlocks(finished.calendar,finished.notes,{...done('a'),checked:false})
+ assert.equal(undone.progress[0].checked,false)
+ assert.equal(checklistItems(undone.notes[0].content)[0].checked,false)
+ assert.equal(undone.calendar.events[0].completedStarts?.length,0)
+ assert.equal(undone.calendar.events[1].completedStarts?.length,1)
+ assert.equal(completeChecklistBlocks(undone.calendar,undone.notes,{...done('a'),checked:false}).changed,false)
+ const redone=completeChecklistBlocks(undone.calendar,undone.notes,done('a'))
+ assert.equal(checklistItems(redone.notes[0].content)[0].checked,true)
+ assert.equal(original.events[0].completedStarts,undefined,'Input and sibling records are not mutated')
+})
+
+test('undo atomically reopens the linked planning task without reopening unrelated completed tasks',async()=>{
+ const originalFetch=globalThis.fetch,keys=['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','SUPABASE_SECRET_KEY'] as const,env=Object.fromEntries(keys.map(k=>[k,process.env[k]]))
+ process.env.SUPABASE_URL='https://undo.test';process.env.SUPABASE_SERVICE_ROLE_KEY='fixture';delete process.env.SUPABASE_SECRET_KEY
+ const block={...event('a'),planning:{kind:'task',taskId:'linked-task'},completedStarts:['2026-11-10T13:00:00Z']}
+ let committed:any
+ globalThis.fetch=async(input,init)=>{
+  const request=new Request(input,init),url=new URL(request.url),args=await request.json() as any
+  assert.equal(args.p_username,'owner')
+  if(url.pathname.endsWith('/rpc/planner_event_check_context'))return Response.json({calendar:{revision:1,state:state(block as CalendarEvent)},planning:{revision:2,state:{tasks:[{id:'linked-task',title:'Task',source:'fixture',status:'done'},{id:'other-task',title:'Other',source:'fixture',status:'done'}]}},filesRevision:3,notes:[{...note,content:note.content.replace('- [ ]','- [x]')}]})
+  assert(url.pathname.endsWith('/rpc/planner_commit_event_checks'));committed=args;return Response.json({calendarRevision:2,filesRevision:4})
+ }
+ try{
+  await completeEventChecklist('owner',{...done('a'),checked:false})
+  assert.equal(committed.p_planning.tasks[0].status,'todo');assert.equal(committed.p_planning.tasks[1].status,'done')
+  assert.equal(checklistItems(committed.p_notes[0].content)[0].checked,false)
+  assert.equal(committed.p_calendar.events[0].completedStarts.length,0)
+ }finally{globalThis.fetch=originalFetch;for(const key of keys){if(env[key]===undefined)delete process.env[key];else process.env[key]=env[key]}}
 })

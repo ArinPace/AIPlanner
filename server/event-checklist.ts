@@ -11,7 +11,7 @@ import type {PlannerTextFile} from '../src/lib/files.js'
 import type {StoredState} from '../src/types.js'
 const iso=z.string().datetime({offset:true})
 const linkArgs=z.object({calendarRevision:z.number().int().nonnegative(),filesRevision:z.number().int().nonnegative(),noteId:z.string().min(1).max(100),itemIndex:z.number().int().nonnegative(),itemText:z.string().min(1).max(2000),eventIds:z.array(z.string().min(1).max(100)).min(1).max(200),replaceLinks:z.boolean().optional(),completionReady:z.boolean().optional()}).strict()
-const doneArgs=z.object({revision:z.number().int().nonnegative(),eventId:z.string().min(1).max(100),occurrenceStart:iso}).strict()
+const doneArgs=z.object({revision:z.number().int().nonnegative(),eventId:z.string().min(1).max(100),occurrenceStart:iso,checked:z.boolean().optional()}).strict()
 // Preserve all rich formatting: change the target task item's attributes, not its document.
 function patchNote(note:PlannerTextFile,index:number,itemId:string,checked:boolean|undefined,now:string){
  const copy=structuredClone(note),rows=checklistItems(copy.content),row=rows[index]
@@ -49,7 +49,8 @@ export function completeChecklistBlocks(calendar:StoredState,notes:PlannerTextFi
   if(!matches||matches.length!==1)throw new ApiError(409,'A linked checklist item was removed or changed. Ask Main Chat to repair its link; nothing was checked off.')
  }
  let changed=false
- for(const leaf of leaves)if(!occurrenceChecked(leaf.event,leaf.start)){leaf.event.completedStarts=[...(leaf.event.completedStarts||[]),leaf.start.toISOString()];changed=true}
+ const checked=args.checked!==false
+ for(const leaf of leaves)if(occurrenceChecked(leaf.event,leaf.start)!==checked){leaf.event.completedStarts=checked?[...(leaf.event.completedStarts||[]),leaf.start.toISOString()]:(leaf.event.completedStarts||[]).filter(value=>Date.parse(value)!==leaf.start.getTime());changed=true}
  const updates=new Map<string,PlannerTextFile>(),progress=[]
  for(const link of links.values()){
   const required=copy.events.filter(e=>e.eventKind!=='folder'&&e.checklistLinks?.some(l=>l.noteId===link.noteId&&l.itemId===link.itemId))
@@ -58,7 +59,8 @@ export function completeChecklistBlocks(calendar:StoredState,notes:PlannerTextFi
   const completed=required.filter(e=>!repeatsWithAncestors(e,copy.events)&&occurrenceChecked(e,new Date(e.start))).length
   const note=updates.get(link.noteId)||notes.find(n=>n.id===link.noteId)!,row=checklistItems(note.content).find(r=>r.id===link.itemId)!
   if(!recurring&&!blocked&&completed===required.length&&!row.checked){updates.set(note.id,patchNote(note,row.index,link.itemId,true,now));changed=true}
-  progress.push({...link,completed,total:required.length,checked:row.checked||(!recurring&&!blocked&&completed===required.length),recurring,blocked})
+  if(!checked&&row.checked){updates.set(note.id,patchNote(note,row.index,link.itemId,false,now));changed=true}
+  progress.push({...link,completed,total:required.length,checked:checked&&(row.checked||(!recurring&&!blocked&&completed===required.length)),recurring,blocked})
  }
  return {calendar:copy,notes:[...updates.values()],progress,changed,blocks:leaves.length}
 }
@@ -69,10 +71,10 @@ async function context(username:string){
  return {calendar:row.calendar,planning:{rawState:row.planning.state,profile:{...structuredClone(DEFAULT_PLANNING),...row.planning.state},revision:Number(row.planning.revision)},filesRevision:row.filesRevision,notes:row.notes}
 }
 
-async function commit(username:string,c:Awaited<ReturnType<typeof context>>,calendar:StoredState,notes:PlannerTextFile[],syncTasks=false){
+async function commit(username:string,c:Awaited<ReturnType<typeof context>>,calendar:StoredState,notes:PlannerTextFile[],syncTasks=false,reopenTaskIds:string[]=[]){
  const files={folders:[],files:c.notes.map(n=>notes.find(v=>v.id===n.id)||n)}
  const profile=structuredClone(c.planning.profile),stored=structuredClone(c.planning.rawState)
- if(syncTasks){const done=completedTodoTasks(files,profile.tasks);for(const task of profile.tasks)if(done.has(task.id))task.status='done'}
+ if(syncTasks){const done=completedTodoTasks(files,profile.tasks),before=completedTodoTasks({folders:[],files:c.notes},profile.tasks);for(const task of profile.tasks){if(done.has(task.id))task.status='done';else if(reopenTaskIds.includes(task.id)||before.has(task.id))task.status='todo'}}
  if(syncTasks&&JSON.stringify(profile.tasks)!==JSON.stringify(c.planning.profile.tasks))stored.tasks=profile.tasks
  const {data,error}=await db().rpc('planner_commit_event_checks',{p_username:username,p_calendar_revision:c.calendar.revision,p_files_revision:c.filesRevision,p_planning_revision:c.planning.revision,p_calendar:calendar,p_notes:notes,p_planning:stored})
  if(error){console.error('Checklist transaction failed',{code:error.code});throw new ApiError(error.code==='P0001'?409:503,error.code==='P0001'?'Your calendar or checklist changed. Refresh and retry.':error.code==='57014'?'Saving this batch timed out. Read current state and retry with fewer event IDs.':'Could not save completion. Read current state before retrying.'+(error.code&&/^[A-Z0-9]{5,8}$/.test(error.code)?' ['+error.code+']':''))}
@@ -127,7 +129,7 @@ export async function completeEventChecklist(
   }
   if (!result.changed) return {saved: true, duplicate: true, revision: c.calendar.revision, progress: result.progress}
   try {
-   const saved = await commit(username, c, result.calendar, result.notes, true)
+   const saved = await commit(username, c, result.calendar, result.notes, true,args.checked===false?leaves.flatMap(leaf=>leaf.event.planning?.taskId?[leaf.event.planning.taskId]:[]):[])
    return {saved: true, revision: saved.calendarRevision, progress: result.progress, blocks: result.blocks}
   } catch (error) {
    if (!(error instanceof ApiError) || error.status !== 409 || attempt === 3) throw error

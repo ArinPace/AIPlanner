@@ -1,3 +1,4 @@
+import {occurrenceChecked} from './lib/eventChecklist'
 import {ChecklistSheet} from './components/ChecklistSheet'
 import {useTranslucence} from './lib/translucence'
 import {WeekCardsView} from './components/WeekCardsView'
@@ -314,17 +315,17 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   }, [tab, loaded, loadError, draft, events, tags, hiddenTagIds, zoom, applyState])
 
   const completionQueue = useRef<Promise<unknown>>(Promise.resolve())
-  function markCalendarDone(event: CalendarEvent, start: Date): Promise<string> {
+  function markCalendarDone(event: CalendarEvent, start: Date, checked=true): Promise<string> {
     const token = getToken()
     const queued = completionQueue.current.catch(() => {}).then(() => {
       if (token !== getToken()) throw new Error('Your account changed. Open your current calendar.')
-      return saveCalendarDone(event, start)
+      return saveCalendarDone(event, start, checked)
     })
     completionQueue.current = queued
     return queued
   }
 
-  async function saveCalendarDone(event:CalendarEvent,start:Date){
+  async function saveCalendarDone(event:CalendarEvent,start:Date,checked=true){
     if(draft)throw new Error('Close the event editor before marking work done.')
     await saveQueue.current
     const baseline=calendarFingerprint(latestCalendar.current)
@@ -333,7 +334,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
     let result
     for (let attempt = 0; ; attempt++) {
       try {
-        result = await completeCalendarBlock({revision:current.revision!,eventId:event.id,occurrenceStart:start.toISOString()})
+        result = await completeCalendarBlock({revision:current.revision!,eventId:event.id,occurrenceStart:start.toISOString(),checked})
         break
       } catch (error) {
         if (attempt >= 3 || !(error instanceof Error) || !/calendar.*changed|checklist changed/i.test(error.message)) throw error
@@ -344,6 +345,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
     const remote=await loadCalendar({adopt:false})
     if(calendarFingerprint(latestCalendar.current)===baseline){adoptCalendarRevision(remote.revision);applyState(remote)}
     else setSaveError('Completion saved. You also edited the calendar; reconcile those edits before saving again.')
+    if(!checked)return 'Event restored and linked checklist reopened.'
     const open=result.progress.filter(item=>!item.checked)
     return open.length?'Block saved. '+open.map(item=>item.blocked?'Additional required work is not yet fully mapped.':item.recurring?'Recurring checklist stays open.':`${item.completed} of ${item.total} required blocks done.`).join(' '):'Block saved and linked checklist item checked off.'
   }
@@ -418,6 +420,10 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
     setEditingFocusWindow(taskScreenTimeWindow(item.event,item.start,item.end))
   }
 
+  function selectCalendarEvent(event:CalendarEvent,start:Date){
+    if(event.eventKind!=='folder'&&occurrenceChecked(event,start)){void markCalendarDone(event,start,false).catch(error=>setSaveError(error instanceof Error?error.message:'Could not restore event.'));return}
+    openEdit(event,start)
+  }
   function openEdit(event: CalendarEvent,occurrenceStart?: Date,sourceEvents=events) {
     setEditingFocusWindow(null)
     setEditingOccurrence((occurrenceStart||new Date(event.start)).toISOString())
@@ -586,10 +592,10 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
                 setCursor(date)
                 setView('day')
               }}
-              onEventClick={(event,start) => openEdit(event,start)}
+              onEventClick={(event,start) => selectCalendarEvent(event,start)}
             />
           ) : view==='week'?(
-            <WeekCardsView visibleEventIds={visibleEventIds} cursor={cursor} occurrences={busyOccurrences} tags={tags} zoom={zoom} active={tab==='calendar'} onEventClick={(event,start)=>openEdit(event,start)} onDayOpen={date=>{setCursor(date);setView('day')}} onNavigate={direction=>setCursor(current=>addDays(current,direction*7))}/>
+            <WeekCardsView visibleEventIds={visibleEventIds} cursor={cursor} occurrences={busyOccurrences} tags={tags} zoom={zoom} active={tab==='calendar'} onEventClick={(event,start)=>selectCalendarEvent(event,start)} onDayOpen={date=>{setCursor(date);setView('day')}} onNavigate={direction=>setCursor(current=>addDays(current,direction*7))}/>
           ) : (
             <TimeGridView
               visibleEventIds={visibleEventIds}
@@ -611,7 +617,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
               busyOccurrences={busyOccurrences}
               tags={tags}
               onSlotClick={(date, allDay) => openCreate(date, { timed: !allDay, allDay })}
-              onEventClick={(event,start) => openEdit(event,start)}
+              onEventClick={(event,start) => selectCalendarEvent(event,start)}
             />
           )}
         </main>
