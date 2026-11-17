@@ -96,3 +96,19 @@ test('WHOOP browser reads require enabled exact WHOOP origin',()=>{
  assert.throws(()=>browserUrl('https://app.whoop.com.evil.test/', ['whoop']))
  assert.throws(()=>browserUrl('https://app.whoop.com/logout', ['whoop']))
 })
+
+test('paginated note reads do not return an unpaginated agent snapshot',async()=>{
+ const savedFetch=globalThis.fetch,keys=['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','SUPABASE_SECRET_KEY'] as const,env=Object.fromEntries(keys.map(k=>[k,process.env[k]]))
+ process.env.SUPABASE_URL='https://note-read.test';process.env.SUPABASE_SERVICE_ROLE_KEY='fixture';delete process.env.SUPABASE_SECRET_KEY
+ const server=createPlannerMcp('arin',['planner:read']),client=new Client({name:'note-test',version:'1'})
+ const [a,b]=InMemoryTransport.createLinkedPair();await server.connect(b);await client.connect(a)
+ let reads=0
+ globalThis.fetch=async(input,init)=>{
+  const request=new Request(input,init);assert(new URL(request.url).pathname.endsWith('/rpc/planner_read_file_item'));assert.deepEqual(await request.json(),{p_username:'arin',p_id:'large-note'});reads++
+  return Response.json({revision:42,section:'files',item:{id:'large-note',name:'Agent To Do',format:'note',content:'x'.repeat(100000),agentSnapshot:'unpaginated private snapshot'.repeat(10000)}})
+ }
+ try{
+  const result=await client.callTool({name:'planner_read_file',arguments:{id:'large-note',limit:1000}})
+  assert(!result.isError);const serialized=JSON.stringify(result);assert(serialized.length<5000);assert(!serialized.includes('agentSnapshot'));assert(!serialized.includes('unpaginated private snapshot'));assert.equal(reads,1)
+ }finally{await client.close();await server.close();globalThis.fetch=savedFetch;for(const key of keys){if(env[key]===undefined)delete process.env[key];else process.env[key]=env[key]}}
+})

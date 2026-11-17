@@ -105,7 +105,7 @@ export function createPlannerMcp(username: string, scopes: string[]) {
     const row=await readFilesItemById(username,args.id),file=row.section==='files'?row.item as any:null
     if(file) {
       const offset=args.offset || 0,limit=args.limit || 20000
-      const {richText,richTextSource,...metadata}=file
+      const {richText,richTextSource,agentSnapshot,...metadata}=file
       return {...metadata,format:file.format||'text',...(args.includeRichText?{richText,richTextSource}:{}),content:file.content.slice(offset,offset+limit),revision:row.revision,offset,totalCharacters:file.content.length,hasMore:offset+limit<file.content.length}
     }
     const document=row.section==='documents'?row.item as any:null
