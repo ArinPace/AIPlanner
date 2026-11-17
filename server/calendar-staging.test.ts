@@ -105,6 +105,14 @@ test('staging is private to the owner, edits are isolated, conflicts require res
   requireGoogleReview=true
   await assert.rejects(()=>publishCalendarStage('owner',{id:next.id,version:next.version,reviewSummary:'Google checks now required.'}),/fresh draft/)
   await assert.rejects(()=>prepareCalendarStage('owner',true),/Expired Google access/)
+  requireGoogleReview=false
+  const folders=await prepareCalendarStage('owner',true)
+  const created=await editCalendarStage('owner',{id:folders.id,version:folders.version,events:[{title:'Package pickup',eventKind:'folder',start:'2026-11-04T20:00:00Z',end:'2026-11-04T20:30:00Z'},{title:'Package pickup',eventKind:'folder',start:'2026-11-18T20:00:00Z',end:'2026-11-18T20:30:00Z'}]})
+  assert.equal(created.savedEvents.length,2)
+  assert.notEqual(created.savedEvents[0]!.id,created.savedEvents[1]!.id,'Same-name folders retain distinct saved IDs')
+  assert.equal(created.savedEvents[1]!.start,'2026-11-18T20:00:00Z')
+  assert(stage!.payload.calendar.events.some(event=>event.id===created.savedEvents[1]!.id))
+
 
  }finally{globalThis.fetch=original}
 })

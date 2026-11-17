@@ -155,6 +155,7 @@ export async function editCalendarStage(username:string,args:{id:string;version:
  if(args.removeIds?.length){
   stage.payload.calendar=removeCalendarItems(stage.payload.calendar,args.removeIds,'events',args.removalScope||'event',args.occurrenceStart)
  }
+ const editedIds:string[]=[]
  for(const input of args.events||[]){
   const patch=draftPatch.parse(input),old=patch.id?stage.payload.calendar.events.find(e=>e.id===patch.id):undefined
   if(patch.id&&!old)throw new ApiError(404,'Draft event not found. Omit id to add an event.')
@@ -163,6 +164,7 @@ export async function editCalendarStage(username:string,args:{id:string;version:
   if(event.recurrence.until&&(!Number.isFinite(Date.parse(event.recurrence.until))||event.recurrence.until<event.start.slice(0,10)))throw new ApiError(400,'Recurrence end must be valid and on/after its start.')
   if(event.reminder&&!event.allDay)event.end=new Date(Date.parse(event.start)+1).toISOString()
   if(old)Object.assign(old,event);else stage.payload.calendar.events.push(event)
+  editedIds.push(event.id)
  }
  stage.payload.calendar.events=normalizeEventFolders(stage.payload.calendar.events);validateEventFolders(stage.payload.calendar.events)
  // Retain original issues as a review checklist even after correcting their fields.
@@ -178,7 +180,7 @@ export async function editCalendarStage(username:string,args:{id:string;version:
  }
  const saved=storage(await db().from('planner_calendar_staging').update({payload:stage.payload,version:stage.version+1,updated_at:new Date().toISOString()}).eq('username',username).eq('id',stage.id).eq('version',stage.version).eq('status','draft').select('id'))
  if(!saved.length)throw new ApiError(409,'The draft changed. Read it again.')
- return stageSummary({...stage,version:stage.version+1})
+ return {...stageSummary({...stage,version:stage.version+1}),savedEvents:editedIds.map(id=>stage.payload.calendar.events.find(event=>event.id===id||event.mergedEventIds?.includes(id))).map(event=>event?{id:event.id,title:event.title,start:event.start,end:event.end,eventKind:event.eventKind||'event',folderId:event.folderId||null}:null)}
 }
 export async function publishCalendarStage(username:string,args:{id:string;version:number;reviewSummary:string}){
  const stage=await stagingRow(username,args.id)
