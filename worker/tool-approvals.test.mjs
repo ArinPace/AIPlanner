@@ -16,7 +16,7 @@ test('interactive browser grants retain their explicit tool allowlist',()=>{
 
 test('scheduled internal review writes are approved without approving external writes',()=>{
  const config=plannerToolApprovals()
- for(const tool of ['planner_calendar_stage_prepare','planner_calendar_stage_edit','planner_calendar_stage_publish','planner_whoop_review_report','planner_save_note'])assert.equal(config['mcp_servers.planner.tools.'+tool+'.approval_mode'],'approve')
+ for(const tool of ['planner_task_save','planner_task_feedback','planner_planning_update','planner_replan','planner_save_tag','planner_calendar_stage_prepare','planner_calendar_stage_edit','planner_calendar_stage_publish','planner_whoop_review_report','planner_save_note'])assert.equal(config['mcp_servers.planner.tools.'+tool+'.approval_mode'],'approve')
  assert.equal(config['mcp_servers.planner.tools.google_calendar_save_event.approval_mode'],undefined)
  assert.equal(config['mcp_servers.planner.default_tools_approval_mode'],undefined)
 })
