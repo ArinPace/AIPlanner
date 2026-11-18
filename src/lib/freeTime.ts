@@ -16,7 +16,7 @@ export function freeTimeGaps(busy: Occurrence[], start: Date, end: Date): Schedu
     if (to <= from) return
     const gapStart = new PlannerDate(from), gapEnd = new PlannerDate(to)
     gaps.push({ freeTime: true, start: gapStart, end: gapEnd, event: {
-      id: `free-time:${from}:${to}`, title: 'Free time', description: '',
+      id: `free-time:${from}:${to}`, title: 'Free time', description: '', difficulty: 0,
       start: gapStart.toISOString(), end: gapEnd.toISOString(), allDay: false,
       tagIds: [], recurrence: { frequency: 'none', interval: 1, until: null },
     } })

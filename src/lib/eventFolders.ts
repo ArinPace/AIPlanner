@@ -5,7 +5,7 @@ import type {CalendarEvent,Occurrence} from '../types.js'
 
 // Folder containers never replace the real events they group.
 export function normalizeEventFolders(events:CalendarEvent[]):CalendarEvent[]{
- events=mergeAdjacentEvents(events)
+ events=mergeAdjacentEvents(events.map(event=>event.title.trim().toLowerCase()==='free time'&&!event.completedStarts?.length?{...event,difficulty:0}:event))
  const folders=new Set(events.filter(e=>e.eventKind==='folder').map(e=>e.id))
  const normalized=events.map(event=>event.folderId&&!folders.has(event.folderId)?{...event,folderId:null}:event)
  const resolved=new Map<string,CalendarEvent>(),visiting=new Set<string>()
