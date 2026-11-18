@@ -31,6 +31,7 @@ export interface CalendarEvent {
   planning?: {kind:'task'|'break'|'buffer'|'routine'|'sleep';taskId?:string;bufferForEventId?:string;locked:boolean}
   id: string
   reminder?: boolean
+  difficulty?: number | null
   urgency?: number | null
   title: string
   description: string
@@ -63,6 +64,7 @@ export interface EventDraft {
   folderChildren?: {id:string;draft:EventDraft}[]
   scheduleType?: 'fixed' | 'planned'
   reminder?: boolean
+  difficulty?: number | null
   urgency?: number | null
   title: string
   description: string

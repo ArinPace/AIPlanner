@@ -11,9 +11,7 @@ export function calendarIntensity(items:Occurrence[],tags:Tag[],start:number,end
   const from=Math.max(0,Math.floor((item.start.getTime()-start)/60000)),to=Math.min(minutes,Math.ceil((item.end.getTime()-start)/60000))
   if(/^sleep\b/i.test(e.title)){for(let m=from;m<to;m++)sleep[m]=1;continue}
   if(/free time|break|buffer|rest with|eyes closed/i.test(text))continue
-  const duration=(item.end.getTime()-item.start.getTime())/60000
-  const academic=/homework|studying|class|quiz|test|exam|assignment|research|project|presentation|practice|reading/i.test(text)
-  const effort=academic?1+Math.min(.5,duration/240):.55+Math.min(.2,duration/600)
+  const effort=(e.difficulty==null?50:Math.max(1,Math.min(100,e.difficulty)))/100
   for(let m=from;m<to;m++)load[m]=Math.max(load[m],effort)
  }
  let awake=0,weighted=0,work=0,rest=0

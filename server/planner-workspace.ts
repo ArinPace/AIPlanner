@@ -18,6 +18,7 @@ export const eventPatch = {
   start:datetime.optional(),end:datetime.optional(),allDay:z.boolean().optional(),reminder:z.boolean().optional(),
   tagIds:z.array(z.string().min(1).max(100)).max(100).optional(),recurrence:recurrence.optional(),
   excludedStarts:z.array(datetime).max(5000).optional(),
+  difficulty:z.number().int().min(1).max(100).nullable().optional(),
   urgency:z.number().int().min(0).max(99).nullable().optional(),
   planningLocked:z.boolean().optional(),
   scheduleType:z.enum(['fixed','planned']).optional(),
