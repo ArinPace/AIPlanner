@@ -3006,3 +3006,12 @@ html, body { touch-action: pan-x pan-y; }
 .agenda-grid-row .event-original-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agenda-grid-row .event-urgency-badge { flex: none; }
 .event-description-input { border: 0 !important; box-shadow: none !important; background: transparent; padding: 12px; }
+
+/* Agent-only compact composer toolbar. */
+.agent-compose-wrap { padding-bottom: max(4px, env(safe-area-inset-bottom)); }
+.agent-compose-wrap .assistant-compose-note { display: none; }
+.agent-compose-wrap .assistant-compose > .assistant-compose-toolbar { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; }
+.agent-compose-wrap .compose-left-actions { display: flex; flex-wrap: nowrap; gap: 8px; }
+.agent-compose-wrap .assistant-compose-actions { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; margin-left: auto; }
+.agent-compose-wrap .assistant-attach span { display: none; }
+.agent-compose-wrap .assistant-attach, .agent-compose-wrap .assistant-compose-connect { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; flex-shrink: 0; }
