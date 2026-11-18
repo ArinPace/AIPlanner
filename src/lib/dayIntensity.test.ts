@@ -11,6 +11,10 @@ assert.equal(score([item(50,2)]),10)
 console.log('Difficulty weighting, neutral fallback, duration coverage and overlap checks passed')
 
 assert.equal(score([item(-1,8)]),0)
-assert.equal(score([item(-1,8),item(100)]),6)
-assert.equal(calendarIntensity([item(-1,8)] as any,[],start,end).summary,'0.0h busy · 16.0h downtime')
+assert.equal(score([item(-1,8),item(100)]),11)
+assert.equal(calendarIntensity([item(-1,8)] as any,[],start,end).summary,'0.0h busy · 8.0h downtime')
 assert.ok(score([item(1,8)])>score([item(100,1)]))
+
+const sleep={event:{title:'WHOOP — recorded sleep interval, November 18',tagIds:[]},start:new Date(start),end:new Date(start+7*3600000)}
+assert.equal(calendarIntensity([sleep] as any,[],start,end).summary,'0.0h busy · 17.0h downtime')
+assert.equal(calendarIntensity([sleep,item(-1,8)] as any,[],start,end).summary,'0.0h busy · 9.0h downtime')
