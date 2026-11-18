@@ -10,6 +10,7 @@ export function calendarIntensity(items:Occurrence[],tags:Tag[],start:number,end
   const text=e.title+' '+names
   const from=Math.max(0,Math.floor((item.start.getTime()-start)/60000)),to=Math.min(minutes,Math.ceil((item.end.getTime()-start)/60000))
   if(/^sleep\b/i.test(e.title)){for(let m=from;m<to;m++)sleep[m]=1;continue}
+  if(e.difficulty===-1)continue
   if(/free time|break|buffer|rest with|eyes closed/i.test(text))continue
   const effort=(e.difficulty==null?50:Math.max(1,Math.min(100,e.difficulty)))/100
   for(let m=from;m<to;m++)load[m]=Math.max(load[m],effort)
@@ -18,6 +19,6 @@ export function calendarIntensity(items:Occurrence[],tags:Tag[],start:number,end
  // If no sleep is recorded, estimate a 16-hour waking day rather than treating overnight gaps as downtime.
  const hasSleep=sleep.some(Boolean)
  for(let m=0;m<minutes;m++)if(!sleep[m]&&(hasSleep||(m>=420&&m<1380))){awake++;weighted+=load[m];if(load[m])work++;else rest++}
- const score=awake?Math.round(Math.min(100,weighted/awake*100)):0
+ const score=awake?Math.round(Math.min(100,(0.6*work+0.4*weighted)/awake*100)):0
  return {score,summary:`${(work/60).toFixed(1)}h busy · ${(rest/60).toFixed(1)}h downtime`}
 }
