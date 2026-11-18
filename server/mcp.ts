@@ -1,3 +1,6 @@
+import {calendarIntensity} from '../src/lib/dayIntensity.js'
+import {expandEvents} from '../src/lib/recurrence.js'
+import {PlannerDate} from '../src/lib/timezone.js'
 import {albertWatchSchema,readAlbertWatches,saveAlbertWatch} from './albert-watches.js'
 import {registerMcpFileTools} from './mcp-files.js'
 import {registerEventChecklistTools} from './event-checklist.js'
@@ -92,6 +95,16 @@ export function createPlannerMcp(username: string, scopes: string[]) {
   })
   add('planner_schedule_read','Read the actual VM scheduled review: enabled state, timezone, daily times, instructions, enabled sources and connection status. Use this before changing it.',{},'planner:read',true,()=>readAutomationSettings(username))
   add('planner_schedule_update','Change this user’s VM review schedule, saved task instructions or enabled source list. Read planner_schedule_read first and pass its updatedAt. Omitted settings remain unchanged. Enabling a source does not sign into it. This changes future scheduled runs, not a note in Files.',{expectedUpdatedAt:iso,enabled:z.boolean().optional(),timezone:z.string().max(80).optional(),times:z.array(z.string()).min(1).max(6).optional(),instructions:z.string().max(12000).optional(),sources:z.array(z.enum(['brightspace','gradescope','gmail','calendar','drive','slack','instagram','x','albert','whatsapp','linkedin','whoop'])).max(12).optional()},'planner:write',false,args=>updateAutomationSettings(username,args))
+  add('planner_calendar_intensity_read','Read actual calendar-derived daily intensity scores using the exact display calculation. This is distinct from the saved planning intensity preference. Includes the exact formula and full calendar coverage regardless of hidden tags.',{date:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),days:z.number().int().min(1).max(31).optional()},'planner:read',true,async args=>{
+    const row=await calendarRow(username),start=new PlannerDate(args.date+'T00:00:00'),end=new PlannerDate(start)
+    end.setDate(end.getDate()+(args.days||7))
+    const items=expandEvents(row.state.events,start,end),scores=[]
+    for(let day=new PlannerDate(start);day<end;day.setDate(day.getDate()+1)){
+      const next=new PlannerDate(day);next.setDate(next.getDate()+1)
+      scores.push({date:day.getFullYear()+'-'+String(day.getMonth()+1).padStart(2,'0')+'-'+String(day.getDate()).padStart(2,'0'),...calendarIntensity(items,row.state.tags,day.getTime(),next.getTime())})
+    }
+    return {revision:row.revision,timezone:'America/New_York',scores,formula:'Minute buckets clipped to each local day (start floor, end ceil). Exclude folders, all-day events and reminders. Titles starting Sleep mark sleep minutes. Ignore title/tag text matching free time, break, buffer, rest with, eyes closed. Academic title/tag matches homework, studying, class, quiz, test, exam, assignment, research, project, presentation, practice, reading: effort=1+min(0.5,eventDurationMinutes/240); other effort=0.55+min(0.2,eventDurationMinutes/600). Overlaps use maximum effort, never sum. Exclude sleep minutes; if no sleep exists use 07:00–23:00. Score=round(min(100,sum(effort)/awakeMinutes*100)), or 0 when no awake minutes. Busy counts awake minutes with effort>0; downtime counts remaining awake minutes. This measures scheduled load, not actual completion or the saved intensity preference.'}
+  })
   add('planner_calendar_read','Read/search the INTERNAL AI Planner calendar, including hidden events, recurrence rules and excludedStarts (skipped occurrence instants), not Google Calendar. Returns base events, not expanded occurrences: account for recurrence when answering date questions. Read the latest revision before editing; paginate for all events.',{query:z.string().max(300).optional(),offset:z.number().int().nonnegative().optional(),limit:z.number().int().min(1).max(200).optional()},'planner:read',true,async args=>{
     const row=await calendarRow(username),query=(args.query || '').toLowerCase(),offset=args.offset || 0,limit=args.limit || 50
     const events=row.state.events.filter(e=>(e.title+' '+e.description+' '+e.tagIds.map(id=>row.state.tags.find(t=>t.id===id)?.name || '').join(' ')).toLowerCase().includes(query)).sort((a,b)=>a.start.localeCompare(b.start))
