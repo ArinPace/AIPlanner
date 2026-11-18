@@ -3015,3 +3015,7 @@ html, body { touch-action: pan-x pan-y; }
 .agent-compose-wrap .assistant-compose-actions { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; margin-left: auto; }
 .agent-compose-wrap .assistant-attach span { display: none; }
 .agent-compose-wrap .assistant-attach, .agent-compose-wrap .assistant-compose-connect { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; flex-shrink: 0; }
+
+/* Reserve only the floating navigation height beneath the Agent composer. */
+.agent-tab-panel { padding-bottom: calc(80px + max(0px, env(safe-area-inset-bottom) - 6px)); }
+.agent-tab-panel .agent-compose-wrap { padding-bottom: 4px; }
