@@ -20,3 +20,9 @@ test('scheduled internal review writes are approved without approving external w
  assert.equal(config['mcp_servers.planner.tools.google_calendar_save_event.approval_mode'],undefined)
  assert.equal(config['mcp_servers.planner.default_tools_approval_mode'],undefined)
 })
+
+test('explicit account automatic mode approves Planner tools and enabled browser without per-tool prompts',()=>{
+ assert.equal(plannerToolApprovals(true)['mcp_servers.planner.default_tools_approval_mode'],'approve')
+ assert.equal(browserToolApprovals(true,true)['mcp_servers.browser.default_tools_approval_mode'],'approve')
+ assert.equal(browserToolApprovals(false,true)['mcp_servers.browser.default_tools_approval_mode'],undefined)
+})

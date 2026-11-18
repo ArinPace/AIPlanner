@@ -1,0 +1,2 @@
+alter table public.planner_agent_instructions drop constraint planner_agent_instructions_content_check;
+alter table public.planner_agent_instructions add constraint planner_agent_instructions_content_check check(char_length(content)<=30000);

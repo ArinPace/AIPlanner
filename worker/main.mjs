@@ -91,8 +91,8 @@ async function chat(job, auth, remote) {
     'mcp_servers.browser.args': [path.join(root, 'browser-tools.mjs')],
     'mcp_servers.browser.env': { ...browserRuntimeEnv(dataDir), PLANNER_BROWSER_CONTROL:remote.browserControlEnabled===true?'1':'0', PLANNER_JOB_ID:job.id, PLANNER_JOB_LEASE:job.lease, PLANNER_ENABLED_SOURCES: JSON.stringify(remote.sources) },
     'mcp_servers.browser.env_vars': ['PLANNER_WORKER_TOKEN', 'PLANNER_ORIGIN'],
-    ...plannerToolApprovals(),
-    ...browserToolApprovals(remote.browserControlEnabled===true),
+    ...plannerToolApprovals(remote.automaticToolApprovals===true),
+    ...browserToolApprovals(remote.browserControlEnabled===true,remote.automaticToolApprovals===true),
     ...(remote.approvedBrowserTools?.includes('browser_read_whatsapp_chat') && remote.whatsappReadConsentAt && remote.sources.includes('whatsapp') ? {'mcp_servers.browser.tools.browser_read_whatsapp_chat.approval_mode':'approve'} : {}),
     ...(remote.approvedBrowserTools?.includes('browser_read_slack_dm') && remote.messageReadConsent?.slack && remote.sources.includes('slack') ? {'mcp_servers.browser.tools.browser_read_slack_dm.approval_mode':'approve'} : {}),
   }
@@ -120,7 +120,7 @@ async function chat(job, auth, remote) {
     const defaultModel=chosen.model||process.env.PLANNER_MODEL||(chosen.reset?catalog.data.find(m=>m.isDefault)?.model:auth.type==='codex'?undefined:'gpt-6-luna')
     const customized=Boolean(chosen.model||chosen.reset)
     const effort=chosen.effort||(customized?catalog.data.find(m=>m.model===defaultModel)?.defaultReasoningEffort:undefined)
-    const params = { cwd: path.join(dataDir, 'workspace'), ...(defaultModel?{model:defaultModel}:{}), approvalPolicy: job.kind === 'sync' ? 'never' : 'on-request', sandbox: 'workspace-write', developerInstructions: effectiveInstructions((remote.accountBehaviorInstructions||'')+'\nTutor enabled for this account: '+(remote.tutorEnabled===true?'yes':'no')+'\n'+instructions+'\n\n'+plannerGuidance+'\n\n'+whatsappPermissionText(remote.whatsappReadConsentAt)+'\n\n'+messagePermissionText(remote.messageReadConsent),remote.agentInstructions,{browserControl:remote.browserControlEnabled===true}) }
+    const params = { cwd: path.join(dataDir, 'workspace'), ...(defaultModel?{model:defaultModel}:{}), approvalPolicy: remote.automaticToolApprovals===true || job.kind === 'sync' ? 'never' : 'on-request', sandbox: 'workspace-write', developerInstructions: effectiveInstructions((remote.accountBehaviorInstructions||'')+'\nTutor enabled for this account: '+(remote.tutorEnabled===true?'yes':'no')+'\n'+instructions+'\n\n'+plannerGuidance+'\n\n'+whatsappPermissionText(remote.whatsappReadConsentAt)+'\n\n'+messagePermissionText(remote.messageReadConsent),remote.agentInstructions,{browserControl:remote.browserControlEnabled===true}) }
     const fork=!threadId && job.fork_thread_id && job.fork_turn_id
     const thread = await rpc.request(fork?'thread/fork':threadId ? 'thread/resume' : 'thread/start', { ...params, ...(fork?{threadId:job.fork_thread_id,lastTurnId:job.fork_turn_id,excludeTurns:true}:threadId ? { threadId, excludeTurns: true } : {}) }, 60000)
     threadId = thread.thread.id

@@ -41,3 +41,8 @@ test('prefilled sign-in controls are used on all enabled websites without exposi
  const text=effectiveInstructions('base',{content:''},{browserControl:true})
  for(const term of ['every enabled or user-requested website','already autofilled','click its visible Sign In','Do not read, copy, log','OAuth permissions are separate','read-only school calendar'])assert(text.includes(term),term)
 })
+
+test('new shared rules beyond the former 20k limit reach every worker prompt',()=>{
+ const content='P'.repeat(21000)+' Urgent unchecked work gets the earliest feasible slot.'
+ assert(effectiveInstructions('base',{revision:36,content}).includes(content))
+})
