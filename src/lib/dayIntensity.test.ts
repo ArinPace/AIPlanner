@@ -7,7 +7,7 @@ assert.equal(score([item(100)]),6)
 assert.equal(score([item(50)]),5)
 assert.equal(score([item(null)]),5)
 assert.equal(score([item(100),item(50)]),6)
-assert.equal(score([item(50,2)]),10)
+assert.equal(score([item(50,2)]),12)
 console.log('Difficulty weighting, neutral fallback, duration coverage and overlap checks passed')
 
 assert.equal(score([item(-1,8)]),0)
@@ -22,3 +22,14 @@ assert.equal(calendarIntensity([sleep,item(-1,8)] as any,[],start,end).summary,'
 assert.equal(score([item(0,8)]),0)
 assert.equal(calendarIntensity([item(0,8)] as any,[],start,end).summary,'0.0h busy · 16.0h downtime')
 assert.equal(score([item(0,8),item(100)]),6)
+
+const shifted=(difficulty:number,hours:number,offsetHours:number)=>{const value=item(difficulty,hours);return {...value,start:new Date(value.start.getTime()+offsetHours*3600000),end:new Date(value.end.getTime()+offsetHours*3600000)}}
+const result=(items:any[])=>calendarIntensity(items,[],start,end)
+assert.equal(result([item(50)]).continuityPenaltyPoints,0)
+assert.equal(result([item(50,2)]).longestContinuousBusyMinutes,120)
+assert.ok(result([item(50,2)]).continuityPenaltyPoints>0)
+assert.equal(score([item(50),shifted(50,1,1)]),score([item(50,2)]))
+assert.equal(result([item(50),shifted(50,1,1.25)]).continuityPenaltyPoints,0)
+assert.equal(result([item(50),shifted(0,.25,1),shifted(50,1,1.25)]).longestContinuousBusyMinutes,60)
+assert.equal(result([item(50),shifted(-1,.25,1),shifted(50,1,1.25)]).continuityPenaltyPoints,0)
+assert.ok(score([item(100,16)])<=100)

@@ -16,10 +16,21 @@ export function calendarIntensity(items:Occurrence[],tags:Tag[],start:number,end
   const effort=(e.difficulty==null?50:Math.max(1,Math.min(100,e.difficulty)))/100
   for(let m=from;m<to;m++)load[m]=Math.max(load[m],effort)
  }
- let awake=0,weighted=0,work=0,rest=0
+ let awake=0,weighted=0,work=0,rest=0,streak=0,continuityPenalty=0,longestStreak=0
  // If no sleep is recorded, estimate a 16-hour waking day rather than treating overnight gaps as downtime.
  const hasSleep=sleep.some(Boolean)
- for(let m=0;m<minutes;m++)if(!sleep[m]&&(!ignored[m]||load[m]>0)&&(hasSleep||(m>=420&&m<1380))){awake++;weighted+=load[m];if(load[m])work++;else rest++}
- const score=awake?Math.round(Math.min(100,(0.6*work+0.4*weighted)/awake*100)):0
- return {score,summary:`${(work/60).toFixed(1)}h busy · ${(rest/60).toFixed(1)}h downtime`}
+ for(let m=0;m<minutes;m++){
+  const included=!sleep[m]&&(!ignored[m]||load[m]>0)&&(hasSleep||(m>=420&&m<1380))
+  if(!included){streak=0;continue}
+  awake++;weighted+=load[m]
+  if(load[m]){
+   work++;streak++;longestStreak=Math.max(longestStreak,streak)
+   // Each five-minute band after one hour adds 5%, capped at double load.
+   const multiplier=Math.min(1,Math.ceil(Math.max(0,streak-60)/5)*.05)
+   continuityPenalty+=(.6+.4*load[m])*multiplier
+  }else{rest++;streak=0}
+ }
+
+ const score=awake?Math.round(Math.min(100,(0.6*work+0.4*weighted+continuityPenalty)/awake*100)):0
+ return {score,continuityPenaltyPoints:awake?Number((continuityPenalty/awake*100).toFixed(2)):0,longestContinuousBusyMinutes:longestStreak,summary:`${(work/60).toFixed(1)}h busy · ${(rest/60).toFixed(1)}h downtime`}
 }
