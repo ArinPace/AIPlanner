@@ -46,7 +46,7 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
   const titleRef = useRef<HTMLInputElement>(null)
   const backdropRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState('')
-  const [editingDescription,setEditingDescription]=useState(mode==='create'||!draft.description.trim())
+  const [editingDescription,setEditingDescription]=useState(false)
   const internalDescriptionLine=(line:string)=>/^\s*Task\s+ID\s*:\s*\S+\s*$/i.test(line)
   const [descriptionText,setDescriptionText]=useState(()=>draft.description.split('\n').filter(line=>!internalDescriptionLine(line)).join('\n').trim())
   const descriptionLines=draft.description.split('\n'),internalDescription=descriptionLines.filter(internalDescriptionLine)
@@ -262,6 +262,7 @@ export function EventModal({ mode, draft, tags, onChange, onClose, onSave, onDel
           <span>Description</span>
           {editingDescription?<><textarea
             aria-label="Description"
+            className="event-description-input"
             rows={3}
             value={descriptionText}
             onChange={event=>{setDescriptionText(event.target.value);update('description',[event.target.value,...internalDescription].filter(Boolean).join('\n\n'))}}

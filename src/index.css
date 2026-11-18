@@ -2954,7 +2954,7 @@ html, body { touch-action: pan-x pan-y; }
 .assistant-message-time[hidden] { display: none; }
 @media(prefers-reduced-motion:reduce) { .chat-thinking-dot,.chat-stream-cursor { animation: none; } }
 
-.event-description-preview { border: 1px solid var(--border); border-radius: 8px; padding: 12px; min-width: 0; overflow-wrap: anywhere; }
+.event-description-preview { border: 0; border-radius: 0; padding: 12px; min-width: 0; overflow-wrap: anywhere; }
 .event-description-preview .chat-markdown { white-space: pre-wrap; line-height: 1.45; }
 .event-description-edit { align-self: flex-start; font-size: .875rem; }
 
@@ -3000,3 +3000,9 @@ html, body { touch-action: pan-x pan-y; }
 @media (prefers-reduced-motion: reduce) { .is-completing, .is-completing .event-original-title, .is-completing .event-original-title::after, .is-completing .event-free-label { animation: none !important; } }
 .mobile-week .is-completing.agenda-grid-row.has-completion:not(.has-left-controls):not(.is-nested)::before { animation: calendar-completion-colors 1500ms ease both; }
 @media (prefers-reduced-motion: reduce) { .mobile-week .is-completing.agenda-grid-row::before { animation: none !important; } }
+
+/* Keep urgency and the title on the same row without pushing the title below clipping. */
+.agenda-grid-row .event-title { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.agenda-grid-row .event-original-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agenda-grid-row .event-urgency-badge { flex: none; }
+.event-description-input { border: 0 !important; box-shadow: none !important; background: transparent; padding: 12px; }
