@@ -1,4 +1,4 @@
-import type {Occurrence,Tag} from '../types'
+import type {Occurrence,Tag} from '../types.js'
 
 /** Calendar-derived estimate. Minute buckets avoid counting overlapping commitments twice. */
 export function calendarIntensity(items:Occurrence[],tags:Tag[],start:number,end:number){
