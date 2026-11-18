@@ -11,6 +11,7 @@ export function calendarIntensity(items:Occurrence[],tags:Tag[],start:number,end
   const from=Math.max(0,Math.floor((item.start.getTime()-start)/60000)),to=Math.min(minutes,Math.ceil((item.end.getTime()-start)/60000))
   if(/\bsleep\b/i.test(e.title)||e.planning?.kind==='sleep'){for(let m=from;m<to;m++)sleep[m]=1;continue}
   if(e.difficulty===-1){for(let m=from;m<to;m++)ignored[m]=1;continue}
+  if(e.difficulty===0)continue
   if(/free time|break|buffer|rest with|eyes closed/i.test(text))continue
   const effort=(e.difficulty==null?50:Math.max(1,Math.min(100,e.difficulty)))/100
   for(let m=from;m<to;m++)load[m]=Math.max(load[m],effort)

@@ -18,3 +18,7 @@ assert.ok(score([item(1,8)])>score([item(100,1)]))
 const sleep={event:{title:'WHOOP — recorded sleep interval, November 18',tagIds:[]},start:new Date(start),end:new Date(start+7*3600000)}
 assert.equal(calendarIntensity([sleep] as any,[],start,end).summary,'0.0h busy · 17.0h downtime')
 assert.equal(calendarIntensity([sleep,item(-1,8)] as any,[],start,end).summary,'0.0h busy · 9.0h downtime')
+
+assert.equal(score([item(0,8)]),0)
+assert.equal(calendarIntensity([item(0,8)] as any,[],start,end).summary,'0.0h busy · 16.0h downtime')
+assert.equal(score([item(0,8),item(100)]),6)
