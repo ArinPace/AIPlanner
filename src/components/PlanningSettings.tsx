@@ -1,3 +1,4 @@
+import {useShowIntensity} from '../lib/showIntensity'
 import {useEffect,useRef,useState} from 'react'
 import {planningRequest} from '../lib/api'
 import {intensityDescription,type PlanningProfile} from '../lib/planning'
@@ -44,6 +45,8 @@ function IntensityFeedback({date,intensity,summary,onClose}:{date:string;intensi
 }
 export function PlanningButton({date, dayNumber, intensity, summary}: {date: string; dayNumber?: number; intensity?: number; summary?: string}) {
  const [open, setOpen] = useState(false)
+ const showIntensity=useShowIntensity()
+ if(!showIntensity)return dayNumber===undefined?null:<span className="num">{dayNumber}</span>
  const color = intensity === undefined ? undefined : `hsl(${120-intensity*1.2} 65% 40%)`
  return <>
   <button type="button" className={dayNumber === undefined ? 'day-intensity-button' : 'num day-intensity-date'} style={{color,borderColor:color}} title={(summary?summary+'. Estimated workload. ':'')+'Rate how intense this day felt: ' + date} aria-label={'Rate intensity for ' + date} onClick={event => { event.stopPropagation(); setOpen(true) }}>

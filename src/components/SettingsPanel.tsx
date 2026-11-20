@@ -1,3 +1,4 @@
+import {useShowIntensity,setShowIntensity} from '../lib/showIntensity'
 import {useEventDifficulty,setEventDifficulty} from '../lib/eventDifficulty'
 import {useTranslucence,setTranslucence} from '../lib/translucence'
 import {useFolderItemCounts,setFolderItemCounts} from '../lib/folderItemCounts'
@@ -30,6 +31,7 @@ function shortcutMod(): string {
 export function SettingsPanel({ calendarDisplay, zoom, onZoomChange, onClose, onLogout }: SettingsPanelProps) {
   const rowControls=useCalendarRowControls()
   const translucence=useTranslucence()
+  const showIntensity=useShowIntensity()
   const showDifficulty=useEventDifficulty()
   const showItemCounts=useFolderItemCounts()
   const [folderAnimations,setFolderAnimationsState]=useState(readFolderAnimations)
@@ -58,6 +60,7 @@ export function SettingsPanel({ calendarDisplay, zoom, onZoomChange, onClose, on
       </div>
       <details className="settings-group">
         <summary>Display</summary>
+        <label className="settings-theme"><span>Show intensity</span><input type="checkbox" role="switch" checked={showIntensity} onChange={e=>setShowIntensity(e.target.checked)}/></label>
         <label className="settings-theme"><span>Show event difficulty</span><input type="checkbox" role="switch" checked={showDifficulty} onChange={e=>setEventDifficulty(e.target.checked)}/></label>
         <div className="settings-group-content">
       <label className="settings-theme">
