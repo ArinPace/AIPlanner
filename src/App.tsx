@@ -1,3 +1,4 @@
+import {CombinedChecklist} from './components/CombinedChecklist'
 import {occurrenceChecked} from './lib/eventChecklist'
 import {ChecklistSheet} from './components/ChecklistSheet'
 import {useTranslucence} from './lib/translucence'
@@ -162,7 +163,7 @@ export default function App() {
 function CalendarApp({ username, onLogout }: { username: string; onLogout: () => void }) {
   useTranslucence()
   const calendarDisplay=useCalendarDisplay(username)
-  const [tab, setTab] = useState<'calendar' | 'files' | 'todo' | 'work' | 'agent' | 'screentime' | 'chat'>(()=>sessionStorage.getItem(RECOVERY_TAB)===username?'agent':'calendar')
+  const [tab, setTab] = useState<'calendar' | 'files' | 'combined' | 'todo' | 'work' | 'agent' | 'screentime' | 'chat'>(()=>sessionStorage.getItem(RECOVERY_TAB)===username?'agent':'calendar')
   const [mainChatOpen,setMainChatOpen]=useState(false)
   const [hideAgent,setHideAgent]=useState(false)
   useEffect(()=>{let live=true;void subscriptionChatRequest<{agentHidden:boolean}>(undefined,{action:'schedule_read'}).then(value=>{if(live&&value)setHideAgent(value.agentHidden===true)}).catch(()=>{});return()=>{live=false}},[username])
@@ -504,7 +505,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
       <WidgetTaskFeedback username={username} onApply={applyWidgetTime}/>
       <DeviceControlSync username={username}/>
       <Header hideAgent={hideAgent}
-        tab={tab==='todo'||tab==='work'?'calendar':tab}
+        tab={tab==='combined'||tab==='todo'||tab==='work'?'calendar':tab}
         onTabChange={next=>{if(next==='chat'){setMainChatOpen(true);return}if(next==='todo'||next==='work')setTodoRequest(n=>n+1);setTab(next)}}
         cursor={view==='day'||view==='year'?visibleDate:cursor}
         view={view}
@@ -527,7 +528,8 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
       />
 
       <div className="files-tab-panel" hidden={tab!=='files'}><FilesView sidebar={filesSidebar} setSidebar={setFilesSidebar} username={username} active={tab==='files'} onUnsavedChange={fileDirtyHandlers.files}/></div>
-      <ChecklistSheet open={tab==='todo'||tab==='work'} title={tab==='work'?'Work':'Tasks'} page={tab==='work'?'work':'todo'} onPageChange={next=>{setTodoRequest(n=>n+1);setTab(next)}} onClose={()=>setTab('calendar')}>
+      <ChecklistSheet open={tab==='combined'||tab==='todo'||tab==='work'} title={tab==='combined'?'Combined':tab==='work'?'Work':'Tasks'} page={tab==='combined'?'combined':tab==='work'?'work':'todo'} onPageChange={next=>{setTodoRequest(n=>n+1);setTab(next)}} onClose={()=>setTab('calendar')}>
+      <div className="files-tab-panel" data-checklist-page="combined" data-checklist-active={tab==='combined'} inert={tab!=='combined'} aria-hidden={tab!=='combined'}><CombinedChecklist active={tab==='combined'} events={events}/></div>
       <div className="files-tab-panel" data-checklist-page="todo" data-checklist-active={tab==='todo'} inert={tab!=='todo'} aria-hidden={tab!=='todo'}><FilesView preloadChecklist calendarEvents={events} standaloneTodo sidebar={false} setSidebar={setFilesSidebar} username={username} active={tab==='todo'} todoRequest={todoRequest||1} onUnsavedChange={fileDirtyHandlers.todo}/></div>
       <div className="files-tab-panel" data-checklist-page="work" data-checklist-active={tab==='work'} inert={tab!=='work'} aria-hidden={tab!=='work'}><FilesView preloadChecklist calendarEvents={events} standaloneTodo workMode sidebar={false} setSidebar={setFilesSidebar} username={username} active={tab==='work'} todoRequest={todoRequest||1} onUnsavedChange={fileDirtyHandlers.work}/></div>
       </ChecklistSheet>

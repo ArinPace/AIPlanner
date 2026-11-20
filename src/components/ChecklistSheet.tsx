@@ -1,7 +1,11 @@
+import {useChecklistSort,toggleChecklistSort} from '../lib/checklistSortMode'
 import {createContext,useCallback,useEffect,useRef,useState,type ReactNode} from 'react'
 import {PlusIcon} from './Icons'
 export const ChecklistSheetToolbar=createContext<HTMLElement|null>(null)
-export function ChecklistSheet({open,title,page,onPageChange,onClose,children}:{open:boolean;title:string;page:'todo'|'work';onPageChange:(page:'todo'|'work')=>void;onClose:()=>void;children:ReactNode}){
+export function ChecklistSheet({open,title,page,onPageChange,onClose,children}:{open:boolean;title:string;page:'combined'|'todo'|'work';onPageChange:(page:'combined'|'todo'|'work')=>void;onClose:()=>void;children:ReactNode}){
+ const sort=useChecklistSort()
+ const pages=['combined','todo','work'] as const
+ const pageIndex=pages.indexOf(page)
  const track=useRef<HTMLDivElement>(null)
  const ref=useRef<HTMLDialogElement>(null),changePage=useRef(onPageChange);changePage.current=onPageChange
  const [toolbarTarget,setToolbarTarget]=useState<HTMLDivElement|null>(null),[offset,setOffset]=useState(0),[paging,setPaging]=useState(false),[closing,setClosing]=useState(false)
@@ -20,7 +24,7 @@ export function ChecklistSheet({open,title,page,onPageChange,onClose,children}:{
  useEffect(()=>{
   const node=ref.current;if(!open||!node)return
   let frame=0,pendingSlide=0
-  const paint=()=>{frame=0;if(track.current){track.current.style.transition="none";track.current.style.transform=`translate3d(calc(${page==='work'?-100:0}% + ${pendingSlide}px),0,0)`}}
+  const paint=()=>{frame=0;if(track.current){track.current.style.transition="none";track.current.style.transform=`translate3d(calc(${-100*pageIndex}% + ${pendingSlide}px),0,0)`}}
   let start:{x:number;y:number;dismiss:boolean}|null=null,signaled=false,down=0,horizontal=0
   const begin=(target:EventTarget|null,x:number,y:number)=>{
    signaled=false;down=0;horizontal=0
@@ -35,18 +39,18 @@ export function ChecklistSheet({open,title,page,onPageChange,onClose,children}:{
    if(event.cancelable)event.preventDefault()
    if(!signaled){signaled=true;signal()}
    horizontal=dx
-   const allowed=page==='todo'?Math.min(0,dx):Math.max(0,dx)
+   const allowed=pageIndex===0?Math.min(0,dx):pageIndex===2?Math.max(0,dx):dx
    if(!frame){setPaging(true);frame=requestAnimationFrame(paint)}
    pendingSlide=Math.max(-node.clientWidth,Math.min(node.clientWidth,allowed))
   }
   const finish=(cancel=false)=>{
    if(frame){cancelAnimationFrame(frame);frame=0}
    let next=page
-   if(!cancel&&Math.abs(horizontal)>node.clientWidth*.23){if(page==='todo'&&horizontal<0)next='work';else if(page==='work'&&horizontal>0)next='todo'}
-   if(track.current){track.current.style.transition="";track.current.style.transform=`translate3d(${next==='work'?-100:0}%,0,0)`}
+   if(!cancel&&Math.abs(horizontal)>node.clientWidth*.23){next=pages[Math.max(0,Math.min(2,pageIndex+(horizontal<0?1:-1)))]}
+   if(track.current){track.current.style.transition="";track.current.style.transform=`translate3d(${-100*pages.indexOf(next)}%,0,0)`}
    const shouldDismiss=!cancel&&down>=42
    if(shouldDismiss)dismiss()
-   if(!cancel&&Math.abs(horizontal)>node.clientWidth*.23){if(page==='todo'&&horizontal<0)changePage.current('work');else if(page==='work'&&horizontal>0)changePage.current('todo')}
+   if(!cancel&&Math.abs(horizontal)>node.clientWidth*.23){changePage.current(next)}
    start=null;down=0;horizontal=0;if(!shouldDismiss)setOffset(0);setPaging(false)
   }
   const touchStart=(event:TouchEvent)=>{if(event.touches.length===1)begin(event.target,event.touches[0].clientX,event.touches[0].clientY);else start=null}
@@ -61,5 +65,5 @@ export function ChecklistSheet({open,title,page,onPageChange,onClose,children}:{
   return()=>{if(frame)cancelAnimationFrame(frame);node.removeEventListener('touchstart',touchStart,true);node.removeEventListener('touchmove',touchMove,true);node.removeEventListener('touchend',end,true);node.removeEventListener('touchcancel',cancel,true);node.removeEventListener('pointerdown',mouseStart,true);window.removeEventListener('pointermove',mouseMove,true);window.removeEventListener('pointerup',mouseEnd,true)}
  },[open,page,signal,dismiss])
 
- return <dialog ref={ref} className={"checklist-sheet"+(paging?" is-paging":"")+(closing?" is-closing":"")} style={{...(height===null?{}:{height}),...(offset?{transform:`translateY(${offset}px)`}:{})}} aria-label={title} onCancel={e=>{e.preventDefault();dismiss()}} onClick={e=>{if(e.target===ref.current){const r=ref.current.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dismiss()}}}><header><button type="button" className="checklist-sheet-handle" role="slider" aria-label="Resize task sheet" aria-orientation="vertical" aria-valuemin={minHeight} aria-valuemax={maxHeight} aria-valuenow={Math.round(height??Math.min(viewport*.76,maxHeight))} onPointerDown={e=>{e.preventDefault();e.currentTarget.setPointerCapture(e.pointerId);drag.current={y:e.clientY,height:ref.current!.getBoundingClientRect().height}}} onPointerMove={e=>{if(drag.current){const proposed=drag.current.height+drag.current.y-e.clientY;resizeTo(proposed);setOffset(Math.max(0,minHeight-proposed))}}} onPointerUp={e=>{if(drag.current&&drag.current.height+drag.current.y-e.clientY<minHeight)dismiss();else setOffset(0);drag.current=null;if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId)}} onPointerCancel={()=>{drag.current=null;setOffset(0)}} onKeyDown={e=>{if(['ArrowUp','ArrowDown','Home','End'].includes(e.key)){e.preventDefault();resizeTo(e.key==='Home'?minHeight:e.key==='End'?maxHeight:(height??ref.current!.getBoundingClientRect().height)+(e.key==='ArrowUp'?40:-40))}}}/><div><div className="checklist-sheet-title"><h2>{title}</h2></div><div className="checklist-sheet-actions"><button type="button" className="checklist-add-item" aria-label="Add item" title="Add item" onClick={()=>window.dispatchEvent(new Event('planner-add-checklist-item'))}><PlusIcon size={20}/></button><div ref={setToolbarTarget} className="checklist-toolbar-slot"/></div></div></header><ChecklistSheetToolbar.Provider value={toolbarTarget}><div className="checklist-pages-viewport"><div ref={track} className="checklist-pages-track" style={{transform:`translate3d(${page==='work'?-100:0}%,0,0)`}}>{children}</div></div></ChecklistSheetToolbar.Provider><nav className={"checklist-page-dots"+(pulse?" is-switching":"")} aria-label="Task lists">{(['todo','work'] as const).map(value=><button type="button" key={value} aria-label={value==='todo'?'Tasks':'Work'} aria-current={page===value?'page':undefined} onClick={()=>{signal();onPageChange(value)}}/>)}</nav></dialog>
+ return <dialog ref={ref} className={"checklist-sheet"+(paging?" is-paging":"")+(closing?" is-closing":"")} style={{...(height===null?{}:{height}),...(offset?{transform:`translateY(${offset}px)`}:{})}} aria-label={title} onCancel={e=>{e.preventDefault();dismiss()}} onClick={e=>{if(e.target===ref.current){const r=ref.current.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dismiss()}}}><header><button type="button" className="checklist-sheet-handle" role="slider" aria-label="Resize task sheet" aria-orientation="vertical" aria-valuemin={minHeight} aria-valuemax={maxHeight} aria-valuenow={Math.round(height??Math.min(viewport*.76,maxHeight))} onPointerDown={e=>{e.preventDefault();e.currentTarget.setPointerCapture(e.pointerId);drag.current={y:e.clientY,height:ref.current!.getBoundingClientRect().height}}} onPointerMove={e=>{if(drag.current){const proposed=drag.current.height+drag.current.y-e.clientY;resizeTo(proposed);setOffset(Math.max(0,minHeight-proposed))}}} onPointerUp={e=>{if(drag.current&&drag.current.height+drag.current.y-e.clientY<minHeight)dismiss();else setOffset(0);drag.current=null;if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId)}} onPointerCancel={()=>{drag.current=null;setOffset(0)}} onKeyDown={e=>{if(['ArrowUp','ArrowDown','Home','End'].includes(e.key)){e.preventDefault();resizeTo(e.key==='Home'?minHeight:e.key==='End'?maxHeight:(height??ref.current!.getBoundingClientRect().height)+(e.key==='ArrowUp'?40:-40))}}}/><div><div className="checklist-sheet-title"><h2>{title}</h2></div><div className="checklist-sheet-actions"><button type="button" className="icon-btn" aria-label={'Sort by '+(sort==='urgency'?'time':'urgency')} title={'Sorted by '+sort} onClick={toggleChecklistSort}>{sort==='urgency'?'↓!':'◷'}</button><button type="button" className="checklist-add-item" aria-label="Add item" title="Add item" onClick={()=>{if(page==='combined'){onPageChange('todo');setTimeout(()=>window.dispatchEvent(new Event('planner-add-checklist-item')),150)}else window.dispatchEvent(new Event('planner-add-checklist-item'))}}><PlusIcon size={20}/></button><div ref={setToolbarTarget} className="checklist-toolbar-slot"/></div></div></header><ChecklistSheetToolbar.Provider value={toolbarTarget}><div className="checklist-pages-viewport"><div ref={track} className="checklist-pages-track" style={{transform:`translate3d(${-100*pageIndex}%,0,0)`}}>{children}</div></div></ChecklistSheetToolbar.Provider><nav className={"checklist-page-dots"+(pulse?" is-switching":"")} aria-label="Task lists">{pages.map(value=><button type="button" key={value} aria-label={value==='combined'?'Combined':value==='todo'?'Tasks':'Work'} aria-current={page===value?'page':undefined} onClick={()=>{signal();onPageChange(value)}}/>)}</nav></dialog>
 }

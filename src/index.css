@@ -3019,3 +3019,14 @@ html, body { touch-action: pan-x pan-y; }
 /* Reserve only the floating navigation height beneath the Agent composer. */
 .agent-tab-panel { padding-bottom: calc(80px + max(0px, env(safe-area-inset-bottom) - 6px)); }
 .agent-tab-panel .agent-compose-wrap { padding-bottom: 4px; }
+.combined-checklist { width:100%; padding:12px 20px 32px; overflow:auto; }
+.combined-checklist-row { display:flex; align-items:flex-start; gap:9px; margin-bottom:14px; }
+.combined-checklist-row input { flex:none; width:18px; height:18px; margin-top:4px; }
+.combined-urgency { border:1px solid; border-radius:3px; padding:1px 5px; }
+.combined-checklist-row > div { flex:1; min-width:0; }
+.combined-checklist-row p { margin:0; }
+.combined-checklist-row small { color:var(--muted); font-size:11px; }
+.combined-time { flex:none; color:#1677ff; background:#e3efff; border-radius:6px; padding:4px 6px; font-size:11px; }
+.checklist-pages-track > [data-checklist-page=combined] { order:0; }
+.checklist-pages-track > [data-checklist-page=todo] { order:1; }
+.checklist-pages-track > [data-checklist-page=work] { order:2; }

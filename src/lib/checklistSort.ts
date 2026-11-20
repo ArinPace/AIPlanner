@@ -1,3 +1,4 @@
+import {readChecklistSort} from './checklistSortMode'
 import { Fragment } from '@tiptap/pm/model'
 import { Plugin, TextSelection } from '@tiptap/pm/state'
 
@@ -29,10 +30,10 @@ export function checklistSortPlugin() {
    view.dom.addEventListener('focusout',onBlur)
    view.dom.addEventListener('change',onChange,true)
    document.addEventListener('pointerup',onPointer,true)
-   window.addEventListener('blur',onWindowBlur)
+   window.addEventListener('blur',onWindowBlur);window.addEventListener('planner-checklist-sort',onWindowBlur)
    window.addEventListener('resize',onViewport);window.visualViewport?.addEventListener('resize',onViewport)
    queueMicrotask(()=>{if(!destroyed)view.dispatch(view.state.tr.setMeta(SORT_CHECKLISTS,true))})
-   return {destroy:()=>{destroyed=true;clearTimeout(timer);view.dom.removeEventListener('focusout',onBlur);view.dom.removeEventListener('change',onChange,true);document.removeEventListener('pointerup',onPointer,true);window.removeEventListener('blur',onWindowBlur);window.removeEventListener('resize',onViewport);window.visualViewport?.removeEventListener('resize',onViewport)}}
+   return {destroy:()=>{destroyed=true;clearTimeout(timer);view.dom.removeEventListener('focusout',onBlur);view.dom.removeEventListener('change',onChange,true);document.removeEventListener('pointerup',onPointer,true);window.removeEventListener('blur',onWindowBlur);window.removeEventListener('planner-checklist-sort',onWindowBlur);window.removeEventListener('resize',onViewport);window.visualViewport?.removeEventListener('resize',onViewport)}}
   },
   appendTransaction(transactions, _old, state) {
    if (!editable()) return null
@@ -83,7 +84,7 @@ export function checklistSortPlugin() {
     if (!list) continue
     const items: { node: typeof list; offset: number }[] = []
     list.forEach((node, offset) => items.push({node, offset}))
-    const sorted = [...items].sort((a,b) => Number(Boolean(a.node.attrs.checked))-Number(Boolean(b.node.attrs.checked)) || (b.node.attrs.urgency ?? -1) - (a.node.attrs.urgency ?? -1))
+    const sorted = [...items].sort((a,b) => Number(Boolean(a.node.attrs.checked))-Number(Boolean(b.node.attrs.checked)) || (readChecklistSort()==='time'?((Number(document.querySelector(`[data-checklist-id="${a.node.attrs.checklistId}"]`)?.getAttribute('data-scheduled-time')||'')||Infinity)-(Number(document.querySelector(`[data-checklist-id="${b.node.attrs.checklistId}"]`)?.getAttribute('data-scheduled-time')||'')||Infinity)):(b.node.attrs.urgency ?? -1) - (a.node.attrs.urgency ?? -1)))
     if (sorted.every((item, index) => item === items[index])) continue
     // Leave a newly inserted blank task in place until its text has been entered.
     if (items.some(item => !item.node.textContent.trim() && tr.selection.from > pos + item.offset && tr.selection.from < pos + item.offset + item.node.nodeSize + 1)) continue
