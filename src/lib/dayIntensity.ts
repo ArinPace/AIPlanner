@@ -1,7 +1,9 @@
+import {DEFAULT_INTENSITY_CALIBRATION,type IntensityCalibration} from './intensityCalibrationModel.js'
 import type {Occurrence,Tag} from '../types.js'
 
 /** Calendar-derived estimate. Minute buckets avoid counting overlapping commitments twice. */
-export function calendarIntensity(items:Occurrence[],tags:Tag[],start:number,end:number){
+export function calendarIntensity(items:Occurrence[],tags:Tag[],start:number,end:number,calibration:Partial<IntensityCalibration>={}){
+ const config={...DEFAULT_INTENSITY_CALIBRATION,...calibration}
  const minutes=Math.round((end-start)/60000), load=new Float64Array(minutes),sleep=new Uint8Array(minutes),ignored=new Uint8Array(minutes)
  for(const item of items){
   const e=item.event
@@ -32,9 +34,9 @@ export function calendarIntensity(items:Occurrence[],tags:Tag[],start:number,end
  }
 
  const busyRatio=awake?work/awake:0
- const occupancyScore=95*Math.pow(busyRatio,.9)
- const difficultyAdjustment=work?4*busyRatio*(weighted/work-.5):0
- const continuityPenaltyPoints=awake?Math.min(2,continuityPenalty/awake*100):0
- const score=Math.round(Math.max(0,Math.min(100,occupancyScore+difficultyAdjustment+continuityPenaltyPoints)))
+ const occupancyScore=config.busyScale*Math.pow(busyRatio,config.busyExponent)
+ const difficultyAdjustment=work?config.difficultyWeight*busyRatio*(weighted/work-.5):0
+ const continuityPenaltyPoints=awake?Math.min(config.continuityCap,continuityPenalty/awake*100):0
+ const score=Math.round(Math.max(0,Math.min(100,(occupancyScore+difficultyAdjustment+continuityPenaltyPoints)*config.gain+config.offset)))
  return {score,occupancyScore:Number(occupancyScore.toFixed(2)),difficultyAdjustment:Number(difficultyAdjustment.toFixed(2)),continuityPenaltyPoints:Number(continuityPenaltyPoints.toFixed(2)),longestContinuousBusyMinutes:longestStreak,summary:`${(work/60).toFixed(1)}h busy · ${(rest/60).toFixed(1)}h downtime`}
 }

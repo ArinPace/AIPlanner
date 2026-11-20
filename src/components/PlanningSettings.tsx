@@ -35,16 +35,23 @@ export function PlanningSettings({date,onClose}:{date?:string;onClose:()=>void})
   </>}
  </dialog>
 }
+function IntensityFeedback({date,intensity,summary,onClose}:{date:string;intensity:number;summary?:string;onClose:()=>void}){
+ const dialog=useRef<HTMLDialogElement>(null)
+ const [felt,setFelt]=useState(''),[row,setRow]=useState<Row|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('')
+ useEffect(()=>{dialog.current?.showModal();let alive=true;void planningRequest<Row>().then(r=>{if(alive){setRow(r);setFelt(r.profile.intensityFeedback?.[date]?.felt.toString()||'')}}).catch(e=>{if(alive)setError(e.message)});return()=>{alive=false}},[date])
+ async function save(){if(!row||felt===''||busy)return;setBusy(true);setError('');try{await planningRequest({revision:row.revision,replan:false,patch:{intensityFeedback:{...row.profile.intensityFeedback,[date]:{felt:Number(felt),calculated:intensity,at:new globalThis.Date().toISOString()}}}});window.dispatchEvent(new Event('planner-intensity-refresh'));onClose()}catch(e){setError(e instanceof Error?e.message:'Could not save');setBusy(false)}}
+ return <dialog ref={dialog} className="files-dialog planning-dialog" onCancel={e=>{e.preventDefault();if(!busy)onClose()}}><div className="files-dialog-head"><h2>Day intensity</h2><button type="button" className="icon-btn" disabled={busy} aria-label="Close intensity feedback" onClick={onClose}>×</button></div><p>{date} · Calculated intensity <strong>{intensity}</strong></p>{summary&&<p>{summary}</p>}<form onSubmit={e=>{e.preventDefault();void save()}}><label className="field"><span>How intense did this day actually feel? (0–100)</span><input type="number" min="0" max="100" step="1" required value={felt} disabled={!row||busy} onChange={e=>setFelt(e.target.value)}/></label><p className="quiet">Your agent can use this feedback to tune your personal calculation. This rating is saved separately from the calculated score.</p>{error&&<p role="alert">{error}</p>}<button className="primary-btn" disabled={!row||busy||felt===''}>{busy?'Saving…':'Save feedback'}</button></form></dialog>
+}
 export function PlanningButton({date, dayNumber, intensity, summary}: {date: string; dayNumber?: number; intensity?: number; summary?: string}) {
  const [open, setOpen] = useState(false)
  const color = intensity === undefined ? undefined : `hsl(${120-intensity*1.2} 65% 40%)`
  return <>
-  <button type="button" className={dayNumber === undefined ? 'day-intensity-button' : 'num day-intensity-date'} style={{color,borderColor:color}} title={(summary?summary+'. Estimated workload. ':'')+'Adjust planning preferences for ' + date} aria-label={'Adjust intensity for ' + date} onClick={event => { event.stopPropagation(); setOpen(true) }}>
+  <button type="button" className={dayNumber === undefined ? 'day-intensity-button' : 'num day-intensity-date'} style={{color,borderColor:color}} title={(summary?summary+'. Estimated workload. ':'')+'Rate how intense this day felt: ' + date} aria-label={'Rate intensity for ' + date} onClick={event => { event.stopPropagation(); setOpen(true) }}>
    {dayNumber ?? <>
     <strong>{intensity === undefined ? 'Intensity' : `Intensity ${intensity}`}</strong>
     {summary && <small>{summary}</small>}
    </>}
   </button>
-  {open && <PlanningSettings date={date} onClose={() => setOpen(false)} />}
+  {open && <IntensityFeedback date={date} intensity={intensity??0} summary={summary} onClose={() => setOpen(false)} />}
  </>
 }

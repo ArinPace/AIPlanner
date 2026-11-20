@@ -3,6 +3,8 @@ export type PlanningTask = {
  preferredDays: number[]; earliestDate: string | null; status: 'todo'|'done'; source: string; goal: string;
 }
 export type PlanningProfile = {
+ intensityCalibration?: import('./intensityCalibrationModel.js').IntensityCalibration;
+ intensityFeedback?: Record<string,{felt:number;calculated:number;at:string}>;
  enabled: boolean; onboarded: boolean; wake: string; sleep: string; intensity: number;
  weekdays: (number|null)[]; overrides: Record<string,number>;
  goals: string; preferences: string; breakActivities: string[];

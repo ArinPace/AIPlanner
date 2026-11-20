@@ -1,3 +1,4 @@
+import {useIntensityCalibration} from './lib/intensityCalibration'
 import {CombinedChecklist} from './components/CombinedChecklist'
 import {occurrenceChecked} from './lib/eventChecklist'
 import {ChecklistSheet} from './components/ChecklistSheet'
@@ -162,6 +163,7 @@ export default function App() {
 
 function CalendarApp({ username, onLogout }: { username: string; onLogout: () => void }) {
   useTranslucence()
+  const intensityCalibration=useIntensityCalibration(username)
   const calendarDisplay=useCalendarDisplay(username)
   const [tab, setTab] = useState<'calendar' | 'files' | 'combined' | 'todo' | 'work' | 'agent' | 'screentime' | 'chat'>(()=>sessionStorage.getItem(RECOVERY_TAB)===username?'agent':'calendar')
   const [mainChatOpen,setMainChatOpen]=useState(false)
@@ -601,7 +603,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
           ) : view==='week'?(
             <WeekCardsView visibleEventIds={visibleEventIds} cursor={cursor} occurrences={busyOccurrences} tags={tags} zoom={zoom} active={tab==='calendar'} onEventClick={(event,start)=>selectCalendarEvent(event,start)} onDayOpen={date=>{setCursor(date);setView('day')}} onNavigate={direction=>setCursor(current=>addDays(current,direction*7))}/>
           ) : (
-            <TimeGridView
+            <TimeGridView intensityCalibration={intensityCalibration}
               visibleEventIds={visibleEventIds}
               onFreeTimeClick={openFreeTime}
               showFreeTime={!hiddenSet.has(FREE_TIME_TAG_ID)}

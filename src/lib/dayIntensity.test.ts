@@ -39,3 +39,6 @@ assert.ok(classDay.score>=78&&classDay.score<=83)
 assert.ok(classDay.continuityPenaltyPoints<=2)
 assert.ok(Math.abs(score([item(100,8)])-score([item(1,8)]))<=3)
 assert.ok(Math.abs(score([item(50,8)])-score([item(50,4),shifted(50,4,5)]))<=2)
+
+assert.equal(calendarIntensity([item(50,8)] as any,[],start,end,{gain:1,offset:10}).score,Math.min(100,result([item(50,8)]).score+10))
+assert.ok(calendarIntensity([item(50,8)] as any,[],start,end,{busyScale:70}).score<result([item(50,8)]).score)

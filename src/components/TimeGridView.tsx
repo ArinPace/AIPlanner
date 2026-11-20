@@ -33,6 +33,7 @@ import {PlanningButton} from './PlanningSettings'
 import {toDateInput} from '../lib/dates'
 
 type TimeGridViewProps = {
+ intensityCalibration?: Partial<import('../lib/intensityCalibrationModel').IntensityCalibration>;
   visibleEventIds?:ReadonlySet<string>
   onFreeTimeClick?: (item:Occurrence)=>void
   showFreeTime?: boolean
@@ -68,12 +69,12 @@ function clipToDay(item: Occurrence, day: Date): { start: Date; end: Date } | nu
   }
 }
 
-export function TimeGridView({ visibleEventIds, onFreeTimeClick, showFreeTime=true, onVisibleDateChange, agendaRange, onAgendaExtend, onMultiDayDate, onWeekNavigate, weekLayout = 'list', scaleToDuration=false, active=true,cursor, view, zoom, occurrences, busyOccurrences, tags, onSlotClick, onEventClick, onEventDone }: TimeGridViewProps) {
+export function TimeGridView({ intensityCalibration,visibleEventIds, onFreeTimeClick, showFreeTime=true, onVisibleDateChange, agendaRange, onAgendaExtend, onMultiDayDate, onWeekNavigate, weekLayout = 'list', scaleToDuration=false, active=true,cursor, view, zoom, occurrences, busyOccurrences, tags, onSlotClick, onEventClick, onEventDone }: TimeGridViewProps) {
   const multiDayCount=useMultiDayCount()
   const showItemCounts=useFolderItemCounts()
   const rowControls=useCalendarRowControls()
   const folderAnimations=useFolderAnimations()
-  const dayIntensity = (day: Date) => calendarIntensity(busyOccurrences,tags,startOfDay(day).getTime(),addDays(startOfDay(day),1).getTime())
+  const dayIntensity = (day: Date) => calendarIntensity(busyOccurrences,tags,startOfDay(day).getTime(),addDays(startOfDay(day),1).getTime(),intensityCalibration)
   const agendaDays:Date[]=[]
   if(agendaRange)for(let day=startOfDay(agendaRange.start);day<=agendaRange.end;day=addDays(day,1))agendaDays.push(day)
   const days = view === 'day' ? [startOfDay(cursor)] : weekLayout==='grid'?Array.from({length:multiDayCount},(_,index)=>addDays(startOfDay(cursor),index)):agendaRange?agendaDays:getWeekDays(cursor)
