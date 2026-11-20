@@ -46,7 +46,7 @@ export function LoginScreen({onSignedIn}:{onSignedIn:(username:string)=>void}) {
     await run(()=>pending?linkGoogleLogin(username,password):mode==='login'?login(username,password):register(username,password,email))
   }
   return <div className="login-screen"><form className="login-card" onSubmit={submit}>
-    <div className="login-brand"><CalendarMark size={40}/><div><h1>AI Planner</h1><p>Sign in to save your calendar and files to your account.</p></div></div>
+    <div className="login-brand"><CalendarMark size={40}/><div><h1>Flow</h1><p>Sign in to save your calendar and files to your account.</p></div></div>
     {pending ? <><p>Continue as {pending.email}. Link your existing account using its password to keep your calendar and files.</p>
       {!pending.existingAccount&&<button type="button" className="secondary-btn login-submit" disabled={busy} onClick={()=>void run(createGoogleLogin)}>Create a new account with Google</button>}
     </> : <>

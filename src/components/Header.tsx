@@ -81,7 +81,7 @@ export function Header({
         </button>
         <div className="brand">
           <CalendarMark />
-          <span>AI Planner</span>
+          <span>Flow</span>
         </div>
         <button type="button" hidden={tab !== 'calendar'} className="create-btn mobile-only" aria-label="Create event" title="Create event" onClick={onCreate}>
           <PlusIcon />
