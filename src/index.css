@@ -3035,3 +3035,5 @@ html, body { touch-action: pan-x pan-y; }
 .tag-heading-actions .icon-btn,.tag-list > li > .icon-btn,.tag-list > li > .tag-delete-placeholder { width:32px; min-width:32px; flex:0 0 32px; box-sizing:border-box; }
 .sidebar-view-switch { border-radius:999px; padding:4px; gap:2px; background:var(--panel); }
 .sidebar-view-switch button { border:0; border-radius:999px; background:transparent; }
+.duo-verification-options { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+.duo-verification-options button { border:1px solid var(--line); border-radius:999px; padding:10px 16px; background:var(--panel); color:inherit; cursor:pointer; }
