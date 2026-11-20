@@ -3030,3 +3030,8 @@ html, body { touch-action: pan-x pan-y; }
 .checklist-pages-track > [data-checklist-page=combined] { order:0; }
 .checklist-pages-track > [data-checklist-page=todo] { order:1; }
 .checklist-pages-track > [data-checklist-page=work] { order:2; }
+/* Align sidebar header actions with the two tag action columns. */
+.tag-heading-actions { display:grid; grid-template-columns:32px 32px; gap:0; }
+.tag-heading-actions .icon-btn,.tag-list > li > .icon-btn,.tag-list > li > .tag-delete-placeholder { width:32px; min-width:32px; flex:0 0 32px; box-sizing:border-box; }
+.sidebar-view-switch { border-radius:999px; padding:4px; gap:2px; background:var(--panel); }
+.sidebar-view-switch button { border:0; border-radius:999px; background:transparent; }
