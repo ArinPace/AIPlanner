@@ -321,7 +321,9 @@ struct PlannerWebView: UIViewRepresentable {
                             replyHandler(["ok": true, "url": controller.conversationLink(chatId: chatId) as Any? ?? NSNull()], nil); return
                         }
                         if action == "chatGPTRelayStop" { try await controller.stopRelay(); parkRelay(); replyHandler(["ok": true], nil); return }
-                        guard let parent = webView?.window?.rootViewController, parent.presentedViewController == nil, let portal = chatGPTPortal else { throw NativeError("Close the current menu first.") }
+                        guard let parent = webView?.window?.rootViewController, let portal = chatGPTPortal else { throw NativeError("The ChatGPT session is unavailable.") }
+                        if parent.presentedViewController === portal { replyHandler(["ok":true,"alreadyOpen":true],nil);return }
+                        guard parent.presentedViewController == nil else { throw NativeError("Close the current menu first.") }
                         if let chatId = body["chatId"] as? String {
                             try controller.prepareWebsiteView(chatId: chatId, providerURL: body["url"] as? String)
                         }
