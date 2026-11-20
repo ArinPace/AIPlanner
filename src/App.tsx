@@ -1,3 +1,4 @@
+import {FlowLoading} from './components/FlowLoading'
 import {useIntensityCalibration} from './lib/intensityCalibration'
 import {CombinedChecklist} from './components/CombinedChecklist'
 import {occurrenceChecked} from './lib/eventChecklist'
@@ -138,7 +139,7 @@ export default function App() {
   if (checking) {
     return (
       <div className="login-screen">
-        <p className="quiet">Loading calendar…</p>
+        <FlowLoading label="Loading your calendar…"/>
       </div>
     )
   }
@@ -492,7 +493,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   if (!loaded) {
     return (
       <div className="login-screen">
-        <p className="quiet">Opening your calendar…</p>
+        <FlowLoading label="Opening your calendar…"/>
       </div>
     )
   }

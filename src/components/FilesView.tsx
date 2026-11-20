@@ -1,3 +1,4 @@
+import {FlowLoading} from './FlowLoading'
 import type {CalendarEvent} from '../types'
 import {FolderChevron} from './FolderChevron'
 import {prepareRelayFile,storeRelayFile,loadRelayFile,shareRelayBlob} from '../lib/relayFiles'
@@ -298,7 +299,7 @@ export function FilesView({ preloadChecklist=false,calendarEvents=[], workMode =
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
-  if (!state) return <main className="files-loading">{loadError ? <><p role="alert" className="form-error">{loadError}</p><button type="button" className="primary-btn" onClick={() => { setLoadError(''); void loadFiles().then((data) => { validateFilesState(data); setState(data) }).catch((err: unknown) => setLoadError(err instanceof Error ? err.message : 'Could not load.')) }}>Retry</button></> : <p className="quiet">Opening your files…</p>}</main>
+  if (!state) return <main className="files-loading">{loadError ? <><p role="alert" className="form-error">{loadError}</p><button type="button" className="primary-btn" onClick={() => { setLoadError(''); void loadFiles().then((data) => { validateFilesState(data); setState(data) }).catch((err: unknown) => setLoadError(err instanceof Error ? err.message : 'Could not load.')) }}>Retry</button></> : <FlowLoading label="Opening your files…"/>}</main>
   const currentFolder = state.folders.find((folder) => folder.id === folderId)
   const path = folderPath(state.folders, folderId)
   const search = query.trim().toLowerCase()
