@@ -34,7 +34,7 @@ export function calendarIntensity(items:Occurrence[],tags:Tag[],start:number,end
  }
 
  const busyRatio=awake?work/awake:0
- const occupancyScore=config.busyScale*Math.pow(busyRatio,config.busyExponent)
+ const occupancyScore=config.busyScale*(.7*Math.min(1,work/600)+.3*busyRatio)
  const difficultyAdjustment=work?config.difficultyWeight*busyRatio*(weighted/work-.5):0
  const continuityPenaltyPoints=awake?Math.min(config.continuityCap,continuityPenalty/awake*100):0
  const score=Math.round(Math.max(0,Math.min(100,(occupancyScore+difficultyAdjustment+continuityPenaltyPoints)*config.gain+config.offset)))
