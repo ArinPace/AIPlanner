@@ -3046,3 +3046,7 @@ html, body { touch-action: pan-x pan-y; }
 @keyframes flow-drift { 0%,100% { transform:scale(1.03) skewY(-2deg); } 50% { transform:scale(1.09) skewY(2deg); } }
 @keyframes flow-light { 0%,15% { transform:translateX(-55%); opacity:0; } 35%,65% { opacity:.65; } 85%,100% { transform:translateX(55%); opacity:0; } }
 @media(prefers-reduced-motion:reduce) { .flow-loading-art,.flow-loading-art img,.flow-loading-shimmer { animation:none; transform:none; } .flow-loading-shimmer { display:none; } }
+/* Procedural strands own their movement; the container remains still. */
+.flow-loading-art:has(.flow-fibres) { animation:none; border-radius:0; overflow:visible; width:clamp(180px,32vw,280px); }
+.flow-fibres { display:block; width:100%; height:100%; aspect-ratio:1; }
+:root:not([data-theme=dark]) .flow-fibres { background:#101010; border-radius:24%; }
