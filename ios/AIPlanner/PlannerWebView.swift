@@ -710,6 +710,16 @@ struct PlannerWebView: UIViewRepresentable {
       const pendingDuo=/duo/i.test(latest)&&/pending|timed out|try again|approve.*push/i.test(latest);
       const current=n=>(window.__plannerSignInCurrent?.(n,true)??true)||(pendingDuo&&n.getClientRects().length>0&&!n.closest('[hidden],[inert],[aria-hidden=true]'));
       const buttons=[...document.querySelectorAll('button,a[href]')].filter(current);
+      if(!window.__plannerSavedSignInObserver){
+        window.__plannerSavedSignInObserver=true;
+        document.addEventListener('click',event=>{const button=event.target.closest?.('button');if(button&&/^(Use saved account|Use saved details|Sign in|Continue)$/i.test(label(button))&&button.closest('form,[role=dialog],[role=alertdialog]'))window.__plannerSavedSignInAt=Date.now()},true);
+      }
+      const privateForm=[...document.querySelectorAll('input[type=password],input[autocomplete=one-time-code]')].some(n=>current(n));
+      if(pendingDuo||(window.__plannerSavedSignInAt&&Date.now()-window.__plannerSavedSignInAt>2000&&!privateForm)){
+        buttons.find(n=>/^Return control$/i.test(label(n)))?.click();
+        window.__plannerSiteSignIn?.restore();delete window.__plannerSavedSignInAt;
+        return {kind:'returned'};
+      }
       // Closing the original browser pane is an explicit return to chat, not
       // proof of successful authentication. Do not reopen its old transcript link.
       if(window.__plannerWebsiteBrowserVisible&&!document.querySelector('video')){
@@ -736,18 +746,11 @@ struct PlannerWebView: UIViewRepresentable {
         window.__plannerWebsiteBrowserVisible=true;
         window.__plannerSiteSignIn?.restore();
         const ready=!document.body.innerText.includes('Connecting to ChatGPT')&&videos.some(v=>v.readyState>=2&&v.videoWidth>0);
-        if(ready&&!window.__plannerWebsiteControlRequested){
-          const takeover=buttons.filter(n=>/^Take over$/i.test(label(n))).at(-1);
-          if(takeover){window.__plannerWebsiteControlRequested=true;takeover.click()}
-        }
-        return {kind:'browser',ready,controlling:document.body.innerText.includes('You have control')};
+        buttons.find(n=>/^Return control$/i.test(label(n)))?.click();
+        return {kind:'returned'};
       }
       const entry=buttons.filter(n=>/^(Open cloud browser|Take over to sign in|Take over)$/i.test(label(n))&&current(n)).at(-1);
-      if(entry){
-        window.__plannerSiteSignIn?.restore();
-        if(!window.__plannerWebsiteHandoffOpened){window.__plannerWebsiteHandoffOpened=true;entry.click()}
-        return {kind:'opening'};
-      }
+      if(entry){return {kind:'returned'}}
       if(window.__plannerWebsiteHandoffOpened)return {kind:'opening'};
       const credential=[...document.querySelectorAll('input[type=password],input[autocomplete=one-time-code]')].some(n=>window.__plannerSignInCurrent?.(n)??true);
       if(!credential){buttons.find(n=>/^Scroll to bottom$/i.test(label(n)))?.click();window.__plannerScrollLatest?.()}
