@@ -25,12 +25,16 @@ export function calendarIntensity(items:Occurrence[],tags:Tag[],start:number,end
   awake++;weighted+=load[m]
   if(load[m]){
    work++;streak++;longestStreak=Math.max(longestStreak,streak)
-   // Each five-minute band after one hour adds 5%, capped at double load.
-   const multiplier=Math.min(1,Math.ceil(Math.max(0,streak-60)/5)*.05)
+   // Small fatigue adjustment; occupancy remains the primary driver.
+   const multiplier=Math.min(.1,Math.ceil(Math.max(0,streak-60)/5)*.005)
    continuityPenalty+=(.6+.4*load[m])*multiplier
   }else{rest++;streak=0}
  }
 
- const score=awake?Math.round(Math.min(100,(0.6*work+0.4*weighted+continuityPenalty)/awake*100)):0
- return {score,continuityPenaltyPoints:awake?Number((continuityPenalty/awake*100).toFixed(2)):0,longestContinuousBusyMinutes:longestStreak,summary:`${(work/60).toFixed(1)}h busy · ${(rest/60).toFixed(1)}h downtime`}
+ const busyRatio=awake?work/awake:0
+ const occupancyScore=95*Math.pow(busyRatio,.9)
+ const difficultyAdjustment=work?4*busyRatio*(weighted/work-.5):0
+ const continuityPenaltyPoints=awake?Math.min(2,continuityPenalty/awake*100):0
+ const score=Math.round(Math.max(0,Math.min(100,occupancyScore+difficultyAdjustment+continuityPenaltyPoints)))
+ return {score,occupancyScore:Number(occupancyScore.toFixed(2)),difficultyAdjustment:Number(difficultyAdjustment.toFixed(2)),continuityPenaltyPoints:Number(continuityPenaltyPoints.toFixed(2)),longestContinuousBusyMinutes:longestStreak,summary:`${(work/60).toFixed(1)}h busy · ${(rest/60).toFixed(1)}h downtime`}
 }
