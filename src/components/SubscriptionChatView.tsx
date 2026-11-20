@@ -1,3 +1,4 @@
+import {isDuoVerification} from '../lib/duoVerification'
 import {whoopBackgroundIds,isWhoopBackground} from '../lib/whoopBackground'
 import {unpackRelayBundle} from '../lib/relayFileBundle'
 import {ChatAttempt} from './ChatAttempt'
@@ -64,7 +65,7 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
    const current=workspaceRef.current,last=current?.messages.at(-1)
    const pendingMessage=last?.role==='assistant'&&/duo|sign.in/i.test(last.content)&&/pending|approve|timed out|try again/i.test(last.content)
    const key=current?.chat.id+':'+(last?.id||'pending')
-   if(current&& !sendLock.current && !document.querySelector('[role="dialog"]') && (state.interaction===true||pendingMessage) && automaticSignIn.current!==key){
+   if(current&&!isDuoVerification(last?.content||'')&& !sendLock.current && !document.querySelector('[role="dialog"]') && (state.interaction===true||pendingMessage) && automaticSignIn.current!==key){
     automaticSignIn.current=key
     await nativeRequest({action:'chatGPTSiteSignIn',account:username,chatId:current.chat.id,url:current.chat.provider_url,intent:'interaction'})
    }
@@ -272,7 +273,7 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
      setRelayPhase(visibleReply?'Responding…':'Thinking…')
      if(visibleReply!==lastSavedPartial&&Date.now()-lastPartialAt>=2500){lastSavedPartial=visibleReply;lastPartialAt=Date.now();await record('submitted',visibleReply?'Responding…':'Thinking…')}
     }
-    setInteraction(result.phase==='interaction');if(result.phase==='interaction'){setRelayPhase('Website sign-in or approval needed.');if(!signInShown&&(window.plannerNativeChatGPTRelayVersion||0)>=5){signInShown=true;await nativeRequest({action:'chatGPTSiteSignIn',account:username,intent:'interaction'})}continue}signInShown=false
+    setInteraction(result.phase==='interaction');if(result.phase==='interaction'){const duo=isDuoVerification([result.text,result.message,visibleReply].filter(Boolean).join(' '));setRelayPhase(duo?'Approve the sign-in in Duo Mobile.':'Website sign-in or approval needed.');if(!duo&&!signInShown&&(window.plannerNativeChatGPTRelayVersion||0)>=5){signInShown=true;await nativeRequest({action:'chatGPTSiteSignIn',account:username,intent:'interaction'})}continue}signInShown=false
     if(result.phase==='completed'){
      const calls=toolsEnabled?relayCalls(result.text||'',turnId):null
      if(calls){
