@@ -3050,3 +3050,7 @@ html, body { touch-action: pan-x pan-y; }
 .flow-loading-art:has(.flow-fibres) { animation:none; border-radius:0; overflow:visible; width:clamp(180px,32vw,280px); }
 .flow-fibres { display:block; width:100%; height:100%; aspect-ratio:1; }
 :root:not([data-theme=dark]) .flow-fibres { background:#101010; border-radius:24%; }
+.chat-attempt-thinking { flex-wrap:nowrap; }
+.chat-attempt-thinking > .chat-thinking-dot { flex:0 0 8px; }
+.chat-attempt-thinking > span:not(.chat-thinking-dot) { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.chat-attempt-thinking > button { flex-shrink:0; white-space:nowrap; }
