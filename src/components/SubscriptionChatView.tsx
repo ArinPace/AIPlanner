@@ -1,4 +1,4 @@
-import {isDuoVerification} from '../lib/duoVerification'
+import {needsDuoApproval} from '../lib/duoVerification'
 import {whoopBackgroundIds,isWhoopBackground} from '../lib/whoopBackground'
 import {unpackRelayBundle} from '../lib/relayFileBundle'
 import {ChatAttempt} from './ChatAttempt'
@@ -56,7 +56,7 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
   if(!native||!active)return
   let stopped=false,timer:ReturnType<typeof setTimeout>|undefined
   const read=async()=>{let delay=1000;try{
-   const state=await nativeRequest<{ready?:boolean;needsLogin?:boolean;interaction?:boolean;running?:boolean;phase?:string;guest?:boolean}>({action:'chatGPTRelayStatus',account:username,peek:true})
+   const state=await nativeRequest<{ready?:boolean;needsLogin?:boolean;interaction?:boolean;credentialRequired?:boolean;running?:boolean;phase?:string;guest?:boolean}>({action:'chatGPTRelayStatus',account:username,peek:true})
    if(stopped)return
    if(state.interaction===false)setError(current=>/website sign-in is pending/i.test(current)?'':current)
    if(state.needsLogin||state.guest){setSignedIn(false);setSessionState('signed-out');try{sessionStorage.removeItem('planner-chat-signed-in:'+username)}catch{};delay=5000}
@@ -65,7 +65,7 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
    const current=workspaceRef.current,last=current?.messages.at(-1)
    const pendingMessage=last?.role==='assistant'&&/duo|sign.in/i.test(last.content)&&/pending|approve|timed out|try again/i.test(last.content)
    const key=current?.chat.id+':'+(last?.id||'pending')
-   if(current&&!isDuoVerification(last?.content||'')&& !sendLock.current && !document.querySelector('[role="dialog"]') && (state.interaction===true||pendingMessage) && automaticSignIn.current!==key){
+   if(current&&!needsDuoApproval(last?.content||'',state.credentialRequired)&& !sendLock.current && !document.querySelector('[role="dialog"]') && (state.interaction===true||pendingMessage) && automaticSignIn.current!==key){
     automaticSignIn.current=key
     await nativeRequest({action:'chatGPTSiteSignIn',account:username,chatId:current.chat.id,url:current.chat.provider_url,intent:'interaction'}).catch(()=>{})
    }
@@ -260,10 +260,10 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
    await record('submitted',resuming?'Restoring reply…':'Thinking…')
    if(submitted.url&&/^https:\/\/chatgpt\.com\/(?:g\/[A-Za-z0-9_-]+\/)?c\/[A-Za-z0-9_-]+$/.test(submitted.url)&&submitted.url!==submittedURL){await subscriptionChatRequest(undefined,{action:'relay_bind',chatId:id,url:submitted.url});submittedURL=submitted.url;setWorkspace(current=>current?{...current,chat:{...current.chat,provider_url:submitted.url},chats:current.chats.map(chat=>chat.id===id?{...chat,provider_url:submitted.url}:chat)}:current)}
    setRelayPhase('Thinking…')
-   let toolRounds=0,boundURL=submittedURL,signInShown=false
+   let toolRounds=0,boundURL=submittedURL,signInShown=false,credentialShown=false
    while(!cancelRelay.current&&alive.current&&scope===epoch.current){
     await new Promise(resolve=>setTimeout(resolve,500))
-    const result=await nativeRequest<{phase:string;text?:string;message?:string;needsLogin?:boolean;interaction?:boolean;url?:string;files?:{key:string;name:string}[]}>({action:'chatGPTRelayStatus',account:username})
+    const result=await nativeRequest<{phase:string;text?:string;message?:string;needsLogin?:boolean;interaction?:boolean;credentialRequired?:boolean;url?:string;files?:{key:string;name:string}[]}>({action:'chatGPTRelayStatus',account:username})
     if(scope!==epoch.current||!alive.current)return
     if(cancelRelay.current)break
     if(result.phase==='idle'&&!result.needsLogin)throw Error('The reply is no longer active. No final reply was saved; check the ChatGPT session before retrying.')
@@ -273,7 +273,7 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
      setRelayPhase(visibleReply?'Responding…':'Thinking…')
      if(visibleReply!==lastSavedPartial&&Date.now()-lastPartialAt>=2500){lastSavedPartial=visibleReply;lastPartialAt=Date.now();await record('submitted',visibleReply?'Responding…':'Thinking…')}
     }
-    setInteraction(result.phase==='interaction');if(result.phase==='interaction'){const duo=isDuoVerification([result.text,result.message,visibleReply].filter(Boolean).join(' '));setRelayPhase(duo?'Approve the sign-in in Duo Mobile.':'Website sign-in or approval needed.');if(!duo&&!signInShown&&(window.plannerNativeChatGPTRelayVersion||0)>=5){signInShown=true;await nativeRequest({action:'chatGPTSiteSignIn',account:username,intent:'interaction'}).catch(()=>{setRelayPhase('Waiting for sign-in to finish…')})}continue}signInShown=false
+    setInteraction(result.phase==='interaction');if(result.phase==='interaction'){const duo=needsDuoApproval([result.text,result.message,visibleReply].filter(Boolean).join(' '),result.credentialRequired);setRelayPhase(duo?'Choose a verification method or complete your selected method.':'Website sign-in or approval needed.');if(!duo&&(!signInShown||(result.credentialRequired===true&&!credentialShown))&&(window.plannerNativeChatGPTRelayVersion||0)>=5){signInShown=true;credentialShown=result.credentialRequired===true;await nativeRequest({action:'chatGPTSiteSignIn',account:username,intent:'interaction'}).catch(()=>{setRelayPhase('Waiting for sign-in to finish…')})}continue}signInShown=false;credentialShown=false
     if(result.phase==='completed'){
      const calls=toolsEnabled?relayCalls(result.text||'',turnId):null
      if(calls){

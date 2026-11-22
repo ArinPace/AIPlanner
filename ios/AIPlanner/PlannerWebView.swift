@@ -716,7 +716,8 @@ struct PlannerWebView: UIViewRepresentable {
         window.__plannerSavedSignInObserver=true;
         document.addEventListener('click',event=>{const button=event.target.closest?.('button');if(button&&/^(Use saved account|Use saved details|Sign in|Continue)$/i.test(label(button))&&button.closest('form,[role=dialog],[role=alertdialog]'))window.__plannerSavedSignInAt=Date.now()},true);
       }
-      const privateForm=[...document.querySelectorAll('input[type=password],input[autocomplete=one-time-code]')].some(n=>current(n));
+      const privateForm=[...document.querySelectorAll('input[type=password],input[autocomplete=one-time-code]')].some(n=>current(n))||buttons.some(n=>/^(Use saved account|Use saved details)$/i.test(label(n)));
+      if(privateForm){return {kind:'form'}}
       if(pendingDuo||(window.__plannerSavedSignInAt&&Date.now()-window.__plannerSavedSignInAt>2000&&!privateForm)){
         buttons.find(n=>/^Return control$/i.test(label(n)))?.click();
         window.__plannerSiteSignIn?.restore();delete window.__plannerSavedSignInAt;
@@ -1072,9 +1073,10 @@ window.__plannerSignInCurrent=(node,allowCompleted=false)=>{
 window.__plannerSignInState=()=>{
  const active=window.__plannerSignInCurrent,label=n=>(n.getAttribute('aria-label')||n.innerText||'').trim();
  const buttons=[...document.querySelectorAll('button')].filter(active);
- const secureForm=buttons.some(n=>/^(Open cloud browser|Take over|Take over to sign in|Sign in on web page|Return control|I.m done|Use saved account|Other sign-in options)$/i.test(label(n)))||[...document.querySelectorAll('form,[role="dialog"]')].filter(active).some(n=>/sign in to [a-z0-9.-]+[.][a-z]{2,}/i.test(n.innerText));
+ const credentialRequired=buttons.some(n=>/^(Use saved account|Use saved details)$/i.test(label(n)))||[...document.querySelectorAll('input[type=password],input[autocomplete=one-time-code]')].some(active);
+ const secureForm=credentialRequired||buttons.some(n=>/^(Open cloud browser|Take over|Take over to sign in|Sign in on web page|Return control|I.m done|Use saved account|Other sign-in options)$/i.test(label(n)))||[...document.querySelectorAll('form,[role="dialog"]')].filter(active).some(n=>/sign in to [a-z0-9.-]+[.][a-z]{2,}/i.test(n.innerText));
  const approval=[...document.querySelectorAll('[role="dialog"],[role="alertdialog"]')].filter(active).some(n=>/website|browser|access to|visit site/i.test(n.innerText)&&[...n.querySelectorAll('button')].some(b=>active(b)&&/^(Allow|Approve|Continue)$/i.test(label(b))));
- return {secureForm,approval,interaction:secureForm||approval};
+ return {secureForm,credentialRequired,approval,interaction:secureForm||approval};
 };
 window.__plannerScrollLatest=()=>{
  const jump=node=>{const previous=node.style.scrollBehavior;node.style.scrollBehavior='auto';node.scrollTop=node.scrollHeight;node.style.scrollBehavior=previous};
@@ -1270,7 +1272,7 @@ return {selectedModel:window.__plannerSelectedModel||'',sliders:ranges,summary:(
     const box=window.__plannerComposer();
     const buttons=[...document.querySelectorAll('button')].filter(visible);
     const label=n=>(n.getAttribute('aria-label')||n.innerText||'').trim();
-    const {secureForm=false,interaction=false}=window.__plannerSignInState?.()||{};
+    const {secureForm=false,credentialRequired=false,interaction=false}=window.__plannerSignInState?.()||{};
     // Keep the submitted turn mounted in ChatGPT's virtualized transcript.
     if(window.__plannerPendingPrompt&&!interaction){buttons.find(n=>/^Scroll to bottom$/i.test(label(n)))?.click();window.__plannerScrollLatest?.()}
     const guest=!secureForm&&buttons.some(n=>/^(Log in|Sign in)$/i.test(label(n)));
@@ -1320,7 +1322,7 @@ return {selectedModel:window.__plannerSelectedModel||'',sliders:ranges,summary:(
     const outputScope=workFinal||turn;
     const outputs=outputScope?[...outputScope.querySelectorAll('a[download],a[href^="sandbox:"],a[href*="/backend-api/files/"],a[href*="/backend-api/estuary/content"],button[aria-label^="Download "],button[aria-label="Save image"],[data-file-reference="true"][role="button"][aria-label^="Download "]')].map((node,index)=>{node.dataset.plannerDownloadId ||= (messageNode?.getAttribute('data-chatgpt-selection-message-id')||last?.getAttribute('data-message-id')||turn?.id||crypto.randomUUID())+':'+index;let cardName='';if(node.getAttribute('aria-label')==='Download file'){for(let parent=node.parentElement,depth=0;parent&&depth<6;parent=parent.parentElement,depth++){const preview=[...parent.querySelectorAll('button[aria-label]')].find(n=>/^Open preview of /i.test(n.getAttribute('aria-label')));if(preview){cardName=preview.getAttribute('aria-label').replace(/^Open preview of /i,'');break}}}const name=(node.getAttribute('download')||cardName||node.innerText||node.getAttribute('aria-label')||'Download file').trim();return {key:node.dataset.plannerDownloadId,name:(cardName?name:name.replace(/^Download (?=.+[.][A-Za-z0-9]{1,12}$)/i,'')).slice(0,240)}}):[];
     const replyKey=messageNode?.getAttribute('data-chatgpt-selection-message-id')||last?.getAttribute('data-message-id')||last?.closest('[data-message-id]')?.getAttribute('data-message-id')||turn?.id||turn?.getAttribute('data-testid')||'';
-    return {attributed,files:outputs,ready:!!box,needsLogin:(!box&&guest)||(!secureForm&&[...document.querySelectorAll('input[type="password"]')].some(n=>window.__plannerSignInCurrent?.(n))),guest,interaction,running,count:replies.length,replyKey,text:response,final:workTurn?!!workFinal&&!!workTurn.querySelector('[data-talvt-turn-state="complete"]'):!!turn?.querySelector(completionSelector),url:location.href};})()
+    return {attributed,credentialRequired,files:outputs,ready:!!box,needsLogin:(!box&&guest)||(!secureForm&&[...document.querySelectorAll('input[type="password"]')].some(n=>window.__plannerSignInCurrent?.(n))),guest,interaction,running,count:replies.length,replyKey,text:response,final:workTurn?!!workFinal&&!!workTurn.querySelector('[data-talvt-turn-state="complete"]'):!!turn?.querySelector(completionSelector),url:location.href};})()
     """ }
     private func snapshot() async throws -> [String: Any] {
         loadViewIfNeeded()
