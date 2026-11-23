@@ -20,7 +20,7 @@ import {WidgetTaskFeedback} from './components/WidgetTaskFeedback'
 import {ScreenTimePanel} from './components/ScreenTimePanel'
 import {RECOVERY_TAB} from './lib/attachmentRecovery'
 import { PlannerDate as Date } from './lib/timezone.js'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { FilesView } from './components/FilesView'
 import { AgentView } from './components/AgentView'
 import { EventModal } from './components/EventModal'
@@ -396,7 +396,8 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
   },[loaded,loadError,tab])
 
   const hiddenSet = useMemo(() => new Set(hiddenTagIds), [hiddenTagIds])
-  const visibleEvents = useMemo(() => events.filter(event => (!hiddenSet.has(FREE_TIME_TAG_ID)||event.title.trim().toLowerCase()!=='free time')&&isEventVisible(event, hiddenSet)&&!hiddenTypes.includes(eventType(event,tags))), [events, hiddenSet,hiddenTypes,tags])
+  const calendarHiddenSet = useDeferredValue(hiddenSet)
+  const visibleEvents = useMemo(() => events.filter(event => (!calendarHiddenSet.has(FREE_TIME_TAG_ID)||event.title.trim().toLowerCase()!=='free time')&&isEventVisible(event, calendarHiddenSet)&&!hiddenTypes.includes(eventType(event,tags))), [events, calendarHiddenSet,hiddenTypes,tags])
   const visibleEventIds=useMemo(()=>new Set(visibleEvents.map(event=>event.id)),[visibleEvents])
   const range = useMemo(() => view==='day'&&agendaWindow?.anchor===cursor.toISOString()?{start:agendaWindow.start,end:agendaWindow.end}:view==='week'?{start:visibleRange(cursor,'day').start,end:visibleRange(addDays(cursor,6),'day').end}:visibleRange(cursor, view === 'day' ? 'week' : view), [cursor, view,agendaWindow])
   const occurrences = useMemo(() => {

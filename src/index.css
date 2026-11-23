@@ -452,9 +452,24 @@ p {
   cursor: pointer;
 }
 
-.tag-item input {
-  accent-color: var(--blue);
+.tag-item input[type=checkbox], .event-type-filter input[type=checkbox] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  margin: 0;
+  border: 2px solid var(--muted);
+  border-radius: 50%;
+  background: var(--bg);
+  cursor: pointer;
+  touch-action: manipulation;
+  position: relative;
 }
+.tag-item input[type=checkbox]:checked, .event-type-filter input[type=checkbox]:checked { background: var(--blue); border-color: var(--blue); }
+.tag-item input[type=checkbox]:checked::after, .event-type-filter input[type=checkbox]:checked::after { content: ''; position: absolute; width: 7px; height: 13px; left: 8px; top: 3px; border: solid white; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); }
+.sidebar-check-target { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex: 0 0 44px; cursor: pointer; touch-action: manipulation; }
+.tag-item input[type=checkbox]:focus-visible, .event-type-filter input[type=checkbox]:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
 
 .tag-swatch {
   width: 12px;

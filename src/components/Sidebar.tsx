@@ -134,13 +134,13 @@ export function Sidebar({
 
         {screenTimeError&&<p role="alert" className="form-error">{screenTimeError}</p>}
         <ul className="tag-list">
-          <li><div className="tag-item"><input aria-label="Show Free time events" type="checkbox" checked={!hiddenTagIds.has(FREE_TIME_TAG_ID)} onChange={()=>onToggleTag(FREE_TIME_TAG_ID)}/><span className="tag-swatch" style={{background:'var(--bg)',border:'1px solid var(--muted)'}}/><span className="tag-name">Free time</span></div>{supportsScreenTime()&&<button type="button" className="icon-btn" aria-label="Screen Time for Free time tag" onClick={()=>openTagScreenTime(FREE_TIME_TAG_ID,'Free time')}><ScreenTimeIcon/></button>}<span className="tag-delete-placeholder" aria-hidden="true"/></li>
+          <li><div className="tag-item"><label className="sidebar-check-target"><input aria-label="Show Free time events" type="checkbox" checked={!hiddenTagIds.has(FREE_TIME_TAG_ID)} onChange={()=>onToggleTag(FREE_TIME_TAG_ID)}/></label><span className="tag-swatch" style={{background:'var(--bg)',border:'1px solid var(--muted)'}}/><span className="tag-name">Free time</span></div>{supportsScreenTime()&&<button type="button" className="icon-btn" aria-label="Screen Time for Free time tag" onClick={()=>openTagScreenTime(FREE_TIME_TAG_ID,'Free time')}><ScreenTimeIcon/></button>}<span className="tag-delete-placeholder" aria-hidden="true"/></li>
           {tags.map((tag) => {
             const visible = !hiddenTagIds.has(tag.id)
             return (
               <li key={tag.id}>
                 <div className="tag-item">
-                  <input aria-label={`Show ${tag.name} events`} type="checkbox" checked={visible} onChange={() => onToggleTag(tag.id)} />
+                  <label className="sidebar-check-target"><input aria-label={`Show ${tag.name} events`} type="checkbox" checked={visible} onChange={() => onToggleTag(tag.id)} /></label>
                   <button type="button" className="tag-edit" aria-label={`Edit ${tag.name} tag`} onClick={()=>{setEditing(tag.id);setName(tag.name);setColor(tag.color);setAdding(true)}}><span className="tag-swatch" style={{background:tag.color}}/><span className="tag-name">{tag.name}</span></button>
                 </div>
                 {supportsScreenTime()&&<button type="button" className="icon-btn" aria-label={'Screen Time for '+tag.name+' tag'} onClick={()=>openTagScreenTime(tag.id,tag.name)}><ScreenTimeIcon/></button>}
