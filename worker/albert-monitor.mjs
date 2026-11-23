@@ -14,7 +14,7 @@ async function unique(page,selector){
   if(found.length>1)throw Error('The monitor selector matches multiple frames.')
   await page.waitForTimeout(250)
  }while(Date.now()<until)
- throw Error('The monitored Albert element is unavailable or ambiguous.')
+ throw Error('The monitored Albert element is unavailable or ambiguous: '+selector)
 }
 export async function checkAlbertWatch(context,watch){
  const c=watch.config,page=await context.newPage()
