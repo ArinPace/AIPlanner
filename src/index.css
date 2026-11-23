@@ -439,8 +439,9 @@ p {
   border-radius: 8px;
 }
 
-.tag-list li:hover {
-  background: #f8f9fa;
+@media (hover: hover) and (pointer: fine) {
+  .tag-list li:hover { background: var(--hover, color-mix(in srgb, var(--fg) 7%, var(--bg))); }
+  .tag-list li:hover .tag-delete { opacity: 1; }
 }
 
 .tag-item {
@@ -487,8 +488,8 @@ p {
   opacity: 0;
 }
 
-.tag-list li:hover .tag-delete {
-  opacity: 1;
+@media (hover: none), (pointer: coarse) {
+  .tag-delete { opacity: 1; }
 }
 
 .tag-form {
