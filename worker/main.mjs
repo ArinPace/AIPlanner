@@ -149,7 +149,7 @@ for (;;) {
   try {
     const remote = await api('config')
     // This is before claiming any work, never during a job or private browser.
-    if (workerReady && await checkForUpdate({ busy: liveBrowserOpen() }).catch(error => { console.error('Worker update deferred: ' + error.message); return false })) {
+    if (workerReady && await checkForUpdate({ busy: liveBrowserOpen()||albertChecking }).catch(error => { console.error('Worker update deferred: ' + error.message); return false })) {
       await shutdownBrowser()
       process.exit(75)
     }
