@@ -12,3 +12,5 @@ test('queued work on a running VM never claims the computer is waking',()=>{
   assert.match(vmJobStatus(job,state({power:'offline'}),now),/Waking your private computer/)
   assert.match(vmJobStatus({...job,status:'running',started_at:'2026-10-18T00:09:40Z'},null,now),/Working.*20s/)
 })
+
+test('running VM with stale worker reports disconnection',()=>{assert.match(vmJobStatus(job,state({power:'online',hosts:[{online:false} as any]}),now),/worker disconnected/)} )

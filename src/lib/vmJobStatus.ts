@@ -10,6 +10,7 @@ export function vmJobStatus(job:VmJob,state:VmState|null,now:number):string {
   const active=state?.queue?.active || state?.runs.find(run=>run.status==='running')
   if(active && active.id!==job.id)return `Queued behind ${active.kind==='sync'?'a source review':'another agent task'}${elapsed?' · waiting '+elapsed:''}`
   if(state?.power==='preparing')return 'Preparing your private computer…'
+  if(state?.power==='online'&&state.hosts.length>0&&!state.hosts.some(host=>host.online))return `Agent worker disconnected${elapsed?' · queued '+elapsed:''}. Reconnecting is required.`
   if(state?.power==='online' || state?.hosts.some(host=>host.online))return `Waiting for your agent${elapsed?' · '+elapsed:''}…`
   return `Waking your private computer${elapsed?' · '+elapsed:''}…`
 }

@@ -73,7 +73,7 @@ export function AgentView({ active, sidebar, setSidebar, username }: { active: b
   const aiReady = Boolean(state?.settings.ai_provider === 'openai_api' || (host?.capabilities.signedIn && (claude ? host.capabilities.runtime === 'claude' : host.capabilities.runtime !== 'claude')))
   const provider = claude ? 'Claude' : state?.settings.ai_provider === 'openai_api' ? 'OpenAI API' : 'ChatGPT'
   const power = state?.power || (host?.online ? 'online' : 'offline')
-  const powerLabel = !state?'Checking connection…':{ online: 'Online', offline: 'Offline', starting: 'Starting', preparing: 'Preparing' }[power]
+  const powerLabel = !state?'Checking connection…':power==='online'&&!host?.online?'Worker disconnected':{ online: 'Online', offline: 'Offline', starting: 'Starting', preparing: 'Preparing' }[power]
   const title = (state?.chats||cachedChats).find(c => c.id === chat)?.title || (openMainOnLoad.current ? 'Main Chat' : 'New chat')
   const branchingAllowed=canBranchChat((state?.chats||cachedChats).find(c=>c.id===chat))
   const archived = (state?.chats||cachedChats).find(c=>c.id===chat)?.archived || false
