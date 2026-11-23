@@ -56,8 +56,11 @@ export async function runAlbertMonitor({api,dataDir}){
  try{
   const [{chromium},{browser,googleBrowser},{siteLaunches},{browserEndpoint}]=await Promise.all([import('playwright'),import('./browser.mjs'),import('./site-launches.mjs'),import('./browser-routing.mjs')])
   const saved=await siteLaunches(dataDir),endpoint=browserEndpoint(watch.url,saved.browserProfiles)
-  if(new URL(endpoint).port==='9223')await googleBrowser(dataDir);else await browser(dataDir)
-  connection=await chromium.connectOverCDP(endpoint)
+  // Reuse the running browser directly: initializing its shared context applies
+  // timezone overrides to every tab and can wait on unrelated live-agent pages.
+  const available=await fetch(endpoint+'/json/version',{signal:AbortSignal.timeout(1000)}).then(r=>r.ok).catch(()=>false)
+  if(!available){if(new URL(endpoint).port==='9223')await googleBrowser(dataDir);else await browser(dataDir)}
+  connection=await chromium.connectOverCDP(endpoint,{timeout:10000})
   result=await checkAlbertWatch(connection.contexts()[0],watch)
  }catch{result={status:'unknown',detail:'The existing Albert browser could not be opened. Reconnect Albert; no availability was inferred.'}}
  finally{await connection?.close()}
