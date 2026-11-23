@@ -102,13 +102,24 @@ def add_ridges(ridge_mask, layer):
 add_ridges((im-gaussian_filter(im,.9)>2.5) & (gaussian_filter(im,2)>28), 1)
 add_ridges((gaussian_filter(im,.8)-im>1.5) & (gaussian_filter(im,2)>32), 2)
 
-# FLW1: count, then [layer:u8, count:u16, (x*8:u16,y*8:u16,luma:u8)...].
-out = bytearray(b'FLW1') + struct.pack('<H', len(strands))
+# Loading screens use a small representative set, not every traced ridge.
+# Limit each strand to 32 vertices; rendering is independent of the data loader.
+compact = []
+for layer, limit in ((0,640),(1,100),(2,100)):
+    family = [(kind, points) for kind, points in strands if kind == layer]
+    for index in np.linspace(0,len(family)-1,min(limit,len(family)),dtype=int):
+        kind, points = family[index]
+        if len(points)>32:
+            points = points[np.linspace(0,len(points)-1,32,dtype=int)]
+        compact.append((kind,points))
+strands = compact
+# FLW2: count, then [layer:u8, count:u16, (x*8:u16,y*8:u16,luma:u8)...].
+out = bytearray(b'FLW2') + struct.pack('<H',len(strands))
 for layer, points in strands:
-    out += struct.pack('<BH', layer, len(points))
+    out += struct.pack('<BH',layer,len(points))
     for x,y in points:
-        luminance = round(im[min(1023,round(y)), min(1023,round(x))])
-        out += struct.pack('<HHB', round(x*8), round(y*8), luminance)
-destination = root / 'src/assets/flow-fibres.bin'
+        luminance = round(im[min(1023,round(y)),min(1023,round(x))])
+        out += struct.pack('<HHB',round(x*8),round(y*8),luminance)
+destination = root / 'src/assets/flow-wave.bin'
 destination.write_bytes(out)
 print(f'{len(strands)} strands, {sum(len(p) for _,p in strands)} vertices, {len(out)} bytes')
