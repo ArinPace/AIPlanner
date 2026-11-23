@@ -19,12 +19,12 @@ export function FlowFibres(){
    ctx.clearRect(0,0,canvas.width,canvas.height);ctx.save();ctx.scale(canvas.width/1000,canvas.height/1000)
    for(const strand of strands){
     const v=strand.lane,spread=(v-.5),phase=strand.phase
-    // The lower crescent rolls into a narrow waist and then fans into the upper plume.
+    // Wave silhouette: wispy lower-left tail, broad right sweep, breaking crest.
     const segments=[
-     [{x:640+spread*50,y:615+spread*40},{x:825+spread*110,y:490+spread*50},{x:590+spread*40,y:895+spread*90},{x:290+spread*90,y:745+spread*60}],
-     [{x:290+spread*90,y:745+spread*60},{x:30+spread*85,y:625+spread*130},{x:160+spread*80,y:330+spread*150},{x:440+spread*70,y:425+spread*115}],
-     [{x:440+spread*70,y:425+spread*115},{x:650+spread*80,y:500+spread*140},{x:585+spread*120,y:195+spread*145},{x:755+spread*65,y:270+spread*65}],
-     [{x:755+spread*65,y:270+spread*65},{x:865+spread*70,y:280+spread*90},{x:907+spread*15,y:235+spread*25},{x:920,y:155}]
+     [{x:170+spread*45,y:735+spread*100},{x:365+spread*50,y:780+spread*65},{x:650+spread*110,y:780+spread*110},{x:730+spread*115,y:610+spread*120}],
+     [{x:730+spread*115,y:610+spread*120},{x:850+spread*100,y:420+spread*85},{x:680+spread*110,y:170+spread*60},{x:510+spread*110,y:245+spread*70}],
+     [{x:510+spread*110,y:245+spread*70},{x:420+spread*90,y:265+spread*75},{x:335+spread*85,y:320+spread*60},{x:275+spread*60,y:360+spread*55}],
+     [{x:275+spread*60,y:360+spread*55},{x:180+spread*45,y:380+spread*50},{x:190+spread*25,y:470+spread*30},{x:220+spread*10,y:480+spread*15}]
     ] as Point[][]
     ctx.beginPath();let count=0
     for(let segment=0;segment<segments.length;segment++){
