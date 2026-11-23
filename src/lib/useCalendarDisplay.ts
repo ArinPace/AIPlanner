@@ -3,7 +3,7 @@ import {calendarDisplayRequest} from './api'
 import {defaultCalendarDisplay,type CalendarDisplay} from './calendarDisplay'
 export function useCalendarDisplay(username:string){
  const key='planner-calendar-display:'+username
- const [settings,setSettings]=useState<CalendarDisplay>(()=>{try{const saved=JSON.parse(localStorage.getItem(key)||'{}');return {week:saved.week===true,month:saved.month===true}}catch{return defaultCalendarDisplay}})
+ const [settings,setSettings]=useState<CalendarDisplay>(()=>{try{const saved=JSON.parse(localStorage.getItem(key)||'{}');return {week:saved.week===true,month:saved.month===true,dayTimeMarkers:saved.dayTimeMarkers===true}}catch{return defaultCalendarDisplay}})
  const [saving,setSaving]=useState(false),[error,setError]=useState('')
  const version=useRef(0),alive=useRef(true),inFlight=useRef(false)
  const cache=(value:CalendarDisplay)=>{try{localStorage.setItem(key,JSON.stringify(value))}catch{/* The cloud copy remains authoritative. */}}

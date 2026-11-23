@@ -3071,3 +3071,31 @@ html, body { touch-action: pan-x pan-y; }
 .chat-attempt-thinking > .chat-thinking-dot { flex:0 0 8px; }
 .chat-attempt-thinking > span:not(.chat-thinking-dot) { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .chat-attempt-thinking > button { flex-shrink:0; white-space:nowrap; }
+
+/* Optional clock-aligned day view: every card uses the same minutes-to-pixels scale. */
+.day-clock-layout { margin:12px 0 24px; }
+.day-clock { position:relative; margin-top:16px; }
+.day-clock-hour { position:absolute; left:0; right:0; height:0; }
+.day-clock-hour-label { position:absolute; width:44px; left:0; top:0; transform:translateY(-50%); font-size:12px; font-weight:500; color:var(--muted); white-space:nowrap; }
+.day-clock-slot { position:absolute; left:48px; right:0; top:0; width:calc(100% - 48px); border:0; border-top:1px solid var(--line); border-radius:0; background:transparent; padding:0; cursor:pointer; }
+.day-clock-events { position:absolute; left:48px; right:0; top:0; height:100%; pointer-events:none; }
+.day-clock-item { position:absolute; pointer-events:auto; min-width:0; }
+.day-clock-card-slot { position:absolute; inset:0; min-width:0; }
+.day-clock-item.is-folder.is-open > .day-clock-card-slot { right:50%; padding-right:3px; }
+.day-clock-folder-contents { position:absolute; left:50%; right:0; top:0; height:100%; border-left:1px solid var(--muted); pointer-events:none; }
+.day-clock-card { display:flex; align-items:flex-start; height:100%; box-sizing:border-box; border-radius:5px; overflow:hidden; min-width:0; border-left:3px solid var(--event-accent,var(--muted)); }
+.day-clock-card-main { display:flex; flex-direction:column; align-items:flex-start; gap:4px; min-width:0; flex:1; height:100%; overflow:hidden; text-align:left; border:0; background:transparent; color:inherit; padding:5px; font:inherit; cursor:pointer; }
+.day-clock-card-main strong { font-size:12px; line-height:1.2; font-weight:500; overflow-wrap:anywhere; }
+.day-clock-card-main small { font-size:10px; line-height:1.2; }
+.day-clock-card.is-short .day-clock-card-main { padding:0 4px; }
+.day-clock-card.is-short strong { font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+.day-clock-disclosure,.day-clock-edit { border:0; background:transparent; color:inherit; cursor:pointer; padding:4px 2px; flex:0 0 20px; }
+.day-clock-disclosure svg { width:16px; height:16px; }
+.day-clock-card .calendar-done-button { min-width:22px; width:22px; min-height:22px; height:22px; margin:3px; padding:0; flex:0 0 22px; }
+.day-clock-reminder { position:absolute; left:0; right:0; width:100%; height:0; padding:0; border:0; border-top:1px solid currentColor; border-radius:0; background:transparent; color:var(--text); pointer-events:auto; text-align:left; cursor:pointer; z-index:4; }
+.day-clock-reminder > span { display:block; width:fit-content; max-width:94%; margin-left:8px; padding:0 5px; transform:translateY(-50%); background:var(--bg); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; line-height:18px; }
+.day-clock-reminder.is-all-day { position:relative; margin:18px 0; }
+.day-clock-all-day { height:40px; margin:4px 0 4px 48px; }
+.day-clock-now { position:absolute; left:0; right:0; height:0; border-top:2px solid #ea4335; pointer-events:none; z-index:5; }
+.day-clock-now > span { position:absolute; left:0; top:-1px; transform:translateY(-50%); padding-right:5px; color:#ea4335; background:var(--bg); font-size:11px; }
+.day-clock-reminder:focus-visible > span { outline:2px solid var(--blue); outline-offset:2px; }

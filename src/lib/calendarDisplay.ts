@@ -1,6 +1,6 @@
 import type {Occurrence} from '../types.js'
-export type CalendarDisplay={week:boolean;month:boolean}
-export const defaultCalendarDisplay:CalendarDisplay={week:false,month:false}
+export type CalendarDisplay={week:boolean;month:boolean;dayTimeMarkers:boolean}
+export const defaultCalendarDisplay:CalendarDisplay={week:false,month:false,dayTimeMarkers:false}
 export function durationHeight(item:Occurrence,view:'week'|'month',zoom:number,dayStart:number,dayEnd:number):number|undefined{
  if(item.event.allDay||item.event.reminder)return undefined
  const minutes=Math.max(0,Math.min(item.end.getTime(),dayEnd)-Math.max(item.start.getTime(),dayStart))/60000

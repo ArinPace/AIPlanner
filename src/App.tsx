@@ -615,6 +615,7 @@ function CalendarApp({ username, onLogout }: { username: string; onLogout: () =>
               onMultiDayDate={setCursor}
               onWeekNavigate={direction => setCursor(current => addDays(current, direction * 7))}
               weekLayout="list"
+              showTimeMarkers={calendarDisplay.settings.dayTimeMarkers}
               scaleToDuration={calendarDisplay.settings.week}
               onEventDone={markCalendarDone}
               active={tab==='calendar'}

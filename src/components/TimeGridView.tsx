@@ -1,3 +1,4 @@
+import {DayTimeline,type TimelineCardOptions} from './DayTimeline'
 import {useMultiDayCount} from '../lib/useMultiDayCount'
 import {useFolderItemCounts} from '../lib/folderItemCounts'
 import {EditIcon} from './Icons'
@@ -43,6 +44,7 @@ type TimeGridViewProps = {
   onMultiDayDate?: (date: Date) => void
   onWeekNavigate?: (direction: -1 | 1) => void
   weekLayout?: 'list' | 'grid'
+  showTimeMarkers?:boolean
   scaleToDuration?:boolean
   active?:boolean
   cursor: Date
@@ -69,7 +71,7 @@ function clipToDay(item: Occurrence, day: Date): { start: Date; end: Date } | nu
   }
 }
 
-export function TimeGridView({ intensityCalibration,visibleEventIds, onFreeTimeClick, showFreeTime=true, onVisibleDateChange, agendaRange, onAgendaExtend, onMultiDayDate, onWeekNavigate, weekLayout = 'list', scaleToDuration=false, active=true,cursor, view, zoom, occurrences, busyOccurrences, tags, onSlotClick, onEventClick, onEventDone }: TimeGridViewProps) {
+export function TimeGridView({ intensityCalibration,visibleEventIds, onFreeTimeClick, showFreeTime=true, onVisibleDateChange, agendaRange, onAgendaExtend, onMultiDayDate, onWeekNavigate, weekLayout = 'list', showTimeMarkers=false, scaleToDuration=false, active=true,cursor, view, zoom, occurrences, busyOccurrences, tags, onSlotClick, onEventClick, onEventDone }: TimeGridViewProps) {
   const multiDayCount=useMultiDayCount()
   const showItemCounts=useFolderItemCounts()
   const rowControls=useCalendarRowControls()
@@ -125,7 +127,7 @@ export function TimeGridView({ intensityCalibration,visibleEventIds, onFreeTimeC
     if(!active)return
     const node = mobileWeek?weekScrollRef.current:scrollRef.current
     if (!node) return
-    const key=view+'/'+cursor.getTime()+'/'+dayKey+'/'+todayKey+'/'+(mobileWeek?'mobile':'grid')+'/'+(mobileWeek&&scaleToDuration),previous=previousLayout.current
+    const key=view+'/'+cursor.getTime()+'/'+dayKey+'/'+todayKey+'/'+(mobileWeek?'mobile':'grid')+'/'+(mobileWeek&&scaleToDuration)+'/'+showTimeMarkers,previous=previousLayout.current
     const keepGridPosition = regularWeek && previous?.gridWeek
     if(previous?.key!==key && !keepGridPosition){
       if(mobileWeek){
@@ -142,7 +144,7 @@ export function TimeGridView({ intensityCalibration,visibleEventIds, onFreeTimeC
       node.scrollTop=midpoint/previous.hourHeight*hourHeight-node.clientHeight/2
     }
     previousLayout.current={key,hourHeight,gridWeek:regularWeek}
-  }, [active,view,cursor,dayKey,todayKey,mobileWeek,hourHeight,containsToday,scaleToDuration,regularWeek])
+  }, [active,view,cursor,dayKey,todayKey,mobileWeek,hourHeight,containsToday,scaleToDuration,regularWeek,showTimeMarkers])
 
   const extensionRef=useRef(onAgendaExtend);extensionRef.current=onAgendaExtend
   const pendingExtension=useRef<{height:number;top:number;prepend:boolean;anchor:number}|null>(null)
@@ -214,7 +216,8 @@ export function TimeGridView({ intensityCalibration,visibleEventIds, onFreeTimeC
     const open=folderOpen(item),children=(grouped.children.get(folderOccurrenceKey(item))||[]).filter(child=>clipToDay(child,day))
     return <><div className="folder-event-header"><button type="button" className="agenda-disclosure grid-folder-disclosure" aria-label={(open?'Collapse folder ':'Expand folder ')+item.event.title} aria-expanded={open} onClick={()=>toggleFolder(item)}><FolderChevron open={open}/></button><button type="button" className={"folder-grid-toggle"+completionClass(item)} onClick={()=>toggleFolder(item)} aria-expanded={open} style={appearance(item)}> {item.event.title}<small>{formatTimeCompact(item.start)}–{formatTimeCompact(item.end)}{showItemCounts&&<> · {children.length} {children.length===1?'item':'items'}</>}</small></button><button type="button" className="folder-pencil" style={appearance(item)} aria-label={'Edit folder '+item.event.title} onClick={()=>onEventClick(item.event,item.start)}><EditIcon size={18}/></button></div><FolderReveal open={open}>{()=><div className="folder-day-children">{folderChildren(item,day).map(child=>child.event.eventKind==='folder'?<div className="nested-day-folder" key={child.event.id}>{dayFolderBody(child,day)}</div>:<div key={child.event.id} className="calendar-task-with-actions"><button type="button" className={"event-chip folder-child-event"+completionClass(child)} onClick={()=>selectEvent(child)} style={appearance(child)}><span>{formatTimeCompact(child.start)}–{formatTimeCompact(child.end)}</span><strong className="event-title">{titleContent(child)}</strong></button>{!child.freeTime&&doneButton(child)}</div>)}</div>}</FolderReveal></>
   }
-  function agendaRows(items:ScheduleRow[],day:Date,showNow:boolean,depth=0):ReactNode{
+  function agendaRows(allItems:ScheduleRow[],day:Date,showNow:boolean,depth=0):ReactNode{
+    const items=scaleToDuration?allItems:allItems.filter(item=>!hiddenRow(item))
     const currentFolder=items.find(item=>item.event.eventKind==='folder'&&item.start<=now&&now<item.end)
     const next=items.findIndex(item=>!item.event.allDay&&item.end>now)
     const marker=<div ref={mobileNowRef} className="mobile-week-now" role="img" aria-label={'Current time '+formatTimeCompact(now)}><span>Now · {formatTimeCompact(now)}</span></div>
@@ -237,6 +240,16 @@ export function TimeGridView({ intensityCalibration,visibleEventIds, onFreeTimeC
     })}{showNow&&!currentFolder&&next===-1&&marker}</>
   }
 
+  function clockCard(item:ScheduleRow,{folder,open,toggle,height}:TimelineCardOptions){
+    return <div className={'day-clock-card'+completionClass(item)+(height<30?' is-short':'')} style={appearance(item)}>
+      {folder&&<button type="button" className="day-clock-disclosure" aria-label={(open?'Collapse folder ':'Expand folder ')+item.event.title} aria-expanded={open} onClick={toggle}><FolderChevron open={open}/></button>}
+      <button type="button" className="day-clock-card-main" title={item.event.title+' · '+formatTimeCompact(item.start)+'–'+formatTimeCompact(item.end)} onClick={()=>folder?toggle?.():selectEvent(item)}>
+        <strong>{item.event.urgency!=null&&<span className="event-urgency-badge" style={urgencyColor(item.event.urgency)}>{item.event.urgency}</span>}{titleContent(item)}</strong>{height>=36&&<small>{formatTimeCompact(item.start)}–{formatTimeCompact(item.end)}</small>}
+      </button>
+      {folder&&height>=24?<button type="button" className="day-clock-edit" aria-label={'Edit folder '+item.event.title} onClick={()=>onEventClick(item.event,item.start)}><EditIcon size={16}/></button>:!item.freeTime&&!item.event.reminder&&height>=28?doneButton(item):null}
+    </div>
+  }
+
   return (
     <div ref={weekScrollRef} data-layout={mobileWeek?'agenda':'grid'} className={`time-view-scroll ${mobileWeek ? 'has-mobile-week' : regularWeek ? 'week-time-grid' : ''}`}>
       {mobileWeek && <div className={'mobile-week'+(scaleToDuration?' is-duration-scaled':'')}>
@@ -249,7 +262,7 @@ export function TimeGridView({ intensityCalibration,visibleEventIds, onFreeTimeC
               <button type="button" className="text-btn" aria-label={'Add event on ' + day.toDateString()} onClick={() => onSlotClick(startOfDay(day), true)}>+</button>
             </div>
             {items.length === 0 && <p className="mobile-week-empty">No events</p>}
-            {agendaRows(items,day,isToday(day))}
+            {showTimeMarkers?<DayTimeline day={day} now={now} zoom={zoom} rows={items} hidden={hiddenRow} childrenFor={item=>folderChildren(item,day)} renderCard={clockCard} reminderStyle={appearance} onSelect={selectEvent} onSlot={minute=>onSlotClick(new Date(day.getFullYear(),day.getMonth(),day.getDate(),Math.floor(minute/60),minute%60))} nowRef={mobileNowRef}/>:agendaRows(items,day,isToday(day))}
           </section>
         })}
       </div>}
