@@ -141,7 +141,8 @@ let albertChecking=false
 const monitorTimer=setInterval(async()=>{
  if(albertChecking)return
  albertChecking=true
- try{const config=await api('config');if(config.sources.includes('albert'))await runAlbertMonitor({api,dataDir})}catch{}finally{albertChecking=false}
+ // The claim RPC already checks the enabled Albert source and watch.
+ try{await runAlbertMonitor({api,dataDir})}catch{}finally{albertChecking=false}
 },5000)
 monitorTimer.unref()
 for (;;) {
