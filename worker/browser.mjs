@@ -48,7 +48,6 @@ export async function browser(dataDir) {
   return context
 }
 export const liveBrowserOpen = () => Boolean(live)
-export const liveBrowserNeedsSignIn = () => Boolean(live && live.mode!=='open')
 export async function shutdownBrowser() { await closeLiveBrowser(); await closeGoogleBrowser(); if (context) await context.close() }
 export async function closeLiveBrowser() {
   if (!live) return
