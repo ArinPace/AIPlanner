@@ -162,12 +162,16 @@ export class InteractiveBrowser {
   const bytes=await page.screenshot({type:'png',fullPage:args.fullPage||false,mask,scale:'css',timeout:25000})
   return {content:[{type:'text',text:JSON.stringify({tabId:args.tabId,url:page.url(),fullPage:args.fullPage||false,captureMode:args.fullPage?'document':'viewport',coordinateSystem:'viewport CSS pixels; full-page image includes content outside viewport'})},{type:'image',mimeType:'image/png',data:bytes.toString('base64')}]}
  })}
- action(args){
+ assertTaskWindow(){
   if(this.browserTask){
    const start=Date.parse(this.browserTask.startsAt),end=Date.parse(this.browserTask.endsAt)
    if(!Number.isFinite(start)||!Number.isFinite(end)||Date.now()<start||Date.now()>=end)throw Error('This scheduled browser action is outside its authorized time window.')
   }
+ }
+ action(args){
+  this.assertTaskWindow()
   return this.use(args.tabId,async(page,entry,context)=>{
+  this.assertTaskWindow()
   const resolveRef=ref=>{const saved=entry.refs.get(ref);if(!saved)return null;const frame=page.frames()[saved.frameIndex];if(!frame||frame.url()!==saved.frameUrl)return null;return frame.locator(saved.selector)}
   const locator=args.ref?resolveRef(args.ref):null
   if(args.ref&&!locator)throw Error('Stale element reference. Take a fresh browser_snapshot.')
