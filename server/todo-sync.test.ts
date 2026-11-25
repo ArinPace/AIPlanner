@@ -17,6 +17,7 @@ test('saved checklist completion persists task state and cleans calendar with ow
  let calendarWrites=0,conflictOnce=true
  globalThis.fetch=async(input,init)=>{
   const req=new Request(input,init),url=new URL(req.url),table=url.pathname.split('/').at(-1)
+  if(table==='planner_planning_todo'){assert.deepEqual(await req.json(),{p_username:'arin'});return Response.json(files)}
   if(req.method==='POST'){assert.equal(table,'planner_planning');assert.equal(((await req.json()) as {username:string}).username,'arin');return Response.json(null)}
   assert.equal(url.searchParams.get('username'),'eq.arin')
   if(req.method==='GET')return Response.json(table==='planner_files'?{state:files}:table==='planner_planning'?planning:calendar)

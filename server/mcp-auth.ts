@@ -6,7 +6,7 @@ export const MCP_ORIGIN = process.env.APP_ORIGIN || 'https://aiplanner-ten.verce
 export const MCP_RESOURCE = `${MCP_ORIGIN}/api/mcp`
 export const MCP_SCOPES = ['planner:read', 'planner:write', 'browser:read']
 export function storage<T>({ data, error }: { data: T; error: { code?: string } | null }): NonNullable<T> {
-  if (error) { console.error('MCP storage failed', { code: error.code }); throw new ApiError(503, 'Could not access planner connection storage.') }
+  if (error) { console.error('MCP storage failed', { code: error.code }); throw new ApiError(503, error.code==='57014'?'Planner database request timed out. Read back current state before retrying changes.':'Could not access planner connection storage.') }
   return data as NonNullable<T>
 }
 export function validRedirect(value: unknown): value is string {

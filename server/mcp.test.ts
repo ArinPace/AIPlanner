@@ -112,3 +112,32 @@ test('paginated note reads do not return an unpaginated agent snapshot',async()=
   assert(!result.isError);const serialized=JSON.stringify(result);assert(serialized.length<5000);assert(!serialized.includes('agentSnapshot'));assert(!serialized.includes('unpaginated private snapshot'));assert.equal(reads,1)
  }finally{await client.close();await server.close();globalThis.fetch=savedFetch;for(const key of keys){if(env[key]===undefined)delete process.env[key];else process.env[key]=env[key]}}
 })
+
+test('agent discovery reads file metadata without fetching the Notes corpus',async()=>{
+ const savedFetch=globalThis.fetch,keys=['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','SUPABASE_SECRET_KEY'] as const,env=Object.fromEntries(keys.map(k=>[k,process.env[k]]))
+ process.env.SUPABASE_URL='https://metadata-read.test';process.env.SUPABASE_SERVICE_ROLE_KEY='fixture';delete process.env.SUPABASE_SECRET_KEY
+ const server=createPlannerMcp('arin',['planner:read']),client=new Client({name:'metadata-test',version:'1'})
+ const [a,b]=InMemoryTransport.createLinkedPair();await server.connect(b);await client.connect(a)
+ let metadataReads=0
+ globalThis.fetch=async(input,init)=>{
+  const request=new Request(input,init),url=new URL(request.url),table=url.pathname.split('/').at(-1)
+  assert.notEqual(table,'planner_files','Discovery must not fetch full note bodies')
+  if(table==='planner_files_metadata'){
+   assert.deepEqual(await request.json(),{p_username:'arin'});metadataReads++
+   return Response.json({revision:42,folders:[],files:[{id:'note',folderId:null,name:'Note',format:'note',tags:[],pinned:false,updatedAt:'2026-11-25T12:00:00Z'}],documents:[]})
+  }
+  if(request.method==='POST')return Response.json(null)
+  assert.equal(url.searchParams.get('username'),'eq.arin')
+  if(table==='planner_calendars')return Response.json({revision:1,state:{events:[],tags:[]}})
+  if(table==='planner_agent_runs')return Response.json([])
+  if(table==='planner_agent_settings')return Response.json({sources:[],context_focus:''})
+  if(table==='planner_vm_settings')return Response.json({sources:['whoop'],schedule_enabled:true,schedule:{times:['07:00']},updated_at:'2026-11-25T12:00:00Z'})
+  throw Error('Unexpected table '+table)
+ }
+ try{
+  const result=await client.callTool({name:'planner_read',arguments:{}})
+  assert(!result.isError,JSON.stringify(result));assert.equal(metadataReads,1)
+  const value=JSON.parse((result.content as {text:string}[])[0].text)
+  assert.equal(value.files.revision,42);assert.equal(value.files.files[0].name,'Note');assert.deepEqual(value.sources,['whoop'])
+ }finally{await client.close();await server.close();globalThis.fetch=savedFetch;for(const key of keys){if(env[key]===undefined)delete process.env[key];else process.env[key]=env[key]}}
+})

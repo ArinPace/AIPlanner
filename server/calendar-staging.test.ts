@@ -21,6 +21,11 @@ test('staging is private to the owner, edits are isolated, conflicts require res
   if(table==='planner_google_accounts'){const account={id:accountId,identity:'owner@example.com',credentials:sealVmCredential({access_token:'private',scope:GOOGLE_CALENDAR_SCOPE+(canEdit?' '+GOOGLE_CALENDAR_WRITE_SCOPE:''),expires_at:Date.now()+3600000})};return Response.json(url.searchParams.has('id')?account:[account])}
   if(table==='planner_google_fixed_events')return Response.json([{local_id:'class',remote_id:'remote',managed:false}])
   if(table==='planner_calendars'){assert.equal(method,'GET');return Response.json(calendar)}
+  if(table==='planner_prepare_calendar_stage'){
+   const args=await request.json() as any
+   assert.equal(args.p_username,'owner');stage=args.p_stage
+   return Response.json({id:stage!.id})
+  }
   if(table==='planner_calendar_staging'){
    if(method==='GET')return Response.json(url.searchParams.get('select')?.includes('feedback:')?{status:stage?.status,feedback:stage?.payload.widgetFeedback}:stage)
    const update=await request.json() as any

@@ -11,6 +11,8 @@ import {DEFAULT_PLANNING,type PlanningProfile} from '../src/lib/planning.js'
 import {PlannerDate as Date} from '../src/lib/timezone.js'
 import {toDateInput} from '../src/lib/dates.js'
 import {buildDayPlan} from './day-planner.js'
+import type {FilesState} from '../src/lib/files.js'
+async function todoWorkspace(username:string){return storage(await db().rpc('planner_planning_todo',{p_username:username})) as FilesState|null}
 const day=z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v=>Number.isFinite(new Date(v+'T00:00:00').getTime())&&toDateInput(new Date(v+'T00:00:00'))===v,'Use a real calendar date.')
 const time=z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)
 const learnedTime=z.union([time,z.literal('')])
@@ -20,8 +22,8 @@ export const taskSchema=z.object({id:z.string().uuid().optional(),title:z.string
 export async function readPlanning(username:string){
  storage(await db().from('planner_planning').upsert({username},{onConflict:'username',ignoreDuplicates:true}))
  const row=storage(await db().from('planner_planning').select('state,revision,started_at').eq('username',username).single())
- const files=storage(await db().from('planner_files').select('state').eq('username',username).maybeSingle())
- return {profile:{...structuredClone(DEFAULT_PLANNING),...row.state} as PlanningProfile,revision:Number(row.revision),startedAt:row.started_at as string|null,todoChecklist:files?todoChecklist(files.state):[]}
+ const files=await todoWorkspace(username)
+ return {profile:{...structuredClone(DEFAULT_PLANNING),...row.state} as PlanningProfile,revision:Number(row.revision),startedAt:row.started_at as string|null,todoChecklist:files?todoChecklist(files):[]}
 }
 async function save(username:string,revision:number,profile:PlanningProfile){
  const rows=storage(await db().from('planner_planning').update({state:profile,revision:revision+1,updated_at:new Date().toISOString()}).eq('username',username).eq('revision',revision).select('revision'))
@@ -32,9 +34,9 @@ async function save(username:string,revision:number,profile:PlanningProfile){
 export async function syncTodoCompletion(username:string){
  for(let attempt=0;attempt<3;attempt++){
   const row=await readPlanning(username)
-  const files=storage(await db().from('planner_files').select('state').eq('username',username).maybeSingle())
+  const files=await todoWorkspace(username)
   if(!files)return
-  const ids=completedTodoTasks(files.state,row.profile.tasks)
+  const ids=completedTodoTasks(files,row.profile.tasks)
   if(!ids.size)return
   if(row.profile.tasks.some(task=>ids.has(task.id)&&task.status!=='done')){
    for(const task of row.profile.tasks)if(ids.has(task.id))task.status='done'

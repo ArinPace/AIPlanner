@@ -17,6 +17,11 @@ export async function cloudFilesManifest(username:string):Promise<FilesManifest>
  if(!data)throw new ApiError(404,'Files not found.')
  return {...data,format:'files-manifest',storageLimitBytes:filesWorkspaceLimit(username)}
 }
+export async function readFilesMetadata(username:string){
+ const metadata=storage(await db().rpc('planner_files_metadata',{p_username:username})) as {revision:number;folders:FilesState['folders'];files:Pick<FilesState['files'][number],'id'|'folderId'|'name'|'format'|'pinned'|'tags'|'updatedAt'>[];documents:FilesState['documents']}|null
+ if(!metadata)throw new ApiError(404,'Files not found.')
+ return metadata
+}
 export async function readFilesTransferItem(username:string,url:URL){
  const section=url.searchParams.get('section') as FilesSection,index=Number(url.searchParams.get('index')),revision=Number(url.searchParams.get('revision')),id=url.searchParams.get('id')
  if(!['files','folders','documents'].includes(section)||!Number.isSafeInteger(index)||index<0||!Number.isSafeInteger(revision)||revision<0||!id)throw new ApiError(400,'Choose a valid file and revision.')

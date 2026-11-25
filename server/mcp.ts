@@ -10,7 +10,7 @@ import {plannerToolError} from './tool-errors.js'
 import {registerWhoopReviewTools} from './whoop-review.js'
 import {registerClientControlTools} from './client-control-tools.js'
 import {registerAppSettingsTools} from './app-settings-tools.js'
-import {readFilesItemById,commitFileItem,commitWorkspaceDelta,workspaceDelta} from './files-transfer.js'
+import {readFilesMetadata,readFilesItemById,commitFileItem,commitWorkspaceDelta,workspaceDelta} from './files-transfer.js'
 import {reportSourceHealth,sourceHealthStatus} from './source-health.js'
 import {readGoogleMail} from './google-mail.js'
 import {readAgentRunHistory} from './agent-run-history.js'
@@ -70,8 +70,8 @@ export function createPlannerMcp(username: string, scopes: string[]) {
     })
   }
   add('planner_read','Read calendar, folder/file metadata, enabled sources and recent run outcomes. Read individual text files with planner_read_file.',{},'planner:read',true,async()=>{
-    const [calendar,files,s,runs,vm] = await Promise.all([db().from('planner_calendars').select('state,revision').eq('username',username).single(),filesRow(username),settings(username),db().from('planner_agent_runs').select('id,status,summary,error,created_at,applied_at').eq('username',username).order('created_at',{ascending:false}).limit(10),automationRow(username)])
-    return {calendar:storage(calendar),files:{revision:files.revision,folders:files.state.folders,files:files.state.files.map((f:any)=>({id:f.id,folderId:f.folderId,name:f.name,format:f.format||'text',pinned:f.pinned||false,tags:f.tags||[],updatedAt:f.updatedAt})),documents:files.state.documents || []},sources:vm?.sources ?? s.sources,contextFocus:s.context_focus,schedule:vm ? {enabled:vm.schedule_enabled,...vm.schedule,updatedAt:vm.updated_at} : {browserUseEnabled:s.schedule_enabled,times:'07:00 and 17:00 America/New_York'},runs:storage(runs)}
+    const [calendar,files,s,runs,vm] = await Promise.all([db().from('planner_calendars').select('state,revision').eq('username',username).single(),readFilesMetadata(username),settings(username),db().from('planner_agent_runs').select('id,status,summary,error,created_at,applied_at').eq('username',username).order('created_at',{ascending:false}).limit(10),automationRow(username)])
+    return {calendar:storage(calendar),files,sources:vm?.sources ?? s.sources,contextFocus:s.context_focus,schedule:vm ? {enabled:vm.schedule_enabled,...vm.schedule,updatedAt:vm.updated_at} : {browserUseEnabled:s.schedule_enabled,times:'07:00 and 17:00 America/New_York'},runs:storage(runs)}
   })
   add('planner_tutor_sync','Reconcile Tutor chats with active subject folders. Creates chats for new folder IDs and archives finished/moved subjects while retaining their history. Never silently restores deleted or manually archived chats. A missing Subjects root is reported, not treated as a completed term.',{},'planner:write',false,async()=> (await import('./vm-tutor.js')).syncTutorChats(username))
   add('planner_subject_rollover_read','Read the actual next one-time subject turnover, its official date evidence and version. This is independent of regular daily reviews.',{},'planner:read',true,async()=> (await import('./subject-rollover.js')).readSubjectRollover(username))
