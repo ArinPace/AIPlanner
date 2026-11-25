@@ -1,3 +1,4 @@
+import {gmailAccountSchema,readGmailAccounts,reportGmailAccount} from './chat-app-accounts.js'
 import {readPlanning} from './planning.js'
 import {calendarIntensity} from '../src/lib/dayIntensity.js'
 import {expandEvents} from '../src/lib/recurrence.js'
@@ -69,6 +70,8 @@ export function createPlannerMcp(username: string, scopes: string[]) {
       catch (error) { console.error('Planner MCP tool failed',{tool:name,type:error instanceof Error?error.name:'unknown'}); return {isError:true,content:[{type:'text',text:plannerToolError(error)}]} }
     })
   }
+  add('planner_gmail_accounts_read','List mailbox identities and capabilities last verified through ChatGPT Gmail MCP. These are agent-reported observations, not OAuth grants or proof that all mailboxes remain accessible. Verify mailbox identity before mail actions.',{},'planner:read',true,()=>readGmailAccounts(username))
+  add('planner_gmail_account_report','Record a mailbox only after inspecting connected Gmail MCP profile and tools. Set readVerified only after a successful API read; list only write tool names actually available. Never test sending or modify mail merely to verify access. This records an observation, not an OAuth connection.',gmailAccountSchema.shape,'planner:write',false,args=>reportGmailAccount(username,args))
   add('planner_read','Read calendar, folder/file metadata, enabled sources and recent run outcomes. Read individual text files with planner_read_file.',{},'planner:read',true,async()=>{
     const [calendar,files,s,runs,vm] = await Promise.all([db().from('planner_calendars').select('state,revision').eq('username',username).single(),readFilesMetadata(username),settings(username),db().from('planner_agent_runs').select('id,status,summary,error,created_at,applied_at').eq('username',username).order('created_at',{ascending:false}).limit(10),automationRow(username)])
     return {calendar:storage(calendar),files,sources:vm?.sources ?? s.sources,contextFocus:s.context_focus,schedule:vm ? {enabled:vm.schedule_enabled,...vm.schedule,updatedAt:vm.updated_at} : {browserUseEnabled:s.schedule_enabled,times:'07:00 and 17:00 America/New_York'},runs:storage(runs)}

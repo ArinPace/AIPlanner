@@ -1,3 +1,4 @@
+import {readGmailAccounts} from './chat-app-accounts.js'
 import {planChatMirror,type ChatMirror} from '../src/lib/chatSync.js'
 import {z} from 'zod'
 import {createHash} from 'node:crypto'
@@ -26,14 +27,15 @@ export async function handleSubscriptionChat(request:Request,username:string){
   let query=db().from('planner_subscription_messages').select('id,role,content,created_at').eq('username',username).eq('chat_id',id)
   if(before){z.string().uuid().parse(before);const cursor=storage(await db().from('planner_subscription_messages').select('id,created_at').eq('username',username).eq('chat_id',id).eq('id',before).maybeSingle());if(!cursor)throw new ApiError(404,'Message cursor not found.');query=query.or('created_at.lt.'+cursor.created_at+',and(created_at.eq.'+cursor.created_at+',id.lt.'+cursor.id+')')}
   const pageSize=before?20:8
-  const [chats,messages,prefs,google,attempts]=await Promise.all([
+  const [chats,messages,prefs,google,attempts,gmailAccounts]=await Promise.all([
    db().from('planner_subscription_chats').select(fields).eq('username',username).or('deleted_at.is.null,deleted_at.gt.'+new Date(Date.now()-30*86400000).toISOString()).order('is_main',{ascending:false}).order('pinned',{ascending:false}).order('updated_at',{ascending:false}).limit(200),
    query.order('created_at',{ascending:false}).order('id',{ascending:false}).limit(pageSize+1),
    fast?Promise.resolve({data:{sources:[]},error:null}):db().from('planner_vm_settings').select('sources').eq('username',username).maybeSingle(),fast?Promise.resolve(undefined):googleCalendarStatus(username),
-   db().from('planner_subscription_attempts').select(attemptFields).eq('username',username).eq('chat_id',id).neq('status','completed').order('created_at',{ascending:false}).limit(100)
+   db().from('planner_subscription_attempts').select(attemptFields).eq('username',username).eq('chat_id',id).neq('status','completed').order('created_at',{ascending:false}).limit(100),
+   readGmailAccounts(username)
   ])
   const rows=storage(messages)
-  return json({chat,attempts:storage(attempts),chats:storage(chats).filter(row=>row.is_main),messages:rows.slice(0,pageSize).reverse(),hasOlder:rows.length>pageSize,sources:storage(prefs)?.sources||[],google,connection:{provider:'chatgpt-subscription',connected:false,state:'setup_required',message:'ChatGPT subscription sign-in is not configured yet.'}})
+  return json({chat,attempts:storage(attempts),chats:storage(chats).filter(row=>row.is_main),messages:rows.slice(0,pageSize).reverse(),hasOlder:rows.length>pageSize,sources:storage(prefs)?.sources||[],google,gmailAccounts,connection:{provider:'chatgpt-subscription',connected:false,state:'setup_required',message:'ChatGPT subscription sign-in is not configured yet.'}})
  }
  if(request.method!=='POST')throw new ApiError(405,'Use GET or POST.')
  const input=await body(request)
