@@ -653,7 +653,12 @@ struct PlannerWebView: UIViewRepresentable {
           if(getComputedStyle(node).display==='flex'&&getComputedStyle(node).flexDirection==='row')node.setAttribute(attr+'actions','');
         }
         targetDomain=domain(root)||targetDomain;
+      let blockedComposer=null,composerWasInert=false;
+      const blockComposer=()=>{const box=window.__plannerComposer?.()||document.querySelector('#prompt-textarea,[data-composer-markdown]');if(!box)return;if(blockedComposer!==box){if(blockedComposer)blockedComposer.inert=composerWasInert;blockedComposer=box;composerWasInert=box.inert}if(box.contains(document.activeElement))document.activeElement.blur();box.inert=true};
+      const restoreComposer=()=>{if(blockedComposer)blockedComposer.inert=composerWasInert;blockedComposer=null};
         return {found:true,domain:targetDomain};
+        const field=[...root.querySelectorAll('input:not([type=hidden]):not([type=checkbox]):not([type=radio]),textarea')].find(n=>!n.disabled&&n.getClientRects().length);
+        if(field&&!root.contains(document.activeElement))field.focus({preventScroll:true});
       };
       const refresh=(rescan=false)=>{
         if([...document.querySelectorAll('video')].some(video=>video.srcObject?.getVideoTracks?.().some(track=>track.readyState==='live'))){clear();html.removeAttribute('data-planner-site-signin');html.removeAttribute('data-planner-secure-waiting');current=null;return {found:true,domain:targetDomain}}
@@ -664,6 +669,7 @@ struct PlannerWebView: UIViewRepresentable {
         let root=[...document.querySelectorAll('[role=dialog],[role=alertdialog]')].filter(n=>currentNode(n)&&isAuthDialog(n)).at(-1);
         if(!root){
           const form=[...document.querySelectorAll('form')].filter(n=>currentNode(n)&&isAuthForm(n)).at(-1);
+        blockComposer();
           if(form){
             root=form;
             for(let parent=form.parentElement,depth=0;parent&&parent!==document.body&&depth<4;parent=parent.parentElement,depth++){
@@ -699,7 +705,7 @@ struct PlannerWebView: UIViewRepresentable {
         refresh(outside);
       });
       observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden','aria-hidden','data-state','data-talvt-turn-state']});
-      window.__plannerSiteSignIn={refresh,restore:()=>{observer.disconnect();clear();style.remove();html.removeAttribute('data-planner-site-signin');html.removeAttribute('data-planner-secure-waiting');delete window.__plannerSiteSignIn}};
+      window.__plannerSiteSignIn={refresh,restore:()=>{observer.disconnect();clear();restoreComposer();style.remove();html.removeAttribute('data-planner-site-signin');html.removeAttribute('data-planner-secure-waiting');delete window.__plannerSiteSignIn}};
       return refresh();
     })()
     """#
@@ -1365,7 +1371,7 @@ return {selectedModel:window.__plannerSelectedModel||'',sliders:ranges,summary:(
         const box=window.__plannerComposer();
         const value=window.__plannerComposerText(box);
         if(!box||value!==expected)throw Error('The ChatGPT draft changed. Read it again before clearing.');
-        box.focus();window.__plannerRelayEditing=true;try{if(box.tagName==='TEXTAREA'){box.select();document.execCommand('delete');if(box.value)Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(box,'');}else{document.getSelection().selectAllChildren(box);document.execCommand('delete');}
+        box.focus();window.__plannerRelayEditing=true;try{if(box.tagName==='TEXTAREA'){box.select();document.execCommand('delete');if(box.value)Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(box,'');}else{document.getSelection().selectAllChildren(box);document.execCommand('delete');const remaining=window.__plannerComposerText(box);if(remaining.trim()){if(remaining!==expected)throw Error('The ChatGPT draft changed. Review it again.');box.replaceChildren();}}
         box.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'deleteContentBackward'}));}finally{window.__plannerRelayEditing=false}window.__plannerHumanDraft=false;await new Promise(r=>setTimeout(r,300));if(window.__plannerComposerText(box).trim())throw Error('Clearing the draft was not confirmed. Open the session to inspect it.');return true;
         """, arguments: ["expected": expected], in: nil, contentWorld: .page)
     }

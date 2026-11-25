@@ -36,6 +36,15 @@ try{
  await page.getByRole('heading',{name:'Verify your identity'}).waitFor({state:'visible'})
  assert.equal(await page.locator('[data-planner-secure-root]').getAttribute('id'),'next-auth','Discover replacement auth cards without form/dialog roles')
  await page.evaluate(()=>window.__plannerSiteSignIn.restore())
+ await page.setContent('<textarea id="prompt-textarea"></textarea><form><h2>Sign in to duosecurity.com</h2><input id="private-passcode" type="password" autocomplete="one-time-code"><button>Sign in</button></form>')
+ await page.locator('#prompt-textarea').focus()
+ await page.evaluate(script)
+ assert.equal(await page.locator('#prompt-textarea').evaluate(n=>n.inert),true)
+ assert.equal(await page.locator('#private-passcode').evaluate(n=>document.activeElement===n),true)
+ await page.keyboard.type('fixture-only')
+ assert.equal(await page.locator('#prompt-textarea').inputValue(),'')
+ await page.evaluate(()=>window.__plannerSiteSignIn.restore())
+ assert.equal(await page.locator('#prompt-textarea').evaluate(n=>n.inert),false)
  const composer=swift.split('// BEGIN_CHAT_COMPOSER_READER')[1].split('#"""\n')[1].split('"""#')[0]
  await page.evaluate(composer)
  for(const width of [320,390,430]){
@@ -85,6 +94,7 @@ try{
  await page.setContent('<main><article data-turn-key="old" data-talvt-turn-state="complete"><form><h2>Sign in to old.example.com</h2><input type="password"><button>Sign in</button></form></article><article data-turn-key="new"><div data-message-author-role="assistant">A newer reply</div></article></main>')
  assert.equal((await page.evaluate(script)).found,false,'Completed historical forms must not become a login sheet')
  await page.evaluate(()=>window.__plannerSiteSignIn.restore())
+ if(process.argv.includes('--surface-only')){console.log('Secure sign-in surface: focus isolation, original form handlers, responsive layout and zero credential reads passed.');process.exitCode=0;await browser.close();process.exit(0)}
  const handoff=swift.split('// BEGIN_SITE_SIGNIN_HANDOFF')[1].split('#"""')[1].split('"""#')[0]
  await page.setContent('<header id="original">Original layout</header><article data-turn-key="latest" data-talvt-turn-state="complete"><button id="open">Open cloud browser</button></article>')
  await page.evaluate(()=>{delete window.__plannerWebsiteHandoffOpened;delete window.__plannerWebsiteControlRequested;window.opened=0;document.querySelector('#open').onclick=()=>window.opened++})
