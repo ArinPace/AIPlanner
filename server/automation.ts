@@ -9,12 +9,12 @@ function checked<T>({data,error}:{data:T;error:unknown}):T{
 export async function automationRow(username:string){
   return checked(await db().from('planner_vm_settings').select('sources,schedule_enabled,schedule,updated_at,sites,agent_hidden,subscription_schedule_enabled,subscription_schedule').eq('username',username).maybeSingle())
 }
-export async function readAutomationSettings(username:string){
+export async function readAutomationSettings(username:string,includeInstructions=true){
   checked(await db().from('planner_vm_settings').upsert({username},{onConflict:'username',ignoreDuplicates:true}))
   const row=await automationRow(username)
   if(!row)throw new ApiError(503,'Scheduled review settings are unavailable.')
   const schedule=(row.agent_hidden?row.subscription_schedule:row.schedule) || row.schedule || DEFAULT_VM_SCHEDULE
-  return {enabled:row.agent_hidden?row.subscription_schedule_enabled:row.schedule_enabled,execution:row.agent_hidden?'foreground-chat':'agent',timezone:DEFAULT_VM_SCHEDULE.timezone,times:schedule.times,instructions:schedule.instructions || DEFAULT_REVIEW_INSTRUCTIONS,sources:row.sources,updatedAt:row.updated_at,connections:Object.fromEntries(row.sources.map((source:string)=>[source,{connected:row.sites?.[source]?.ready===true}]))}
+  return {enabled:row.agent_hidden?row.subscription_schedule_enabled:row.schedule_enabled,execution:row.agent_hidden?'foreground-chat':'agent',timezone:DEFAULT_VM_SCHEDULE.timezone,times:schedule.times,instructions:includeInstructions?(schedule.instructions || DEFAULT_REVIEW_INSTRUCTIONS):undefined,sources:row.sources,updatedAt:row.updated_at,connections:Object.fromEntries(row.sources.map((source:string)=>[source,{connected:row.sites?.[source]?.ready===true}]))}
 }
 export async function updateAutomationSettings(username:string,input:{expectedUpdatedAt:string;enabled?:boolean;timezone?:string;times?:string[];instructions?:string;sources?:string[]}){
   const current=await readAutomationSettings(username)
