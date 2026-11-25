@@ -147,6 +147,14 @@ const monitorTimer=setInterval(async()=>{
 monitorTimer.unref()
 for (;;) {
   let job
+  // Authentication/browser discovery can stall without throwing. No job has
+  // been claimed yet, so let systemd replace the process rather than leave
+  // the account permanently powered on but disconnected.
+  const preflightDeadline = setTimeout(() => {
+    console.error('Worker preflight stalled for three minutes; restarting.')
+    process.exit(1)
+  }, 180000)
+  preflightDeadline.unref()
   try {
     const remote = await api('config')
     // This is before claiming any work, never during a job or private browser.
@@ -165,6 +173,7 @@ for (;;) {
     await refreshModels(auth).catch(()=>{runtimeModels=[]})
     pendingSites = { ...pendingSites, ...await observeSignIn(dataDir).catch(() => ({})) }
     ;({ job } = await api('claim', { signedIn, identity, workerStartedAt, workerRevision:process.env.PLANNER_WORKER_REVISION, observedSites: pendingSites, modelCatalog:runtimeModels, runtime: remote.aiProvider === 'claude_code' ? 'claude' : 'codex', chatgptConnected: Boolean(nativeChatGpt), claudeConnected: Boolean(nativeClaude), activateClaude, version: '0.3.2' }))
+    clearTimeout(preflightDeadline)
     process.send?.({ type: 'ready' })
     workerReady = true
     pendingSites = {}
@@ -206,6 +215,6 @@ for (;;) {
   } catch (error) {
     if (error.status === 401) { console.error('VM pairing was revoked. Stopping.'); process.exit(1) }
     console.error('Worker connection needs attention; retrying.')
-  }
+  } finally { clearTimeout(preflightDeadline) }
   await new Promise(resolve => setTimeout(resolve, job ? 1000 : 5000))
 }

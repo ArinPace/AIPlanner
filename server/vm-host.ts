@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { ApiError, body, db, json } from './cloud.js'
 import { uuid, vmHash } from './vm-validation.js'
 import { shouldRunVm } from './vm-power.js'
+import { workerRecovery } from './vm-recovery.js'
 
 function checked<T>({ data, error }: { data: T; error: unknown }): NonNullable<T> {
   if (error) throw new ApiError(503, 'Could not access private computer setup.')
@@ -45,7 +46,7 @@ export async function handleVmPool(request: Request, path: string) {
     return json({ ok: true })
   }
   if (path.endsWith('/power')) {
-    const computers = checked(await db().from('planner_vm_provisioning').select('username,status,wake_until,lease_until').eq('pool_id', pool.id))
+    const computers = checked(await db().from('planner_vm_provisioning').select('username,status,wake_until,lease_until,power_state,recovery_heartbeat_at,recovery_started_at').eq('pool_id', pool.id))
     const decisions = []
     for (const computer of computers) {
       if (computer.status !== 'ready') {
@@ -54,8 +55,8 @@ export async function handleVmPool(request: Request, path: string) {
       }
       const [settings, jobs, host, rollover, whoop, monitors] = await Promise.all([
         db().from('planner_vm_settings').select('schedule_enabled,schedule,sources').eq('username', computer.username).maybeSingle(),
-        db().from('planner_vm_jobs').select('chat_id,kind,status,result,schedule_slot,created_at,finished_at').eq('username', computer.username).or(`created_at.gte.${new Date(Date.now() - 86400000).toISOString()},status.in.(queued,running,waiting,paused)`),
-        db().from('planner_vm_hosts').select('id').eq('username', computer.username).is('revoked_at', null).maybeSingle(),
+        db().from('planner_vm_jobs').select('chat_id,kind,status,result,schedule_slot,created_at,finished_at,lease_until').eq('username', computer.username).or(`created_at.gte.${new Date(Date.now() - 86400000).toISOString()},status.in.(queued,running,waiting,paused)`),
+        db().from('planner_vm_hosts').select('id,heartbeat_at').eq('username', computer.username).is('revoked_at', null).maybeSingle(),
         db().from('planner_subject_rollovers').select('next_at,last_queued_at').eq('username',computer.username).maybeSingle(),
         db().from('planner_whoop_reviews').select('next_at').eq('username',computer.username).eq('channel','agent').maybeSingle(),
         db().from('planner_albert_watches').select('id').eq('username',computer.username).eq('enabled',true).limit(1),
@@ -64,7 +65,14 @@ export async function handleVmPool(request: Request, path: string) {
       if(rolloverAt&&Date.parse(rolloverAt)<=Date.now()+120000){const main=checked(await db().from('planner_vm_chats').select('id').eq('username',computer.username).eq('is_main',true).maybeSingle());if(main&&jobs.data?.some(job=>job.chat_id===main.id&&job.status==='paused'))rolloverAt=null}
         let whoopAt=settings.data?.sources?.includes('whoop')?checked(whoop)?.next_at:null
       if(whoopAt&&Date.parse(whoopAt)<=Date.now()+120000){const main=checked(await db().from('planner_vm_chats').select('id').eq('username',computer.username).eq('is_main',true).maybeSingle());if(main&&jobs.data?.some(job=>job.chat_id===main.id&&job.status==='paused'))whoopAt=null}
-      decisions.push({ username: computer.username, shouldRun: Boolean(checked(host)) && shouldRunVm({ hasMonitors:checked(monitors).length>0&&settings.data?.sources?.includes('albert'),whoopAt,rolloverAt,wakeUntil: computer.wake_until, scheduled: checked(settings)?.schedule_enabled || false, schedule: settings.data?.schedule, jobs: checked(jobs) }) })
+      const wantsRun = Boolean(checked(host)) && shouldRunVm({ hasMonitors:checked(monitors).length>0&&settings.data?.sources?.includes('albert'),whoopAt,rolloverAt,wakeUntil: computer.wake_until, scheduled: checked(settings)?.schedule_enabled || false, schedule: settings.data?.schedule, jobs: checked(jobs) })
+      const recovery = workerRecovery({ heartbeat:host.data?.heartbeat_at || null, recoveredHeartbeat:computer.recovery_heartbeat_at, recoveringSince:computer.recovery_started_at, power:computer.power_state, wantsRun, hasLease:checked(jobs).some(job=>job.status==='running'&&Date.parse(job.lease_until||'')>Date.now()) })
+      if (recovery === 'stop' && !computer.recovery_started_at) {
+        checked(await db().from('planner_vm_provisioning').update({ recovery_heartbeat_at:host.data?.heartbeat_at, recovery_started_at:new Date().toISOString() }).eq('username',computer.username).eq('pool_id',pool.id))
+      } else if (recovery === 'start') {
+        checked(await db().from('planner_vm_provisioning').update({ recovery_started_at:null }).eq('username',computer.username).eq('pool_id',pool.id))
+      }
+      decisions.push({ username: computer.username, shouldRun: recovery === 'stop' ? false : wantsRun })
     }
     return json({ computers: decisions, capacity: pool.max_vms })
   }
