@@ -16,6 +16,18 @@ test('browser actions allow enabled write routes while rejecting unrelated direc
  assert.throws(()=>enabledBrowserUrl(sources.gmail,['whoop'],sources))
  assert.throws(()=>publicBrowserUrl('https://[::1]/'))
 })
+test('scheduled browser grants are exact URLs, isolated to one instance and expire before actions',()=>{
+ const options={enabled:[],sources:{},connect:()=>{throw Error('must not connect')}}
+ const task={urls:['https://pollev.com/johanngaebler241'],startsAt:'2026-11-25T13:00:00Z',endsAt:'2026-11-25T14:30:00Z'}
+ const browser=new InteractiveBrowser({...options,browserTask:task})
+ assert.equal(browser.allowed(task.urls[0]),task.urls[0])
+ assert.throws(()=>browser.allowed('https://pollev.com/other'))
+ assert.throws(()=>new InteractiveBrowser(options).allowed(task.urls[0]))
+ const expired=new InteractiveBrowser({...options,browserTask:{...task,endsAt:'2000-01-01T00:00:00Z'}})
+ assert.throws(()=>expired.action({tabId:'x',action:'click'}),/authorized time window/)
+ const future=new InteractiveBrowser({...options,browserTask:{...task,startsAt:'2999-01-01T00:00:00Z',endsAt:'2999-01-02T00:00:00Z'}})
+ assert.throws(()=>future.action({tabId:'x',action:'click'}),/authorized time window/)
+})
 test('upload confinement handles traversal and symlinks',async()=>{
  const root=await mkdtemp(path.join(os.tmpdir(),'planner-upload-'))
  try{await mkdir(path.join(root,'work'));await writeFile(path.join(root,'outside'),'private');await writeFile(path.join(root,'work','ok.csv'),'one,two');await symlink(path.join(root,'outside'),path.join(root,'work','link'))

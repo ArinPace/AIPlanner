@@ -38,7 +38,7 @@ export const browserActionSchema={tabId:tab,action:z.enum(['click','hover','fill
 // One MCP process per active agent job. Keep actual tabs between calls, not a new
 // temporary extraction page per read. CDP disconnect never closes profile tabs.
 export class InteractiveBrowser {
- constructor({enabled,sources,connect,profiles=async()=>({}),resolveUrl=x=>x,workspace}){Object.assign(this,{enabled,sources,connect,profiles,resolveUrl,workspace});this.tabs=new Map();this.external=new Map()}
+ constructor({enabled,sources,connect,profiles=async()=>({}),resolveUrl=x=>x,workspace,browserTask=null}){Object.assign(this,{enabled,sources,connect,profiles,resolveUrl,workspace,browserTask});this.tabs=new Map();this.external=new Map();for(const value of browserTask?.urls||[]){const href=publicBrowserUrl(value);this.external.set(href,href)}}
  async use(id,fn){
   const entry=this.tabs.get(id);if(!entry)throw Error('Unknown tab. Open it with browser_navigate or browser_tabs first.')
   const connection=await this.connect(entry.route,await this.profiles())
@@ -162,7 +162,12 @@ export class InteractiveBrowser {
   const bytes=await page.screenshot({type:'png',fullPage:args.fullPage||false,mask,scale:'css',timeout:25000})
   return {content:[{type:'text',text:JSON.stringify({tabId:args.tabId,url:page.url(),fullPage:args.fullPage||false,captureMode:args.fullPage?'document':'viewport',coordinateSystem:'viewport CSS pixels; full-page image includes content outside viewport'})},{type:'image',mimeType:'image/png',data:bytes.toString('base64')}]}
  })}
- action(args){return this.use(args.tabId,async(page,entry,context)=>{
+ action(args){
+  if(this.browserTask){
+   const start=Date.parse(this.browserTask.startsAt),end=Date.parse(this.browserTask.endsAt)
+   if(!Number.isFinite(start)||!Number.isFinite(end)||Date.now()<start||Date.now()>=end)throw Error('This scheduled browser action is outside its authorized time window.')
+  }
+  return this.use(args.tabId,async(page,entry,context)=>{
   const resolveRef=ref=>{const saved=entry.refs.get(ref);if(!saved)return null;const frame=page.frames()[saved.frameIndex];if(!frame||frame.url()!==saved.frameUrl)return null;return frame.locator(saved.selector)}
   const locator=args.ref?resolveRef(args.ref):null
   if(args.ref&&!locator)throw Error('Stale element reference. Take a fresh browser_snapshot.')
