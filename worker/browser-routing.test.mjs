@@ -65,3 +65,11 @@ test('profile migration preserves sessions and account choices without moving co
     await rm(old,{recursive:true,force:true});await rm(fresh,{recursive:true,force:true})
   }
 })
+
+test('a task can route its exact authorized external page without enabling the site globally',()=>{
+ const url='https://pollev.com/johanngaebler241'
+ assert.throws(()=>browserEndpoint(url),/Unknown browser source/)
+ assert.equal(browserEndpoint(url,{},sources,[url]),'http://127.0.0.1:9223')
+ assert.throws(()=>browserEndpoint('https://pollev.com/other',{},sources,[url]),/Unknown browser source/)
+ assert.throws(()=>browserEndpoint(url),/Unknown browser source/)
+})

@@ -9,9 +9,9 @@ export function stableProfile(source, profiles={}) {
 export function loginUsesStableProfile(source,intent,profiles={}) {
   return intent!=='open' || stableProfile(source,profiles)
 }
-export function browserEndpoint(url,profiles={},registry=sources) {
+export function browserEndpoint(url,profiles={},registry=sources,taskUrls=[]) {
   const host=new URL(url).hostname.replace(/^www\./,'')
   const source=Object.keys(registry).find(key=>new URL(registry[key]).hostname.replace(/^www\./,'')===host) || (host==='twitter.com'?'x':albertHosts.has(host)?'albert':['docs.google.com','forms.google.com','forms.gle'].includes(host)?'drive':null)
-  if(!source)throw new Error('Unknown browser source.')
+  if(!source){if(taskUrls.includes(url))return googleCdp;throw new Error('Unknown browser source.')}
   return stableProfile(source,profiles) ? googleCdp : 'http://127.0.0.1:9222'
 }
