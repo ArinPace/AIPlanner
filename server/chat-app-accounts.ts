@@ -11,3 +11,9 @@ export async function reportGmailAccount(username:string,input:unknown){
  storage(await db().from('planner_chat_app_accounts').upsert({username,email:value.email,read_verified:value.readVerified,write_tools:[...new Set(value.writeTools)],verified_at:new Date().toISOString()},{onConflict:'username,email'}))
  return {saved:true,accounts:await readGmailAccounts(username)}
 }
+
+export async function observeGmailConnections(username:string,input:unknown){
+ const emails=z.array(z.string().email().max(254)).max(10).parse(input)
+ if(emails.length)storage(await db().from('planner_chat_app_accounts').upsert([...new Set(emails.map(email=>email.toLowerCase()))].map(email=>({username,email,read_verified:false,write_tools:[],verified_at:new Date().toISOString()})),{onConflict:'username,email',ignoreDuplicates:true}))
+ return {accounts:await readGmailAccounts(username)}
+}

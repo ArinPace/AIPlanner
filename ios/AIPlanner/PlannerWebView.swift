@@ -145,10 +145,11 @@ struct PlannerWebView: UIViewRepresentable {
                 nav.modalPresentationStyle = .fullScreen
                 controller.onClose = { [weak self, weak nav, weak controller] in
                     let gmail = controller?.gmailAccountManagement == true
+                    let emails = controller?.gmailObservedAccounts ?? []
                     controller?.gmailAccountManagement = false
                     nav?.dismiss(animated: true) {
                         self?.parkRelay()
-                        if gmail { self?.webView?.evaluateJavaScript("window.dispatchEvent(new Event('planner-gmail-accounts-closed'))", completionHandler:nil) }
+                        if gmail, let data=try? JSONSerialization.data(withJSONObject:emails), let json=String(data:data,encoding:.utf8) { self?.webView?.evaluateJavaScript("window.dispatchEvent(new CustomEvent('planner-gmail-accounts-closed',{detail:{emails:"+json+"}}))", completionHandler:nil) }
                     }
                 }
                 chatGPTPortal = nav; chatGPTAccount = account
@@ -799,11 +800,38 @@ struct PlannerWebView: UIViewRepresentable {
             self.onClose?()
         }
     }
+    // BEGIN_GMAIL_CONNECTED_ACCOUNTS
+    static let gmailConnectedAccountsScript = #"""
+    (()=>{
+      if(location.hostname!=='chatgpt.com'||location.pathname!=='/settings/plugins-settings/plugin_connector_1p_95d39881713c8191931482a62d6edff9')return null;
+      const heading=[...document.querySelectorAll('h1,h2,h3,div,span')].find(n=>n.childElementCount===0&&n.textContent.trim()==='Connected accounts');
+      if(!heading)return null;
+      let section=heading;
+      for(let depth=0;section&&depth<7;depth++,section=section.parentElement){
+        const text=section.innerText||'';
+        if(/Connect another account/.test(text))return [...new Set((text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)||[]).map(email=>email.toLowerCase()))].slice(0,10);
+      }
+      return null;
+    })()
+    """#
+    // END_GMAIL_CONNECTED_ACCOUNTS
+    private var gmailInitialAccounts: Set<String>?
+    var gmailObservedAccounts: [String] = []
+    private var gmailStableChanges = 0
+    private func gmailAccountsChanged() async -> Bool {
+        guard gmailAccountManagement, documentCommitted, let emails = try? await browser.evaluateJavaScript(Self.gmailConnectedAccountsScript) as? [String] else { return false }
+        gmailObservedAccounts = emails
+        let current = Set(emails)
+        guard let initial = gmailInitialAccounts else { gmailInitialAccounts=current; return false }
+        if !current.subtracting(initial).isEmpty { gmailStableChanges += 1 } else { gmailStableChanges=0 }
+        return gmailStableChanges >= 2
+    }
     var gmailAccountManagement = false
     func openGmailAccounts() throws {
         guard pendingChat == nil else { throw NativeError("Stop or finish the current ChatGPT reply before managing Gmail accounts.") }
         endSiteSignIn()
         returnAfterAuthentication = false; returnAfterWebsiteInteraction = false
+        gmailInitialAccounts=nil; gmailObservedAccounts=[]; gmailStableChanges=0
         gmailAccountManagement = true; documentCommitted = false
         browser.load(URLRequest(url:URL(string:"https://chatgpt.com/settings/plugins-settings/plugin_connector_1p_95d39881713c8191931482a62d6edff9")!,cachePolicy:.reloadIgnoringLocalCacheData))
     }
@@ -1019,6 +1047,10 @@ struct PlannerWebView: UIViewRepresentable {
             guard let self else { return }; var verified = 0
             while !Task.isCancelled, self.navigationController?.presentingViewController != nil {
                 if self.presentedViewController != nil { verified = 0; try? await Task.sleep(for: .seconds(1)); continue }
+                if self.gmailAccountManagement {
+                    if await self.gmailAccountsChanged() { self.onClose?(); return }
+                    try? await Task.sleep(for:.seconds(1)); continue
+                }
                 await self.refreshSiteSignIn()
                 if let state = try? await self.snapshot() {
                     if state["guest"] as? Bool == true || state["needsLogin"] as? Bool == true || self.browser.url?.host != "chatgpt.com" { self.returnAfterAuthentication = true }

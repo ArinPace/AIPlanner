@@ -1,4 +1,4 @@
-import {readGmailAccounts} from './chat-app-accounts.js'
+import {observeGmailConnections,readGmailAccounts} from './chat-app-accounts.js'
 import {planChatMirror,type ChatMirror} from '../src/lib/chatSync.js'
 import {z} from 'zod'
 import {createHash} from 'node:crypto'
@@ -39,6 +39,7 @@ export async function handleSubscriptionChat(request:Request,username:string){
  }
  if(request.method!=='POST')throw new ApiError(405,'Use GET or POST.')
  const input=await body(request)
+ if(input.action==='gmail_accounts_observed')return json(await observeGmailConnections(username,input.emails))
  if(input.action==='relay_resume_check'){
   const args=z.object({chatId:z.string().uuid(),turnId:z.string().uuid()}).parse(input)
   const chat=await owned(username,args.chatId)

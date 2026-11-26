@@ -329,7 +329,12 @@ export function SubscriptionChatView({username,active,sidebar,setSidebar}:{usern
   setPanel(null);setError('')
   try{await nativeRequest({action:'chatGPTGmailAccounts',account:username})}catch(e){setError(e instanceof Error?e.message:'Could not open Gmail account settings.')}
  }
- useEffect(()=>{const returned=()=>{void send(gmailAccountPrompt())};window.addEventListener('planner-gmail-accounts-closed',returned);return()=>window.removeEventListener('planner-gmail-accounts-closed',returned)})
+ useEffect(()=>{const returned=(event:Event)=>{void(async()=>{
+  const emails:unknown=(event as CustomEvent).detail?.emails
+  const mailboxes=Array.isArray(emails)?emails.filter((email):email is string=>typeof email==='string'&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)).slice(0,10):[]
+  try{if(mailboxes.length)await subscriptionChatRequest(undefined,{action:'gmail_accounts_observed',emails:mailboxes});await refresh()}catch(e){setError(e instanceof Error?e.message:'Could not refresh connected accounts.')}
+  void send((mailboxes.length?'ChatGPT’s Gmail connection interface lists these mailboxes: '+mailboxes.join(', ')+'. Verify each mailbox using its account-specific Gmail MCP tools. Do not substitute one mailbox for another; if a connected mailbox cannot be selected by the available tools, report that limitation and leave its read/write access unverified. ':'')+gmailAccountPrompt())
+ })()};window.addEventListener('planner-gmail-accounts-closed',returned);return()=>window.removeEventListener('planner-gmail-accounts-closed',returned)})
  async function inspectRemoteDraft(){setDraftError('');try{const result=await nativeRequest<{text:string}>({action:'chatGPTRelayDraft',account:username});setRemoteDraft(result.text)}catch(e){setError(e instanceof Error?e.message:'Could not inspect draft.')}}
  async function clearRemoteDraft(){
   if(remoteDraft===null||clearingDraft)return
