@@ -23,7 +23,7 @@ struct PlannerWebView: UIViewRepresentable {
         config.websiteDataStore = .default()
         config.allowsInlineMediaPlayback = true
         config.userContentController.addScriptMessageHandler(context.coordinator, contentWorld: .page, name: "plannerNative")
-        config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeScreenTime=true;window.plannerNativeChatGPTPortal=true;window.plannerNativeChatGPTRelayVersion=9;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true';document.documentElement.dataset.edgeToEdge='true';const inset=document.createElement('style');inset.id='planner-native-safe-area';inset.textContent=':root[data-iphone-app=true] .app-shell{padding-top:env(safe-area-inset-top);box-sizing:border-box}';document.head.append(inset)});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        config.userContentController.addUserScript(WKUserScript(source: "window.plannerNativeGmailAccounts=true;window.plannerNativeScreenTime=true;window.plannerNativeChatGPTPortal=true;window.plannerNativeChatGPTRelayVersion=9;document.addEventListener('DOMContentLoaded',()=>{document.documentElement.dataset.iphoneApp='true';document.documentElement.dataset.edgeToEdge='true';const inset=document.createElement('style');inset.id='planner-native-safe-area';inset.textContent=':root[data-iphone-app=true] .app-shell{padding-top:env(safe-area-inset-top);box-sizing:border-box}';document.head.append(inset)});", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.userContentController.addUserScript(WKUserScript(source: """
             document.addEventListener('click', event => {
               const link = event.target instanceof Element && event.target.closest('a[href]');
@@ -143,7 +143,14 @@ struct PlannerWebView: UIViewRepresentable {
                 let controller = PlannerChatGPTPortal(account: account)
                 let nav = UINavigationController(rootViewController: controller)
                 nav.modalPresentationStyle = .fullScreen
-                controller.onClose = { [weak self, weak nav] in nav?.dismiss(animated: true) { self?.parkRelay() } }
+                controller.onClose = { [weak self, weak nav, weak controller] in
+                    let gmail = controller?.gmailAccountManagement == true
+                    controller?.gmailAccountManagement = false
+                    nav?.dismiss(animated: true) {
+                        self?.parkRelay()
+                        if gmail { self?.webView?.evaluateJavaScript("window.dispatchEvent(new Event('planner-gmail-accounts-closed'))", completionHandler:nil) }
+                    }
+                }
                 chatGPTPortal = nav; chatGPTAccount = account
                 parkRelay()
             }
@@ -271,7 +278,7 @@ struct PlannerWebView: UIViewRepresentable {
                         guard let account = body["account"] as? String, let value = body["settings"], JSONSerialization.isValidJSONObject(value) else { throw NativeError("Missing notification settings.") }
                         let options = try JSONDecoder().decode(TaskNotificationOptions.self, from: JSONSerialization.data(withJSONObject: value))
                         try await PlannerTaskNotifications.shared.configure(account: account, options: options)
-                    case "chatGPTPortal", "chatGPTSiteSignIn", "chatGPTRelayStatus", "chatGPTRelaySend", "chatGPTRelayResume", "chatGPTRelayStop", "chatGPTRelayDraft", "chatGPTRelayClearDraft", "chatGPTRelayDownload", "chatGPTRelayMirror", "chatGPTRelayModel", "chatGPTRelayFind":
+                    case "chatGPTPortal", "chatGPTGmailAccounts", "chatGPTSiteSignIn", "chatGPTRelayStatus", "chatGPTRelaySend", "chatGPTRelayResume", "chatGPTRelayStop", "chatGPTRelayDraft", "chatGPTRelayClearDraft", "chatGPTRelayDownload", "chatGPTRelayMirror", "chatGPTRelayModel", "chatGPTRelayFind":
                         guard let account = body["account"] as? String else { throw NativeError("Sign into Planner first.") }
                         let controller = try relay(account: account)
                         if action == "chatGPTRelayStatus" {
@@ -324,6 +331,10 @@ struct PlannerWebView: UIViewRepresentable {
                         guard let parent = webView?.window?.rootViewController, let portal = chatGPTPortal else { throw NativeError("The ChatGPT session is unavailable.") }
                         if parent.presentedViewController === portal { replyHandler(["ok":true,"alreadyOpen":true],nil);return }
                         guard parent.presentedViewController == nil else { throw NativeError("Close the current menu first.") }
+                        if action == "chatGPTGmailAccounts" {
+                            guard !relayOperationActive else { throw NativeError("Wait for the current ChatGPT request to finish.") }
+                            try controller.openGmailAccounts()
+                        }
                         if let chatId = body["chatId"] as? String {
                             try controller.prepareWebsiteView(chatId: chatId, providerURL: body["url"] as? String)
                         }
@@ -645,7 +656,12 @@ struct PlannerWebView: UIViewRepresentable {
         return '';
       };
       let current=null,targetDomain='';
+      let blockedComposer=null,composerWasInert=false;
+      const blockComposer=()=>{const box=window.__plannerComposer?.()||document.querySelector('#prompt-textarea,[data-composer-markdown]');if(!box)return;if(blockedComposer!==box){if(blockedComposer)blockedComposer.inert=composerWasInert;blockedComposer=box;composerWasInert=box.inert}if(box.contains(document.activeElement))document.activeElement.blur();box.inert=true};
+      const restoreComposer=()=>{if(blockedComposer)blockedComposer.inert=composerWasInert;blockedComposer=null};
       const fit=root=>{
+        const field=[...root.querySelectorAll('input:not([type=hidden]):not([type=checkbox]):not([type=radio]),textarea')].find(n=>!n.disabled&&n.getClientRects().length);
+        if(field&&!root.contains(document.activeElement))field.focus({preventScroll:true});
         const bounds=root.getBoundingClientRect();
         for(const node of root.querySelectorAll('div,section,form,[role=dialog],[role=alertdialog]')){
           const rect=node.getBoundingClientRect();
@@ -653,14 +669,10 @@ struct PlannerWebView: UIViewRepresentable {
           if(getComputedStyle(node).display==='flex'&&getComputedStyle(node).flexDirection==='row')node.setAttribute(attr+'actions','');
         }
         targetDomain=domain(root)||targetDomain;
-      let blockedComposer=null,composerWasInert=false;
-      const blockComposer=()=>{const box=window.__plannerComposer?.()||document.querySelector('#prompt-textarea,[data-composer-markdown]');if(!box)return;if(blockedComposer!==box){if(blockedComposer)blockedComposer.inert=composerWasInert;blockedComposer=box;composerWasInert=box.inert}if(box.contains(document.activeElement))document.activeElement.blur();box.inert=true};
-      const restoreComposer=()=>{if(blockedComposer)blockedComposer.inert=composerWasInert;blockedComposer=null};
         return {found:true,domain:targetDomain};
-        const field=[...root.querySelectorAll('input:not([type=hidden]):not([type=checkbox]):not([type=radio]),textarea')].find(n=>!n.disabled&&n.getClientRects().length);
-        if(field&&!root.contains(document.activeElement))field.focus({preventScroll:true});
       };
       const refresh=(rescan=false)=>{
+        blockComposer();
         if([...document.querySelectorAll('video')].some(video=>video.srcObject?.getVideoTracks?.().some(track=>track.readyState==='live'))){clear();html.removeAttribute('data-planner-site-signin');html.removeAttribute('data-planner-secure-waiting');current=null;return {found:true,domain:targetDomain}}
         if(!rescan&&currentNode(current)&&(isAuthForm(current)||isAuthDialog(current)||[...current.querySelectorAll('button,a[href]')].some(n=>actions.test(label(n)))))return fit(current);
         // Keep every original node, React ancestor, iframe and submit handler in place.
@@ -669,7 +681,6 @@ struct PlannerWebView: UIViewRepresentable {
         let root=[...document.querySelectorAll('[role=dialog],[role=alertdialog]')].filter(n=>currentNode(n)&&isAuthDialog(n)).at(-1);
         if(!root){
           const form=[...document.querySelectorAll('form')].filter(n=>currentNode(n)&&isAuthForm(n)).at(-1);
-        blockComposer();
           if(form){
             root=form;
             for(let parent=form.parentElement,depth=0;parent&&parent!==document.body&&depth<4;parent=parent.parentElement,depth++){
@@ -787,6 +798,14 @@ struct PlannerWebView: UIViewRepresentable {
             """#)
             self.onClose?()
         }
+    }
+    var gmailAccountManagement = false
+    func openGmailAccounts() throws {
+        guard pendingChat == nil else { throw NativeError("Stop or finish the current ChatGPT reply before managing Gmail accounts.") }
+        endSiteSignIn()
+        returnAfterAuthentication = false; returnAfterWebsiteInteraction = false
+        gmailAccountManagement = true; documentCommitted = false
+        browser.load(URLRequest(url:URL(string:"https://chatgpt.com/settings/plugins-settings/plugin_connector_1p_95d39881713c8191931482a62d6edff9")!,cachePolicy:.reloadIgnoringLocalCacheData))
     }
     func endSiteSignIn() {
         guard siteSignInMode else{return};siteSignInMode=false;siteSignInSurfaceActive=false;siteSignInLoading.isHidden=true;returnAfterWebsiteInteraction=false;observedWebsiteInteraction=false
