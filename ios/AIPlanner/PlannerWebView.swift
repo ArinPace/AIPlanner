@@ -1115,7 +1115,18 @@ return {url:location.origin+location.pathname,name:projectName,created};
     private static var composerReader: String { #"""
 // WebKit innerText can include CSS-generated placeholder text. It is not a draft.
 window.__plannerComposer=()=>{const visible=n=>n&&n.getClientRects().length;return [...document.querySelectorAll('#prompt-textarea,[data-composer-markdown][contenteditable="true"]')].find(visible)||[...document.querySelectorAll('[role="textbox"][contenteditable="true"],textarea')].find(visible)};
-window.__plannerComposerText=box=>!box?'':box.tagName==='TEXTAREA'?box.value:(box.textContent||'').trim()?(box.innerText||box.textContent||''):'';
+window.__plannerComposerText=box=>{
+ if(!box)return '';if(box.tagName==='TEXTAREA')return box.value;
+ let text=box.innerText||box.textContent||'',content=box.textContent||'';
+ // Suggested replies are editor decorations, not accepted user input. Preserve
+ // actual editable text, including mentions and text that merely says Tab.
+ for(const node of box.querySelectorAll('[contenteditable="false"],[data-suggestion],[data-ghost-text],[data-testid*="suggestion"]')){
+  if(!node.matches('[data-suggestion],[data-ghost-text],[data-testid*="suggestion"]')&&!/Press\s+Tab\s+to\s+accept/i.test(node.textContent||''))continue;
+  const suggestion=node.innerText||node.textContent||'';if(suggestion)text=text.replace(suggestion,'');
+  const raw=node.textContent||'';if(raw)content=content.replace(raw,'');
+ }
+ return content.trim()?text:'';
+};
 // Completed transcript cards must not masquerade as an active sign-in prompt.
 window.__plannerSignInCurrent=(node,allowCompleted=false)=>{
  if(!node?.getClientRects().length)return false;
