@@ -16,5 +16,10 @@ try{
  assert.match(await read(),/Press Tab to accept is literal text @Gmail/,'Keep real text and noneditable mentions')
  await page.setContent('<div contenteditable="true" data-composer-markdown><p><br></p><span data-ghost-text>Suggestion without keyboard hint</span></div>')
  assert.equal(await read(),'')
+ await page.setContent('<form><h2>Sign in to duosecurity.com</h2><label>Passcode<input type="text" autocomplete="off" aria-label="Passcode"></label><button>Submit</button></form>')
+ await page.evaluate(()=>{const input=document.querySelector('input');Object.defineProperty(input,'value',{get(){throw Error('Credential value must never be read')}})})
+ assert.equal(await page.evaluate(()=>window.__plannerSignInState().credentialRequired),true,'A text passcode field must open private credential entry')
+ await page.setContent('<input type="text" aria-label="Search messages">')
+ assert.equal(await page.evaluate(()=>window.__plannerSignInState().credentialRequired),false,'An ordinary search field must not trigger private entry')
  console.log('Composer suggestions: unaccepted decorations excluded; actual drafts, literal text and mentions preserved.')
 }finally{await browser.close()}

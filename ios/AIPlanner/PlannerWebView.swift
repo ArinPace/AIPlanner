@@ -734,7 +734,7 @@ struct PlannerWebView: UIViewRepresentable {
         window.__plannerSavedSignInObserver=true;
         document.addEventListener('click',event=>{const button=event.target.closest?.('button');if(button&&/^(Use saved account|Use saved details|Sign in|Continue)$/i.test(label(button))&&button.closest('form,[role=dialog],[role=alertdialog]'))window.__plannerSavedSignInAt=Date.now()},true);
       }
-      const privateForm=[...document.querySelectorAll('input[type=password],input[autocomplete=one-time-code]')].some(n=>current(n))||buttons.some(n=>/^(Use saved account|Use saved details)$/i.test(label(n)));
+      const privateForm=[...document.querySelectorAll('input')].some(n=>current(n)&&(window.__plannerCredentialInput?.(n)||n.matches('input[type=password],input[autocomplete=one-time-code]')))||buttons.some(n=>/^(Use saved account|Use saved details)$/i.test(label(n)));
       if(privateForm){return {kind:'form'}}
       if(pendingDuo||(window.__plannerSavedSignInAt&&Date.now()-window.__plannerSavedSignInAt>2000&&!privateForm)){
         buttons.find(n=>/^Return control$/i.test(label(n)))?.click();
@@ -1138,10 +1138,11 @@ window.__plannerSignInCurrent=(node,allowCompleted=false)=>{
  if(latest&&!turn.contains(latest)&&!latest.contains(turn)&&(turn.compareDocumentPosition(latest)&Node.DOCUMENT_POSITION_FOLLOWING))return false;
  return allowCompleted===true||(!turn.closest('[data-talvt-turn-state="complete"]')&&!turn.querySelector('[data-talvt-turn-state="complete"]'));
 };
+window.__plannerCredentialInput=n=>n?.matches('input:not([type=hidden]):not([type=checkbox]):not([type=radio])')&&(n.matches('input[type=password],input[autocomplete=one-time-code]')||/passcode|verification code|security code|one.time.code/i.test([n.getAttribute('aria-label'),n.getAttribute('placeholder'),n.getAttribute('name'),n.id,...[...(n.labels||[])].map(label=>label.textContent)].filter(Boolean).join(' ')));
 window.__plannerSignInState=()=>{
  const active=window.__plannerSignInCurrent,label=n=>(n.getAttribute('aria-label')||n.innerText||'').trim();
  const buttons=[...document.querySelectorAll('button')].filter(active);
- const credentialRequired=buttons.some(n=>/^(Use saved account|Use saved details)$/i.test(label(n)))||[...document.querySelectorAll('input[type=password],input[autocomplete=one-time-code]')].some(active);
+ const credentialRequired=buttons.some(n=>/^(Use saved account|Use saved details)$/i.test(label(n)))||[...document.querySelectorAll('input')].some(n=>active(n)&&window.__plannerCredentialInput(n));
  const secureForm=credentialRequired||buttons.some(n=>/^(Open cloud browser|Take over|Take over to sign in|Sign in on web page|Return control|I.m done|Use saved account|Other sign-in options)$/i.test(label(n)))||[...document.querySelectorAll('form,[role="dialog"]')].filter(active).some(n=>/sign in to [a-z0-9.-]+[.][a-z]{2,}/i.test(n.innerText));
  const approval=[...document.querySelectorAll('[role="dialog"],[role="alertdialog"]')].filter(active).some(n=>/website|browser|access to|visit site/i.test(n.innerText)&&[...n.querySelectorAll('button')].some(b=>active(b)&&/^(Allow|Approve|Continue)$/i.test(label(b))));
  return {secureForm,credentialRequired,approval,interaction:secureForm||approval};
