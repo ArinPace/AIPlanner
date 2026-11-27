@@ -868,7 +868,7 @@ struct PlannerWebView: UIViewRepresentable {
             siteSignInLoading.isHidden=siteSignInSurfaceActive || observedWebsiteInteraction
             if siteSignInSurfaceActive {observedWebsiteInteraction=true}
             let host=surface["domain"] as? String ?? ""
-            status.text=siteSignInSurfaceActive ? (host.isEmpty ? "Your chat continues after sign-in." : "Sign in to "+host) : "Waiting for the website…"
+            status.text=siteSignInSurfaceActive ? (host.contains("duosecurity.com") ? "Enter the SMS code, then tap Sign in. No code? Tap Not now, then Done to return to Flow. Done/Cancel alone do not resend a code." : (host.isEmpty ? "Your chat continues after sign-in." : "Sign in to "+host)) : "Waiting for the website…"
         } catch {status.text="The sign-in form is loading…"}
     }
     init(account: String) { self.account = account; super.init(nibName: nil, bundle: nil) }
